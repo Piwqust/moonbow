@@ -83,3 +83,13 @@ Player.h/.cpp  libmpv wrapper (all commands async; ProcessEvents → PlayerChang
   our UI above mpv's window.
 - No blocking work on the UI thread (disk scans, thumbnails → worker threads, post results back).
 - Keep `/W4` clean; match existing style (4-space indent, 120 cols, comments only where they help).
+
+## Testing without disturbing the desktop
+Run an isolated instance and drive it with posted messages (the real mouse and focus are untouched):
+```
+build\Lumen.exe --new-instance --automation --data-dir %TEMP%\lumen-test-<you> [file]
+powershell -File tools\dev\input.ps1 -ProcessId <pid> -Click 300,200 [-Right|-Double] | -Move x,y | -Wheel x,y -Delta -1 | -Drag x1,y1,x2,y2 | -Key Space | -Type "text"
+powershell -File tools\dev\capture.ps1 -ProcessId <pid> -Out shot.png [-Title "Settings"] [-Scale 0.6]
+```
+Coordinates are client pixels at the window's DPI. Never use SetCursorPos/SendInput/SetForegroundWindow,
+and kill only the processes you started (by PID).

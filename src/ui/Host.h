@@ -121,6 +121,9 @@ public:
 
     // Every live host, e.g. to repaint all windows after a theme change.
     static const std::vector<Host*>& All();
+    // Test runs drive windows with posted messages while the real cursor is
+    // elsewhere: keep hover state instead of dropping it on WM_MOUSELEAVE.
+    static void SetAutomation(bool on);
     static void ForgetWidget(Widget* w);
     static void ForgetSubtree(Widget* w);
 

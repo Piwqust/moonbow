@@ -2,6 +2,7 @@
 
 #include "Trace.h"
 #include "Util.h"
+#include "core/Paths.h"
 
 #include <cstring>
 #include <string>
@@ -121,7 +122,7 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("audio-display", "no");  // cover art is shown by our music view
     opt("background-color", "#000000");
 
-    std::wstring appData = KnownFolderPath(FOLDERID_RoamingAppData, L"Lumen");
+    std::wstring appData = DataDir();
     if (!appData.empty()) {
         opt("config-dir", WideToUtf8(appData));
         opt("config", "yes");

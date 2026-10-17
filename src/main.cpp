@@ -2,8 +2,10 @@
 #include "app/App.h"
 #include "app/Gallery.h"
 #include "app/MainWindow.h"
+#include "core/Paths.h"
 #include "gfx/Gpu.h"
 #include "gfx/Text.h"
+#include "ui/Host.h"
 
 #include <objbase.h>
 #include <shellapi.h>
@@ -56,9 +58,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     Trace("wWinMain");
     const std::vector<std::wstring> args = Arguments();
     const bool gallery = !args.empty() && args[0] == L"--gallery";
+    // Developer flags: --new-instance (skip single-instance hand-off) and
+    // --data-dir <dir> (settings, history... somewhere other than %APPDATA%\Lumen).
+    bool newInstance = gallery;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] == L"--new-instance") newInstance = true;
+        if (args[i] == L"--automation") ui::Host::SetAutomation(true);
+        if (args[i] == L"--data-dir" && i + 1 < args.size()) SetDataDirForTests(args[i + 1]);
+    }
+    std::vector<std::wstring> files;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (args[i] == L"--data-dir") { ++i; continue; }
+        if (!args[i].empty() && args[i][0] != L'-') files.push_back(args[i]);
+    }
 
-    HANDLE mutex = gallery ? nullptr : CreateMutexW(nullptr, FALSE, L"Lumen.SingleInstance.v2");
-    if (mutex && GetLastError() == ERROR_ALREADY_EXISTS && ForwardToRunningInstance(args)) {
+    HANDLE mutex = newInstance ? nullptr : CreateMutexW(nullptr, FALSE, L"Lumen.SingleInstance.v2");
+    if (mutex && GetLastError() == ERROR_ALREADY_EXISTS && ForwardToRunningInstance(files)) {
         CloseHandle(mutex);
         return 0;
     }
@@ -66,7 +81,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     int code = 1;
     if (gfx::Gpu::Get().CreateFactories() && gfx::Text::Get().Init(instance))
-        code = gallery ? app::RunGallery() : app::App::Get().Run(instance, args);
+        code = gallery ? app::RunGallery() : app::App::Get().Run(instance, files);
     CoUninitialize();
     if (mutex) CloseHandle(mutex);
     return code;

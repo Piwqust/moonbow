@@ -21,6 +21,8 @@ constexpr UINT WM_APP_POST = WM_APP + 41;
 constexpr float kResizeBorder = 6.0f;
 constexpr UINT kTooltipDelayMs = 550;
 
+bool g_automation = false;
+
 std::vector<Host*>& Registry() {
     static std::vector<Host*> hosts;
     return hosts;
@@ -52,6 +54,10 @@ void ForEachInTree(Widget* w, const std::function<void(Widget*)>& fn) {
 }
 
 }  // namespace
+
+void Host::SetAutomation(bool on) {
+    g_automation = on;
+}
 
 const std::vector<Host*>& Host::All() {
     return Registry();
@@ -831,7 +837,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const bool moved = x != mouse_.x || y != mouse_.y;
             mouse_ = {x, y};
             mouseInside_ = true;
-            if (!trackingLeave_) {
+            if (!trackingLeave_ && !g_automation) {
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
                 trackingLeave_ = TrackMouseEvent(&tme) != FALSE;
             }
@@ -849,6 +855,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_MOUSELEAVE:
+            if (g_automation) return 0;
             trackingLeave_ = false;
             mouseInside_ = false;
             if (!capture_) UpdateHot(-1, -1);
