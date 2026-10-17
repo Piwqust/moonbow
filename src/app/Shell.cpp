@@ -4,6 +4,7 @@
 #include "app/Actions.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/library/LibraryCommon.h"
 #include "app/player/PlayerView.h"
 #include "gfx/Icons.h"
 
@@ -61,7 +62,7 @@ public:
         onClick = [this] {
             std::vector<MenuItem> items;
             items.push_back({Tr(L"Add folder to library"), L"", "new-folder", false, true, false, false,
-                             [] { TheApp().OpenFolderDialog(); }});
+                             [] { lib::AddFolderToLibrary(); }});
             items.push_back({Tr(L"Open file"), ShortcutText(Action::OpenFile), "file", false, true, false, false,
                              [] { Run(Action::OpenFile); }});
             items.push_back({Tr(L"Open network stream"), ShortcutText(Action::OpenNetwork), "streaming", false, true,

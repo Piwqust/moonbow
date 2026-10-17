@@ -1,0 +1,421 @@
+// Home: Continue Watching, Listen Again, Frequently Visited Folders / Playlists, Frequently
+// Listened Artists and Recently Added, each one row of cards with a title that opens the full
+// page (design/ref/Player_6261-15078.png). Searching shows matching videos and music instead.
+#include "Util.h"
+#include "app/I18n.h"
+#include "app/library/Pages.h"
+#include "library/MediaTypes.h"
+
+#include <shellapi.h>
+#include <shlwapi.h>
+
+#include <algorithm>
+#include <map>
+
+namespace app::lib {
+
+using namespace ui;
+
+namespace {
+
+// One titled row of cards (or up to three rows in the side panel).
+class HomeSection : public Widget {
+public:
+    HomeSection(std::wstring title, Route more, bool compact, GridStyle style) : more_(std::move(more)), compact_(compact) {
+        dir = Dir::Column;
+        width = Length::Grow();
+        gap = compact ? 4.0f : 20.0f;
+        title_ = Add<SectionTitle>(std::move(title), compact);
+        title_->onClick = [this] { TheApp().Navigate(more_); };
+        grid_ = Add<ItemGrid>();
+        grid_->SetStyle(compact ? GridStyle::CompactRows : style);
+        grid_->maxRows = compact ? 3 : 1;
+        grid_->stretch = false;
+        grid_->columns = kColDuration;
+        grid_->onActivate = [this](int i) { Activate(i); };
+        grid_->onMenu = [this](int i, Point at) { Menu(i, at); };
+    }
+
+    void Clear() {
+        entries_.clear();
+        routes_.clear();
+        actions_.clear();
+        queue_.clear();
+    }
+    void AddEntry(Entry e, Route r = {}, std::function<void()> action = {}) {
+        entries_.push_back(std::move(e));
+        routes_.push_back(std::move(r));
+        actions_.push_back(std::move(action));
+    }
+    int AddQueue(QueueItem q) {
+        queue_.push_back(std::move(q));
+        return static_cast<int>(queue_.size()) - 1;
+    }
+    void Commit(const std::wstring& queueName) {
+        queueName_ = queueName;
+        visible = !entries_.empty();
+        grid_->SetEntries(std::move(entries_));
+        entries_.clear();
+    }
+    void SetGridStyle(GridStyle s, int rows) {
+        grid_->SetStyle(compact_ ? GridStyle::CompactRows : s);
+        grid_->maxRows = rows;
+        grid_->stretch = rows == 0;
+    }
+    ItemGrid* Grid() const { return grid_; }
+    SectionTitle* Title() const { return title_; }
+    std::vector<Route> routes_;
+    std::vector<std::function<void()>> actions_;
+    std::vector<QueueItem> queue_;
+
+private:
+    void Activate(int i) {
+        const auto& v = grid_->Entries();
+        if (i < 0 || i >= static_cast<int>(v.size())) return;
+        if (i < static_cast<int>(actions_.size()) && actions_[static_cast<size_t>(i)]) {
+            auto a = actions_[static_cast<size_t>(i)];
+            a();
+            return;
+        }
+        const Entry& e = v[static_cast<size_t>(i)];
+        if (e.kind == EntryKind::Media && e.ref >= 0) {
+            PlayQueue(queue_, e.ref, queueName_);
+            return;
+        }
+        if (i < static_cast<int>(routes_.size()) && routes_[static_cast<size_t>(i)].section != Section::Home)
+            TheApp().Navigate(routes_[static_cast<size_t>(i)]);
+    }
+
+    void Menu(int i, Point at) {
+        const auto& v = grid_->Entries();
+        if (i < 0 || i >= static_cast<int>(v.size()) || !GetHost()) return;
+        const Entry& e = v[static_cast<size_t>(i)];
+        std::vector<MenuItem> m;
+        if (e.kind == EntryKind::Media) {
+            m = MediaMenu(e.path, queue_, e.ref, queueName_);
+            if (more_.section == Section::Recent) {
+                const std::wstring path = e.path;
+                m.push_back(MenuItem::Separator());
+                m.push_back(Item(L"Remove from History", "remove", [path] {
+                    TheApp().history().Remove(path);
+                    TheApp().libraryChanged.Emit();
+                }));
+            }
+        } else {
+            const Route r = i < static_cast<int>(routes_.size()) ? routes_[static_cast<size_t>(i)] : Route{};
+            auto open = actions_.size() > static_cast<size_t>(i) ? actions_[static_cast<size_t>(i)] : nullptr;
+            m.push_back(Item(L"Open", e.kind == EntryKind::Playlist ? "playlist" : "folder", [r, open] {
+                if (open) open();
+                else if (r.section != Section::Home) TheApp().Navigate(r);
+            }));
+            if (e.kind == EntryKind::Playlist) {
+                const std::string plId = e.key;
+                m.push_back(Item(L"Play", "play", [plId] {
+                    if (const library::Playlist* p = TheApp().playlists().Find(plId)) {
+                        std::vector<QueueItem> q;
+                        for (const auto& it : p->items) q.push_back(MakeQueueItem(it.path, it.title, it.duration));
+                        CountPlaylistPlay(plId);
+                        PlayQueue(std::move(q), 0, p->name);
+                    }
+                }));
+            }
+            if (e.kind == EntryKind::Folder && !IsUrl(e.path)) {
+                const std::wstring path = e.path;
+                m.push_back(Item(L"Play All", "play", [path] { TheApp().Open({path}); }));
+                m.push_back(Item(L"Show in File Explorer", "open", [path] {
+                    ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                }));
+            }
+        }
+        if (!m.empty()) ShowContextMenu(GetHost(), at, std::move(m));
+    }
+
+    Route more_;
+    bool compact_;
+    SectionTitle* title_ = nullptr;
+    ItemGrid* grid_ = nullptr;
+    std::vector<Entry> entries_;
+    std::wstring queueName_;
+};
+
+class HomePage : public LibraryView {
+public:
+    explicit HomePage(bool compact) : compact_(compact) {
+        dir = Dir::Stack;
+        align = Align::Stretch;
+        scroll_ = Add<ScrollView>();
+        content_ = scroll_->SetContent<Widget>();
+        content_->dir = Dir::Column;
+        content_->width = Length::Grow();
+        // Title of the first section sits 37 DIP under the header line, sections are 77 apart.
+        content_->pad = compact ? Insets{12, 6, 12, 16} : Insets{28, 37, 20, 40};
+        content_->gap = compact ? 26.0f : 77.0f;
+
+        results_[0] = AddSection(L"Videos", Route{Section::Videos, {}}, GridStyle::VideoCards);
+        results_[1] = AddSection(L"Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
+        continue_ = AddSection(L"Continue Watching", Route{Section::Recent, L"continue"}, GridStyle::VideoCards);
+        listen_ = AddSection(L"Listen Again", Route{Section::Recent, L"audio"}, GridStyle::SquareCards);
+        folders_ = AddSection(L"Frequently Visited Folders", Route{Section::Videos, {}}, GridStyle::SquareCards);
+        playlists_ = AddSection(L"Frequently Visited Playlists", Route{Section::Playlists, {}}, GridStyle::SquareCards);
+        artists_ = AddSection(L"Frequently Listened Artists", Route{Section::Music, L"artists"}, GridStyle::SquareCards);
+        added_ = AddSection(L"Recently Added", Route{Section::Videos, {}}, GridStyle::VideoCards);
+        for (HomeSection* s : results_) s->SetGridStyle(s == results_[0] ? GridStyle::VideoCards : GridStyle::SquareCards, 0);
+
+        empty_ = Add<EmptyState>();
+        empty_->visible = false;
+        scan_ = Add<ScanBadge>(compact);
+
+        libConn_ = Connect(TheApp().libraryChanged, [this] { Rebuild(); });
+        playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & kChangeFile) Rebuild();
+        });
+        Rebuild();
+    }
+
+    std::vector<Crumb> Breadcrumbs() const override { return {{Tr(L"Home"), Route{Section::Home, {}}}}; }
+    long long ItemCount() const override { return count_; }
+    void SetFilter(const std::wstring& text) override {
+        if (text == filter_) return;
+        filter_ = text;
+        Rebuild();
+        scroll_->ScrollTo(0, false);
+    }
+    std::vector<MenuItem> MoreMenu() override {
+        std::vector<MenuItem> m;
+        m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
+        m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(MenuItem::Separator());
+        m.push_back(Item(L"Open File…", "file", [] { TheApp().OpenFileDialog(); }));
+        m.push_back(Item(L"Open Network Stream…", "streaming", [] { TheApp().OpenUrl({}); }));
+        return m;
+    }
+    Widget* InitialFocus() override {
+        for (auto& c : content_->Children())
+            if (auto* s = dynamic_cast<HomeSection*>(c.get()); s && s->visible) return s->Grid();
+        return nullptr;
+    }
+
+private:
+    HomeSection* AddSection(const wchar_t* title, Route more, GridStyle style) {
+        return content_->Add<HomeSection>(Tr(title), std::move(more), compact_, style);
+    }
+
+    static std::wstring TitleFor(const library::HistoryEntry& h, const library::MediaItem* m, bool fileName) {
+        if (m && m->kind == library::MediaKind::Audio) return m->DisplayTitle();
+        if (IsUrl(h.path)) return h.title.empty() ? h.path : h.title;
+        if (fileName) return FileNameOf(h.path);
+        return h.title.empty() ? FileNameOf(h.path) : h.title;
+    }
+
+    void Rebuild() {
+        App& app = TheApp();
+        auto snap = app.library().Current();
+        library::History& hist = app.history();
+        count_ = static_cast<long long>(snap->items.size());
+
+        const bool searching = !filter_.empty();
+        for (HomeSection* s : {continue_, listen_, folders_, playlists_, artists_, added_, results_[0], results_[1]})
+            s->Clear();
+
+        if (searching) {
+            int n = 0;
+            for (int k = 0; k < 2; ++k) {
+                HomeSection* s = results_[k];
+                const library::MediaKind kind = k == 0 ? library::MediaKind::Video : library::MediaKind::Audio;
+                auto found = snap->Search(filter_, kind);
+                library::SortItems(found, library::SortKey::Name);
+                for (const library::MediaItem* m : found) {
+                    Entry e;
+                    e.kind = EntryKind::Media;
+                    e.path = m->path;
+                    e.audio = k == 1;
+                    e.title = k == 0 ? FileNameOf(m->path) : m->DisplayTitle();
+                    e.subtitle = k == 1 ? m->artist : std::wstring();
+                    if (!m->offline) e.image = m->path;
+                    e.duration = m->duration;
+                    e.ref = s->AddQueue(MakeQueueItem(m->path, k == 1 ? m->DisplayTitle() : std::wstring(), m->duration));
+                    s->AddEntry(std::move(e));
+                    ++n;
+                }
+                s->Title()->text = Fmt(Tr(k == 0 ? L"Videos · {0}" : L"Music · {0}"), static_cast<long long>(found.size()));
+                s->Commit(Tr(L"Search results"));
+            }
+            for (HomeSection* s : {continue_, listen_, folders_, playlists_, artists_, added_}) s->Commit({});
+            empty_->visible = n == 0;
+            if (n == 0)
+                empty_->Set("search", Tr(L"Nothing found"),
+                            Fmt(Tr(L"No videos or music match “{0}”. Try a shorter or different word."), {filter_}));
+            InvalidateLayout();
+            headerChanged.Emit();
+            return;
+        }
+        for (HomeSection* s : results_) s->Commit({});
+
+        // Continue Watching: videos stopped halfway.
+        for (const library::HistoryEntry& h : hist.ContinueWatching(20)) {
+            const library::MediaItem* m = snap->FindItem(h.path);
+            Entry e;
+            e.kind = EntryKind::Media;
+            e.path = h.path;
+            e.title = TitleFor(h, m, true);
+            if (!IsUrl(h.path) && !(m && m->offline)) e.image = h.path;
+            e.icon = IsUrl(h.path) ? "streaming" : "video";
+            e.progress = h.Progress();
+            e.duration = h.duration;
+            e.ref = continue_->AddQueue(MakeQueueItem(h.path, h.title, h.duration));
+            continue_->AddEntry(std::move(e));
+        }
+        continue_->Commit(Tr(L"Continue Watching"));
+
+        // Listen Again: recently played audio.
+        std::map<std::wstring, uint32_t> artistPlays;
+        for (const library::HistoryEntry& h : hist.Entries()) {
+            if (h.kind != library::MediaKind::Audio) continue;
+            const library::MediaItem* m = snap->FindItem(h.path);
+            if (m && !m->artist.empty()) artistPlays[m->artist] += std::max<uint32_t>(1, h.playCount);
+        }
+        for (const library::HistoryEntry& h : hist.ListenAgain(20)) {
+            const library::MediaItem* m = snap->FindItem(h.path);
+            Entry e;
+            e.kind = EntryKind::Media;
+            e.audio = true;
+            e.path = h.path;
+            e.title = m ? m->DisplayTitle() : (h.title.empty() ? library::StemOf(h.path) : h.title);
+            e.subtitle = m && !m->artist.empty() ? m->artist : (IsUrl(h.path) ? Tr(L"Network stream") : std::wstring());
+            if (!IsUrl(h.path) && !(m && m->offline)) e.image = h.path;
+            e.icon = IsUrl(h.path) ? "streaming" : "music";
+            e.duration = h.duration;
+            e.ref = listen_->AddQueue(MakeQueueItem(h.path, e.title, h.duration));
+            listen_->AddEntry(std::move(e));
+        }
+        listen_->Commit(Tr(L"Listen Again"));
+
+        // Frequently visited folders.
+        for (const library::FolderStat& f : hist.FrequentFolders(10)) {
+            if (f.folder.size() < 3 || IsUrl(f.folder) || !(f.folder[1] == L':' || (f.folder[0] == L'\\' && f.folder[1] == L'\\')))
+                continue;  // URLs report their host as a "folder"
+            Entry e;
+            e.kind = EntryKind::Folder;
+            e.path = f.folder;
+            e.icon = "folder";
+            e.title = FileNameOf(f.folder).empty() ? f.folder : FileNameOf(f.folder);
+            if (const library::FolderNode* node = snap->Folder(f.folder)) {
+                const Section sec = node->totalAudios > node->totalVideos ? Section::Music : Section::Videos;
+                e.count = static_cast<int>(node->totalAudios + node->totalVideos);
+                folders_->AddEntry(std::move(e), Route{sec, node->path});
+            } else {
+                const std::wstring path = f.folder;
+                folders_->AddEntry(std::move(e), {}, [path] { TheApp().Open({path}); });
+            }
+        }
+        folders_->Commit({});
+
+        // Playlists, most played first.
+        std::vector<const library::Playlist*> pls;
+        for (const library::Playlist& p : app.playlists().All())
+            if (!p.items.empty()) pls.push_back(&p);
+        std::stable_sort(pls.begin(), pls.end(), [](const library::Playlist* a, const library::Playlist* b) {
+            const int pa = PlaylistPlays(a->id), pb = PlaylistPlays(b->id);
+            if (pa != pb) return pa > pb;
+            return a->modified > b->modified;
+        });
+        for (size_t i = 0; i < pls.size() && i < 10; ++i) {
+            const library::Playlist& p = *pls[i];
+            Entry e;
+            e.kind = EntryKind::Playlist;
+            e.title = p.name;
+            e.subtitle = CountItems(static_cast<long long>(p.items.size()));
+            e.icon = "playlist";
+            e.key = p.id;
+            e.count = static_cast<int>(p.items.size());
+            for (const auto& it : p.items)
+                if (!IsUrl(it.path)) {
+                    e.image = it.path;
+                    break;
+                }
+            playlists_->AddEntry(std::move(e), Route{Section::Playlists, Utf8ToWide(p.id)});
+        }
+        playlists_->Commit({});
+
+        // Artists by plays.
+        std::vector<std::pair<std::wstring, uint32_t>> artists(artistPlays.begin(), artistPlays.end());
+        std::stable_sort(artists.begin(), artists.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+        for (size_t i = 0; i < artists.size() && i < 10; ++i) {
+            Entry e;
+            e.kind = EntryKind::Artist;
+            e.title = artists[i].first;
+            e.subtitle = CountPlays(artists[i].second);
+            e.icon = "artist";
+            artists_->AddEntry(std::move(e), Route{Section::Music, L"artist:" + artists[i].first});
+        }
+        artists_->Commit({});
+
+        // Recently added videos (newest files first).
+        auto vids = snap->Videos();
+        library::SortItems(vids, library::SortKey::Date, true);
+        for (size_t i = 0; i < vids.size() && i < 20; ++i) {
+            const library::MediaItem* m = vids[i];
+            Entry e;
+            e.kind = EntryKind::Media;
+            e.path = m->path;
+            e.title = FileNameOf(m->path);
+            if (!m->offline) e.image = m->path;
+            e.duration = m->duration;
+            e.ref = added_->AddQueue(MakeQueueItem(m->path, {}, m->duration));
+            const double p = [&] {
+                const library::HistoryEntry* h = hist.Find(m->path);
+                return h ? h->Progress() : 0.0;
+            }();
+            if (p > 0.02) e.progress = std::min(1.0, p);
+            e.watched = p >= 0.95;
+            added_->AddEntry(std::move(e));
+        }
+        added_->Commit(Tr(L"Recently Added"));
+
+        bool any = false;
+        for (HomeSection* s : {continue_, listen_, folders_, playlists_, artists_, added_}) any |= s->visible;
+        const bool scanning = app.library().Scanning();
+        scan_->Update();
+        if (!any) scan_->visible = false;  // the empty state says it already
+        empty_->visible = !any;
+        if (!any) {
+            const bool noRoots = app.library().Roots().empty();
+            std::vector<EmptyState::Btn> buttons = {
+                {Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }},
+                {Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}};
+            if (scanning)
+                empty_->Set("refresh", Tr(L"Scanning your library…"), Tr(L"Your videos and music will appear here in a moment."));
+            else if (noRoots)
+                empty_->Set("lumen", Tr(L"Welcome to Lumen"),
+                            Tr(L"Add a folder with videos or music and Lumen will keep it in order here. "
+                               L"Nothing is moved or copied."),
+                            std::move(buttons));
+            else
+                empty_->Set("folder", Tr(L"No media found yet"),
+                            Tr(L"Your library folders don't contain videos or music. Add another folder or open a file."),
+                            std::move(buttons));
+        }
+        InvalidateLayout();
+        headerChanged.Emit();
+    }
+
+    bool compact_;
+    std::wstring filter_;
+    long long count_ = 0;
+    ScrollView* scroll_ = nullptr;
+    Widget* content_ = nullptr;
+    ScanBadge* scan_ = nullptr;
+    EmptyState* empty_ = nullptr;
+    HomeSection* results_[2] = {};
+    HomeSection *continue_ = nullptr, *listen_ = nullptr, *folders_ = nullptr, *playlists_ = nullptr,
+                *artists_ = nullptr, *added_ = nullptr;
+    ScopedConnection libConn_, playerConn_;
+};
+
+}  // namespace
+
+std::unique_ptr<LibraryView> MakeHomePage(bool compact) {
+    return std::make_unique<HomePage>(compact);
+}
+
+}  // namespace app::lib
