@@ -29,6 +29,7 @@ public:
         };
     }
     bool Selected() const { return !TheApp().PlayerShown() && TheApp().route().section == section_; }
+    const wchar_t* Name() const { return SectionName(section_); }
     void Paint(Painter& p) override {
         const bool sel = Selected();
         if (sel)
@@ -234,6 +235,7 @@ NavSidebar::NavSidebar() {
                       Section::Recent})
         Add<NavItem>(s, this);
     Add<AddItem>(this);
+    width = Length::Px(200);
     routeConn_ = Connect(TheApp().routeChanged, [this] { Invalidate(); });
 }
 
@@ -242,7 +244,11 @@ NavSidebar::~NavSidebar() = default;
 void NavSidebar::SetCollapsed(bool collapsed) {
     collapsed_ = collapsed;
     width = Length::Px(collapsed ? 56.0f : 200.0f);
-    for (auto& c : Children()) c->tooltip = collapsed && dynamic_cast<NavItem*>(c.get()) ? L"" : L"";
+    // Icons-only rail: the labels move into tooltips.
+    for (auto& c : Children()) {
+        if (auto* item = dynamic_cast<NavItem*>(c.get())) item->tooltip = collapsed ? Tr(item->Name()) : L"";
+        else c->tooltip = collapsed ? Tr(L"Add item") : L"";
+    }
     InvalidateLayout();
 }
 
