@@ -1570,7 +1570,7 @@ void BuildSystem(Builder& b) {
 
     b.Sec("recording", L"Recording", L"Запись");
     b.Path("recording.folder", L"Save recordings to", L"Папка для записей", PathKind::Folder)
-        .Hint(L"~/Videos", L"~/Видео")
+        .Hint(L"Videos\Lumen", L"Видео\Lumen")
         .Desc(L"Folder for recorded streams and clips.", L"Папка для записанных потоков и фрагментов.");
     b.Toggle("recording.noReencode", L"Record without re-encoding when possible", L"Записывать без перекодирования", true);
 

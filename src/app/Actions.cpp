@@ -434,7 +434,9 @@ void Run(Action a) {
             static bool recording = false;
             recording = !recording;
             if (recording) {
-                const std::wstring dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
+                std::wstring dir = Utf8ToWide(app.config().GetString("recording.folder"));
+                if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
+                CreateDirectoryW(dir.c_str(), nullptr);
                 SYSTEMTIME t;
                 GetLocalTime(&t);
                 wchar_t name[64];
