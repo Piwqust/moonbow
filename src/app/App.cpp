@@ -273,6 +273,12 @@ void App::OnConfigChanged(const std::string& key) {
         languageChanged.Emit();
         return;
     }
+    if (key == "playback.repeat") {
+        const std::string r = config_.GetString("playback.repeat");
+        queue_.SetRepeat(r == "one" ? Repeat::One : r == "all" ? Repeat::All : Repeat::Off);
+    }
+    if (key == "playback.shuffle") queue_.SetShuffle(config_.GetBool("playback.shuffle"));
+    if (key == "interface.alwaysOnTop") ApplyWindowOptions();
     if (key == "library.showHidden" || key == "library.readTags") {
         library_.SetOptions({config_.GetBool("library.showHidden"), config_.GetBool("library.readTags")});
         library_.Rescan();
@@ -373,12 +379,18 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     LoadUiState();
     SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
     config_.Subscribe("", [this](const std::string& key) { OnConfigChanged(key); });
+    {
+        const std::string r = config_.GetString("playback.repeat");
+        queue_.SetRepeat(r == "one" ? Repeat::One : r == "all" ? Repeat::All : Repeat::Off);
+        queue_.SetShuffle(config_.GetBool("playback.shuffle"));
+    }
     Trace("config loaded");
 
     main_ = std::make_unique<MainWindow>();
     if (!main_->Create()) return 1;
     RestoreWindowPlacement();
     if (!IsWindowVisible(main_->Hwnd())) main_->Show();
+    ApplyWindowOptions();
     system_.Attach(main_->Hwnd());
     Trace("window shown");
     // The GPU device (driver load) and libmpv start after the first paint.
@@ -456,9 +468,70 @@ void App::OnPlayerEvents() {
             SaveHistoryPosition();
         }
     }
+    if ((changes & kChangeFile) && s.fileLoaded) fitPending_ = true;
+    if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
+        fitPending_ = false;
+        FitWindowToVideo();
+    }
+    if (changes & kChangeVolume) config_.SetDouble("audio.lastVolume", std::round(s.volume));
     playerChanged.Emit(changes);
     system_.Update(changes);
-    if (changes & kChangeEnd) Next(false);
+    if (changes & kChangeEnd) OnPlaybackEnded();
+}
+
+void App::OnPlaybackEnded() {
+    // "Stop after each item" leaves the last frame up (keep-open pauses there).
+    if (config_.GetBool("playback.stopAfterEach") && queue_.RepeatMode() != Repeat::One) return;
+    if (queue_.NextIndex(false) >= 0) {
+        Next(false);
+        return;
+    }
+    // End of the queue.
+    const std::string finished = config_.GetString("playback.whenFinished");
+    const QueueItem* item = queue_.CurrentItem();
+    if (finished == "next" && item && item->path.find(L"://") == std::wstring::npos) {
+        // Continue with the file after this one in its folder.
+        const auto siblings = ListSiblingMedia(item->path);
+        for (size_t i = 0; i + 1 < siblings.size(); ++i)
+            if (_wcsicmp(siblings[i].c_str(), item->path.c_str()) == 0) {
+                BuildFolderQueue(siblings[i + 1]);
+                return;
+            }
+    } else if (finished == "close") {
+        Quit();
+    }
+}
+
+void App::ApplyWindowOptions() {
+    if (!main_ || !main_->Hwnd()) return;
+    const bool top = config_.GetBool("interface.alwaysOnTop");
+    SetWindowPos(main_->Hwnd(), top ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+void App::FitWindowToVideo() {
+    const std::string mode = config_.GetString("interface.autoResize");
+    if (mode == "never" || (mode == "first" && fittedOnce_)) return;
+    if (!main_ || !playerShown_ || main_->IsFullscreen() || main_->IsWindowMaximized() || main_->UiHidden()) return;
+    const PlayerState& s = player_.State();
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(MonitorFromWindow(main_->Hwnd(), MONITOR_DEFAULTTONEAREST), &mi)) return;
+    const RECT& work = mi.rcWork;
+    const double scale = main_->Scale();
+    // Chrome around the video: title bar, control bar and the 10 DIP side frame.
+    const double chromeW = 20 * scale, chromeH = (40 + 56) * scale;
+    const double maxW = (work.right - work.left) * 0.85 - chromeW, maxH = (work.bottom - work.top) * 0.85 - chromeH;
+    const double f = std::min({1.0, maxW / static_cast<double>(s.videoW), maxH / static_cast<double>(s.videoH)});
+    int w = static_cast<int>(std::lround(static_cast<double>(s.videoW) * f + chromeW));
+    int h = static_cast<int>(std::lround(static_cast<double>(s.videoH) * f + chromeH));
+    w = std::max(w, static_cast<int>(760 * scale));
+    h = std::max(h, static_cast<int>(440 * scale));
+    RECT cur;
+    GetWindowRect(main_->Hwnd(), &cur);
+    int x = (cur.left + cur.right) / 2 - w / 2, y = (cur.top + cur.bottom) / 2 - h / 2;
+    x = std::clamp(x, static_cast<int>(work.left), std::max<int>(work.left, work.right - w));
+    y = std::clamp(y, static_cast<int>(work.top), std::max<int>(work.top, work.bottom - h));
+    SetWindowPos(main_->Hwnd(), nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+    fittedOnce_ = true;
 }
 
 bool App::HasMedia() const {

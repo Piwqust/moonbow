@@ -163,6 +163,20 @@ bool MainWindow::Immersive() const {
     return IsFullscreen() || uiHidden_;
 }
 
+namespace {
+
+UINT ChromeHideDelay() {
+    const double s = TheApp().config().GetDouble("interface.hideDelay");
+    return static_cast<UINT>(std::clamp(s, 0.5, 10.0) * 1000);
+}
+
+bool ChromeAutoHides() {
+    return TheApp().config().GetString("interface.autoHide") != "never" &&
+           TheApp().config().GetBool("interface.controlsInFullscreen");
+}
+
+}  // namespace
+
 void MainWindow::SetVideoRect(const Rect& r) {
     videoRect_ = r;
     videoWanted_ = !r.Empty();
@@ -198,7 +212,8 @@ void MainWindow::PokeChrome() {
         RequestLayout();
     }
     if (chromeTimer_) CancelTimer(chromeTimer_);
-    chromeTimer_ = StartTimer(kChromeHideMs, [this] {
+    if (!ChromeAutoHides()) return;
+    chromeTimer_ = StartTimer(ChromeHideDelay(), [this] {
         chromeTimer_ = 0;
         if (!Immersive()) return;
         // Keep the controls while the pointer is on them or a popup is open.

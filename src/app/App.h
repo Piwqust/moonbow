@@ -172,6 +172,9 @@ private:
     void SaveHistoryPosition();
     void SaveWindowPlacement();
     void RestoreWindowPlacement();
+    void OnPlaybackEnded();
+    void FitWindowToVideo();
+    void ApplyWindowOptions();
     void LoadUiState();
     void SaveUiState();
 
@@ -196,6 +199,8 @@ private:
     bool playerShown_ = false;
     std::vector<std::wstring> pendingOpen_;
     bool engineReady_ = false;
+    bool fitPending_ = false;
+    bool fittedOnce_ = false;
     bool quitting_ = false;
 };
 

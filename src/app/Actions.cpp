@@ -109,7 +109,7 @@ MainWindow* Win() {
 }
 
 void Toast(const std::wstring& text, const char* icon = "") {
-    if (Win()) ShowToast(Win(), text, icon, 1200);
+    if (Win() && TheApp().config().GetBool("interface.osdMessages")) ShowToast(Win(), text, icon, 1200);
 }
 
 const PlayerState& PS() {
@@ -287,14 +287,14 @@ void Run(Action a) {
         case Action::ToggleRepeat: {
             PlayQueue& q = app.queue();
             const Repeat next = q.RepeatMode() == Repeat::Off ? Repeat::All : q.RepeatMode() == Repeat::All ? Repeat::One : Repeat::Off;
-            q.SetRepeat(next);
-            p.SetProperty("loop-file", std::string(next == Repeat::One ? "inf" : "no"));
+            // Through the setting: it persists and drives mpv's loop-file.
+            app.config().SetString("playback.repeat", next == Repeat::One ? "one" : next == Repeat::All ? "all" : "off");
             Toast(next == Repeat::Off ? Tr(L"Repeat off") : next == Repeat::All ? Tr(L"Repeat all") : Tr(L"Repeat one"),
                   "repeat_right");
             break;
         }
         case Action::ToggleShuffle:
-            app.queue().SetShuffle(!app.queue().Shuffle());
+            app.config().SetBool("playback.shuffle", !app.queue().Shuffle());
             Toast(app.queue().Shuffle() ? Tr(L"Shuffle on") : Tr(L"Shuffle off"), "shuffle_right");
             break;
         case Action::ABLoop: p.Command({"ab-loop"}); Toast(Tr(L"A-B loop"), "repeat_right"); break;

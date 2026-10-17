@@ -190,6 +190,8 @@ void TitleBar::Refresh() {
     std::wstring title = media ? (s.title.empty() ? FileNameOf(item->path) : s.title) : std::wstring();
     if (media && !s.artist.empty() && !app.player().State().hasVideo) title = s.artist + L" — " + title;
     title_->SetText(title.empty() ? L"Lumen" : title);
+    const bool showName = app.config().GetBool("interface.titleFileName");
+    if (!showName) title.clear();
     if (window_) window_->SetTitle(title.empty() ? L"Lumen" : title + L" — Lumen");
     maxBtn_->icon = window_ && window_->IsWindowMaximized() ? "minimize" : "maximize";
     maxBtn_->tooltip = window_ && window_->IsWindowMaximized() ? Tr(L"Restore") : Tr(L"Maximize");
