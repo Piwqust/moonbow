@@ -172,6 +172,7 @@ void SetBindings(Action a, Keys keys) {
 }
 
 std::wstring KeyText(UINT vk, const Mods& mods) {
+    if (vk == 0) return {};  // "unassigned" marker set by Settings > Controls
     std::wstring s;
     if (mods.ctrl) s += L"Ctrl + ";
     if (mods.alt) s += L"Alt + ";
@@ -219,8 +220,9 @@ std::wstring KeyText(UINT vk, const Mods& mods) {
 }
 
 std::wstring ShortcutText(Action a) {
-    const Keys& k = Bindings(a);
-    return k.empty() ? L"" : KeyText(k.front().first, k.front().second);
+    for (const auto& [vk, mods] : Bindings(a))
+        if (vk != 0) return KeyText(vk, mods);
+    return L"";
 }
 
 Action ActionForKey(const KeyEvent& e) {

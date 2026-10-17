@@ -10,6 +10,7 @@
 #include "ui/Theme.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/settings/ShortcutStore.h"
 #include "gfx/Gpu.h"
 #include "ui/Controls.h"
 
@@ -367,6 +368,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         if (!a.empty() && a[0] != L'-') pendingOpen_.push_back(a);
 
     config_.Load();
+    LoadKeyBindings();
     SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
     ApplyTheme();
     LoadUiState();

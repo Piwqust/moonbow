@@ -577,6 +577,11 @@ void BuildApp(Builder& b) {
     b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
         .Desc(L"Look for a new version of Lumen once a day. Nothing else is sent.",
               L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.");
+    b.Button("general.fileAssociations", L"Make Lumen the default player", L"Сделать Lumen плеером по умолчанию",
+             "file-associations", L"Set up", L"Настроить")
+        .Inferred()
+        .Desc(L"Register Lumen for video and audio files, then pick it in Windows Default apps.",
+              L"Зарегистрировать Lumen для видео- и аудиофайлов и выбрать его в разделе «Приложения по умолчанию».");
 
     b.Sec("diagnostics", L"Diagnostics", L"Диагностика");
     b.Toggle("general.developerMode", L"Developer mode", L"Режим разработчика", false)
