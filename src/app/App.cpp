@@ -439,6 +439,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     if (config_.GetBool("library.scanOnStartup") || !library_.Current()) library_.Rescan();
     ControlLayoutChanged().Connect([this] { SetUiValue("controls.layout", CurrentControlLayout().Serialize()); });
     main_->StartTimer(3000, [this] { FlushStores(); }, true);
+    InitDialogs();
     if (UiValue("onboarded") != "1") {
         app::ShowOnboarding([this] {
             SetUiValue("onboarded", "1");

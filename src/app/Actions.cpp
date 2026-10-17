@@ -394,7 +394,7 @@ void Run(Action a) {
         case Action::OpenFile: app.OpenFileDialog(); break;
         case Action::OpenFolder: app.OpenFolderDialog(); break;
         case Action::OpenNetwork: app.OpenUrl(L""); break;
-        case Action::OpenSubtitles: app.OpenSubtitleDialog(); break;
+        case Action::OpenSubtitles: ShowAddSubtitlesDialog(); break;
         case Action::CloseMedia: app.StopPlayback(); break;
         case Action::GoHome: app.ShowPlayer(false); app.Navigate(Route{Section::Home, {}}); break;
         case Action::ToggleSidebar:

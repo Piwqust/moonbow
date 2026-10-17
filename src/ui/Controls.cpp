@@ -692,9 +692,14 @@ bool TextBox::OnKeyDown(const KeyEvent& e) {
             MoveCaret(caret_, false);
             Changed();
             return true;
-        case VK_RETURN:
-            if (onSubmit) onSubmit(text_);
-            return onSubmit != nullptr;
+        case VK_RETURN: {
+            // onSubmit may close the dialog and destroy this box: copy the callback
+            // and the text, and touch no member after the call.
+            if (!onSubmit) return false;
+            auto submit = onSubmit;
+            submit(std::wstring(text_));
+            return true;
+        }
         case VK_ESCAPE:
             if (onEscape) {
                 onEscape();
