@@ -109,6 +109,8 @@ private:
             {"frames", "1"}, {"start", start.c_str()}, {"aid", "no"}, {"sid", "no"}, {"hr-seek", "yes"},
             {"hwdec", "no"}, {"terminal", "no"}, {"config", "no"}, {"load-scripts", "no"}, {"ytdl", "no"},
             {"idle", "no"}, {"msg-level", "all=no"},
+            // One small frame: no read-ahead cache, few decoder threads (4K sources).
+            {"cache", "no"}, {"demuxer-max-bytes", "8MiB"}, {"demuxer-readahead-secs", "0"}, {"vd-lavc-threads", "2"},
         };
         for (auto& kv : opts) api.mpv_set_option_string(h, kv[0], kv[1]);
         std::shared_ptr<Frame> frame;
