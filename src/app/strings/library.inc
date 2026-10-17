@@ -197,3 +197,4 @@
 {L"Songs you listen to will appear here.", L"Здесь появятся песни, которые вы слушаете."},
 {L"No recent items", L"Недавних файлов нет"},
 {L"Files and streams you play will appear here.", L"Здесь появятся файлы и потоки, которые вы открываете."},
+{L"Add Subtitles…", L"Добавить субтитры…"},

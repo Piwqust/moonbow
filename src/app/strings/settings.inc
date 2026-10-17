@@ -27,7 +27,7 @@
 {L"Custom color…", L"Другой цвет…"},
 {L"Action", L"Действие"},
 {L"Shortcut", L"Сочетание"},
-{L"Alternative", L"Дополнительное"},
+{L"Alternative", L"Дополнительно"},
 {L"Press a key…", L"Нажмите клавишу…"},
 {L"Reassign", L"Переназначить"},
 {L"{0} is already used by “{1}”.", L"{0} уже используется для «{1}»."},

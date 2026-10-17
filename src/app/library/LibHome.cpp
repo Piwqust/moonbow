@@ -328,11 +328,7 @@ private:
             e.icon = "playlist";
             e.key = p.id;
             e.count = static_cast<int>(p.items.size());
-            for (const auto& it : p.items)
-                if (!IsUrl(it.path)) {
-                    e.image = it.path;
-                    break;
-                }
+            e.image = PlaylistImage(p);
             playlists_->AddEntry(std::move(e), Route{Section::Playlists, Utf8ToWide(p.id)});
         }
         playlists_->Commit({});

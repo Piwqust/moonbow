@@ -1,6 +1,7 @@
 // Library pages: shared page base, folder browsing (Videos / Music folders), Recent and the
 // CreateLibraryView factory. Home, Music, Network and Playlists live in Lib*.cpp.
 #include "Util.h"
+#include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
@@ -380,6 +381,8 @@ std::vector<MenuItem> Page::FolderMenu(const std::wstring& folder, library::Medi
     MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr, !q.empty());
     if (!q.empty()) pl.submenu = AddToPlaylistMenu(q);
     m.push_back(std::move(pl));
+    if (kind == library::MediaKind::Video)
+        m.push_back(Item(L"Add Subtitles…", "subtitles", [folder] { ShowAddSubtitlesDialog(folder); }, !q.empty()));
     m.push_back(MenuItem::Separator());
     m.push_back(Item(L"Show in File Explorer", "open", [folder] { ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
     const auto& roots = TheApp().library().Roots();

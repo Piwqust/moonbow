@@ -510,6 +510,21 @@ void SetSavedStreams(const std::string& group, const std::vector<SavedStream>& l
     TheApp().SetUiValue("network." + group, Encode(list));
 }
 
+std::wstring PlaylistImage(const library::Playlist& p) {
+    const std::string cover = TheApp().UiValue("playlist.cover." + p.id);
+    if (!cover.empty()) {
+        std::wstring path = Utf8ToWide(cover);
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+    }
+    const auto snap = TheApp().library().Current();
+    for (const auto& it : p.items)
+        if (!IsUrl(it.path)) {
+            const library::MediaItem* m = snap ? snap->FindItem(it.path) : nullptr;
+            return m && m->offline ? std::wstring() : it.path;
+        }
+    return {};
+}
+
 void CountPlaylistPlay(const std::string& id) {
     TheApp().SetUiValue("stats.playlist." + id, std::to_string(PlaylistPlays(id) + 1));
 }

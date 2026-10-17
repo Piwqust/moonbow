@@ -55,6 +55,7 @@ void DeletePlaylist(const std::string& id, bool leavePage) {
                 Fmt(Tr(L"“{0}” will be deleted. The media files themselves are not touched."), {p->name}), Tr(L"Delete"),
                 [id, leavePage] {
                     TheApp().playlists().Delete(id);
+                    TheApp().SetUiValue("playlist.cover." + id, {});
                     TheApp().playlists().Flush();
                     if (leavePage) TheApp().Navigate(Route{Section::Playlists, {}});
                     TheApp().libraryChanged.Emit();
@@ -102,6 +103,7 @@ std::vector<MenuItem> PlaylistMenu(const library::Playlist& p, bool onPage) {
     m.push_back(Item(L"Shuffle", "shuffle_right", [id] { PlayPlaylist(id, true); }, has));
     auto q = PlaylistQueue(p);
     m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }, has));
+    m.push_back(Item(L"Add Subtitles…", "subtitles", [id] { ShowAddSubtitlesDialog(Utf8ToWide(id)); }, has));
     m.push_back(MenuItem::Separator());
     m.push_back(Item(L"Rename…", "edit", [id] { RenamePlaylist(id); }));
     m.push_back(Item(L"Export Playlist…", "save", [id] { ExportPlaylist(id); }, has));
@@ -172,12 +174,7 @@ protected:
             e.icon = "playlist";
             e.date = p->modified;
             e.count = list_ || compact_ ? static_cast<int>(p->items.size()) : -1;
-            for (const auto& it : p->items)
-                if (!IsUrl(it.path)) {
-                    const library::MediaItem* m = snap_ ? snap_->FindItem(it.path) : nullptr;
-                    if (!m || !m->offline) e.image = it.path;
-                    break;
-                }
+            e.image = PlaylistImage(*p);
             AddRoute(std::move(e), Route{Section::Playlists, Utf8ToWide(p->id)});
         }
     }

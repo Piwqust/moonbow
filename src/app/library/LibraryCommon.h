@@ -71,6 +71,8 @@ std::vector<SavedStream> SavedStreams(const std::string& group);
 void SetSavedStreams(const std::string& group, const std::vector<SavedStream>& list);
 void CountPlaylistPlay(const std::string& id);
 int PlaylistPlays(const std::string& id);
+// Card image of a playlist: the cover picked in "New playlist", else the first local item.
+std::wstring PlaylistImage(const library::Playlist& p);
 
 // "view.<key>" = grid|list, "sort.<key>" = <name>[:desc]
 bool ListModeFor(const std::string& key, bool fallbackList);
