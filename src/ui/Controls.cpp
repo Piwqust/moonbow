@@ -582,11 +582,20 @@ Rect TextBox::CaretRect() const {
     return {tr.x + XOf(caret_) - scroll_, rect.Cy() - 9, 1, 18};
 }
 
+TextBox::~TextBox() {
+    // A focused box can be destroyed with its popup or page: stop the caret timer,
+    // unless its host is already gone.
+    if (!blinkTimer_ || !blinkHost_) return;
+    const auto& hosts = Host::All();
+    if (std::find(hosts.begin(), hosts.end(), blinkHost_) != hosts.end()) blinkHost_->CancelTimer(blinkTimer_);
+}
+
 void TextBox::ResetBlink() {
     caretOn_ = true;
     Host* host = GetHost();
     if (!host) return;
-    if (blinkTimer_) host->CancelTimer(blinkTimer_);
+    if (blinkTimer_ && blinkHost_) blinkHost_->CancelTimer(blinkTimer_);
+    blinkHost_ = host;
     blinkTimer_ = host->StartTimer(530, [this] {
         caretOn_ = !caretOn_;
         Invalidate();
@@ -594,11 +603,10 @@ void TextBox::ResetBlink() {
 }
 
 void TextBox::OnFocusChanged(bool focused) {
-    Host* host = GetHost();
     if (focused) {
         ResetBlink();
     } else {
-        if (host && blinkTimer_) host->CancelTimer(blinkTimer_);
+        if (blinkHost_ && blinkTimer_) blinkHost_->CancelTimer(blinkTimer_);
         blinkTimer_ = 0;
         anchor_ = caret_;
     }

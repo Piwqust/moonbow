@@ -215,6 +215,7 @@ private:
 class TextBox : public Widget {
 public:
     explicit TextBox(std::wstring placeholder = {}, std::string leadingIcon = {});
+    ~TextBox() override;
     const std::wstring& Text() const { return text_; }
     void SetText(std::wstring text, bool notify = false);
     void SelectAll();
@@ -256,6 +257,7 @@ private:
     bool selecting_ = false;
     bool caretOn_ = true;
     UINT_PTR blinkTimer_ = 0;
+    Host* blinkHost_ = nullptr;  // the host that owns blinkTimer_
 };
 
 // Row of accent swatches (monochrome tones).

@@ -1,0 +1,860 @@
+// Queue / Bookmarks / Chapters tabs of the list popover, and the mini player queue.
+#include "Util.h"
+#include "app/Actions.h"
+#include "app/App.h"
+#include "app/I18n.h"
+#include "app/MainWindow.h"
+#include "app/player/LiveState.h"
+#include "app/player/PanelKit.h"
+#include "app/player/PanelTabs.h"
+#include "gfx/Text.h"
+
+#include <algorithm>
+#include <numeric>
+
+namespace app::panel {
+
+using namespace ui;
+
+std::vector<std::wstring> PickFiles(int kind);  // TracksPanel.cpp
+
+namespace {
+
+const PlayerState& PS() {
+    return TheApp().player().State();
+}
+
+std::wstring CurrentPath() {
+    const QueueItem* item = TheApp().queue().CurrentItem();
+    if (item) return item->path;
+    return PS().path;
+}
+
+// "2h 3m", "25m", "40s".
+std::wstring ShortDuration(double s) {
+    const long long t = static_cast<long long>(std::llround(s));
+    const long long h = t / 3600, m = (t % 3600) / 60;
+    if (h > 0) return Fmt(Tr(L"{0}h {1}m"), {std::to_wstring(h), std::to_wstring(m)});
+    if (m > 0) return Fmt(Tr(L"{0}m"), m);
+    return Fmt(Tr(L"{0}s"), t);
+}
+
+// "23:06" (or "1:02:03") as in the queue list.
+std::wstring ClockTime(double s) {
+    return FormatTime(s, s >= 3600);
+}
+
+// "00:00:42:023" as in the bookmarks list.
+std::wstring PreciseTime(double s) {
+    const long long ms = std::llround(std::max(0.0, s) * 1000);
+    wchar_t buf[40];
+    swprintf_s(buf, L"%02lld:%02lld:%02lld:%03lld", ms / 3600000, (ms / 60000) % 60, (ms / 1000) % 60, ms % 1000);
+    return buf;
+}
+
+std::wstring BookmarkName(const library::Bookmark& b, size_t index) {
+    return b.name.empty() ? Fmt(Tr(L"Bookmark {0}"), static_cast<long long>(index + 1)) : b.name;
+}
+
+std::wstring CountBookmarks(size_t n) {
+    const long long c = static_cast<long long>(n);
+    if (CurrentLanguage() == Language::Russian)
+        return std::to_wstring(c) + L" " + Plural(c, L"закладка", L"закладки", L"закладок");
+    return std::to_wstring(c) + (c == 1 ? L" Bookmark" : L" Bookmarks");
+}
+
+ScrollView* ScrollerOf(Widget* w) {
+    for (Widget* p = w->Parent(); p; p = p->Parent())
+        if (auto* s = dynamic_cast<ScrollView*>(p)) return s;
+    return nullptr;
+}
+
+// Small icon button for list headers (24 DIP icons in a 30×28 hit box).
+IconButton* HeaderButton(Widget* parent, const char* icon, const wchar_t* tip, std::function<void()> click, int box = 30,
+                         int iconSize = 24) {
+    auto* b = parent->Add<IconButton>(icon, Tr(tip), box, iconSize);
+    b->width = Length::Px(static_cast<float>(box));
+    b->height = Length::Px(28);
+    b->onClick = std::move(click);
+    return b;
+}
+
+// Summary line + buttons, 68 DIP tall in the design (40 in the mini player).
+class ListHeader : public Widget {
+public:
+    ListHeader(std::function<std::wstring()> text, bool compact) : text_(std::move(text)), compact_(compact) {
+        dir = Dir::Row;
+        align = Align::Center;
+        width = Length::Grow();
+        height = Length::Px(compact ? 40.0f : 68.0f);
+        pad = compact ? Insets{20, 0, 14, 0} : Insets{28, 0, 18, 0};
+        gap = compact ? 4.0f : 6.0f;
+        label_ = Add<Label>(L"", compact ? TextStyle::Small : TextStyle::Body, Tone::Tertiary);
+        label_->width = Length::Grow();
+        Refresh();
+    }
+    void Refresh() {
+        label_->SetText(text_());
+    }
+
+private:
+    std::function<std::wstring()> text_;
+    bool compact_;
+    Label* label_;
+};
+
+// --- queue ------------------------------------------------------------------------------------
+
+class QueueList : public Widget {
+public:
+    explicit QueueList(bool compact) : compact_(compact) {
+        interactive = true;
+        focusable = true;
+        width = Length::Grow();
+        pad = compact ? Insets{12, 0, 12, 12} : Insets{20, 0, 20, 20};
+        queueConn_ = Connect(TheApp().queue().changed, [this] {
+            if (!dragging_) selected_ = std::min(selected_, static_cast<int>(TheApp().queue().Items().size()) - 1);
+            InvalidateLayout();
+        });
+        playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & (kChangeFile | kChangeMeta | kChangeState)) Invalidate();
+        });
+        libConn_ = Connect(TheApp().libraryChanged, [this] { Invalidate(); });
+        onContextMenu = [this](const MouseEvent& e) { ShowMenuAt(e); };
+    }
+
+    float Pitch() const { return compact_ ? 31.0f : 44.0f; }
+    float RowH() const { return compact_ ? 26.0f : 32.0f; }
+    int Count() const { return static_cast<int>(TheApp().queue().Items().size()); }
+    Rect RowRect(int i) const {
+        return {rect.x + pad.l, rect.y + pad.t + Pitch() * static_cast<float>(i), rect.w - pad.H(), RowH()};
+    }
+    int RowAt(float y) const {
+        const int i = static_cast<int>(std::floor((y - rect.y - pad.t) / Pitch()));
+        return i >= 0 && i < Count() ? i : -1;
+    }
+
+    Size MeasureContent(float availW, float) override {
+        const int n = Count();
+        if (n == 0) return {availW, 120};
+        return {availW, pad.V() + Pitch() * static_cast<float>(n) - (Pitch() - RowH())};
+    }
+
+    void OnLayout() override {
+        if (!scrolled_ && Count() > 0) {
+            scrolled_ = true;
+            const int cur = TheApp().queue().Current();
+            if (cur >= 0)
+                if (Host* h = GetHost())
+                    h->Post([this, cur, alive = std::weak_ptr<bool>(alive_)] {
+                        if (alive.expired()) return;
+                        if (ScrollView* sv = ScrollerOf(this)) sv->ScrollIntoView(RowRect(cur));
+                    });
+        }
+    }
+
+    double DurationOf(int i) const {
+        const auto& items = TheApp().queue().Items();
+        const QueueItem& item = items[static_cast<size_t>(i)];
+        if (i == TheApp().queue().Current() && PS().fileLoaded && PS().duration > 0) return PS().duration;
+        if (item.duration > 0) return item.duration;
+        if (const library::MediaItem* m = TheApp().library().Current()->FindItem(item.path)) return m->duration;
+        return 0;
+    }
+
+    std::wstring TitleOf(int i) const {
+        const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
+        if (!item.title.empty()) return item.title;
+        return FileNameOf(item.path);
+    }
+
+    void PaintRow(Painter& p, int i, const Rect& r, bool floating) {
+        const Palette& c = P();
+        const bool current = i == TheApp().queue().Current();
+        const bool hot = !dragging_ && i == hover_ && IsHot();
+        if (floating) {
+            p.Shadow(r, 4, 10, 4, 0.35f);
+            p.Fill(r, c.bgMenu, 4);
+        } else if (current) {
+            p.Fill(r, c.accentFaint, 4);
+        }
+        if (!floating && hot) p.Fill(r, c.hover, 4);
+        if (!floating && i == selected_ && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, 4);
+        const float box = RowH();
+        const bool handleHot = hot && hoverHandle_;
+        p.Icon("move", Rect{r.x, r.y, box, box}.Center(compact_ ? 18.0f : 24.0f, compact_ ? 18.0f : 24.0f),
+               handleHot || floating ? c.textPrimary : c.textTertiary);
+        const TextStyle ts = compact_ ? TextStyle::Small : TextStyle::Body;
+        const float textX = r.x + box + (compact_ ? 8.0f : 10.0f);
+        const double d = DurationOf(i);
+        const std::wstring dur = d > 0 ? ClockTime(d) : L"";
+        const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, ts).width + 4;
+        const bool showRemove = hot && !compact_;
+        const float right = r.Right() - (showRemove ? 28.0f : 0.0f);
+        const Color fg = current ? c.accent : hot ? c.textPrimary : RowText();
+        p.Text(TitleOf(i), {textX, r.y, std::max(0.0f, right - textX - dw - 10), r.h}, ts, fg);
+        if (showRemove) {
+            const Rect x{r.Right() - 26, r.Cy() - 12, 24, 24};
+            if (hoverRemove_) p.Fill(x, c.hover, 4);
+            p.Icon("close", x.Center(18, 18), hoverRemove_ ? c.textPrimary : c.textTertiary);
+        }
+        if (!dur.empty())
+            p.Text(dur, {right - dw - 4, r.y, dw + 4, r.h}, ts, current ? c.textSecondary : c.textTertiary, HAlign::Trailing);
+    }
+
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const int n = Count();
+        if (!dragging_ && IsHot() && GetHost()) {
+            const Point m = GetHost()->MousePos();
+            const int i = RowAt(m.y);
+            hover_ = i >= 0 && RowRect(i).Contains(m.x, m.y) ? i : -1;
+        }
+        if (n == 0) {
+            p.Text(Tr(L"Queue is empty"), {rect.x, rect.y + 24, rect.w, 24}, TextStyle::Body, c.textTertiary,
+                   HAlign::Center);
+            p.Text(Tr(L"Add files with the + button or drop them on the window."), {rect.x + 24, rect.y + 52, rect.w - 48, 40},
+                   TextStyle::Small, c.textTertiary, HAlign::Center, VAlign::Top, gfx::kTextWrap);
+            return;
+        }
+        const Rect clip = p.Clip();
+        const int first = std::max(0, static_cast<int>((clip.y - rect.y - pad.t) / Pitch()) - 1);
+        const int last = std::min(n - 1, static_cast<int>((clip.Bottom() - rect.y - pad.t) / Pitch()) + 1);
+        for (int slot = first; slot <= last; ++slot) {
+            // While dragging, rows between the source and the target shift by one slot.
+            int i = slot;
+            if (dragging_) {
+                if (slot == dropIndex_) continue;
+                if (dragFrom_ < dropIndex_ && slot >= dragFrom_ && slot < dropIndex_) i = slot + 1;
+                else if (dragFrom_ > dropIndex_ && slot > dropIndex_ && slot <= dragFrom_) i = slot - 1;
+            }
+            if (i < 0 || i >= n) continue;
+            PaintRow(p, i, RowRect(slot), false);
+        }
+    }
+
+    void PaintOver(Painter& p) override {
+        if (!dragging_) return;
+        Rect r = RowRect(dragFrom_);
+        r.y = std::clamp(dragY_ - grabDy_, rect.y + pad.t, RowRect(Count() - 1).y);
+        PaintRow(p, dragFrom_, r, true);
+    }
+
+    bool OnMouseMove(const MouseEvent& e) override {
+        if (dragging_) {
+            dragY_ = e.y;
+            const float center = dragY_ - grabDy_ + RowH() / 2;
+            dropIndex_ = std::clamp(static_cast<int>((center - rect.y - pad.t) / Pitch()), 0, Count() - 1);
+            AutoScroll(e.y);
+            Invalidate();
+            return true;
+        }
+        const int i = RowAt(e.y);
+        const Rect r = i >= 0 ? RowRect(i) : Rect{};
+        const bool inRow = i >= 0 && r.Contains(e.x, e.y);
+        const bool handle = inRow && e.x < r.x + RowH() + 4;
+        const bool remove = inRow && !compact_ && e.x >= r.Right() - 28;
+        const int h = inRow ? i : -1;
+        if (h != hover_ || handle != hoverHandle_ || remove != hoverRemove_) {
+            hover_ = h;
+            hoverHandle_ = handle;
+            hoverRemove_ = remove;
+            cursor = handle ? IDC_SIZENS : IDC_ARROW;
+            tooltip = remove ? Tr(L"Remove from queue") : handle ? Tr(L"Drag to reorder") : L"";
+            Invalidate();
+        }
+        return true;
+    }
+
+    void OnMouseLeave() override {
+        if (dragging_) return;
+        hover_ = -1;
+        hoverHandle_ = hoverRemove_ = false;
+        Invalidate();
+    }
+
+    bool OnMouseDown(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        downIndex_ = -1;
+        if (i < 0 || !RowRect(i).Contains(e.x, e.y)) return true;
+        selected_ = i;
+        if (e.x < RowRect(i).x + RowH() + 4) {
+            dragging_ = true;
+            dragFrom_ = dropIndex_ = i;
+            dragY_ = e.y;
+            grabDy_ = e.y - RowRect(i).y;
+        } else {
+            downIndex_ = i;
+        }
+        Invalidate();
+        return true;
+    }
+
+    bool OnMouseUp(const MouseEvent& e) override {
+        if (dragging_) {
+            dragging_ = false;
+            const int from = dragFrom_, to = dropIndex_;
+            selected_ = to;
+            if (from != to) TheApp().queue().Move(from, to);
+            Invalidate();
+            return true;
+        }
+        const int i = RowAt(e.y);
+        if (i >= 0 && i == downIndex_) {
+            if (!compact_ && e.x >= RowRect(i).Right() - 28) {
+                Remove(i);
+            } else if (i == TheApp().queue().Current() && PS().fileLoaded) {
+                if (PS().paused) TheApp().player().SetPause(false);
+            } else {
+                TheApp().PlayIndex(i);
+            }
+        }
+        downIndex_ = -1;
+        return true;
+    }
+
+    bool OnKeyDown(const KeyEvent& e) override {
+        const int n = Count();
+        if (n == 0) return false;
+        if (selected_ < 0) selected_ = std::max(0, TheApp().queue().Current());
+        const bool move = e.mods.alt || e.mods.ctrl;
+        int target = selected_;
+        switch (e.key) {
+            case VK_UP: target = std::max(0, selected_ - 1); break;
+            case VK_DOWN: target = std::min(n - 1, selected_ + 1); break;
+            case VK_HOME: target = 0; break;
+            case VK_END: target = n - 1; break;
+            case VK_RETURN: TheApp().PlayIndex(selected_); return true;
+            case VK_DELETE: Remove(selected_); return true;
+            default: return false;
+        }
+        if (move && target != selected_) TheApp().queue().Move(selected_, target);
+        selected_ = target;
+        if (ScrollView* sv = ScrollerOf(this)) sv->ScrollIntoView(RowRect(selected_));
+        Invalidate();
+        return true;
+    }
+
+    void Remove(int i) {
+        if (i < 0 || i >= Count()) return;
+        TheApp().queue().Remove(i);
+        hover_ = -1;
+    }
+
+    int Selected() const { return selected_; }
+
+private:
+    void AutoScroll(float y) {
+        ScrollView* sv = ScrollerOf(this);
+        if (!sv) return;
+        if (y < sv->rect.y + 24) sv->ScrollTo(sv->Offset() - 12, false);
+        else if (y > sv->rect.Bottom() - 24) sv->ScrollTo(sv->Offset() + 12, false);
+    }
+
+    void ShowMenuAt(const MouseEvent& e) {
+        const int i = RowAt(e.y);
+        if (i < 0) return;
+        selected_ = i;
+        std::vector<MenuItem> items;
+        items.push_back({Tr(L"Play"), L"", "play", false, true, false, false, [i] { TheApp().PlayIndex(i); }});
+        items.push_back({Tr(L"Move up"), L"", "arrow_up", false, i > 0, false, false,
+                         [i] { TheApp().queue().Move(i, i - 1); }});
+        items.push_back({Tr(L"Move down"), L"", "arrow_down", false, i + 1 < Count(), false, false,
+                         [i] { TheApp().queue().Move(i, i + 1); }});
+        items.push_back(MenuItem::Separator());
+        items.push_back({Tr(L"Remove from queue"), L"Del", "remove", false, true, false, false,
+                         [this, i] { Remove(i); }});
+        ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
+    }
+
+    bool compact_;
+    int hover_ = -1, selected_ = -1, downIndex_ = -1;
+    bool hoverHandle_ = false, hoverRemove_ = false;
+    bool dragging_ = false;
+    int dragFrom_ = 0, dropIndex_ = 0;
+    float dragY_ = 0, grabDy_ = 0;
+    bool scrolled_ = false;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+    ScopedConnection queueConn_, playerConn_, libConn_;
+};
+
+std::wstring QueueSummary() {
+    const PlayQueue& q = TheApp().queue();
+    const auto& items = q.Items();
+    double total = 0;
+    bool complete = true;  // a partial total would be misleading
+    auto lib = TheApp().library().Current();
+    for (size_t i = 0; i < items.size(); ++i) {
+        double d = items[i].duration;
+        if (static_cast<int>(i) == q.Current() && PS().duration > 0) d = PS().duration;
+        if (d <= 0)
+            if (const library::MediaItem* m = lib->FindItem(items[i].path)) d = m->duration;
+        if (d <= 0) complete = false;
+        total += d;
+    }
+    std::wstring s = CountItems(static_cast<long long>(items.size()));
+    if (complete && total > 0) s += L" - " + ShortDuration(total);
+    return s;
+}
+
+void SortQueue(int mode) {
+    PlayQueue& q = TheApp().queue();
+    std::vector<QueueItem> items = q.Items();
+    if (items.size() < 2) return;
+    const std::wstring current = q.CurrentItem() ? q.CurrentItem()->path : L"";
+    std::vector<size_t> order(items.size());
+    std::iota(order.begin(), order.end(), size_t{0});
+    auto name = [&](size_t i) { return items[i].title.empty() ? FileNameOf(items[i].path) : items[i].title; };
+    if (mode == 2) {
+        std::reverse(order.begin(), order.end());
+    } else {
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            const int c = CompareStringEx(LOCALE_NAME_USER_DEFAULT, SORT_DIGITSASNUMBERS | NORM_IGNORECASE,
+                                          name(a).c_str(), -1, name(b).c_str(), -1, nullptr, nullptr, 0);
+            return mode == 0 ? c == CSTR_LESS_THAN : c == CSTR_GREATER_THAN;
+        });
+    }
+    std::vector<QueueItem> sorted;
+    int cur = -1;
+    for (size_t i : order) {
+        if (items[i].path == current && cur < 0) cur = static_cast<int>(sorted.size());
+        sorted.push_back(items[i]);
+    }
+    q.Set(std::move(sorted), cur, q.Name());
+}
+
+void AddFilesToQueue() {
+    std::vector<QueueItem> add;
+    for (const std::wstring& f : PickFiles(0)) add.push_back({f, FileNameOf(f), 0});
+    if (add.empty()) return;
+    const bool wasEmpty = TheApp().queue().Items().empty();
+    TheApp().queue().Add(std::move(add));
+    if (wasEmpty || !PS().fileLoaded) TheApp().PlayIndex(TheApp().queue().Current() < 0 ? 0 : TheApp().queue().Current());
+}
+
+// Repeat button with a small "1" for repeat-one.
+class RepeatButton : public IconButton {
+public:
+    RepeatButton() : IconButton("repeat_right", Tr(L"Repeat")) {
+        width = Length::Px(30);
+        height = Length::Px(28);
+        onClick = [] { Run(Action::ToggleRepeat); };
+        conn_ = Connect(TheApp().queue().changed, [this] { Invalidate(); });
+    }
+    void Paint(Painter& p) override {
+        const Repeat r = TheApp().queue().RepeatMode();
+        active = r != Repeat::Off;
+        tooltip = r == Repeat::Off ? Tr(L"Repeat off") : r == Repeat::All ? Tr(L"Repeat all") : Tr(L"Repeat one");
+        IconButton::Paint(p);
+        if (r == Repeat::One) {
+            const Rect b{rect.Right() - 11, rect.y + 2, 10, 10};
+            p.Fill(b, P().accent, 5);
+            p.Text(L"1", b, TextStyle::Micro, P().onAccent, HAlign::Center);
+        }
+    }
+
+private:
+    ScopedConnection conn_;
+};
+
+class ShuffleButton : public IconButton {
+public:
+    ShuffleButton() : IconButton("shuffle_right", Tr(L"Shuffle")) {
+        width = Length::Px(30);
+        height = Length::Px(28);
+        onClick = [] { Run(Action::ToggleShuffle); };
+        conn_ = Connect(TheApp().queue().changed, [this] { Invalidate(); });
+    }
+    void Paint(Painter& p) override {
+        active = TheApp().queue().Shuffle();
+        IconButton::Paint(p);
+    }
+
+private:
+    ScopedConnection conn_;
+};
+
+// Column: header + scrolling list. Keeps the header text in sync.
+class QueueTab : public Widget {
+public:
+    explicit QueueTab(bool compact) {
+        dir = Dir::Column;
+        width = Length::Grow();
+        height = Length::Grow();
+        header_ = Add<ListHeader>([] { return QueueSummary(); }, compact);
+        sort_ = HeaderButton(header_, "sort", L"Sort", [this] {
+            std::vector<MenuItem> items;
+            items.push_back({Tr(L"Sort by name"), L"", "", false, true, false, false, [] { SortQueue(0); }});
+            items.push_back({Tr(L"Sort by name, descending"), L"", "", false, true, false, false, [] { SortQueue(1); }});
+            items.push_back({Tr(L"Reverse order"), L"", "", false, true, false, false, [] { SortQueue(2); }});
+            ShowMenu(GetHost(), sort_->rect, std::move(items), Place::Below, 220);
+        });
+        if (!compact) {
+            header_->Add<RepeatButton>();
+            header_->Add<ShuffleButton>();
+        }
+        HeaderButton(header_, "remove", L"Remove selected", [this] {
+            const int sel = list_->Selected();
+            if (sel >= 0) {
+                list_->Remove(sel);
+                return;
+            }
+            // Nothing selected: clear everything except what is playing.
+            PlayQueue& q = TheApp().queue();
+            for (int i = static_cast<int>(q.Items().size()) - 1; i >= 0; --i)
+                if (i != q.Current()) q.Remove(i);
+        });
+        HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
+        auto* sv = Add<ScrollView>();
+        sv->width = Length::Grow();
+        sv->height = Length::Grow();
+        list_ = sv->SetContent<QueueList>(compact);
+        conn_ = Connect(TheApp().queue().changed, [this] { header_->Refresh(); });
+        playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & (kChangeFile | kChangeMeta)) header_->Refresh();
+        });
+        libConn_ = Connect(TheApp().libraryChanged, [this] { header_->Refresh(); });
+    }
+
+private:
+    ListHeader* header_;
+    IconButton* sort_ = nullptr;
+    QueueList* list_;
+    ScopedConnection conn_, playerConn_, libConn_;
+};
+
+// --- bookmarks ----------------------------------------------------------------------------------
+
+class BookmarkList : public Widget {
+public:
+    BookmarkList() {
+        interactive = true;
+        focusable = true;
+        dir = Dir::None;
+        width = Length::Grow();
+        pad = {20, 0, 20, 20};
+        conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & kChangeFile) {
+                CancelEdit();
+                InvalidateLayout();
+            }
+        });
+        onContextMenu = [this](const MouseEvent& e) {
+            const int i = RowAt(e.y);
+            if (i < 0) return;
+            selected_ = i;
+            std::vector<MenuItem> items;
+            items.push_back({Tr(L"Go to bookmark"), L"", "play", false, true, false, false, [this, i] { Seek(i); }});
+            items.push_back({Tr(L"Rename"), L"F2", "edit", false, true, false, false, [this, i] { BeginEdit(i); }});
+            items.push_back({Tr(L"Delete"), L"Del", "remove", false, true, false, false, [this, i] { Delete(i); }});
+            ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
+        };
+    }
+    std::vector<library::Bookmark> Marks() const { return TheApp().bookmarks().For(CurrentPath()); }
+    static constexpr float kPitch = 44, kRowH = 32;
+    Rect RowRect(int i) const { return {rect.x + pad.l, rect.y + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH}; }
+    int RowAt(float y) const {
+        const int i = static_cast<int>(std::floor((y - rect.y) / kPitch));
+        return i >= 0 && i < static_cast<int>(Marks().size()) ? i : -1;
+    }
+    Size MeasureContent(float availW, float) override {
+        const size_t n = Marks().size();
+        return {availW, n == 0 ? 120.0f : kPitch * static_cast<float>(n) + pad.b};
+    }
+    void OnLayout() override {
+        if (editor_) editor_->Arrange(RowRect(editIndex_).Inset({-4, 0, 140, 0}));
+    }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const auto marks = Marks();
+        if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y);
+        if (marks.empty()) {
+            const bool loaded = PS().fileLoaded;
+            p.Text(loaded ? Tr(L"No bookmarks yet") : Tr(L"Nothing is playing"), {rect.x, rect.y + 24, rect.w, 24},
+                   TextStyle::Body, c.textTertiary, HAlign::Center);
+            if (loaded)
+                p.Text(Tr(L"Press + to bookmark the current moment."), {rect.x + 24, rect.y + 52, rect.w - 48, 20},
+                       TextStyle::Small, c.textTertiary, HAlign::Center);
+            return;
+        }
+        for (size_t k = 0; k < marks.size(); ++k) {
+            const int i = static_cast<int>(k);
+            const Rect r = RowRect(i);
+            const bool hot = i == hover_ && IsHot();
+            if (i == selected_) p.Fill(r, c.bgSelected, 4);
+            if (hot) p.Fill(r, c.hover, 4);
+            if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
+            const std::wstring time = PreciseTime(marks[k].time);
+            if (!(editor_ && editIndex_ == i))
+                p.Text(BookmarkName(marks[k], k), {r.x, r.y, r.w - 130, r.h}, TextStyle::Body,
+                       hot ? c.textPrimary : RowText());
+            p.Text(time, {r.Right() - 130, r.y, 126, r.h}, TextStyle::Mono, c.textTertiary, HAlign::Trailing);
+        }
+    }
+    bool OnMouseMove(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        if (i != hover_) {
+            hover_ = i;
+            Invalidate();
+        }
+        return true;
+    }
+    void OnMouseLeave() override {
+        hover_ = -1;
+        Invalidate();
+    }
+    bool OnMouseDown(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        if (i >= 0) {
+            selected_ = i;
+            Seek(i);
+        }
+        return true;
+    }
+    bool OnDoubleClick(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        if (i >= 0) BeginEdit(i);
+        return true;
+    }
+    bool OnKeyDown(const KeyEvent& e) override {
+        const int n = static_cast<int>(Marks().size());
+        if (n == 0) return false;
+        if (e.key == VK_UP) selected_ = std::max(0, selected_ - 1);
+        else if (e.key == VK_DOWN) selected_ = std::min(n - 1, selected_ + 1);
+        else if (e.key == VK_RETURN && selected_ >= 0) Seek(selected_);
+        else if (e.key == VK_F2 && selected_ >= 0) BeginEdit(selected_);
+        else if (e.key == VK_DELETE && selected_ >= 0) Delete(selected_);
+        else return false;
+        Invalidate();
+        return true;
+    }
+
+    void Seek(int i) {
+        const auto marks = Marks();
+        if (i < 0 || i >= static_cast<int>(marks.size()) || !PS().fileLoaded) return;
+        TheApp().player().SeekAbsolute(marks[static_cast<size_t>(i)].time, true);
+    }
+    void Delete(int i) {
+        CancelEdit();
+        TheApp().bookmarks().Remove(CurrentPath(), static_cast<size_t>(i));
+        selected_ = std::min(selected_, static_cast<int>(Marks().size()) - 1);
+        Changed();
+    }
+    void AddCurrent() {
+        if (!PS().fileLoaded) return;
+        const size_t i = TheApp().bookmarks().Add(CurrentPath(), PS().position);
+        selected_ = static_cast<int>(i);
+        Changed();
+        BeginEdit(selected_);
+    }
+    int Selected() const { return selected_; }
+    std::function<void()> onChanged;
+
+private:
+    void Changed() {
+        InvalidateLayout();
+        if (onChanged) onChanged();
+    }
+    void BeginEdit(int i) {
+        CancelEdit();
+        const auto marks = Marks();
+        if (i < 0 || i >= static_cast<int>(marks.size())) return;
+        editIndex_ = i;
+        auto box = std::make_unique<EditBox>();
+        box->SetText(BookmarkName(marks[static_cast<size_t>(i)], static_cast<size_t>(i)));
+        box->onSubmit = [this](const std::wstring& t) { FinishEdit(t); };
+        box->onEscape = [this] { Post([this] { CancelEdit(); }); };
+        editor_ = static_cast<TextBox*>(AddChild(std::move(box)));
+        InvalidateLayout();
+        if (Host* h = GetHost()) {
+            h->SetFocus(editor_, true);
+            editor_->SelectAll();
+        }
+    }
+    void FinishEdit(const std::wstring& text) {
+        const int i = editIndex_;
+        std::wstring name = text;
+        while (!name.empty() && iswspace(name.back())) name.pop_back();
+        Post([this, i, name] {
+            TheApp().bookmarks().Rename(CurrentPath(), static_cast<size_t>(i), name);
+            CancelEdit();
+            if (Host* h = GetHost()) h->SetFocus(this);
+        });
+    }
+    void CancelEdit() {
+        if (!editor_) return;
+        Widget* e = editor_;
+        editor_ = nullptr;
+        if (Host* h = GetHost(); h && h->Focus() == e) h->SetFocus(this);
+        RemoveChild(e);
+        Invalidate();
+    }
+    void Post(std::function<void()> fn) {
+        // Removing the editor from inside its own key handler would free it mid-call.
+        if (Host* h = GetHost())
+            h->Post([fn = std::move(fn), alive = std::weak_ptr<bool>(alive_)] {
+                if (!alive.expired()) fn();
+            });
+    }
+
+    int hover_ = -1, selected_ = -1;
+    TextBox* editor_ = nullptr;
+    int editIndex_ = -1;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+    ScopedConnection conn_;
+};
+
+class BookmarksTab : public Widget {
+public:
+    BookmarksTab() {
+        dir = Dir::Column;
+        width = Length::Grow();
+        height = Length::Grow();
+        header_ = Add<ListHeader>([] { return CountBookmarks(TheApp().bookmarks().For(CurrentPath()).size()); }, false);
+        HeaderButton(header_, "remove", L"Delete bookmark", [this] {
+            if (list_->Selected() >= 0) list_->Delete(list_->Selected());
+        });
+        HeaderButton(header_, "add", L"Add bookmark", [this] { list_->AddCurrent(); });
+        auto* sv = Add<ScrollView>();
+        sv->width = Length::Grow();
+        sv->height = Length::Grow();
+        list_ = sv->SetContent<BookmarkList>();
+        list_->onChanged = [this] { header_->Refresh(); };
+        conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & kChangeFile) header_->Refresh();
+        });
+    }
+
+private:
+    ListHeader* header_;
+    BookmarkList* list_;
+    ScopedConnection conn_;
+};
+
+// --- chapters ---------------------------------------------------------------------------------
+
+class ChapterList : public Widget {
+public:
+    ChapterList() {
+        interactive = true;
+        focusable = true;
+        width = Length::Grow();
+        pad = {20, 20, 20, 20};
+        conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & (kChangeChapters | kChangeFile)) InvalidateLayout();
+            else if (m & (kChangeTime | kChangeState)) Invalidate();
+        });
+    }
+    static constexpr float kPitch = 44, kRowH = 32;
+    int Count() const { return static_cast<int>(PS().chapters.size()); }
+    Rect RowRect(int i) const {
+        return {rect.x + pad.l, rect.y + pad.t + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH};
+    }
+    int RowAt(float y) const {
+        const int i = static_cast<int>(std::floor((y - rect.y - pad.t) / kPitch));
+        return i >= 0 && i < Count() ? i : -1;
+    }
+    int CurrentChapter() const {
+        const PlayerState& s = PS();
+        if (s.chapter >= 0) return static_cast<int>(s.chapter);
+        int cur = -1;
+        for (int i = 0; i < Count(); ++i)
+            if (s.chapters[static_cast<size_t>(i)].time <= s.position + 0.05) cur = i;
+        return cur;
+    }
+    Size MeasureContent(float availW, float) override {
+        const int n = Count();
+        return {availW, n == 0 ? 120.0f : pad.V() + kPitch * static_cast<float>(n) - (kPitch - kRowH)};
+    }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const int n = Count();
+        if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y);
+        if (n == 0) {
+            p.Text(Tr(L"This file has no chapters"), {rect.x, rect.y + 24, rect.w, 24}, TextStyle::Body, c.textTertiary,
+                   HAlign::Center);
+            return;
+        }
+        const int cur = CurrentChapter();
+        for (int i = 0; i < n; ++i) {
+            const Chapter& ch = PS().chapters[static_cast<size_t>(i)];
+            const Rect r = RowRect(i);
+            const bool hot = i == hover_ && IsHot();
+            const bool isCur = i == cur;
+            if (isCur) p.Fill(r, c.accentFaint, 4);
+            if (hot) p.Fill(r, c.hover, 4);
+            if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
+            p.Text(std::to_wstring(i + 1), {r.x + 8, r.y, 32, r.h}, TextStyle::Body, isCur ? c.accent : c.accentMid);
+            const std::wstring title = ch.title.empty() ? Fmt(Tr(L"Chapter {0}"), static_cast<long long>(i + 1)) : ch.title;
+            p.Text(title, {r.x + 48, r.y, r.w - 48 - 90, r.h}, TextStyle::Body,
+                   isCur ? c.accent : hot ? c.textPrimary : RowText());
+            p.Text(FormatTime(ch.time, true), {r.Right() - 90, r.y, 86, r.h}, TextStyle::Mono,
+                   isCur ? c.textSecondary : c.textTertiary, HAlign::Trailing);
+        }
+    }
+    bool OnMouseMove(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        if (i != hover_) {
+            hover_ = i;
+            Invalidate();
+        }
+        return true;
+    }
+    void OnMouseLeave() override {
+        hover_ = -1;
+        Invalidate();
+    }
+    bool OnMouseDown(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        if (i >= 0) {
+            selected_ = i;
+            Seek(i);
+        }
+        return true;
+    }
+    bool OnKeyDown(const KeyEvent& e) override {
+        const int n = Count();
+        if (n == 0) return false;
+        if (selected_ < 0) selected_ = std::max(0, CurrentChapter());
+        if (e.key == VK_UP) selected_ = std::max(0, selected_ - 1);
+        else if (e.key == VK_DOWN) selected_ = std::min(n - 1, selected_ + 1);
+        else if (e.key == VK_RETURN) Seek(selected_);
+        else return false;
+        if (ScrollView* sv = ScrollerOf(this)) sv->ScrollIntoView(RowRect(selected_));
+        Invalidate();
+        return true;
+    }
+    void Seek(int i) {
+        if (i < 0 || i >= Count()) return;
+        TheApp().player().SeekAbsolute(PS().chapters[static_cast<size_t>(i)].time, true);
+    }
+
+private:
+    int hover_ = -1, selected_ = -1;
+    ScopedConnection conn_;
+};
+
+}  // namespace
+
+std::unique_ptr<Widget> BuildQueueTab(bool compact) {
+    return std::make_unique<QueueTab>(compact);
+}
+
+std::unique_ptr<Widget> BuildBookmarksTab() {
+    return std::make_unique<BookmarksTab>();
+}
+
+std::unique_ptr<Widget> BuildChaptersTab() {
+    auto sv = std::make_unique<ScrollView>();
+    sv->width = Length::Grow();
+    sv->height = Length::Grow();
+    sv->SetContent<ChapterList>();
+    return sv;
+}
+
+float CompactQueueHeight() {
+    const float rows = static_cast<float>(std::max<size_t>(1, TheApp().queue().Items().size()));
+    return kHeaderH + 40 + std::min(rows, 8.0f) * 31 + 16;
+}
+
+}  // namespace app::panel

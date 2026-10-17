@@ -341,7 +341,12 @@ void Run(Action a) {
             if (w) w->SetUiHidden(!w->UiHidden());
             break;
         case Action::PictureInPicture:
-            Toast(Tr(L"Picture in Picture"), "pip");
+            if (!w) break;
+            if (!w->PictureInPicture() && !s.fileLoaded) {
+                Toast(Tr(L"Nothing is playing"), "pip");
+                break;
+            }
+            w->SetPictureInPicture(!w->PictureInPicture());
             break;
         case Action::Snapshot:
             p.Screenshot();
@@ -405,8 +410,23 @@ void Run(Action a) {
             break;
         case Action::Back: app.GoBack(); break;
         case Action::Forward: app.GoForward(); break;
-        case Action::AddBookmark: Toast(Fmt(Tr(L"Bookmark added at {0}"), {FormatTime(s.position, true)}), "bookmark"); break;
-        case Action::ToggleFavorite: Toast(Tr(L"Added to favorites"), "favorite"); break;
+        case Action::AddBookmark: {
+            if (!s.fileLoaded) break;
+            const QueueItem* item = app.queue().CurrentItem();
+            const std::wstring path = item ? item->path : s.path;
+            if (path.empty()) break;
+            app.bookmarks().Add(path, s.position);
+            Toast(Fmt(Tr(L"Bookmark added at {0}"), {FormatTime(s.position, true)}), "bookmark");
+            break;
+        }
+        case Action::ToggleFavorite: {
+            const QueueItem* item = app.queue().CurrentItem();
+            const std::wstring path = item ? item->path : s.path;
+            if (path.empty()) break;
+            const bool on = app.favorites().Toggle(path);
+            Toast(on ? Tr(L"Added to favorites") : Tr(L"Removed from favorites"), on ? "favorite_active" : "favorite");
+            break;
+        }
         case Action::ShowInfo: ShowMediaInfoDialog(); break;
         case Action::Settings: app.OpenSettings(); break;
         case Action::KeyboardShortcuts: ShowKeyboardShortcutsDialog(); break;

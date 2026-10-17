@@ -34,12 +34,15 @@ private:
     ui::Widget* side_ = nullptr;
     VideoArea* video_ = nullptr;
     ui::Widget* music_ = nullptr;
+    ui::Widget* pip_ = nullptr;
     ControlBar* bar_ = nullptr;
     ScopedConnection playerConn_;
 };
 
 // Built by the player module (MusicView.cpp): cover art, blurred backdrop, titles.
 std::unique_ptr<ui::Widget> CreateMusicView();
+// Hover controls of Picture in Picture mode (PipOverlay.cpp).
+std::unique_ptr<ui::Widget> CreatePipOverlay(MainWindow* window);
 
 // Library-mode mini player (bottom-right): small video, seek, title, controls on hover.
 class MiniPlayer : public ui::Widget {

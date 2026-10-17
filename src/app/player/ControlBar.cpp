@@ -524,6 +524,25 @@ void SeekBar::Paint(Painter& p) {
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : s.position;
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));
+    if (!compact && !s.hasVideo) {
+        // Music: the design's waveform-style bar (decorative bars seeded by the file name).
+        uint32_t h = 2166136261u;
+        for (wchar_t ch : s.path) h = (h ^ static_cast<uint32_t>(ch)) * 16777619u;
+        const float pitch = 5, playX = t.x + t.w * k;
+        float smooth = 0.5f;
+        for (float bx = t.x + 6; bx < t.Right() - 6; bx += pitch) {
+            h = h * 1664525u + 1013904223u;
+            const float r = static_cast<float>((h >> 8) & 0xFFFF) / 65535.0f;
+            smooth = smooth * 0.55f + r * 0.45f;
+            const float bh = std::round(4 + (t.h - 10) * smooth * smooth * 1.4f);
+            const float bhc = std::min(bh, t.h - 6);
+            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc}, bx < playX ? P().accentMid : P().lineStrong,
+                   0.75f);
+        }
+        const float x = std::clamp(playX, t.x + 2, t.Right() - 2);
+        p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);
+        return;
+    }
     // Buffered range ahead of the playhead (network streams).
     if (s.cacheTime > pos) {
         const float kc = static_cast<float>(std::clamp(s.cacheTime / s.duration, 0.0, 1.0));
