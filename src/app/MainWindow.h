@@ -30,10 +30,14 @@ public:
 
     // Hide UI mode (Ctrl+\): only the video and an auto-hiding control bar.
     void SetUiHidden(bool hidden);
-    bool UiHidden() const { return uiHidden_; }
+    bool UiHidden() const { return uiHidden_ || pip_; }
     // True while the controls overlay is visible in fullscreen/hide-UI mode.
     float ChromeOpacity() const { return chrome_.Get(); }
     void PokeChrome();  // mouse moved: show controls, restart the hide timer
+
+    // Picture in Picture: compact always-on-top video; off restores the previous placement.
+    void SetPictureInPicture(bool on);
+    bool PictureInPicture() const { return pip_; }
 
     TitleBar* titleBar() const { return titleBar_; }
     PlayerView* playerView() const { return player_; }
@@ -56,6 +60,8 @@ private:
     bool videoWanted_ = false;
     RECT appliedVideo_{-1, -1, -1, -1};
     bool uiHidden_ = false;
+    bool pip_ = false;
+    WINDOWPLACEMENT pipRestore_{sizeof(WINDOWPLACEMENT)};
     ui::AnimFloat chrome_{1.0f};
     UINT_PTR chromeTimer_ = 0;
 

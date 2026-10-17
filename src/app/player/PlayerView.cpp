@@ -7,6 +7,7 @@
 #include "app/MainWindow.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/PanelTabs.h"
 
 #include <cmath>
 
@@ -168,6 +169,8 @@ public:
         onContextMenu = [this](const MouseEvent& e) { ShowVideoContextMenu(GetHost(), {e.x, e.y}); };
     }
     bool OnMouseDown(const MouseEvent& e) override {
+        // The click that closed a player popover doesn't also pause.
+        if (e.button == MouseButton::Left && panel::PanelJustClosed()) return true;
         if (e.button == MouseButton::Left && PS().fileLoaded) {
             Run(Action::PlayPause);  // like MPC-HC; a double click undoes it
             pausedByClick_ = true;
@@ -181,6 +184,7 @@ public:
         return true;
     }
     bool OnDoubleClick(const MouseEvent&) override {
+        if (window_->PictureInPicture()) return true;
         if (pausedByClick_) Run(Action::PlayPause);
         pausedByClick_ = false;
         Run(Action::Fullscreen);
@@ -222,6 +226,8 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     video_ = Add<VideoArea>(window);
     music_ = AddChild(CreateMusicView());
     music_->visible = false;
+    pip_ = AddChild(CreatePipOverlay(window));
+    pip_->visible = false;
     bar_ = Add<ControlBar>();
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
@@ -247,6 +253,7 @@ void PlayerView::OnLayout() {
     const PlayerState& s = PS();
     const bool audioOnly = s.fileLoaded && !s.hasVideo;
     const float barH = 56;
+    const bool pip = window_->PictureInPicture();
 
     float x = rect.x;
     if (side_->visible && !immersive) {
@@ -259,8 +266,10 @@ void PlayerView::OnLayout() {
     if (audioOnly) music_->Arrange(immersive ? area : video_->Inner(false));
 
     bar_->opacity = immersive ? window_->ChromeOpacity() : 1.0f;
-    bar_->visible = !immersive || window_->ChromeOpacity() > 0.01f;
+    bar_->visible = !pip && (!immersive || window_->ChromeOpacity() > 0.01f);
     bar_->Arrange({rect.x, rect.Bottom() - barH, rect.w, barH});
+    pip_->visible = pip;
+    if (pip) pip_->Arrange(rect);
 }
 
 void PlayerView::Paint(Painter& p) {
@@ -325,7 +334,15 @@ MiniPlayer::MiniPlayer(MainWindow* window) : window_(window) {
     auto* next = overlay_->Add<MiniOverlayButton>("next", L"Next", 36, 24);
     next->id = "next";
     next->onClick = [] { Run(Action::Next); };
-    auto* queue = Add<IconButton>("list", Tr(L"Queue"), 28, 20);
+    class QueueButton : public IconButton {
+    public:
+        QueueButton() : IconButton("list", Tr(L"Queue"), 28, 20) {}
+        void Paint(Painter& p) override {
+            active = PlayerPanelOpen(PanelKind::Queue);
+            IconButton::Paint(p);
+        }
+    };
+    auto* queue = Add<QueueButton>();
     queue->id = "queue";
     queue->onClick = [this] { TogglePlayerPanel(PanelKind::Queue, rect); };
     auto* seek = Add<SeekBar>();

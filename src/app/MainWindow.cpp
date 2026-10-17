@@ -111,6 +111,12 @@ bool MainWindow::Create() {
     onKey = [this](const KeyEvent& e) {
         const Action a = ActionForKey(e);
         if (a == Action::None) return false;
+        // Esc and F leave Picture in Picture first.
+        if (pip_ && (a == Action::ExitFullscreen || a == Action::Fullscreen)) {
+            SetPictureInPicture(false);
+            if (a == Action::Fullscreen) Run(a);
+            return true;
+        }
         // Esc only leaves fullscreen / hide-UI; elsewhere it does nothing.
         if (a == Action::ExitFullscreen && !IsFullscreen() && !UiHidden()) return false;
         Run(a);
@@ -158,7 +164,49 @@ void MainWindow::BuildUi() {
 }
 
 bool MainWindow::Immersive() const {
-    return IsFullscreen() || uiHidden_;
+    return IsFullscreen() || uiHidden_ || pip_;
+}
+
+void MainWindow::SetPictureInPicture(bool on) {
+    if (on == pip_) return;
+    HWND hwnd = Hwnd();
+    if (on) {
+        if (!TheApp().player().State().fileLoaded) return;
+        if (IsFullscreen()) SetFullscreen(false);
+        if (!TheApp().PlayerShown()) TheApp().ShowPlayer(true);
+        CloseAllPopups();
+        GetWindowPlacement(hwnd, &pipRestore_);
+        if (IsZoomed(hwnd) || IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+        // Last PiP rect (physical pixels) if it is still on a monitor, else bottom-right.
+        const float s = Scale();
+        RECT r{};
+        int x = 0, y = 0, w = 0, h = 0;
+        const std::string saved = TheApp().UiValue("pip.rect");
+        if (sscanf_s(saved.c_str(), "%d,%d,%d,%d", &x, &y, &w, &h) == 4 && w > 100 && h > 60) r = {x, y, x + w, y + h};
+        MONITORINFO mi{sizeof(mi)};
+        HMONITOR mon = r.right > r.left ? MonitorFromRect(&r, MONITOR_DEFAULTTONULL) : nullptr;
+        if (!mon) {
+            GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+            const LONG pw = static_cast<LONG>(480 * s), ph = static_cast<LONG>(270 * s), m = static_cast<LONG>(24 * s);
+            r = {mi.rcWork.right - pw - m, mi.rcWork.bottom - ph - m, mi.rcWork.right - m, mi.rcWork.bottom - m};
+        }
+        pip_ = true;
+        SetWindowPos(hwnd, HWND_TOPMOST, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                     SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+    } else {
+        RECT r;
+        if (GetWindowRect(hwnd, &r)) {
+            char buf[64];
+            sprintf_s(buf, "%ld,%ld,%ld,%ld", r.left, r.top, r.right - r.left, r.bottom - r.top);
+            TheApp().SetUiValue("pip.rect", buf);
+        }
+        pip_ = false;
+        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetWindowPlacement(hwnd, &pipRestore_);
+    }
+    chrome_.Set(1);
+    PokeChrome();
+    RequestLayout();
 }
 
 void MainWindow::SetVideoRect(const Rect& r) {
@@ -172,6 +220,7 @@ void MainWindow::HideVideo() {
 
 void MainWindow::UpdateScreen() {
     CloseAllPopups();
+    if (pip_ && !TheApp().PlayerShown()) SetPictureInPicture(false);
     if (!TheApp().PlayerShown() && uiHidden_) uiHidden_ = false;
     RequestLayout();
 }
@@ -287,6 +336,18 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             *result = TRUE;
             return true;
         }
+        case WM_GETMINMAXINFO:
+            if (!pip_) return false;
+            reinterpret_cast<MINMAXINFO*>(lp)->ptMinTrackSize = {static_cast<LONG>(256 * Scale()),
+                                                                  static_cast<LONG>(144 * Scale())};
+            *result = 0;
+            return true;
+        case WM_NCLBUTTONDBLCLK:
+            // Double click on the PiP video returns to the full window instead of maximizing.
+            if (!pip_ || wp != HTCAPTION) return false;
+            Post([this] { SetPictureInPicture(false); });
+            *result = 0;
+            return true;
         case WM_SIZE:
         case WM_WINDOWPOSCHANGED:
             if (titleBar_) titleBar_->Refresh();
