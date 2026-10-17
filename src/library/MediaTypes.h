@@ -1,0 +1,45 @@
+#pragma once
+// File classification and path helpers shared by the library services.
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+namespace library {
+
+enum class MediaKind : uint8_t { Other, Video, Audio };
+
+// By extension. The lists extend IsMediaFile() in src/Util.cpp (same video/audio set plus
+// less common containers such as .mka, .ape, .wv, .divx, .mxf).
+MediaKind KindOf(std::wstring_view path);
+bool IsMediaPath(std::wstring_view path);  // Video or Audio
+bool IsSubtitlePath(std::wstring_view path);
+bool IsPlaylistPath(std::wstring_view path);
+
+// "video" / "audio" / "other" for JSON files, and back.
+const char* KindName(MediaKind kind);
+MediaKind KindFromName(std::string_view name);
+
+// Forward slashes become backslashes and trailing separators are dropped ("C:\" keeps its
+// backslash). Nothing else is touched: no case change, no resolving of "..".
+std::wstring NormalizePath(std::wstring_view path);
+
+// Case-insensitive identity of a path (normalized + upper-cased like NTFS compares names).
+std::wstring PathKey(std::wstring_view path);
+
+std::wstring ParentFolder(std::wstring_view path);  // "D:\Video\a.mkv" -> "D:\Video"
+std::wstring FileNameOf(std::wstring_view path);    // "a.mkv"
+std::wstring StemOf(std::wstring_view path);        // "a"
+
+// Folding for search: linguistic lower case (Cyrillic included) and "ё" -> "е".
+std::wstring SearchFold(std::wstring_view text);
+// Case-insensitive substring test on already folded strings.
+inline bool FoldedContains(const std::wstring& foldedText, const std::wstring& foldedQuery) {
+    return foldedText.find(foldedQuery) != std::wstring::npos;
+}
+
+// Milliseconds since 1970-01-01 UTC.
+int64_t UnixMsNow();
+int64_t FileTimeToUnixMs(uint64_t fileTime100ns);
+
+}  // namespace library
