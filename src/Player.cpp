@@ -218,6 +218,11 @@ unsigned Player::ProcessEvents() {
                 }
                 break;
             }
+            case MPV_EVENT_START_FILE:
+                // Forget the previous file's size, so window fitting waits for this one's.
+                state_.videoW = state_.videoH = 0;
+                changes |= kChangeVideoSize;
+                break;
             case MPV_EVENT_FILE_LOADED:
                 Trace("file loaded");
                 state_.fileLoaded = true;

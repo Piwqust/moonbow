@@ -30,8 +30,10 @@ public:
 
 private:
     class VideoArea;
+    class ErrorCard;
     MainWindow* window_;
     ui::Widget* side_ = nullptr;
+    ErrorCard* error_ = nullptr;
     VideoArea* video_ = nullptr;
     ui::Widget* music_ = nullptr;
     ui::Widget* pip_ = nullptr;

@@ -857,6 +857,10 @@ void BuildMedia(Builder& b) {
     b.Toggle("playback.shuffle", L"Shuffle", L"Перемешать", false)
         .Desc(L"Play the playlist in random order.", L"Воспроизводить плейлист в случайном порядке.")
         .MpvBool("shuffle");
+    b.Toggle("playback.folderAsPlaylist", L"Play the folder's other files next", L"Играть остальные файлы папки",
+             true)
+        .Desc(L"Opening one file queues the files next to it, like a series. Off: only that file plays.",
+              L"Открытый файл ставит в очередь соседние файлы, как серии. Если выключено, играет только он.");
     b.Toggle("playback.stopAfterEach", L"Stop after each item", L"Останавливаться после каждого файла", false)
         .Desc(L"Pause at the end of every file instead of moving to the next one.",
               L"Ставить на паузу в конце каждого файла, а не переходить к следующему.");

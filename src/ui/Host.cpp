@@ -797,8 +797,10 @@ void Host::OnKey(UINT vk, bool down, bool repeat) {
                 return;
             }
     }
-    if ((vk == VK_RETURN || vk == VK_SPACE) && focus_ && focus_->interactive && focus_->IsEnabled() &&
-        !focus_->WantsTextInput()) {
+    // Space/Enter press the focused control only when it was reached with the
+    // keyboard: after a mouse click Space stays the window's shortcut (play/pause).
+    if ((vk == VK_RETURN || vk == VK_SPACE) && focusVisible_ && focus_ && focus_->interactive &&
+        focus_->IsEnabled() && !focus_->WantsTextInput()) {
         focus_->OnClick();
         RequestRender();
         return;

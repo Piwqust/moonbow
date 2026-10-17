@@ -209,6 +209,11 @@ std::vector<std::wstring> MediaInFolder(const std::wstring& dir, bool recursive)
     return out;
 }
 
+bool IsPlaylistFile(const std::wstring& path) {
+    const wchar_t* ext = PathFindExtensionW(path.c_str());
+    return _wcsicmp(ext, L".m3u") == 0 || _wcsicmp(ext, L".m3u8") == 0;
+}
+
 QueueItem ItemFor(const std::wstring& path) {
     return QueueItem{path, IsUrl(path) ? path : FileNameOf(path), 0};
 }
@@ -490,7 +495,12 @@ void App::OnPlayerEvents() {
         lastEmit = now;
         lastSecond = sec;
     }
-    if (changes & kChangeError) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
+    if (changes & kChangeError) {
+        failedPath_ = queue_.CurrentItem() ? queue_.CurrentItem()->path : std::wstring();
+        failedError_ = s.lastError;
+        if (failedPath_.empty()) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
+    }
+    if ((changes & kChangeFile) && s.fileLoaded) failedPath_.clear();
     if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && config_.GetBool("privacy.saveHistory"))
         history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
     if ((changes & kChangeTime) && s.fileLoaded) {
@@ -571,6 +581,10 @@ bool App::HasMedia() const {
 }
 
 void App::BuildFolderQueue(const std::wstring& file) {
+    if (!config_.GetBool("playback.folderAsPlaylist")) {
+        PlayQueueItems({ItemFor(file)}, 0);
+        return;
+    }
     std::vector<std::wstring> siblings = ListSiblingMedia(file);
     const bool audio = [&] {
         const wchar_t* ext = PathFindExtensionW(file.c_str());
@@ -616,6 +630,36 @@ void App::Open(const std::vector<std::wstring>& paths) {
             ShowToast(main_.get(), Tr(L"Subtitles added"), "subtitles");
             return;
         }
+    }
+    // Missing files: say so instead of playing something else from that folder.
+    std::vector<std::wstring> existing;
+    std::wstring missing;
+    for (const auto& p : paths) {
+        if (IsUrl(p) || GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES)
+            existing.push_back(p);
+        else if (missing.empty())
+            missing = p;
+    }
+    if (!missing.empty())
+        ShowToast(main_.get(), Fmt(Tr(L"File not found: {0}"), {FileNameOf(missing)}), "info", 4000);
+    if (existing.empty()) return;
+    if (existing.size() != paths.size()) {
+        Open(existing);
+        return;
+    }
+    // Playlist files become the queue.
+    if (paths.size() == 1 && IsPlaylistFile(paths[0])) {
+        std::vector<library::PlaylistItem> entries;
+        if (!library::ReadM3u(paths[0], &entries) || entries.empty()) {
+            ShowToast(main_.get(), Fmt(Tr(L"Couldn't read the playlist {0}"), {FileNameOf(paths[0])}), "info", 4000);
+            return;
+        }
+        std::vector<QueueItem> items;
+        for (auto& e : entries) items.push_back({std::move(e.path), std::move(e.title), e.duration});
+        std::wstring name = FileNameOf(paths[0]);
+        if (const size_t dot = name.find_last_of(L'.'); dot != std::wstring::npos) name.resize(dot);
+        PlayQueueItems(std::move(items), 0, std::move(name));
+        return;
     }
     if (paths.size() == 1 && !IsUrl(paths[0])) {
         if (IsDirectory(paths[0])) {
@@ -684,6 +728,7 @@ void App::Previous() {
 }
 
 void App::StopPlayback() {
+    failedPath_.clear();
     SaveHistoryPosition();
     player_.Stop();
     if (main_ && main_->IsFullscreen()) main_->SetFullscreen(false);

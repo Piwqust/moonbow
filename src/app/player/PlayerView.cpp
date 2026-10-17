@@ -211,6 +211,61 @@ private:
     bool pausedByClick_ = false;
 };
 
+// Shown instead of a black player when a file can't be opened.
+class PlayerView::ErrorCard : public Widget {
+public:
+    ErrorCard() {
+        dir = Dir::Column;
+        align = Align::Center;
+        gap = 8;
+        pad = Insets::All(28);
+        width = Length::Px(440);
+        icon_ = Add<IconView>("info", 32, Tone::Secondary);
+        title_ = Add<Label>(L"", TextStyle::Heading, Tone::Primary);
+        title_->halign = HAlign::Center;
+        title_->wrap = true;
+        title_->maxLines = 2;
+        title_->width = Length::Grow();
+        body_ = Add<Label>(L"", TextStyle::Body, Tone::Secondary);
+        body_->halign = HAlign::Center;
+        body_->wrap = true;
+        body_->width = Length::Grow();
+        detail_ = Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
+        detail_->halign = HAlign::Center;
+        detail_->width = Length::Grow();
+        auto* row = Add<Widget>();
+        row->dir = Dir::Row;
+        row->gap = 8;
+        row->pad.t = 12;
+        next_ = row->Add<Button>(Tr(L"Next file"), ButtonKind::Primary, "next");
+        next_->onClick = [] { Run(Action::Next); };
+        close_ = row->Add<Button>(Tr(L"Close"), ButtonKind::Secondary);
+        close_->onClick = [] { Run(Action::CloseMedia); };
+    }
+    void Refresh() {
+        App& app = TheApp();
+        title_->SetText(Fmt(Tr(L"Can't open “{0}”"), {FileNameOf(app.FailedPath())}));
+        const std::wstring& err = app.FailedError();
+        const bool missing = GetFileAttributesW(app.FailedPath().c_str()) == INVALID_FILE_ATTRIBUTES &&
+                             app.FailedPath().find(L"://") == std::wstring::npos;
+        body_->SetText(missing ? Tr(L"The file was moved or deleted.")
+                       : app.FailedPath().find(L"://") != std::wstring::npos
+                           ? Tr(L"The stream is unavailable. Check the link and your connection.")
+                           : Tr(L"The file is damaged or its format isn't supported."));
+        detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
+        detail_->visible = !err.empty();
+        const int nextIndex = app.queue().NextIndex(true);
+        next_->visible = nextIndex >= 0 && nextIndex != app.queue().Current();
+        InvalidateLayout();
+    }
+    void Paint(Painter& p) override { p.Fill(rect, P().bgPanel, 12); }
+
+private:
+    IconView* icon_;
+    Label *title_, *body_, *detail_;
+    Button *next_, *close_;
+};
+
 PlayerView::PlayerView(MainWindow* window) : window_(window) {
     dir = Dir::None;
     width = Length::Grow();
@@ -228,10 +283,13 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     music_->visible = false;
     pip_ = AddChild(CreatePipOverlay(window));
     pip_->visible = false;
+    error_ = Add<ErrorCard>();
+    error_->visible = false;
     bar_ = Add<ControlBar>();
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-        if (m & (kChangeTracks | kChangeFile | kChangeState)) InvalidateLayout();
+        if (m & (kChangeError | kChangeFile)) error_->Refresh();
+        if (m & (kChangeTracks | kChangeFile | kChangeState | kChangeError)) InvalidateLayout();
     });
 }
 
@@ -270,6 +328,13 @@ void PlayerView::OnLayout() {
     bar_->Arrange({rect.x, rect.Bottom() - barH, rect.w, barH});
     pip_->visible = pip;
     if (pip) pip_->Arrange(rect);
+
+    error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && !pip;
+    if (error_->visible) {
+        const Rect v = video_->Inner(immersive);
+        const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);
+        error_->Arrange(v.Center(sz.w, sz.h));
+    }
 }
 
 void PlayerView::Paint(Painter& p) {

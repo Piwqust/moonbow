@@ -144,6 +144,9 @@ public:
     // Library vs. player screen. Showing the library while media plays keeps the mini player.
     void ShowPlayer(bool show);
     bool PlayerShown() const { return playerShown_; }
+    // The file that failed to open (shown as a card in the player); empty when none.
+    const std::wstring& FailedPath() const { return failedPath_; }
+    const std::wstring& FailedError() const { return failedError_; }
 
     // --- windows --------------------------------------------------------------------
     void OpenSettings(const std::string& category = {});
@@ -199,6 +202,7 @@ private:
     std::vector<Route> nav_{Route{}};
     int historyPos_ = 0;
     bool playerShown_ = false;
+    std::wstring failedPath_, failedError_;
     std::vector<std::wstring> pendingOpen_;
     bool engineReady_ = false;
     bool fitPending_ = false;

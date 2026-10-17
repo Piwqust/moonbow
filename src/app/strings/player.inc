@@ -260,3 +260,8 @@
 {L"Text Color", L"Цвет текста"},
 {L"Outline Color", L"Цвет обводки"},
 {L"Right channel", L"Правый канал"},
+{L"Next file", L"Следующий файл"},
+{L"Can't open “{0}”", L"Не удаётся открыть «{0}»"},
+{L"The file was moved or deleted.", L"Файл перемещён или удалён."},
+{L"The stream is unavailable. Check the link and your connection.", L"Поток недоступен. Проверьте ссылку и подключение."},
+{L"The file is damaged or its format isn't supported.", L"Файл повреждён или его формат не поддерживается."},
