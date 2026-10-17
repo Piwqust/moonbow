@@ -28,7 +28,7 @@ std::wstring FormatTime(double seconds, bool withHours) {
     long long h = total / 3600, m = (total / 60) % 60, s = total % 60;
     wchar_t buf[32];
     if (withHours)
-        swprintf_s(buf, L"%lld:%02lld:%02lld", h, m, s);
+        swprintf_s(buf, L"%02lld:%02lld:%02lld", h, m, s);
     else
         swprintf_s(buf, L"%02lld:%02lld", m + h * 60, s);
     return buf;

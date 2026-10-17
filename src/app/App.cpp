@@ -3,6 +3,7 @@
 #include "Trace.h"
 #include "Util.h"
 #include "app/Actions.h"
+#include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "gfx/Gpu.h"
@@ -431,26 +432,10 @@ void App::OpenSubtitleDialog() {
 }
 
 void App::OpenUrl(const std::wstring& url) {
-    if (!url.empty()) {
+    if (url.empty())
+        ShowNetworkStreamDialog();
+    else
         Open({url});
-        return;
-    }
-    auto d = std::make_unique<Dialog>(Tr(L"Open network stream"), 560);
-    d->Body()->Add<Label>(Tr(L"Network URL"), TextStyle::Body, Tone::Tertiary);
-    auto* box = d->Body()->Add<TextBox>(L"https://");
-    box->width = Length::Grow();
-    d->Footer()->Add<Spacer>();
-    Dialog* raw = d.get();
-    d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost)->onClick = [raw] { raw->Close(); };
-    auto open = [raw, box] {
-        const std::wstring u = box->Text();
-        raw->Close();
-        if (!u.empty()) TheApp().Open({u});
-    };
-    d->Footer()->Add<Button>(Tr(L"Open"), ButtonKind::Primary)->onClick = open;
-    box->onSubmit = [open](const std::wstring&) { open(); };
-    ShowDialog(main_.get(), std::move(d));
-    main_->SetFocus(box, true);
 }
 
 void App::Navigate(Route r) {
@@ -485,11 +470,13 @@ void App::ShowPlayer(bool show) {
     screenChanged.Emit();
 }
 
-void App::OpenSettings(const std::string&) {
-    ShowToast(main_.get(), Tr(L"Settings"), "settings");
+void App::OpenSettings(const std::string& category) {
+    ShowSettingsWindow(category);
 }
 
-void App::ShowOnboarding() {}
+void App::ShowOnboarding() {
+    app::ShowOnboarding({});
+}
 
 void App::Quit() {
     if (main_) main_->Close();

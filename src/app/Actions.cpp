@@ -2,6 +2,7 @@
 
 #include "Util.h"
 #include "app/App.h"
+#include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/Shell.h"
@@ -406,16 +407,10 @@ void Run(Action a) {
         case Action::Forward: app.GoForward(); break;
         case Action::AddBookmark: Toast(Fmt(Tr(L"Bookmark added at {0}"), {FormatTime(s.position, true)}), "bookmark"); break;
         case Action::ToggleFavorite: Toast(Tr(L"Added to favorites"), "favorite"); break;
-        case Action::ShowInfo: {
-            std::wstring info = s.title;
-            if (s.videoW > 0) info += L"  ·  " + std::to_wstring(s.videoW) + L"×" + std::to_wstring(s.videoH);
-            if (!s.hwdec.empty() && s.hwdec != L"no") info += L"  ·  " + s.hwdec;
-            Toast(info, "info");
-            break;
-        }
+        case Action::ShowInfo: ShowMediaInfoDialog(); break;
         case Action::Settings: app.OpenSettings(); break;
-        case Action::KeyboardShortcuts: app.OpenSettings("controls"); break;
-        case Action::CustomizePlayer: Toast(Tr(L"Customize player"), "edit"); break;
+        case Action::KeyboardShortcuts: ShowKeyboardShortcutsDialog(); break;
+        case Action::CustomizePlayer: ShowCustomizePlayerDialog(); break;
         case Action::Quit: app.Quit(); break;
     }
 }

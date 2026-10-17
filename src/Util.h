@@ -8,7 +8,7 @@
 std::wstring Utf8ToWide(std::string_view s);
 std::string WideToUtf8(std::wstring_view s);
 
-// "1:02:03" when withHours, "02:03" otherwise.
+// "01:02:03" when withHours, "02:03" otherwise.
 std::wstring FormatTime(double seconds, bool withHours);
 
 std::wstring FileNameOf(const std::wstring& path);
