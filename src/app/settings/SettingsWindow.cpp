@@ -1,17 +1,569 @@
-// Settings window. Placeholder until the schema-driven window lands
-// (design/ref/Settings-*.png).
+// Settings window (design/ref/Settings-*.png): search + grouped category list on the left, the
+// selected category on the right. Rows are generated from core/SettingsSchema; writes go through
+// Config, which the app applies live.
 #include "app/App.h"
 #include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
-#include "ui/Controls.h"
+#include "app/SettingsActions.h"
+#include "app/settings/SettingsUi.h"
+#include "app/settings/ShortcutStore.h"
+#include "core/Config.h"
+#include "gfx/Gpu.h"
+
+#include <cmath>
+#include <set>
 
 namespace app {
 
-void ShowSettingsWindow(const std::string&) {
-    ui::ShowToast(TheApp().main(), Tr(L"Settings"), "settings");
+using namespace ui;
+using namespace sui;
+using settings::Category;
+using settings::Item;
+
+namespace {
+
+constexpr float kWindowW = 1048, kWindowH = 865;  // the frame without its drop shadow
+constexpr float kHeaderH = 50;
+// The design's nav column is 216; it grows when labels are longer (Russian "Конфиденциальность").
+float NavColumnWidth() {
+    float w = 0;
+    for (const Category& c : settings::Categories())
+        w = std::max(w, gfx::Text::Get().Measure(c.Label(Lang()), TextStyle::Body).width);
+    // panel margin 8 + list padding 6 + icon column 44 + text + 8, mirrored on the right.
+    return std::max(216.0f, std::ceil(8 + 6 + 44 + w + 8 + 6 + 8));
 }
 
-void CloseSettingsWindow() {}
+Widget* FindById(Widget* w, const std::string& id) {
+    if (!w) return nullptr;
+    if (w->id == id) return w;
+    for (auto& c : w->Children())
+        if (Widget* hit = FindById(c.get(), id)) return hit;
+    return nullptr;
+}
+
+class SearchField : public TextBox {
+public:
+    SearchField() : TextBox(Tr(L"Search"), "search") {
+        width = Length::Px(200);
+        height = Length::Px(34);
+    }
+    void Paint(Painter& p) override {
+        background = P().bgRaised;
+        TextBox::Paint(p);
+    }
+};
+
+class CloseButton : public IconButton {
+public:
+    CloseButton() : IconButton("close", Tr(L"Close"), 32, 24) {}
+    void Paint(Painter& p) override {
+        if (IsHot()) p.Fill(rect, IsPressed() ? P().danger.Fade(0.8f) : P().danger, 4);
+        PaintFocusRing(p, rect, 4);
+        p.Icon(icon, rect.Center(24, 24), IsHot() ? P().textPrimary : P().textSecondary);
+    }
+};
+
+class NavGroupLabel : public PadLabel {
+public:
+    explicit NavGroupLabel(std::wstring text) : PadLabel(std::move(text), TextStyle::Body, Tone::Tertiary) {
+        width = Length::Grow();
+        height = Length::Px(33);
+        pad = {10, 8, 10, 8};
+    }
+};
+
+class SettingsWindow;
+
+class NavItem : public Widget {
+public:
+    NavItem(SettingsWindow* window, const Category& cat) : cat_(cat), window_(window) {
+        interactive = true;
+        focusable = true;
+        width = Length::Grow();
+        height = Length::Px(40);
+        id = "nav." + cat.id;
+    }
+    void SetSelected(bool s) {
+        selected_ = s;
+        Invalidate();
+    }
+    const Category& Cat() const { return cat_; }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        if (selected_)
+            p.Fill(rect, c.bgSelected, 2);
+        else if (IsPressed())
+            p.Fill(rect, c.press, 2);
+        else if (IsHot())
+            p.Fill(rect, c.hover, 2);
+        PaintFocusRing(p, rect, 2);
+        const Rect icon{rect.x + 8, rect.Cy() - 12, 24, 24};
+        if (selected_)
+            p.Icon(cat_.icon + "_active", icon, c.accent, c.accent);
+        else
+            p.Icon(cat_.icon, icon, IsHot() ? c.textPrimary : c.textSecondary);
+        p.Text(cat_.Label(Lang()), {rect.x + 44, rect.y, rect.w - 52, rect.h}, TextStyle::Body,
+               selected_ ? c.textPrimary : IsHot() ? c.textPrimary : c.textSecondary);
+    }
+    void OnClick() override;
+    bool OnKeyDown(const KeyEvent& e) override;
+
+private:
+    const Category& cat_;
+    SettingsWindow* window_;
+    bool selected_ = false;
+};
+
+class AdvancedExpander : public Widget {
+public:
+    AdvancedExpander() {
+        interactive = true;
+        focusable = true;
+        width = Length::Grow();
+        height = Length::Px(38);
+        id = "advanced";
+    }
+    bool open = false;
+    std::function<void()> onToggle;
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        p.Fill(rect, IsHot() ? Color::Mix(c.bgPanel, c.bgSelected, 0.5f) : c.bgPanel.Fade(0.95f), 2);
+        PaintFocusRing(p, rect, 2);
+        const std::wstring& text = settings::AdvancedOptionsLabel(Lang());
+        const Color fg = IsHot() ? c.textPrimary : c.textSecondary;
+        const float tw = p.Measure(text, TextStyle::Body).width;
+        const float x = rect.Cx() - (tw + 34) / 2;
+        p.Text(text, {x, rect.y, tw + 1, rect.h}, TextStyle::Body, fg, HAlign::Leading, VAlign::Center, 0);
+        p.Icon(open ? "chevron_down" : "chevron_right", {x + tw + 10, rect.Cy() - 12, 24, 24}, fg);
+    }
+    void OnClick() override {
+        if (onToggle) onToggle();
+    }
+};
+
+class SettingsWindow : public Host {
+public:
+    bool Open(const std::string& category) {
+        HostOptions o;
+        o.title = std::wstring(Tr(L"Settings")) + L" — Lumen";
+        MainWindow* main = TheApp().main();
+        o.owner = main ? main->Hwnd() : nullptr;
+        o.showInTaskbar = o.owner == nullptr;
+        o.minWidth = 760;
+        o.minHeight = 520;
+        o.width = kWindowW;
+        o.height = kWindowH;
+        // Fit small screens (work area of the owner's monitor, in DIPs).
+        MONITORINFO mi{sizeof(mi)};
+        HMONITOR mon = MonitorFromWindow(o.owner, MONITOR_DEFAULTTOPRIMARY);
+        if (GetMonitorInfoW(mon, &mi)) {
+            const float scale = (o.owner ? GetDpiForWindow(o.owner) : GetDpiForSystem()) / 96.0f;
+            o.width = std::min(o.width, (mi.rcWork.right - mi.rcWork.left) / scale - 24);
+            o.height = std::min(o.height, (mi.rcWork.bottom - mi.rcWork.top) / scale - 24);
+        }
+        if (!Create(o)) return false;
+
+        category_ = settings::FindCategory(category) ? category : std::string("general");
+        page_.host = this;
+        page_.state = &state_;
+        page_.relayout = [this] { RequestLayout(); };
+        page_.runAction = [this](const std::string& action, const Item& item) { RunAction(action, item); };
+        BuildUi();
+
+        configToken_ = Cfg().Subscribe("", [this](const std::string&) { ScheduleSync(); });
+        langConn_ = Connect(TheApp().languageChanged, [this] {
+            Post([this] {
+                SetTitle(std::wstring(Tr(L"Settings")) + L" — Lumen");
+                BuildUi();
+            });
+        });
+        onKey = [this](const KeyEvent& e) { return OnWindowKey(e); };
+        onCloseRequest = [this] {
+            SetFocus(nullptr);  // commits a field being edited
+            Cfg().Flush();
+            return true;
+        };
+        Show();
+        if (gfx::Gpu::Get().Ready()) OnDeviceReady();
+        return true;
+    }
+
+    ~SettingsWindow() override { Detach(); }
+
+    // Stops listening to the app; called when the window is destroyed.
+    void Detach() {
+        if (configToken_) Cfg().Unsubscribe(configToken_);
+        configToken_ = 0;
+        langConn_.Reset();
+    }
+
+    void ShowCategory(const std::string& id) {
+        if (!settings::FindCategory(id)) return;
+        category_ = id;
+        if (search_ && !search_->Text().empty()) search_->SetText(L"");
+        query_.clear();
+        RefreshNav();
+        BuildPage();
+    }
+
+    void StepCategory(int delta) {
+        const auto& cats = settings::Categories();
+        int i = 0;
+        for (size_t k = 0; k < cats.size(); ++k)
+            if (cats[k].id == category_) i = static_cast<int>(k);
+        i = std::clamp(i + delta, 0, static_cast<int>(cats.size()) - 1);
+        ShowCategory(cats[static_cast<size_t>(i)].id);
+        if (Widget* item = FindById(Root(), "nav." + category_)) SetFocus(item, true);
+    }
+
+    const std::string& CurrentCategory() const { return category_; }
+
+private:
+    void BuildUi() {
+        auto root = std::make_unique<Panel>();
+        root->fill = [] { return P().bgBase; };
+        root->dir = Dir::Column;
+
+        // Header: search (over the nav column), category title, close. Drags the window.
+        auto* header = root->Add<Panel>();
+        header->fill = [] { return P().bgDeep; };
+        header->dir = Dir::Row;
+        header->align = Align::Center;
+        header->width = Length::Grow();
+        header->height = Length::Px(kHeaderH);
+        header->pad = {8, 0, 14, 0};
+        header->ncRole = NcRole::Caption;
+        search_ = header->Add<SearchField>();
+        const float navW = NavColumnWidth();
+        search_->width = Length::Px(navW - 16);
+        search_->SetText(query_);
+        search_->onChange = [this](const std::wstring& t) {
+            query_ = t;
+            RefreshNav();
+            BuildPage();
+        };
+        search_->onEscape = [this] {
+            if (!search_->Text().empty())
+                search_->SetText(L"", true);
+            else
+                Close();
+        };
+        header->Add<Widget>()->width = Length::Px(32);
+        title_ = header->Add<Label>(L"", TextStyle::Large, Tone::Secondary);
+        title_->width = Length::Grow();
+        auto* close = header->Add<CloseButton>();
+        close->onClick = [this] { Close(); };
+
+        auto* body = root->Add<Widget>();
+        body->dir = Dir::Row;
+        body->width = Length::Grow();
+        body->height = Length::Grow();
+
+        auto* left = body->Add<Widget>();
+        left->dir = Dir::Column;
+        left->width = Length::Px(navW);
+        left->height = Length::Grow();
+        left->pad = Insets::All(8);
+        auto* navPanel = left->Add<Panel>();
+        navPanel->fill = [] { return P().bgPanel.Fade(0.95f); };
+        navPanel->radius = 6;
+        navPanel->dir = Dir::Column;
+        navPanel->width = Length::Grow();
+        navPanel->height = Length::Grow();
+        auto* navScroll = navPanel->Add<ScrollView>();
+        auto* nav = navScroll->SetContent<Widget>();
+        nav->dir = Dir::Column;
+        nav->pad = Insets::All(6);
+        nav->gap = 8;
+        nav->width = Length::Grow();
+        navItems_.clear();
+        for (const settings::Group& g : settings::Groups()) {
+            nav->Add<NavGroupLabel>(g.Label(Lang()));
+            for (const Category& c : settings::Categories())
+                if (c.group == g.id) navItems_.push_back(nav->Add<NavItem>(this, c));
+        }
+
+        content_ = body->Add<ScrollView>();
+        SetRoot(std::move(root));
+        RefreshNav();
+        BuildPage();
+    }
+
+    void RefreshNav() {
+        const bool searching = !query_.empty();
+        for (NavItem* n : navItems_) n->SetSelected(!searching && n->Cat().id == category_);
+        if (!title_) return;
+        if (searching) {
+            title_->SetText(Tr(L"Search results"));
+        } else if (const Category* c = settings::FindCategory(category_)) {
+            title_->SetText(c->Title(Lang()));
+        }
+    }
+
+    void BuildPage() {
+        if (!content_) return;
+        CloseAllPopups();  // menus of the old rows point at widgets about to go
+        auto* page = content_->SetContent<Widget>();
+        page->dir = Dir::Column;
+        page->width = Length::Grow();
+        page->pad = {24, 20, 24, 40};
+        page->gap = 20;
+        if (!query_.empty())
+            BuildSearch(page);
+        else if (const Category* c = settings::FindCategory(category_))
+            BuildCategory(page, *c);
+        content_->ScrollTo(0, false);
+        RequestLayout();
+    }
+
+    // Adds rows for `items`, drawing items that share a `group` as one widget.
+    void AddItems(Widget* parent, const std::vector<const Item*>& items) {
+        for (size_t i = 0; i < items.size(); ++i) {
+            const Item* it = items[i];
+            if (!it->group.empty()) {
+                std::vector<const Item*> members;
+                size_t j = i;
+                for (; j < items.size() && items[j]->group == it->group; ++j)
+                    if (!items[j]->hidden) members.push_back(items[j]);
+                i = j - 1;
+                if (auto w = MakeGroupRow(it->group, members, page_)) parent->AddChild(std::move(w));
+                continue;
+            }
+            if (auto w = MakeItemRow(*it, page_)) parent->AddChild(std::move(w));
+        }
+    }
+
+    Widget* AddSection(Widget* page, const std::wstring& title) {
+        auto* sec = page->Add<Widget>();
+        sec->dir = Dir::Column;
+        sec->width = Length::Grow();
+        if (!title.empty()) sec->AddChild(MakeHeading(title));
+        return sec;
+    }
+
+    void BuildCategory(Widget* page, const Category& cat) {
+        const settings::Lang lang = Lang();
+        bool anyAdvanced = false;
+        for (const settings::Section& s : cat.sections) {
+            std::vector<const Item*> normal;
+            for (const Item& it : s.items) {
+                if (it.hidden) continue;
+                if (it.advanced) anyAdvanced = true;
+                else normal.push_back(&it);
+            }
+            if (normal.empty()) continue;
+            Widget* sec = AddSection(page, s.Title(lang));
+            AddItems(sec, normal);
+            if (cat.id == "controls" && s.id == "shortcuts") {
+                auto editor = MakeShortcutEditor(page_);
+                editor->visible = state_.Open("shortcuts");
+                sec->AddChild(std::move(editor));
+                if (state_.Open("shortcuts"))
+                    if (auto* b = dynamic_cast<Button*>(FindById(sec, "edit-shortcuts")))
+                        b->SetText(Tr(L"Hide Keyboard Shortcuts"));
+            }
+        }
+        if (anyAdvanced) {
+            const std::string key = "advanced." + cat.id;
+            auto* expander = page->Add<AdvancedExpander>();
+            auto* adv = page->Add<Widget>();
+            adv->dir = Dir::Column;
+            adv->width = Length::Grow();
+            adv->gap = 20;
+            adv->visible = state_.Open(key);
+            expander->open = adv->visible;
+            expander->onToggle = [this, key, expander, adv] {
+                const bool open = !adv->visible;
+                adv->visible = open;
+                expander->open = open;
+                state_.open[key] = open;
+                RequestLayout();
+                RequestRender();
+            };
+            for (const settings::Section& s : cat.sections) {
+                std::vector<const Item*> items;
+                bool hasNormal = false;
+                for (const Item& it : s.items) {
+                    if (it.hidden) continue;
+                    if (it.advanced) items.push_back(&it);
+                    else hasNormal = true;
+                }
+                if (items.empty()) continue;
+                Widget* sec = AddSection(adv, hasNormal ? std::wstring() : s.Title(lang));
+                AddItems(sec, items);
+            }
+        }
+        // Reset the whole category.
+        auto* footer = page->Add<Widget>();
+        footer->dir = Dir::Row;
+        footer->width = Length::Grow();
+        footer->align = Align::Center;
+        footer->pad = {0, 8, 0, 0};
+        footer->Add<Spacer>();
+        auto* reset = footer->Add<Button>(Tr(L"Reset to defaults"), ButtonKind::Outline, "refresh");
+        reset->id = "reset-category";
+        const std::string id = cat.id;
+        const std::wstring label = cat.Label(lang);
+        reset->onClick = [this, id, label] {
+            Confirm(this, Tr(L"Reset to defaults?"),
+                    Fmt(Tr(L"All settings in “{0}” return to their default values."), {label}), Tr(L"Reset"),
+                    [id] { Cfg().ResetCategory(id); });
+        };
+    }
+
+    void BuildSearch(Widget* page) {
+        const std::vector<const Item*> hits = settings::Search(query_);
+        std::set<const Item*> hit(hits.begin(), hits.end());
+        // A hit inside a group ("60 Hz") brings the whole group (the equalizer).
+        std::set<std::string> groups;
+        for (const Item* it : hits)
+            if (!it->group.empty()) groups.insert(it->category + "/" + it->group);
+        bool any = false;
+        for (const Category& cat : settings::Categories()) {
+            std::vector<const Item*> items;
+            for (const settings::Section& s : cat.sections)
+                for (const Item& it : s.items) {
+                    if (it.hidden) continue;
+                    if (hit.count(&it) || (!it.group.empty() && groups.count(cat.id + "/" + it.group))) items.push_back(&it);
+                }
+            if (items.empty()) continue;
+            any = true;
+            Widget* sec = AddSection(page, cat.Label(Lang()));
+            AddItems(sec, items);
+        }
+        if (!any) {
+            auto* none = page->Add<PadLabel>(Fmt(Tr(L"Nothing found for “{0}”"), {query_}), TextStyle::Body, Tone::Tertiary);
+            none->pad = {0, 12, 0, 0};
+        }
+    }
+
+    void ScheduleSync() {
+        if (syncPosted_) return;
+        syncPosted_ = true;
+        Post([this] {
+            syncPosted_ = false;
+            if (content_) SyncTree(content_->Content());
+            RequestLayout();
+        });
+    }
+
+    void RunAction(const std::string& action, const Item& item) {
+        if (action == "edit-shortcuts") {
+            const bool open = !state_.Open("shortcuts");
+            state_.open["shortcuts"] = open;
+            if (Widget* editor = FindById(Root(), "shortcut-editor")) editor->visible = open;
+            if (auto* b = dynamic_cast<Button*>(FindById(Root(), "edit-shortcuts")))
+                b->SetText(open ? std::wstring(Tr(L"Hide Keyboard Shortcuts")) : item.ActionLabel(Lang()));
+            RequestLayout();
+            return;
+        }
+        if (action == "reset-shortcuts") {
+            Confirm(this, Tr(L"Reset all shortcuts?"), Tr(L"Every keyboard shortcut returns to its default."),
+                    Tr(L"Reset"), [this] {
+                        ResetAllBindings();
+                        ShowToast(this, Tr(L"Shortcuts reset"), "hotkeys");
+                    });
+            return;
+        }
+        if (action == "clear-history") {
+            Confirm(this, Tr(L"Clear history?"), item.Description(Lang()), item.ActionLabel(Lang()),
+                    [action] { RunSettingsAction(action); });
+            return;
+        }
+        if (action == "reset-picture") {
+            for (const char* key : {"video.hue", "video.brightness", "video.contrast", "video.saturation", "video.gamma"})
+                Cfg().Reset(key);
+            RunSettingsAction(action);
+            return;
+        }
+        if (action == "rescan-plugins") {
+            RescanAddons();
+            ShowToast(this, Tr(L"Plugins rescanned"), "refresh");
+            return;
+        }
+        if (!RunSettingsAction(action)) ShowToast(this, Tr(L"Not available yet"), "info");
+    }
+
+    bool OnWindowKey(const KeyEvent& e) {
+        if (e.key == VK_ESCAPE && !e.mods.ctrl && !e.mods.alt && !e.mods.shift) {
+            Close();
+            return true;
+        }
+        if (e.key == 'F' && e.mods.ctrl && search_) {
+            SetFocus(search_, true);
+            search_->SelectAll();
+            return true;
+        }
+        if ((e.key == VK_NEXT || e.key == VK_PRIOR) && e.mods.ctrl) {
+            StepCategory(e.key == VK_NEXT ? 1 : -1);
+            return true;
+        }
+        return false;
+    }
+
+    std::string category_;
+    std::wstring query_;
+    UiState state_;
+    PageHost page_;
+    Config::Token configToken_ = 0;
+    ScopedConnection langConn_;
+    bool syncPosted_ = false;
+
+    SearchField* search_ = nullptr;
+    Label* title_ = nullptr;
+    ScrollView* content_ = nullptr;
+    std::vector<NavItem*> navItems_;
+};
+
+void NavItem::OnClick() {
+    window_->ShowCategory(cat_.id);
+}
+
+bool NavItem::OnKeyDown(const KeyEvent& e) {
+    if (e.key == VK_UP || e.key == VK_DOWN) {
+        window_->StepCategory(e.key == VK_UP ? -1 : 1);
+        return true;
+    }
+    if (e.key == VK_HOME || e.key == VK_END) {
+        window_->StepCategory(e.key == VK_HOME ? -100 : 100);
+        return true;
+    }
+    return false;
+}
+
+// Raw on purpose: a window still open at exit is left to the process teardown instead of being
+// destroyed after the UI framework's statics.
+SettingsWindow* g_window = nullptr;
+
+}  // namespace
+
+void ShowSettingsWindow(const std::string& category) {
+    if (g_window && g_window->Hwnd()) {
+        if (!category.empty()) g_window->ShowCategory(category);
+        HWND h = g_window->Hwnd();
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+        SetForegroundWindow(h);
+        return;
+    }
+    auto* w = new SettingsWindow();
+    w->onDestroyed = [w] {
+        w->Detach();
+        if (g_window == w) g_window = nullptr;
+        // Deleting a Host from inside its own WM_DESTROY is not safe; do it after the message.
+        // Without a main window the app is quitting and the process cleans up.
+        MainWindow* main = TheApp().main();
+        if (main && main->Hwnd()) main->Post([w] { delete w; });
+    };
+    g_window = w;
+    if (!w->Open(category)) {
+        g_window = nullptr;
+        delete w;
+    }
+}
+
+void CloseSettingsWindow() {
+    if (g_window && g_window->Hwnd()) g_window->Close();
+}
 
 }  // namespace app

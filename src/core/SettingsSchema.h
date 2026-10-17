@@ -181,6 +181,9 @@ const std::vector<EqPreset>& EqPresets();
 const EqPreset* FindEqPreset(std::string_view id);
 
 // --- Keyboard shortcuts (Keyboard_Shortcuts dialog) ------------------------------------------
+// The settings window edits shortcuts through app/Actions.h (the single source of truth for the
+// UI); controls.keyBindings is keyed by ActionInfo ids there. The ids below are still accepted and
+// mapped when settings.json is read (app/settings/ShortcutStore.cpp).
 
 struct KeyAction {
     std::string id;     // "fullscreen"

@@ -28,6 +28,16 @@ std::string ConditionText(const json::Value& v) {
     }
 }
 
+// Shortcut overrides are keyed by app action ids ("playback.play_pause", see app/Actions.h) or,
+// in older files, by settings::KeyActions() ids ("fullscreen").
+bool IsActionId(const std::string& id) {
+    if (settings::FindKeyAction(id)) return true;
+    if (id.empty() || id.size() > 64 || id.find('.') == std::string::npos) return false;
+    return std::all_of(id.begin(), id.end(), [](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-';
+    });
+}
+
 bool IsHexColor(const std::string& s) {
     if (s.size() != 7 || s[0] != '#') return false;
     for (size_t i = 1; i < s.size(); ++i)
@@ -245,7 +255,7 @@ std::optional<json::Value> Config::Validate(const Item& item, const json::Value&
             // Keep only known actions with string fields; drop anything else silently.
             json::Value out = json::Value::MakeObject();
             for (const json::Member& m : value.AsObject()) {
-                if (!settings::FindKeyAction(m.key) || !m.value.IsObject()) continue;
+                if (!IsActionId(m.key) || !m.value.IsObject()) continue;
                 json::Value binding = json::Value::MakeObject();
                 for (const char* field : {"key", "global"}) {
                     const json::Value* f = m.value.Find(field);
