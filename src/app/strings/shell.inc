@@ -42,3 +42,8 @@
 {L"Library", L"Медиатека"},
 {L"App", L"Приложение"},
 {L"Media", L"Медиа"},
+{L"History cleared", L"История очищена"},
+{L"Picture reset", L"Изображение сброшено"},
+{L"Lumen is registered. Pick it in Default apps.", L"Lumen зарегистрирован. Выберите его в «Приложениях по умолчанию»."},
+{L"Couldn't register file types", L"Не удалось зарегистрировать типы файлов"},
+{L"Rescanning the library…", L"Обновляю медиатеку…"},
