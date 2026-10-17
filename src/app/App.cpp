@@ -644,7 +644,7 @@ void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring n
     PlayIndex(queue_.Current());
 }
 
-void App::PlayIndex(int index) {
+void App::PlayIndex(int index, bool showPlayer) {
     queue_.SetCurrent(index);
     const QueueItem* item = queue_.CurrentItem();
     if (!item) return;
@@ -654,7 +654,7 @@ void App::PlayIndex(int index) {
     }
     player_.Open(item->path);
     player_.SetPause(false);
-    ShowPlayer(true);
+    if (showPlayer || playerShown_) ShowPlayer(true);
 }
 
 void App::Next(bool userAction) {
@@ -666,7 +666,7 @@ void App::Next(bool userAction) {
         player_.SetPause(false);
         return;
     }
-    PlayIndex(i);
+    PlayIndex(i, false);
 }
 
 void App::Previous() {
@@ -675,7 +675,7 @@ void App::Previous() {
         return;
     }
     const int i = queue_.PrevIndex();
-    if (i >= 0) PlayIndex(i);
+    if (i >= 0) PlayIndex(i, false);
 }
 
 void App::StopPlayback() {

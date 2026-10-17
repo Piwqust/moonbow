@@ -121,7 +121,9 @@ public:
     // Plays files/URLs; a single local file pulls its folder siblings into the queue.
     void Open(const std::vector<std::wstring>& paths);
     void PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name = {});
-    void PlayIndex(int index);
+    // `showPlayer` = switch to the player screen (off for next/previous, so music
+    // keeps playing in the mini player while the user browses the library).
+    void PlayIndex(int index, bool showPlayer = true);
     void Next(bool userAction = true);
     void Previous();
     void StopPlayback();

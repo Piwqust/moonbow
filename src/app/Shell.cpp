@@ -383,6 +383,11 @@ void LibraryPane::ShowRoute(const Route& route) {
     }
     search_->SetText(L"");
     RefreshHeader();
+    // Arrow keys work on a page right after it opens (not in the player's side
+    // panel, where the player keeps the keyboard).
+    if (!compact_ && view_)
+        if (ui::Host* host = GetHost())
+            if (ui::Widget* first = view_->InitialFocus()) host->SetFocus(first);
 }
 
 void LibraryPane::RefreshHeader() {
