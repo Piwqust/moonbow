@@ -1045,6 +1045,10 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             for (Host* h : Registry()) h->OnDeviceReady();
             return 0;
 
+        case kRepaintMessage:
+            RequestRender();
+            return 0;
+
         case kDumpTreeMessage: {
             wchar_t tmp[MAX_PATH];
             GetTempPathW(MAX_PATH, tmp);

@@ -1,4 +1,5 @@
 #include "app/player/ControlBar.h"
+#include "app/player/SeekPreview.h"
 
 #include "Util.h"
 #include "app/Actions.h"
@@ -553,6 +554,7 @@ void SeekBar::PaintOver(Painter& p) {
         }
     const float w = gfx::Text::Get().Measure(label, TextStyle::Small).width + 20;
     const Rect tr = Track();
+    PaintSeekPreview(p, tr, dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_, t);
     const float x = std::clamp((dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_) - w / 2,
                                tr.x, tr.Right() - w);
     const Rect tip{x, tr.y - 34, w, 26};

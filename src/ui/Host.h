@@ -97,6 +97,8 @@ public:
     // Debug aid: posting this writes the widget tree (type, rect, flags) to
     // %TEMP%\lumen-tree-<pid>.txt. See tools/dev/dump-tree.ps1.
     static constexpr UINT kDumpTreeMessage = WM_APP + 43;
+    // Any thread may post this to ask the window for a repaint.
+    static constexpr UINT kRepaintMessage = WM_APP + 44;
     void DumpTree(const std::wstring& path) const;
     // Re-applies DWM attributes (dark title/border) and repaints after a theme change.
     void OnThemeChanged();

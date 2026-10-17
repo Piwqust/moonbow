@@ -5,6 +5,7 @@
 #include "app/Actions.h"
 #include "app/Dialogs.h"
 #include "app/player/ControlBar.h"
+#include "app/player/SeekPreview.h"
 #include "core/Json.h"
 #include "core/Paths.h"
 #include "ui/Theme.h"
@@ -410,6 +411,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         DispatchMessageW(&msg);
     }
     FlushStores();
+    ShutdownSeekPreview();
     main_.reset();
     return static_cast<int>(msg.wParam);
 }
