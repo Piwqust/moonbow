@@ -53,6 +53,25 @@ bool ForwardToRunningInstance(const std::vector<std::wstring>& args) {
                                &result) != 0;
 }
 
+// "Only allow one Lumen window" (library.singleInstance). Read straight from the
+// settings file: parsing the whole config here would cost startup time.
+bool SingleInstanceDisabled() {
+    const std::wstring path = DataFilePath(L"settings.json");
+    if (path.empty()) return false;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    std::string text(1 << 16, ' ');
+    DWORD read = 0;
+    ReadFile(f, text.data(), static_cast<DWORD>(text.size()), &read, nullptr);
+    CloseHandle(f);
+    text.resize(read);
+    const size_t at = text.find("\"library.singleInstance\"");
+    if (at == std::string::npos) return false;
+    const size_t value = text.find_first_not_of(" \t\r\n:", at + 24);
+    return value != std::string::npos && text.compare(value, 5, "false") == 0;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
@@ -73,6 +92,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (!args[i].empty() && args[i][0] != L'-') files.push_back(args[i]);
     }
 
+    if (!newInstance && SingleInstanceDisabled()) newInstance = true;
     HANDLE mutex = newInstance ? nullptr : CreateMutexW(nullptr, FALSE, L"Lumen.SingleInstance.v2");
     if (mutex && GetLastError() == ERROR_ALREADY_EXISTS && ForwardToRunningInstance(files)) {
         CloseHandle(mutex);

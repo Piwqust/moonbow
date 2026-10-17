@@ -3,9 +3,11 @@
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/App.h"
+#include "app/I18n.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
 
+#include <shellapi.h>
 #include <shobjidl.h>
 #include <systemmediatransportcontrolsinterop.h>
 
@@ -22,6 +24,9 @@ namespace app {
 namespace {
 
 constexpr UINT WM_APP_SMTC = WM_APP + 90;
+constexpr UINT WM_APP_TRAY = WM_APP + 91;
+constexpr UINT kTrayId = 1;
+enum TrayCommand : UINT { kTrayShow = 100, kTrayPlay, kTrayPrev, kTrayNext, kTrayQuit };
 constexpr UINT kBtnPrev = 1, kBtnPlay = 2, kBtnNext = 3;
 
 namespace wm = winrt::Windows::Media;
@@ -95,8 +100,12 @@ struct SystemIntegration::Impl {
     wm::SystemMediaTransportControls smtc{nullptr};
     winrt::event_token buttonToken{};
     double lastProgress = -1;
+    UINT trayCreated = 0;  // "TaskbarCreated": Explorer restarted, add the icon again
+    bool trayAdded = false;
+    std::wstring trayTip, notifiedPath;
 
     ~Impl() {
+        RemoveTray();
         for (HICON i : {prev, play, pause, next})
             if (i) DestroyIcon(i);
         if (smtc) {
@@ -148,6 +157,102 @@ struct SystemIntegration::Impl {
         taskbar->ThumbBarUpdateButtons(hwnd, 1, &b);
     }
 
+    // The notification needs the icon too, so either setting shows it.
+    static bool WantsTray() {
+        const Config& c = TheApp().config();
+        return c.GetBool("interface.trayIcon") || c.GetBool("interface.notifyTrackChange");
+    }
+
+    NOTIFYICONDATAW TrayData() const {
+        NOTIFYICONDATAW nid{sizeof(nid)};
+        nid.hWnd = hwnd;
+        nid.uID = kTrayId;
+        return nid;
+    }
+
+    void SyncTray() {
+        if (!WantsTray()) {
+            RemoveTray();
+            return;
+        }
+        if (trayAdded) return;
+        NOTIFYICONDATAW nid = TrayData();
+        nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+        nid.uCallbackMessage = WM_APP_TRAY;
+        const int px = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(hwnd));
+        nid.hIcon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1), IMAGE_ICON, px, px, 0));
+        wcsncpy_s(nid.szTip, trayTip.empty() ? L"Lumen" : trayTip.c_str(), _TRUNCATE);
+        trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+        if (trayAdded) {
+            nid.uVersion = NOTIFYICON_VERSION_4;
+            Shell_NotifyIconW(NIM_SETVERSION, &nid);
+        }
+        if (nid.hIcon) DestroyIcon(nid.hIcon);
+    }
+
+    void RemoveTray() {
+        if (!trayAdded) return;
+        NOTIFYICONDATAW nid = TrayData();
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        trayAdded = false;
+    }
+
+    void SetTrayTip(const std::wstring& tip) {
+        if (tip == trayTip) return;
+        trayTip = tip;
+        if (!trayAdded) return;
+        NOTIFYICONDATAW nid = TrayData();
+        nid.uFlags = NIF_TIP | NIF_SHOWTIP;
+        wcsncpy_s(nid.szTip, tip.c_str(), _TRUNCATE);
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+
+    void NotifyTrack(const std::wstring& text) {
+        if (!trayAdded || !TheApp().config().GetBool("interface.notifyTrackChange")) return;
+        // Only worth a notification when Lumen isn't what the user is looking at.
+        if (GetForegroundWindow() == hwnd && !IsIconic(hwnd)) return;
+        NOTIFYICONDATAW nid = TrayData();
+        nid.uFlags = NIF_INFO;
+        nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND;
+        wcsncpy_s(nid.szInfoTitle, Tr(L"Now playing"), _TRUNCATE);
+        wcsncpy_s(nid.szInfo, text.c_str(), _TRUNCATE);
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+
+    void ShowWindowFromTray() const {
+        if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+        SetForegroundWindow(hwnd);
+    }
+
+    void TrayMenu() {
+        const PlayerState& s = TheApp().player().State();
+        HMENU menu = CreatePopupMenu();
+        const bool playing = s.fileLoaded && !s.paused;
+        const UINT media = MF_STRING | (s.fileLoaded ? 0u : static_cast<UINT>(MF_GRAYED));
+        AppendMenuW(menu, MF_STRING, kTrayShow, Tr(L"Show Lumen"));
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, media, kTrayPlay, playing ? Tr(L"Pause") : Tr(L"Play"));
+        AppendMenuW(menu, media, kTrayPrev, Tr(L"Previous"));
+        AppendMenuW(menu, media, kTrayNext, Tr(L"Next"));
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, kTrayQuit, Tr(L"Quit"));
+        SetMenuDefaultItem(menu, kTrayShow, FALSE);
+        POINT pt;
+        GetCursorPos(&pt);
+        SetForegroundWindow(hwnd);  // so the menu closes when clicking elsewhere
+        const UINT cmd = static_cast<UINT>(TrackPopupMenuEx(
+            menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, hwnd, nullptr));
+        DestroyMenu(menu);
+        switch (cmd) {
+            case kTrayShow: ShowWindowFromTray(); break;
+            case kTrayPlay: Run(Action::PlayPause); break;
+            case kTrayPrev: Run(Action::Previous); break;
+            case kTrayNext: Run(Action::Next); break;
+            case kTrayQuit: TheApp().Quit(); break;
+            default: break;
+        }
+    }
+
     void InitSmtc() {
         try {
             auto interop = winrt::get_activation_factory<wm::SystemMediaTransportControls, ISystemMediaTransportControlsInterop>();
@@ -176,14 +281,50 @@ SystemIntegration::~SystemIntegration() = default;
 void SystemIntegration::Attach(HWND window) {
     impl_->hwnd = window;
     impl_->taskbarCreated = RegisterWindowMessageW(L"TaskbarButtonCreated");
+    impl_->trayCreated = RegisterWindowMessageW(L"TaskbarCreated");
     // Let the (non-elevated or elevated) shell deliver it either way.
     ChangeWindowMessageFilterEx(window, impl_->taskbarCreated, MSGFLT_ALLOW, nullptr);
     ChangeWindowMessageFilterEx(window, WM_COMMAND, MSGFLT_ALLOW, nullptr);
     impl_->InitSmtc();
+    impl_->SyncTray();
 }
 
-bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM, LRESULT* result) {
+void SystemIntegration::SettingsChanged() {
     Impl& d = *impl_;
+    d.SyncTray();
+    d.lastProgress = -2;  // force a taskbar progress refresh
+    if (d.taskbar && !TheApp().config().GetBool("interface.taskbarProgress"))
+        d.taskbar->SetProgressState(d.hwnd, TBPF_NOPROGRESS);
+    Update(kChangeState | kChangeMeta);
+}
+
+bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) {
+    Impl& d = *impl_;
+    if (msg == d.trayCreated && d.trayCreated) {
+        d.trayAdded = false;
+        d.SyncTray();
+        return false;
+    }
+    if (msg == WM_APP_TRAY) {
+        switch (LOWORD(lp)) {
+            case NIN_SELECT:
+            case NIN_KEYSELECT:
+                if (IsWindowVisible(d.hwnd) && !IsIconic(d.hwnd) && GetForegroundWindow() == d.hwnd)
+                    ShowWindow(d.hwnd, SW_MINIMIZE);
+                else
+                    d.ShowWindowFromTray();
+                break;
+            case WM_CONTEXTMENU: d.TrayMenu(); break;
+            default: break;
+        }
+        *result = 0;
+        return true;
+    }
+    // Minimize to tray: hide the taskbar button while minimized.
+    if (msg == WM_SIZE && wp == SIZE_MINIMIZED && d.trayAdded && TheApp().config().GetBool("interface.minimizeToTray")) {
+        ShowWindow(d.hwnd, SW_HIDE);
+        return false;
+    }
     if (msg == d.taskbarCreated && d.taskbarCreated) {
         if (!d.taskbar && FAILED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&d.taskbar))))
             d.taskbar = nullptr;
@@ -239,6 +380,17 @@ void SystemIntegration::Update(unsigned changes) {
                 d.taskbar->SetProgressValue(d.hwnd, static_cast<ULONGLONG>(k * 10000), 10000);
                 d.lastProgress = k;
             }
+        }
+    }
+
+    // Tray tooltip and track notification (once per file).
+    if (changes & (kChangeFile | kChangeMeta)) {
+        const QueueItem* item = app.queue().CurrentItem();
+        std::wstring title = s.title.empty() && item ? FileNameOf(item->path) : s.title;
+        d.SetTrayTip(s.fileLoaded && !title.empty() ? title + L" — Lumen" : L"Lumen");
+        if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
+            d.notifiedPath = item->path;
+            d.NotifyTrack(s.artist.empty() ? title : title + L"\n" + s.artist);
         }
     }
 

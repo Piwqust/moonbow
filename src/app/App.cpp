@@ -181,11 +181,31 @@ bool IsDirectory(const std::wstring& path) {
     return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-std::vector<std::wstring> MediaInFolder(const std::wstring& dir) {
+std::vector<std::wstring> MediaInFolder(const std::wstring& dir, bool recursive) {
     std::wstring probe = dir;
     if (!probe.empty() && probe.back() != L'\\') probe += L'\\';
-    probe += L"x";  // ListSiblingMedia lists the folder of a path
-    return ListSiblingMedia(probe);
+    std::vector<std::wstring> out = ListSiblingMedia(probe + L"x");  // lists the folder of a path
+    if (!recursive) return out;
+    std::vector<std::wstring> subdirs;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW((probe + L"*").c_str(), FindExInfoBasic, &fd, FindExSearchLimitToDirectories, nullptr,
+                                FIND_FIRST_EX_LARGE_FETCH);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)) continue;
+            if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+            subdirs.push_back(probe + fd.cFileName);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    std::sort(subdirs.begin(), subdirs.end(),
+              [](const std::wstring& a, const std::wstring& b) { return StrCmpLogicalW(a.c_str(), b.c_str()) < 0; });
+    for (const auto& sub : subdirs) {
+        if (out.size() > 5000) break;
+        auto more = MediaInFolder(sub, true);
+        out.insert(out.end(), more.begin(), more.end());
+    }
+    return out;
 }
 
 QueueItem ItemFor(const std::wstring& path) {
@@ -279,6 +299,11 @@ void App::OnConfigChanged(const std::string& key) {
     }
     if (key == "playback.shuffle") queue_.SetShuffle(config_.GetBool("playback.shuffle"));
     if (key == "interface.alwaysOnTop") ApplyWindowOptions();
+    if (key == "privacy.excludePatterns") history_.SetExcludePatterns(config_.GetWString("privacy.excludePatterns"));
+    if (key.rfind("interface.", 0) == 0) {
+        system_.SettingsChanged();
+        if (main_) main_->RequestLayout();
+    }
     if (key == "library.showHidden" || key == "library.readTags") {
         library_.SetOptions({config_.GetBool("library.showHidden"), config_.GetBool("library.readTags")});
         library_.Rescan();
@@ -357,6 +382,7 @@ void App::SaveHistoryPosition() {
     const PlayerState& s = player_.State();
     const QueueItem* item = queue_.CurrentItem();
     if (!s.fileLoaded || !item || s.duration <= 0) return;
+    if (!config_.GetBool("privacy.saveHistory") || !config_.GetBool("privacy.rememberPosition")) return;
     history_.UpdatePosition(item->path, s.position, s.duration);
 }
 
@@ -400,6 +426,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
 
     // Stores and the library scan load after the window is up.
     history_.Load();
+    history_.SetExcludePatterns(config_.GetWString("privacy.excludePatterns"));
     playlists_.Load();
     bookmarks_.Load();
     favorites_.Load();
@@ -459,7 +486,7 @@ void App::OnPlayerEvents() {
         lastSecond = sec;
     }
     if (changes & kChangeError) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
-    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded)
+    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && config_.GetBool("privacy.saveHistory"))
         history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
     if ((changes & kChangeTime) && s.fileLoaded) {
         const double now = ui::AnimFloat::Now();
@@ -588,7 +615,8 @@ void App::Open(const std::vector<std::wstring>& paths) {
     if (paths.size() == 1 && !IsUrl(paths[0])) {
         if (IsDirectory(paths[0])) {
             std::vector<QueueItem> items;
-            for (const auto& f : MediaInFolder(paths[0])) items.push_back(ItemFor(f));
+            for (const auto& f : MediaInFolder(paths[0], config_.GetString("library.openFolder") != "folder"))
+                items.push_back(ItemFor(f));
             if (items.empty()) {
                 ShowToast(main_.get(), Tr(L"No media files in this folder"), "folder");
                 return;
@@ -602,7 +630,8 @@ void App::Open(const std::vector<std::wstring>& paths) {
     std::vector<QueueItem> items;
     for (const auto& p : paths) {
         if (!IsUrl(p) && IsDirectory(p))
-            for (const auto& f : MediaInFolder(p)) items.push_back(ItemFor(f));
+            for (const auto& f : MediaInFolder(p, config_.GetString("library.openFolder") != "folder"))
+                items.push_back(ItemFor(f));
         else
             items.push_back(ItemFor(p));
     }
@@ -731,7 +760,15 @@ void App::OnCopyData(const std::wstring& payload) {
         if (end > start) files.push_back(payload.substr(start, end - start));
         start = end + 1;
     }
-    if (!files.empty()) Open(files);
+    if (files.empty()) return;
+    if (config_.GetBool("library.enqueue") && player_.State().fileLoaded) {
+        std::vector<QueueItem> items;
+        for (const auto& f : files) items.push_back(ItemFor(f));
+        queue_.Add(std::move(items));
+        ShowToast(main_.get(), Fmt(Tr(L"Added to the queue: {0}"), {std::to_wstring(files.size())}), "list");
+        return;
+    }
+    Open(files);
 }
 
 void App::OnMainDestroyed() {

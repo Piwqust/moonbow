@@ -106,7 +106,8 @@ public:
     // --- window state ------------------------------------------------------------------
     bool IsWindowMaximized() const;
     bool IsFullscreen() const { return fullscreen_; }
-    void SetFullscreen(bool on);
+    // `primaryScreen` = fullscreen on the primary monitor instead of the current one.
+    void SetFullscreen(bool on, bool primaryScreen = false);
     void ToggleMaximize();
     void Minimize();
     void SetTitle(const std::wstring& title);

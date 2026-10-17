@@ -338,13 +338,15 @@ void Host::SetTitle(const std::wstring& title) {
     SetWindowTextW(hwnd_, title.c_str());
 }
 
-void Host::SetFullscreen(bool on) {
+void Host::SetFullscreen(bool on, bool primaryScreen) {
     if (on == fullscreen_) return;
     const DWORD style = static_cast<DWORD>(GetWindowLongW(hwnd_, GWL_STYLE));
     if (on) {
         MONITORINFO mi{sizeof(mi)};
         if (!GetWindowPlacement(hwnd_, &placement_) ||
-            !GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY), &mi))
+            !GetMonitorInfoW(primaryScreen ? MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY)
+                                           : MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY),
+                             &mi))
             return;
         fullscreen_ = true;
         SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style & ~WS_OVERLAPPEDWINDOW));

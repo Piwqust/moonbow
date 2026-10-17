@@ -330,7 +330,7 @@ void Run(Action a) {
         case Action::Fullscreen:
             if (!w) break;
             if (!app.PlayerShown() && s.fileLoaded) app.ShowPlayer(true);
-            w->SetFullscreen(!w->IsFullscreen());
+            w->SetFullscreen(!w->IsFullscreen(), app.config().GetString("interface.fullscreenScreen") == "primary");
             w->PokeChrome();
             break;
         case Action::ExitFullscreen:

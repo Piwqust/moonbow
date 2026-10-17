@@ -1,5 +1,6 @@
 #include "app/ImageCache.h"
 
+#include "app/App.h"
 #include "library/Thumbnails.h"
 
 namespace app {
@@ -28,7 +29,7 @@ bool ImageCache::Missing(const std::wstring& path, int sizePx) const {
 }
 
 ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
-    if (path.empty()) return nullptr;
+    if (path.empty() || !TheApp().config().GetBool("library.thumbnails")) return nullptr;
     const int bucket = Bucket(sizePx);
     const std::wstring key = Key(path, bucket);
     gfx::Gpu& gpu = gfx::Gpu::Get();
