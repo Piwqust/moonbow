@@ -2,6 +2,7 @@
 
 #include "Player.h"
 #include "app/Actions.h"
+#include "app/I18n.h"
 #include "app/App.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
@@ -118,6 +119,7 @@ bool MainWindow::Create() {
         return true;
     };
     onDropFiles = [](std::vector<std::wstring> files) { TheApp().Open(files); };
+    dropHint = Tr(L"Drop to play");
     onCloseRequest = [this] {
         // mpv's video window is a child of ours, owned by an mpv thread, so
         // shut mpv down off the UI thread while this thread keeps pumping.

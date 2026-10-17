@@ -123,6 +123,8 @@ public:
     std::function<bool()> onCloseRequest;                     // false cancels closing
     std::function<void()> onDestroyed;
     std::function<void(std::vector<std::wstring>)> onDropFiles;
+    // Text shown in the overlay while files are dragged over the window.
+    std::wstring dropHint;
     std::function<void(bool active)> onActivate;
 
     // Every live host, e.g. to repaint all windows after a theme change.
@@ -154,6 +156,12 @@ private:
         bool above = false;  // flipped above the anchor (slide direction)
     };
     void ApplyDwmAttributes();
+    void SetDragOver(bool over);
+    void PaintDropOverlay(Painter& p);
+    friend class DropTarget;
+    class DropTarget* dropTarget_ = nullptr;
+    bool dragOver_ = false;
+    AnimFloat dragAnim_{0.0f};
 
     void DoLayout();
     void Render();

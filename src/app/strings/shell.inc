@@ -47,3 +47,4 @@
 {L"Lumen is registered. Pick it in Default apps.", L"Lumen зарегистрирован. Выберите его в «Приложениях по умолчанию»."},
 {L"Couldn't register file types", L"Не удалось зарегистрировать типы файлов"},
 {L"Rescanning the library…", L"Обновляю медиатеку…"},
+{L"Drop to play", L"Отпустите, чтобы воспроизвести"},

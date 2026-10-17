@@ -8,6 +8,7 @@
 #include "ui/Host.h"
 
 #include <objbase.h>
+#include <ole2.h>
 #include <shellapi.h>
 
 #include <string>
@@ -78,11 +79,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return 0;
     }
 
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    // OLE (STA COM + drag and drop targets).
+    OleInitialize(nullptr);
     int code = 1;
     if (gfx::Gpu::Get().CreateFactories() && gfx::Text::Get().Init(instance))
         code = gallery ? app::RunGallery() : app::App::Get().Run(instance, files);
-    CoUninitialize();
+    OleUninitialize();
     if (mutex) CloseHandle(mutex);
     return code;
 }

@@ -8,6 +8,8 @@
 #include <shellapi.h>
 #include <windowsx.h>
 
+#include <oleidl.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <typeinfo>
@@ -50,6 +52,25 @@ private:
     std::wstring text_;
 };
 
+std::vector<std::wstring> FilesFrom(IDataObject* data) {
+    std::vector<std::wstring> files;
+    FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    STGMEDIUM medium{};
+    if (FAILED(data->GetData(&fmt, &medium))) return files;
+    if (auto drop = static_cast<HDROP>(GlobalLock(medium.hGlobal))) {
+        const UINT n = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+        for (UINT i = 0; i < n; ++i) {
+            const UINT len = DragQueryFileW(drop, i, nullptr, 0);
+            std::wstring path(len, L'\0');
+            DragQueryFileW(drop, i, path.data(), len + 1);
+            files.push_back(std::move(path));
+        }
+        GlobalUnlock(medium.hGlobal);
+    }
+    ReleaseStgMedium(&medium);
+    return files;
+}
+
 void ForEachInTree(Widget* w, const std::function<void(Widget*)>& fn) {
     fn(w);
     for (auto& c : w->Children()) ForEachInTree(c.get(), fn);
@@ -59,6 +80,96 @@ void ForEachInTree(Widget* w, const std::function<void(Widget*)>& fn) {
 
 void Host::SetAutomation(bool on) {
     g_automation = on;
+}
+
+// OLE drop target: shows the overlay while files hover and hands them over on drop.
+class DropTarget : public IDropTarget {
+public:
+    explicit DropTarget(Host* host) : host_(host) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** out) override {
+        if (riid == IID_IUnknown || riid == IID_IDropTarget) {
+            *out = static_cast<IDropTarget*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *out = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG r = --refs_;
+        if (!r) delete this;
+        return r;
+    }
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL, DWORD* effect) override {
+        FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+        accepts_ = host_->onDropFiles && data->QueryGetData(&fmt) == S_OK;
+        *effect = accepts_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        if (accepts_) host_->SetDragOver(true);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL, DWORD* effect) override {
+        *effect = accepts_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DragLeave() override {
+        host_->SetDragOver(false);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL, DWORD* effect) override {
+        host_->SetDragOver(false);
+        *effect = DROPEFFECT_NONE;
+        if (!accepts_) return S_OK;
+        auto files = FilesFrom(data);
+        if (!files.empty() && host_->onDropFiles) {
+            *effect = DROPEFFECT_COPY;
+            SetForegroundWindow(host_->Hwnd());
+            // Run after the drag source returns (opening files may show dialogs).
+            Host* host = host_;
+            host->Post([host, files = std::move(files)]() mutable {
+                if (host->onDropFiles) host->onDropFiles(std::move(files));
+            });
+        }
+        return S_OK;
+    }
+
+private:
+    Host* host_;
+    ULONG refs_ = 1;
+    bool accepts_ = false;
+};
+
+void Host::SetDragOver(bool over) {
+    if (over == dragOver_) return;
+    dragOver_ = over;
+    dragAnim_.To(over ? 1.0f : 0.0f, 140);
+    RequestRender();
+}
+
+void Host::PaintDropOverlay(Painter& p) {
+    const float k = dragAnim_.Get();
+    if (k <= 0.01f) return;
+    const Size c = ClientSize();
+    const Rect all{0, 0, c.w, c.h};
+    p.PushOpacity(k);
+    p.Fill(all, P().scrim);
+    const Rect frame = all.Inset(16);
+    gfx::ComPtr<ID2D1StrokeStyle> dash;
+    const float dashes[] = {4, 3};
+    gfx::Gpu::Get().D2DFactory()->CreateStrokeStyle(
+        D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+                                    D2D1_LINE_JOIN_ROUND, 10, D2D1_DASH_STYLE_CUSTOM, 0),
+        dashes, 2, &dash);
+    gfx::ComPtr<ID2D1SolidColorBrush> brush;
+    Color line = P().accentMid;
+    line.a *= k;
+    p.Ctx()->CreateSolidColorBrush(line.D2D(), &brush);
+    p.Ctx()->DrawRoundedRectangle(D2D1::RoundedRect(frame.Inset(1).D2D(), 12, 12), brush.Get(), 2, dash.Get());
+    const Rect icon = all.Center(48, 48).Offset(0, -24);
+    p.Icon("add", icon, P().textPrimary);
+    p.Text(dropHint.empty() ? L"Drop to open" : dropHint, {0, icon.Bottom() + 12, c.w, 28}, TextStyle::Heading,
+           P().textPrimary, HAlign::Center);
+    p.PopOpacity();
 }
 
 const std::vector<Host*>& Host::All() {
@@ -152,7 +263,8 @@ bool Host::Create(const HostOptions& options) {
     }
     ApplyDwmAttributes();
     SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
-    DragAcceptFiles(hwnd_, TRUE);
+    dropTarget_ = new DropTarget(this);
+    if (FAILED(RegisterDragDrop(hwnd_, dropTarget_))) DragAcceptFiles(hwnd_, TRUE);  // OLE not initialized
     if (gfx::Gpu::Get().Ready()) surface_.Attach(hwnd_, static_cast<float>(dpi_));
     return true;
 }
@@ -464,6 +576,7 @@ void Host::Render() {
             if (slide != 0) ctx->SetTransform(D2D1::Matrix3x2F::Identity());
             p.PopOpacity();
         }
+        PaintDropOverlay(p);
     }
     if (!surface_.End()) RequestLayout();
     gfx::Text::Get().EndFrame();
@@ -1069,6 +1182,11 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case WM_DESTROY:
+            RevokeDragDrop(hwnd_);
+            if (dropTarget_) {
+                dropTarget_->Release();
+                dropTarget_ = nullptr;
+            }
             if (onDestroyed) onDestroyed();
             return 0;
 
