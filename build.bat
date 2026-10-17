@@ -39,7 +39,7 @@ if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG"
     set "LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF"
 )
-set "LIBS=user32.lib gdi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib"
+set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib"
 
 rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
 cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" %SOURCES% "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1

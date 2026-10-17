@@ -4,6 +4,10 @@
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/Dialogs.h"
+#include "app/player/ControlBar.h"
+#include "core/Json.h"
+#include "core/Paths.h"
+#include "ui/Theme.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "gfx/Gpu.h"
@@ -231,9 +235,102 @@ std::vector<std::wstring> FileDialog(HWND owner, bool folders, bool multi, bool 
 
 }  // namespace
 
+App::App() : thumbnails_(2) {}
+
 App& App::Get() {
     static App app;
     return app;
+}
+
+// --- settings & state ------------------------------------------------------------------
+
+void App::ApplyTheme() {
+    const std::string mode = config_.GetString("general.theme");
+    bool dark = mode != "light";
+    if (mode == "system") {
+        DWORD light = 0, size = sizeof(light);
+        if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS)
+            dark = light == 0;
+    }
+    static const char* const kAccents[] = {"white", "pearl", "silver", "steel", "graphite"};
+    int accent = 0;
+    const std::string a = config_.GetString("general.accent");
+    for (int i = 0; i < 5; ++i)
+        if (a == kAccents[i]) accent = i;
+    ui::Theme::Get().Set(dark ? ui::ThemeMode::Dark : ui::ThemeMode::Light, accent);
+    for (ui::Host* h : ui::Host::All()) h->OnThemeChanged();
+}
+
+void App::OnConfigChanged(const std::string& key) {
+    if (key == "general.theme" || key == "general.accent") {
+        ApplyTheme();
+        return;
+    }
+    if (key == "general.language") {
+        SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
+        languageChanged.Emit();
+        return;
+    }
+    if (key == "library.showHidden" || key == "library.readTags") {
+        library_.SetOptions({config_.GetBool("library.showHidden"), config_.GetBool("library.readTags")});
+        library_.Rescan();
+    }
+    // Settings mapped to mpv apply live as properties.
+    for (const auto& [name, value] : MpvOptionFor(config_, key)) player_.SetProperty(name.c_str(), value);
+}
+
+std::string App::UiValue(const std::string& key, const std::string& fallback) const {
+    auto it = ui_.find(key);
+    return it == ui_.end() ? fallback : it->second;
+}
+
+void App::SetUiValue(const std::string& key, const std::string& value) {
+    if (UiValue(key) == value) return;
+    ui_[key] = value;
+    uiDirty_ = true;
+}
+
+void App::LoadUiState() {
+    std::string text;
+    if (!json::ReadFileUtf8(DataFilePath(L"ui.json"), &text)) return;
+    std::string error;
+    auto doc = json::Parse(text, &error);
+    if (!doc || !doc->IsObject()) return;
+    for (const auto& [k, v] : doc->AsObject())
+        if (v.IsString()) ui_[k] = v.AsString();
+}
+
+void App::SaveUiState() {
+    if (!uiDirty_) return;
+    json::Value doc = json::Value::MakeObject();
+    for (const auto& [k, v] : ui_) doc.Set(k, json::Value(v));
+    if (json::WriteFileAtomic(DataFilePath(L"ui.json"), json::Serialize(doc, true))) uiDirty_ = false;
+}
+
+void App::FlushStores() {
+    SaveHistoryPosition();
+    config_.Flush();
+    history_.Flush();
+    playlists_.Flush();
+    bookmarks_.Flush();
+    favorites_.Flush();
+    SaveUiState();
+}
+
+void App::SaveHistoryPosition() {
+    const PlayerState& s = player_.State();
+    const QueueItem* item = queue_.CurrentItem();
+    if (!s.fileLoaded || !item || s.duration <= 0) return;
+    history_.UpdatePosition(item->path, s.position, s.duration);
+}
+
+void App::OnLibraryScanned() {
+    libraryChanged.Emit();
+}
+
+void App::OnThumbnails() {
+    images_.OnCompleted();
 }
 
 int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
@@ -241,19 +338,48 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     for (auto& a : args)
         if (!a.empty() && a[0] != L'-') pendingOpen_.push_back(a);
 
+    config_.Load();
+    SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
+    ApplyTheme();
+    LoadUiState();
+    SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
+    config_.Subscribe("", [this](const std::string& key) { OnConfigChanged(key); });
+    Trace("config loaded");
+
     main_ = std::make_unique<MainWindow>();
     if (!main_->Create()) return 1;
     main_->Show();
     Trace("window shown");
     // The GPU device (driver load) and libmpv start after the first paint.
     gfx::Gpu::Get().CreateDeviceAsync(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
+    player_.SetStartOptions(MpvOptions(config_));
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
+
+    // Stores and the library scan load after the window is up.
+    history_.Load();
+    playlists_.Load();
+    bookmarks_.Load();
+    favorites_.Load();
+    library_.Load();
+    library_.SetOptions({config_.GetBool("library.showHidden"), config_.GetBool("library.readTags")});
+    library_.SetNotifyWindow(main_->Hwnd(), kLibraryMessage);
+    thumbnails_.SetNotifyWindow(main_->Hwnd(), kThumbnailsMessage);
+    if (config_.GetBool("library.scanOnStartup") || !library_.Current()) library_.Rescan();
+    ControlLayoutChanged().Connect([this] { SetUiValue("controls.layout", CurrentControlLayout().Serialize()); });
+    main_->StartTimer(3000, [this] { FlushStores(); }, true);
+    if (UiValue("onboarded") != "1") {
+        app::ShowOnboarding([this] {
+            SetUiValue("onboarded", "1");
+            FlushStores();
+        });
+    }
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    FlushStores();
     main_.reset();
     return static_cast<int>(msg.wParam);
 }
@@ -289,8 +415,14 @@ void App::OnPlayerEvents() {
         lastSecond = sec;
     }
     if (changes & kChangeError) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
-    if ((changes & kChangeFile) && queue_.CurrentItem() && !s.title.empty()) {
-        // Keep the queue's display name in sync with what mpv reports for streams.
+    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded)
+        history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
+    if ((changes & kChangeTime) && s.fileLoaded) {
+        const double now = ui::AnimFloat::Now();
+        if (now - lastHistorySave_ > 5000) {
+            lastHistorySave_ = now;
+            SaveHistoryPosition();
+        }
     }
     playerChanged.Emit(changes);
     if (changes & kChangeEnd) Next(false);
@@ -391,6 +523,7 @@ void App::PlayIndex(int index) {
 }
 
 void App::Next(bool userAction) {
+    SaveHistoryPosition();
     const int i = queue_.NextIndex(userAction);
     if (i < 0) return;
     if (i == queue_.Current() && !userAction) {
@@ -411,6 +544,7 @@ void App::Previous() {
 }
 
 void App::StopPlayback() {
+    SaveHistoryPosition();
     player_.Stop();
     if (main_ && main_->IsFullscreen()) main_->SetFullscreen(false);
     ShowPlayer(false);
@@ -443,10 +577,10 @@ void App::Navigate(Route r) {
         routeChanged.Emit();
         return;
     }
-    history_.resize(static_cast<size_t>(historyPos_) + 1);
-    history_.push_back(std::move(r));
-    if (history_.size() > 100) history_.erase(history_.begin());
-    historyPos_ = static_cast<int>(history_.size()) - 1;
+    nav_.resize(static_cast<size_t>(historyPos_) + 1);
+    nav_.push_back(std::move(r));
+    if (nav_.size() > 100) nav_.erase(nav_.begin());
+    historyPos_ = static_cast<int>(nav_.size()) - 1;
     routeChanged.Emit();
 }
 

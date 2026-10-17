@@ -263,6 +263,14 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             TheApp().OnPlayerEvents();
             *result = 0;
             return true;
+        case kLibraryMessage:
+            TheApp().OnLibraryScanned();
+            *result = 0;
+            return true;
+        case kThumbnailsMessage:
+            TheApp().OnThumbnails();
+            *result = 0;
+            return true;
         case WM_APP_CLOSED:
             Destroy();
             *result = 0;
