@@ -9,6 +9,8 @@
 #include <windowsx.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <typeinfo>
 #include <cmath>
 
 namespace ui {
@@ -727,6 +729,25 @@ void Host::HideTooltip() {
     }
 }
 
+void Host::DumpTree(const std::wstring& path) const {
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, path.c_str(), L"w") != 0 || !f) return;
+    std::function<void(const Widget*, int)> dump = [&](const Widget* w, int depth) {
+        const char* name = typeid(*w).name();
+        if (strncmp(name, "class ", 6) == 0) name += 6;
+        fprintf(f, "%*s%s%s%s [%.0f,%.0f %.0fx%.0f]%s%s\n", depth * 2, "", name, w->id.empty() ? "" : " #",
+                w->id.c_str(), w->rect.x, w->rect.y, w->rect.w, w->rect.h, w->visible ? "" : " hidden",
+                w->enabled ? "" : " disabled");
+        for (auto& c : w->Children()) dump(c.get(), depth + 1);
+    };
+    if (root_) dump(root_.get(), 0);
+    for (const Popup& p : popups_) {
+        fprintf(f, "--- popup\n");
+        dump(p.content.get(), 0);
+    }
+    fclose(f);
+}
+
 void Host::PaintSkeleton(HDC dc) {
     RECT rc;
     GetClientRect(hwnd_, &rc);
@@ -1023,6 +1044,13 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             }
             for (Host* h : Registry()) h->OnDeviceReady();
             return 0;
+
+        case kDumpTreeMessage: {
+            wchar_t tmp[MAX_PATH];
+            GetTempPathW(MAX_PATH, tmp);
+            DumpTree(std::wstring(tmp) + L"lumen-tree-" + std::to_wstring(GetCurrentProcessId()) + L".txt");
+            return 0;
+        }
 
         case WM_APP_POST: {
             std::vector<std::function<void()>> tasks;

@@ -94,6 +94,10 @@ public:
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the
     // device and attaches every window's surface.
     static constexpr UINT kDeviceReadyMessage = WM_APP + 42;
+    // Debug aid: posting this writes the widget tree (type, rect, flags) to
+    // %TEMP%\lumen-tree-<pid>.txt. See tools/dev/dump-tree.ps1.
+    static constexpr UINT kDumpTreeMessage = WM_APP + 43;
+    void DumpTree(const std::wstring& path) const;
     // Re-applies DWM attributes (dark title/border) and repaints after a theme change.
     void OnThemeChanged();
 

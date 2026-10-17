@@ -235,7 +235,7 @@ void Widget::Paint(Painter&) {}
 void Widget::PaintOver(Painter&) {}
 
 void Widget::PaintChildren(Painter& p) {
-    const Rect& clip = p.Clip();
+    const Rect clip = p.Clip();  // by value: children may push clips (vector reallocation)
     for (auto& c : children_)
         if (c->visible && c->rect.Intersects(clip)) c->PaintTree(p);
 }
