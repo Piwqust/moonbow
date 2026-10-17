@@ -6,6 +6,10 @@
 // window (src/app/settings). All run on the UI thread and return immediately.
 namespace app {
 
+// Called once after the main window and the stores are up (App::Run): installs
+// the dialogs module's app-wide hooks (remembered subtitle pairs).
+void InitDialogs();
+
 void ShowCustomizePlayerDialog();
 void ShowKeyboardShortcutsDialog();
 void ShowNetworkStreamDialog();

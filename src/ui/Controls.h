@@ -215,6 +215,7 @@ private:
 class TextBox : public Widget {
 public:
     explicit TextBox(std::wstring placeholder = {}, std::string leadingIcon = {});
+    ~TextBox() override;  // stops the caret timer (a focused box can be destroyed with its popup)
     const std::wstring& Text() const { return text_; }
     void SetText(std::wstring text, bool notify = false);
     void SelectAll();

@@ -582,6 +582,11 @@ Rect TextBox::CaretRect() const {
     return {tr.x + XOf(caret_) - scroll_, rect.Cy() - 9, 1, 18};
 }
 
+TextBox::~TextBox() {
+    if (!blinkTimer_) return;
+    if (Host* host = GetHost()) host->CancelTimer(blinkTimer_);
+}
+
 void TextBox::ResetBlink() {
     caretOn_ = true;
     Host* host = GetHost();
@@ -684,9 +689,12 @@ bool TextBox::OnKeyDown(const KeyEvent& e) {
             MoveCaret(caret_, false);
             Changed();
             return true;
-        case VK_RETURN:
-            if (onSubmit) onSubmit(text_);
-            return onSubmit != nullptr;
+        case VK_RETURN: {
+            // onSubmit may close the dialog and destroy this box: no member access after it.
+            if (!onSubmit) return false;
+            onSubmit(std::wstring(text_));
+            return true;
+        }
         case VK_ESCAPE:
             if (onEscape) {
                 onEscape();
