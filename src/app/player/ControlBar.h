@@ -71,7 +71,7 @@ private:
     bool dragging_ = false;
     double dragTime_ = 0;
     float hoverX_ = -1;
-    ScopedConnection conn_;
+    ScopedConnection conn_, liveConn_;
 };
 
 // The bar itself (56 DIP): left items, seek bar, right items.
@@ -80,6 +80,7 @@ public:
     ControlBar();
     ~ControlBar() override;
     void Rebuild();
+    void OnLayout() override;
     void Paint(ui::Painter& p) override;
     float opacity = 1;  // fades in fullscreen
 

@@ -124,7 +124,7 @@ public:
     // `showPlayer` = switch to the player screen (off for next/previous, so music
     // keeps playing in the mini player while the user browses the library).
     void PlayIndex(int index, bool showPlayer = true);
-    void Next(bool userAction = true);
+    bool Next(bool userAction = true);  // false at the end of the queue
     void Previous();
     void StopPlayback();
     void OpenFileDialog();
@@ -203,6 +203,7 @@ private:
     int historyPos_ = 0;
     bool playerShown_ = false;
     std::wstring failedPath_, failedError_;
+    double lastRestart_ = 0;  // Previous restarted the file at this time (ms)
     std::vector<std::wstring> pendingOpen_;
     bool engineReady_ = false;
     bool fitPending_ = false;

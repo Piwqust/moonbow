@@ -189,6 +189,10 @@ void TitleBar::Refresh() {
     crumb_->visible = app.PlayerShown() && !folder.empty();
     crumbLabel_->SetText(folder);
     std::wstring title = media ? (s.title.empty() ? FileNameOf(item->path) : s.title) : std::wstring();
+    if (media && _wcsicmp(title.c_str(), FileNameOf(item->path).c_str()) == 0) {
+        const size_t dot = title.find_last_of(L'.');
+        if (dot != std::wstring::npos && dot > 0) title.resize(dot);
+    }
     if (media && !s.artist.empty() && !app.player().State().hasVideo) title = s.artist + L" — " + title;
     title_->SetText(title.empty() ? L"Lumen" : title);
     const bool showName = app.config().GetBool("interface.titleFileName");

@@ -200,7 +200,7 @@ public:
         } else {
             TheApp().player().SetVolume(std::round(PS().volume + 5 * e.delta));
             ShowToast(GetHost(), Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))),
-                      "volume_value-high", 900);
+                      VolumeIcon(PS().volume, PS().mute), 900);
         }
         return true;
     }

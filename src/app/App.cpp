@@ -517,6 +517,7 @@ void App::OnPlayerEvents() {
     }
     if (changes & kChangeVolume) config_.SetDouble("audio.lastVolume", std::round(s.volume));
     playerChanged.Emit(changes);
+    OnPlayerChangeForOsd(changes);
     system_.Update(changes);
     if (changes & kChangeEnd) OnPlaybackEnded();
 }
@@ -706,23 +707,27 @@ void App::PlayIndex(int index, bool showPlayer) {
     if (showPlayer || playerShown_) ShowPlayer(true);
 }
 
-void App::Next(bool userAction) {
+bool App::Next(bool userAction) {
     SaveHistoryPosition();
     const int i = queue_.NextIndex(userAction);
-    if (i < 0) return;
+    if (i < 0) return false;
     if (i == queue_.Current() && !userAction) {
         player_.SeekAbsolute(0, true);
         player_.SetPause(false);
-        return;
+        return true;
     }
     PlayIndex(i, false);
+    return true;
 }
 
 void App::Previous() {
-    if (player_.State().fileLoaded && player_.State().position > 3) {
+    const double now = ui::AnimFloat::Now();
+    if (player_.State().fileLoaded && player_.State().position > 3 && now - lastRestart_ > 1500) {
         player_.SeekAbsolute(0, true);
+        lastRestart_ = now;
         return;
     }
+    lastRestart_ = 0;
     const int i = queue_.PrevIndex();
     if (i >= 0) PlayIndex(i, false);
 }

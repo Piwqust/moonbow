@@ -1,4 +1,5 @@
 #include "app/player/ControlBar.h"
+#include "app/player/LiveState.h"
 #include "app/player/SeekPreview.h"
 
 #include "Util.h"
@@ -116,24 +117,27 @@ public:
         if (duration_) {
             interactive = true;
             tooltip = Tr(L"Show remaining time");
+            remaining_ = TheApp().UiValue("player.remainingTime") == "1";
             onClick = [this] {
                 remaining_ = !remaining_;
+                TheApp().SetUiValue("player.remainingTime", remaining_ ? "1" : "0");
                 Invalidate();
             };
         }
     }
     Size MeasureContent(float, float) override {
-        return {gfx::Text::Get().Measure(L"00:00:00", TextStyle::Mono).width + 8, 24};
+        return {gfx::Text::Get().Measure(L"-00:00:00", TextStyle::Mono).width + 8, 24};
     }
     void Paint(Painter& p) override {
         const PlayerState& s = PS();
         std::wstring text = L"--:--:--";
         if (s.fileLoaded) {
+            const bool hours = s.duration >= 3600 || s.position >= 3600;
             if (!duration_)
-                text = FormatTime(s.position, true);
+                text = FormatTime(s.position, hours);
             else if (s.duration > 0)
-                text = remaining_ ? L"-" + FormatTime(std::max(0.0, s.duration - s.position), true)
-                                  : FormatTime(s.duration, true);
+                text = remaining_ ? L"-" + FormatTime(std::max(0.0, s.duration - s.position), hours)
+                                  : FormatTime(s.duration, hours);
         }
         p.Text(text, rect, TextStyle::Mono, IsHot() ? P().textPrimary : P().textSecondary, HAlign::Center);
     }
@@ -153,16 +157,22 @@ public:
         height = Length::Px(32);
         Bind(this, kChangeVolume);
     }
-    Rect Wedge() const { return {rect.x + 36, rect.Cy() - 9, 86, 18}; }
+    Rect Wedge() const { return collapsed_ ? Rect{} : Rect{rect.x + 36, rect.Cy() - 9, 86, 18}; }
+    // Narrow windows keep only the speaker (wheel still changes the volume), so the
+    // seek bar keeps its room.
+    void SetCollapsed(bool c) {
+        if (c == collapsed_) return;
+        collapsed_ = c;
+        width = Length::Px(c ? 32.0f : 126.0f);
+        tooltip = c ? Tr(L"Volume: scroll to change, click to mute") : std::wstring();
+    }
     void Paint(Painter& p) override {
         const PlayerState& s = PS();
         const Rect speaker{rect.x, rect.y, 32, rect.h};
         if (hotSpeaker_) p.Fill(speaker, P().hover, 4);
-        const char* icon = s.mute || s.volume <= 0 ? "volume_value-high" : "volume_value-high";
+        const char* icon = VolumeIcon(s.volume, s.mute);
         p.Icon(icon, speaker.Center(24, 24), hotSpeaker_ ? P().textPrimary : P().textSecondary);
-        if (s.mute) {
-            p.Line({speaker.x + 9, speaker.y + 9}, {speaker.Right() - 9, speaker.Bottom() - 9}, P().textSecondary, 1.5f);
-        }
+        if (collapsed_) return;
 
         const Rect w = Wedge();
         auto wedge = [&](float t, Color c) {
@@ -205,7 +215,7 @@ public:
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
-        if (e.x < rect.x + 34) {
+        if (collapsed_ || e.x < rect.x + 34) {
             Run(Action::Mute);
             return true;
         }
@@ -220,6 +230,9 @@ public:
     }
     bool OnWheel(const WheelEvent& e) override {
         TheApp().player().SetVolume(std::round(PS().volume + 5 * e.delta));
+        if (collapsed_)
+            ShowToast(GetHost(), Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))),
+                      VolumeIcon(PS().volume, PS().mute), 900);
         Invalidate();
         return true;
     }
@@ -231,8 +244,10 @@ public:
     }
 
 private:
+    bool collapsed_ = false;
     void SetFromX(float x) {
         const Rect w = Wedge();
+        if (w.w <= 0) return;
         const double v = std::clamp((x - w.x) / w.w, 0.0f, 1.0f) * 100.0;
         if (PS().mute) TheApp().player().SetMute(false);
         TheApp().player().SetVolume(std::round(v));
@@ -464,6 +479,7 @@ SeekBar::SeekBar() {
     conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeTime | kChangeFile | kChangeChapters)) Invalidate();
     });
+    liveConn_ = Connect(LiveState::Get().changed, [this] { Invalidate(); });
 }
 
 SeekBar::~SeekBar() = default;
@@ -548,7 +564,16 @@ void SeekBar::Paint(Painter& p) {
         const float kc = static_cast<float>(std::clamp(s.cacheTime / s.duration, 0.0, 1.0));
         p.Fill({t.x + t.w * k, t.Bottom() - 3, t.w * (kc - k), 3}, P().line, 1);
     }
-    p.Fill({t.x, t.y, t.w * k, t.h}, P().accentDim, 3);
+    p.Fill({t.x, t.y, t.w * k, t.h}, Color::Mix(P().bgDeep, P().accent, 0.32f), 3);
+    // A-B loop range.
+    const LiveValues& lv = LiveState::Get().V();
+    if (!std::isnan(lv.abA)) {
+        const float ax = t.x + t.w * static_cast<float>(std::clamp(lv.abA / s.duration, 0.0, 1.0));
+        const float bx = std::isnan(lv.abB) ? ax : t.x + t.w * static_cast<float>(std::clamp(lv.abB / s.duration, 0.0, 1.0));
+        if (bx > ax) p.Fill({ax, t.Bottom() - 3, bx - ax, 3}, P().accent, 1);
+        p.Fill({std::round(ax) - 1, t.y, 2, t.h}, P().accent);
+        if (bx > ax) p.Fill({std::round(bx) - 1, t.y, 2, t.h}, P().accent);
+    }
     for (const Chapter& c : s.chapters) {
         if (c.time <= 0) continue;
         const float cx = t.x + t.w * static_cast<float>(c.time / s.duration);
@@ -606,6 +631,12 @@ void ControlBar::Rebuild() {
     seek->pad = {10, 0, 10, 0};
     for (ControlId cid : l.right) AddChild(CreateControl(cid));
     InvalidateLayout();
+}
+
+void ControlBar::OnLayout() {
+    for (auto& c : Children())
+        if (auto* v = dynamic_cast<VolumeControl*>(c.get())) v->SetCollapsed(rect.w < 900);
+    Widget::OnLayout();
 }
 
 void ControlBar::Paint(Painter& p) {

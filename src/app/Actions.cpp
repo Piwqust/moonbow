@@ -66,7 +66,7 @@ const std::vector<ActionInfo>& Table() {
         {Action::HideUI, "video.hide_ui", L"Hide UI", L"Video", {{VK_OEM_5, kCtrl}}},
         {Action::PictureInPicture, "video.pip", L"Picture in Picture", L"Video", {{'P', kCtrlShift}}},
         {Action::Snapshot, "video.snapshot", L"Snapshot", L"Video", {{'S', kCtrlShift}}},
-        {Action::Record, "video.record", L"Record", L"Video", {{'R', kNone}}},
+        {Action::Record, "video.record", L"Record", L"Video", {{'R', kCtrlShift}}},
         {Action::ZoomIn, "video.zoom_in", L"Zoom in", L"Video", {{'Z', kNone}}},
         {Action::ZoomOut, "video.zoom_out", L"Zoom out", L"Video", {{'Z', kShift}}},
         {Action::ZoomReset, "video.zoom_reset", L"Reset zoom", L"Video", {{'Z', kAlt}}},
@@ -114,6 +114,35 @@ void Toast(const std::wstring& text, const char* icon = "") {
 
 const PlayerState& PS() {
     return TheApp().player().State();
+}
+
+// Messages about things mpv reports back a moment later.
+enum class PendingOsd { None, Audio, Subtitles, Chapter };
+PendingOsd g_pendingOsd = PendingOsd::None;
+double g_pendingUntil = 0;
+
+void ExpectOsd(PendingOsd kind) {
+    g_pendingOsd = kind;
+    g_pendingUntil = ui::AnimFloat::Now() + 1500;
+}
+
+std::wstring SelectedTrackText(const wchar_t* type) {
+    for (const Track& t : PS().tracks)
+        if (t.selected && t.type == type) return t.Label();
+    return Tr(L"off");
+}
+
+std::wstring Clock(double t) {
+    return FormatTime(t, PS().duration >= 3600);
+}
+
+void SeekBy(double seconds) {
+    const PlayerState& s = PS();
+    if (!s.fileLoaded) return;
+    TheApp().player().SeekRelative(seconds);
+    const double target = std::clamp(s.position + seconds, 0.0, s.duration > 0 ? s.duration : s.position + seconds);
+    if (s.duration > 0)
+        Toast(Clock(target) + L" / " + Clock(s.duration), seconds >= 0 ? "forward-10-sec" : "backward-10-sec");
 }
 
 void ChangeSpeed(double delta, bool reset = false) {
@@ -269,22 +298,39 @@ void Run(Action a) {
             else
                 app.OpenFileDialog();
             break;
-        case Action::Stop: app.StopPlayback(); break;
+        case Action::Stop:
+            if (!s.fileLoaded) {
+                app.StopPlayback();
+                break;
+            }
+            p.SetPause(true);
+            p.SeekAbsolute(0, true);
+            Toast(Tr(L"Stopped"), "stop");
+            break;
         case Action::Previous: app.Previous(); break;
-        case Action::Next: app.Next(true); break;
-        case Action::SeekForward: p.SeekRelative(10); break;
-        case Action::SeekBackward: p.SeekRelative(-10); break;
-        case Action::SeekForwardLong: p.SeekRelative(60); break;
-        case Action::SeekBackwardLong: p.SeekRelative(-60); break;
-        case Action::SeekForwardShort: p.SeekRelative(3); break;
-        case Action::SeekBackwardShort: p.SeekRelative(-3); break;
+        case Action::Next:
+            if (!app.Next(true)) Toast(Tr(L"End of the list"), "next");
+            break;
+        case Action::SeekForward: SeekBy(10); break;
+        case Action::SeekBackward: SeekBy(-10); break;
+        case Action::SeekForwardLong: SeekBy(60); break;
+        case Action::SeekBackwardLong: SeekBy(-60); break;
+        case Action::SeekForwardShort: SeekBy(3); break;
+        case Action::SeekBackwardShort: SeekBy(-3); break;
         case Action::FrameStep: p.FrameStep(false); break;
         case Action::FrameBackStep: p.FrameStep(true); break;
         case Action::SpeedUp: ChangeSpeed(+1); break;
         case Action::SpeedDown: ChangeSpeed(-1); break;
         case Action::SpeedReset: ChangeSpeed(0, true); break;
-        case Action::NextChapter: p.SeekChapter(1); break;
-        case Action::PreviousChapter: p.SeekChapter(-1); break;
+        case Action::NextChapter:
+        case Action::PreviousChapter:
+            if (s.chapters.empty()) {
+                Toast(Tr(L"No chapters"), "chapters");
+                break;
+            }
+            p.SeekChapter(a == Action::NextChapter ? 1 : -1);
+            ExpectOsd(PendingOsd::Chapter);
+            break;
         case Action::Replay: p.SeekAbsolute(0, true); p.SetPause(false); break;
         case Action::ToggleRepeat: {
             PlayQueue& q = app.queue();
@@ -299,18 +345,36 @@ void Run(Action a) {
             app.config().SetBool("playback.shuffle", !app.queue().Shuffle());
             Toast(app.queue().Shuffle() ? Tr(L"Shuffle on") : Tr(L"Shuffle off"), "shuffle_right");
             break;
-        case Action::ABLoop: p.Command({"ab-loop"}); Toast(Tr(L"A-B loop"), "repeat_right"); break;
+        case Action::ABLoop: {
+            // mpv's ab-loop cycles: set A, set B, clear.
+            const std::string pa = p.GetPropertyString("ab-loop-a"), pb = p.GetPropertyString("ab-loop-b");
+            p.Command({"ab-loop"});
+            if (pa.empty() || pa == "no")
+                Toast(Fmt(Tr(L"Loop start {0}"), {Clock(s.position)}), "repeat_right");
+            else if (pb.empty() || pb == "no")
+                Toast(Fmt(Tr(L"Loop {0} – {1}"), {Clock(std::atof(pa.c_str())), Clock(s.position)}), "repeat_right");
+            else
+                Toast(Tr(L"Loop off"), "repeat_right");
+            break;
+        }
         case Action::VolumeUp:
         case Action::VolumeDown:
+        {
             if (s.mute) p.SetMute(false);
-            p.SetVolume(std::round(s.volume + (a == Action::VolumeUp ? 5 : -5)));
-            Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), "volume_value-high");
+            const double step = std::clamp(app.config().GetDouble("audio.volumeStep"), 1.0, 25.0);
+            p.SetVolume(std::round(s.volume + (a == Action::VolumeUp ? step : -step)));
+            Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))),
+                  VolumeIcon(PS().volume, false));
             break;
+        }
         case Action::Mute:
             p.ToggleMute();
-            Toast(PS().mute ? Tr(L"Muted") : Tr(L"Sound on"), "volume_value-high");
+            Toast(PS().mute ? Tr(L"Muted") : Tr(L"Sound on"), VolumeIcon(PS().volume, PS().mute));
             break;
-        case Action::CycleAudio: p.CycleTrack("aid"); break;
+        case Action::CycleAudio:
+            p.CycleTrack("aid");
+            ExpectOsd(PendingOsd::Audio);
+            break;
         case Action::AudioDelayUp:
         case Action::AudioDelayDown: {
             const double d = p.GetPropertyDouble("audio-delay", 0) + (a == Action::AudioDelayUp ? 0.05 : -0.05);
@@ -318,8 +382,16 @@ void Run(Action a) {
             Toast(Fmt(Tr(L"Audio delay {0} ms"), static_cast<long long>(std::lround(d * 1000))), "audio");
             break;
         }
-        case Action::CycleSubtitles: p.CycleTrack("sid"); break;
-        case Action::ToggleSubtitles: p.Command({"cycle", "sub-visibility"}); break;
+        case Action::CycleSubtitles:
+            p.CycleTrack("sid");
+            ExpectOsd(PendingOsd::Subtitles);
+            break;
+        case Action::ToggleSubtitles: {
+            const bool shown = p.GetPropertyString("sub-visibility") != "no";
+            p.Command({"cycle", "sub-visibility"});
+            Toast(shown ? Tr(L"Subtitles hidden") : Tr(L"Subtitles shown"), "subtitles");
+            break;
+        }
         case Action::SubtitleDelayUp:
         case Action::SubtitleDelayDown: {
             const double d = p.GetPropertyDouble("sub-delay", 0) + (a == Action::SubtitleDelayUp ? 0.05 : -0.05);
@@ -350,10 +422,14 @@ void Run(Action a) {
             }
             w->SetPictureInPicture(!w->PictureInPicture());
             break;
-        case Action::Snapshot:
+        case Action::Snapshot: {
+            if (!s.fileLoaded) break;
             p.Screenshot();
-            Toast(Tr(L"Snapshot saved to Pictures\\Lumen"), "snapshot");
+            std::wstring dir = Utf8ToWide(app.config().GetString("video.screenshotDir"));
+            if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
+            Toast(Fmt(Tr(L"Snapshot saved to {0}"), {dir}), "snapshot");
             break;
+        }
         case Action::Record: {
             static bool recording = false;
             recording = !recording;
@@ -435,6 +511,36 @@ void Run(Action a) {
         case Action::CustomizePlayer: ShowCustomizePlayerDialog(); break;
         case Action::Quit: app.Quit(); break;
     }
+}
+
+const char* VolumeIcon(double volume, bool mute) {
+    if (mute || volume <= 0) return "close_value-none";
+    if (volume < 34) return "close_value-low";
+    if (volume < 67) return "close_value-medium";
+    return "volume_value-high";
+}
+
+void OnPlayerChangeForOsd(unsigned changes) {
+    if (g_pendingOsd == PendingOsd::None) return;
+    if (ui::AnimFloat::Now() > g_pendingUntil) {
+        g_pendingOsd = PendingOsd::None;
+        return;
+    }
+    const PlayerState& s = PS();
+    if (g_pendingOsd == PendingOsd::Audio && (changes & kChangeTracks)) {
+        Toast(Fmt(Tr(L"Audio: {0}"), {SelectedTrackText(L"audio")}), "audio");
+    } else if (g_pendingOsd == PendingOsd::Subtitles && (changes & kChangeTracks)) {
+        Toast(Fmt(Tr(L"Subtitles: {0}"), {SelectedTrackText(L"sub")}), "subtitles");
+    } else if (g_pendingOsd == PendingOsd::Chapter && (changes & kChangeChapters) && s.chapter >= 0 &&
+               s.chapter < static_cast<long long>(s.chapters.size())) {
+        const std::wstring& title = s.chapters[static_cast<size_t>(s.chapter)].title;
+        std::wstring text = Fmt(Tr(L"Chapter {0}/{1}"), {std::to_wstring(s.chapter + 1), std::to_wstring(s.chapters.size())});
+        if (!title.empty()) text += L": " + title;
+        Toast(text, "chapters");
+    } else {
+        return;
+    }
+    g_pendingOsd = PendingOsd::None;
 }
 
 }  // namespace app

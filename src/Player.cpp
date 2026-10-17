@@ -67,6 +67,8 @@ std::wstring Track::Label() const {
     std::wstring label;
     if (!title.empty())
         label = title;
+    else if (external && !file.empty())
+        label = FileNameOf(file);
     else if (!lang.empty())
         label = lang;
     else
@@ -323,6 +325,7 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
                     track.codec = NodeString(MapGet(t, "codec"));
                     track.selected = NodeFlag(MapGet(t, "selected"));
                     track.external = NodeFlag(MapGet(t, "external"));
+                    track.file = NodeString(MapGet(t, "external-filename"));
                     if (track.type == L"video" && !NodeFlag(MapGet(t, "albumart"))) state_.hasVideo = true;
                     state_.tracks.push_back(std::move(track));
                 }

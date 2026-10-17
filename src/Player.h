@@ -21,6 +21,7 @@ struct Track {
     std::wstring codec;
     bool selected = false;
     bool external = false;
+    std::wstring file;  // external-filename for external tracks
 
     std::wstring Label() const;
 };
