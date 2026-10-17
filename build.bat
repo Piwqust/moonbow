@@ -1,5 +1,6 @@
 @echo off
 rem Builds build\Lumen.exe with MSVC. Usage: build.bat [release|debug]
+rem Set LUMEN_OUT to build into another folder (parallel builds in worktrees).
 setlocal enabledelayedexpansion
 set "ROOT=%~dp0"
 set "CONFIG=%~1"
@@ -21,10 +22,15 @@ if not defined VCINSTALLDIR (
 )
 
 set "OUT=%ROOT%build"
+if defined LUMEN_OUT set "OUT=%LUMEN_OUT%"
 set "OBJ=%OUT%\obj\%CONFIG%"
 if not exist "%OBJ%" mkdir "%OBJ%"
 
-set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /permissive- /Zc:__cplusplus /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /I"%ROOT%third_party\mpv\include""
+rem Every .cpp under src (object files share one folder, so basenames must be unique).
+set "SOURCES="
+for /r "%ROOT%src" %%f in (*.cpp) do set "SOURCES=!SOURCES! "%%f""
+
+set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /permissive- /Zc:__cplusplus /MP /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /I"%ROOT%src" /I"%ROOT%third_party\mpv\include""
 set "LFLAGS=/SUBSYSTEM:WINDOWS /MANIFEST:NO /DYNAMICBASE /NXCOMPAT"
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /Od /Zi /MTd /D_DEBUG"
@@ -33,10 +39,10 @@ if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG"
     set "LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF"
 )
-set "LIBS=user32.lib gdi32.lib shell32.lib shlwapi.lib ole32.lib dwmapi.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib"
+set "LIBS=user32.lib gdi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib"
 
-rc /nologo /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
-cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" "%ROOT%src\*.cpp" "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1
+rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
+cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" %SOURCES% "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 copy /y "%ROOT%third_party\mpv\libmpv-2.dll" "%OUT%\" >nul || exit /b 1
 echo Built %OUT%\Lumen.exe (%CONFIG%)

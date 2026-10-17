@@ -1,6 +1,13 @@
 #include <winres.h>
 
 1 RT_MANIFEST "app.manifest"
+1 ICON "lumen.ico"
+
+// Inter (OFL), see res/fonts/Inter-LICENSE.txt. Ids are read by src/gfx/Text.cpp.
+201 RCDATA "fonts/Inter-Light.ttf"
+202 RCDATA "fonts/Inter-Regular.ttf"
+203 RCDATA "fonts/Inter-Medium.ttf"
+204 RCDATA "fonts/Inter-SemiBold.ttf"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 0,1,0,0

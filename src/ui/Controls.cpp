@@ -1,0 +1,1294 @@
+#include "ui/Controls.h"
+
+#include "gfx/Text.h"
+
+#include <algorithm>
+#include <cwctype>
+#include <map>
+
+namespace ui {
+
+namespace {
+
+constexpr float kMenuItemH = 40;
+constexpr float kMenuSepH = 9;
+constexpr float kMenuPad = 6;
+
+std::wstring ClipboardText(HWND owner) {
+    std::wstring out;
+    if (!OpenClipboard(owner)) return out;
+    if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
+        if (const auto* p = static_cast<const wchar_t*>(GlobalLock(h))) {
+            out = p;
+            GlobalUnlock(h);
+        }
+    }
+    CloseClipboard();
+    return out;
+}
+
+void SetClipboardText(HWND owner, const std::wstring& text) {
+    if (!OpenClipboard(owner)) return;
+    EmptyClipboard();
+    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    if (HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+        if (void* p = GlobalLock(mem)) {
+            memcpy(p, text.c_str(), bytes);
+            GlobalUnlock(mem);
+            if (!SetClipboardData(CF_UNICODETEXT, mem)) GlobalFree(mem);
+        } else {
+            GlobalFree(mem);
+        }
+    }
+    CloseClipboard();
+}
+
+bool IsWordChar(wchar_t c) {
+    return std::iswalnum(c) || c == L'_';
+}
+
+}  // namespace
+
+Color ToneColor(Tone t) {
+    switch (t) {
+        case Tone::Primary: return P().textPrimary;
+        case Tone::Secondary: return P().textSecondary;
+        case Tone::Tertiary: return P().textTertiary;
+        case Tone::Disabled: return P().textDisabled;
+        case Tone::Accent: return P().accent;
+    }
+    return P().textSecondary;
+}
+
+// --- Label ------------------------------------------------------------------------------
+
+Label::Label(std::wstring text, TextStyle s, Tone t) : style(s), tone(t), text_(std::move(text)) {}
+
+void Label::SetText(std::wstring text) {
+    if (text == text_) return;
+    text_ = std::move(text);
+    InvalidateLayout();
+}
+
+Size Label::MeasureContent(float availW, float) {
+    const float lh = gfx::Text::Get().LineHeight(style);
+    if (text_.empty()) return {0, lh};
+    if (wrap) {
+        auto m = gfx::Text::Get().Measure(text_, style, std::max(1.0f, availW), gfx::kTextWrap);
+        float h = std::max(lh, m.height);
+        if (maxLines > 0) h = std::min(h, lh * static_cast<float>(maxLines));
+        return {std::min(m.width, availW), h};
+    }
+    auto m = gfx::Text::Get().Measure(text_, style);
+    return {std::min(m.width, availW), lh};
+}
+
+void Label::Paint(Painter& p) {
+    const Color c = color ? color() : (IsEnabled() ? ToneColor(tone) : P().textDisabled);
+    p.Text(text_, rect, style, c, halign, valign, wrap ? gfx::kTextWrap : gfx::kTextEllipsis);
+}
+
+// --- IconView / Divider -------------------------------------------------------------------
+
+IconView::IconView(std::string i, int s, Tone t) : icon(std::move(i)), size(static_cast<float>(s)), tone(t) {}
+
+void IconView::Paint(Painter& p) {
+    p.Icon(icon, rect.Center(size, size), color ? color() : ToneColor(tone));
+}
+
+Divider::Divider(bool v) : vertical(v) {
+    if (vertical) {
+        width = Length::Px(1);
+        height = Length::Grow();
+    } else {
+        height = Length::Px(1);
+        width = Length::Grow();
+    }
+}
+
+void Divider::Paint(Painter& p) {
+    p.Fill(rect, P().line);
+}
+
+// --- Button -------------------------------------------------------------------------------
+
+Button::Button(std::wstring text, ButtonKind k, std::string i) : kind(k), icon(std::move(i)), text_(std::move(text)) {
+    interactive = true;
+    focusable = true;
+    height = Length::Px(32);
+}
+
+void Button::SetText(std::wstring text) {
+    text_ = std::move(text);
+    InvalidateLayout();
+}
+
+Size Button::MeasureContent(float, float) {
+    float w = gfx::Text::Get().Measure(text_, style).width + 32;
+    if (!icon.empty()) w += text_.empty() ? 20 - 32 + 12 : 28;
+    return {w, 32};
+}
+
+void Button::Paint(Painter& p) {
+    const bool on = IsEnabled();
+    const bool hot = on && IsHot(), down = on && IsPressed();
+    const Palette& c = P();
+    Color bg = Color::Clear(), fg = c.textSecondary;
+    switch (kind) {
+        case ButtonKind::Primary:
+            bg = on ? (down ? Color::Mix(c.accent, c.bgBase, 0.22f) : hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent)
+                    : c.bgPanel;
+            fg = on ? c.onAccent : c.textDisabled;
+            break;
+        case ButtonKind::Secondary:
+            bg = down ? c.bgSelected : hot ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel;
+            fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            break;
+        case ButtonKind::Ghost:
+            bg = down ? c.press : hot ? c.hover : Color::Clear();
+            fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            break;
+        case ButtonKind::Outline:
+            bg = down ? c.press : hot ? c.hover : Color::Clear();
+            fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            break;
+    }
+    p.Fill(rect, bg, 4);
+    if (kind == ButtonKind::Outline) p.Stroke(rect, c.lineStrong, 4);
+    PaintFocusRing(p, rect, 4);
+
+    const float tw = gfx::Text::Get().Measure(text_, style).width;
+    const float iw = icon.empty() ? 0.0f : 20.0f;
+    const float total = tw + iw + (iw > 0 && tw > 0 ? 8 : 0);
+    float x = rect.Cx() - total / 2;
+    if (!icon.empty()) {
+        p.Icon(icon, {x, rect.Cy() - 10, 20, 20}, fg);
+        x += 28;
+    }
+    if (!text_.empty()) p.Text(text_, {x, rect.y, tw + 1, rect.h}, style, fg, HAlign::Leading, VAlign::Center, 0);
+}
+
+// --- IconButton -------------------------------------------------------------------------
+
+IconButton::IconButton(std::string i, std::wstring tip, int box, int isz) : icon(std::move(i)), iconSize(static_cast<float>(isz)) {
+    interactive = true;
+    focusable = true;
+    tooltip = std::move(tip);
+    width = Length::Px(static_cast<float>(box));
+    height = Length::Px(static_cast<float>(box));
+}
+
+void IconButton::Paint(Painter& p) {
+    const bool on = IsEnabled();
+    const bool hot = on && IsHot(), down = on && IsPressed();
+    const float r = round ? rect.w / 2 : 4;
+    if (down)
+        p.Fill(rect, P().press, r);
+    else if (hot)
+        p.Fill(rect, P().hover, r);
+    PaintFocusRing(p, rect, r);
+    Color c = !on ? P().textDisabled : active ? P().accent : hot ? P().textPrimary : ToneColor(tone);
+    p.Icon(icon, rect.Center(iconSize, iconSize), c, active ? P().accent : P().accentMid);
+}
+
+// --- LinkButton ---------------------------------------------------------------------------
+
+LinkButton::LinkButton(std::wstring t, TextStyle s) : text(std::move(t)), style(s) {
+    interactive = true;
+    focusable = true;
+}
+
+Size LinkButton::MeasureContent(float, float) {
+    float w = gfx::Text::Get().Measure(text, style).width;
+    if (!trailingIcon.empty()) w += 24;
+    return {w, std::max(gfx::Text::Get().LineHeight(style), 24.0f)};
+}
+
+void LinkButton::Paint(Painter& p) {
+    const bool hot = IsHot();
+    const Color c = hot ? P().textPrimary : P().textSecondary;
+    const float tw = gfx::Text::Get().Measure(text, style).width;
+    p.Text(text, {rect.x, rect.y, tw + 1, rect.h}, style, c, HAlign::Leading, VAlign::Center, 0);
+    if (!trailingIcon.empty()) p.Icon(trailingIcon, {rect.x + tw + 4, rect.Cy() - 10, 20, 20}, c);
+    PaintFocusRing(p, rect, 4);
+}
+
+// --- Toggle -------------------------------------------------------------------------------
+
+Toggle::Toggle(bool on) : on_(on), knob_(on ? 1.0f : 0.0f) {
+    interactive = true;
+    focusable = true;
+}
+
+void Toggle::SetValue(bool on, bool animate) {
+    if (on == on_) return;
+    on_ = on;
+    if (animate)
+        knob_.To(on ? 1.0f : 0.0f, 160, Ease::Out);
+    else
+        knob_.Set(on ? 1.0f : 0.0f);
+    Invalidate();
+}
+
+void Toggle::OnClick() {
+    SetValue(!on_);
+    if (onChange) onChange(on_);
+}
+
+void Toggle::Paint(Painter& p) {
+    const Palette& c = P();
+    const float k = knob_.Get();
+    const Rect box = rect.Center(66, 30);
+    const Color bg = Color::Mix(c.bgCard, c.accentDim, k);
+    p.Fill(box, IsEnabled() ? bg : c.bgPanel, 4);
+    p.Stroke(box, Color::Mix(c.bgDeep, c.accentFaint, k), 4, 2);
+    if (IsHot()) p.Fill(box, c.hover, 4);
+    PaintFocusRing(p, box, 4);
+
+    const float knobW = 26, knobH = 22;
+    const float x = box.x + 4 + (box.w - 8 - knobW) * k;
+    p.Fill({x, box.y + 4, knobW, knobH}, Color::Mix(c.lineStrong, c.accent, k), 3);
+    const Rect textOff{box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
+    const Rect textOn{box.x + 4, box.y, box.w - 8 - knobW, box.h};
+    if (k < 0.99f) p.Text(L"OFF", textOff, TextStyle::Micro, c.textTertiary.Fade(1 - k), HAlign::Center);
+    if (k > 0.01f) p.Text(L"ON", textOn, TextStyle::Micro, c.accent.Fade(k), HAlign::Center);
+}
+
+// --- Checkbox -------------------------------------------------------------------------------
+
+Checkbox::Checkbox(std::wstring text, bool checked) : text_(std::move(text)), checked_(checked) {
+    interactive = true;
+    focusable = true;
+}
+
+Size Checkbox::MeasureContent(float availW, float) {
+    float w = 20 + (text_.empty() ? 0 : 10 + gfx::Text::Get().Measure(text_, TextStyle::Body).width);
+    return {std::min(w, availW), 24};
+}
+
+void Checkbox::OnClick() {
+    checked_ = !checked_;
+    if (onChange) onChange(checked_);
+    Invalidate();
+}
+
+void Checkbox::Paint(Painter& p) {
+    const Palette& c = P();
+    const Rect box{rect.x + 1, rect.Cy() - 9, 18, 18};
+    if (checked_) {
+        p.Fill(box, c.accent, 3);
+        p.Icon("check", box.Inset(1), c.onAccent);
+    } else {
+        p.Fill(box, c.bgDeep, 3);
+        p.Stroke(box, IsHot() ? c.textTertiary : c.lineStrong, 3);
+    }
+    PaintFocusRing(p, box, 3);
+    if (!text_.empty())
+        p.Text(text_, {box.Right() + 10, rect.y, rect.Right() - box.Right() - 10, rect.h}, TextStyle::Body,
+               IsEnabled() ? (IsHot() ? c.textPrimary : c.textSecondary) : c.textDisabled);
+}
+
+// --- Segmented ------------------------------------------------------------------------------
+
+Segmented::Segmented(std::vector<Choice> choices, int selected) : choices_(std::move(choices)), selected_(selected) {
+    interactive = true;
+    focusable = true;
+}
+
+void Segmented::SetSelected(int i) {
+    selected_ = i;
+    Invalidate();
+}
+
+Size Segmented::MeasureContent(float availW, float) {
+    float w = 4;
+    for (auto& ch : choices_) w += std::max(segmentWidth, gfx::Text::Get().Measure(ch.label, TextStyle::Body).width + 24) + 2;
+    return {std::min(w, availW), 36};
+}
+
+int Segmented::IndexAt(float x) const {
+    if (choices_.empty()) return -1;
+    const float segW = (rect.w - 4 - 2 * static_cast<float>(choices_.size() - 1)) / static_cast<float>(choices_.size());
+    int i = static_cast<int>((x - rect.x - 2) / (segW + 2));
+    return std::clamp(i, 0, static_cast<int>(choices_.size()) - 1);
+}
+
+bool Segmented::OnMouseMove(const MouseEvent& e) {
+    int i = IndexAt(e.x);
+    if (i != hoverIndex_) {
+        hoverIndex_ = i;
+        Invalidate();
+    }
+    return false;
+}
+
+bool Segmented::OnMouseDown(const MouseEvent& e) {
+    int i = IndexAt(e.x);
+    if (i >= 0 && i != selected_) {
+        selected_ = i;
+        if (onChange) onChange(i);
+        Invalidate();
+    }
+    return true;
+}
+
+bool Segmented::OnKeyDown(const KeyEvent& e) {
+    if (e.key != VK_LEFT && e.key != VK_RIGHT) return false;
+    int i = std::clamp(selected_ + (e.key == VK_LEFT ? -1 : 1), 0, static_cast<int>(choices_.size()) - 1);
+    if (i != selected_) {
+        selected_ = i;
+        if (onChange) onChange(i);
+    }
+    return true;
+}
+
+void Segmented::Paint(Painter& p) {
+    const Palette& c = P();
+    p.Fill(rect, c.bgDeep, 5);
+    PaintFocusRing(p, rect, 5);
+    if (choices_.empty()) return;
+    const float n = static_cast<float>(choices_.size());
+    const float segW = (rect.w - 4 - 2 * (n - 1)) / n;
+    for (size_t i = 0; i < choices_.size(); ++i) {
+        const Rect seg{rect.x + 2 + static_cast<float>(i) * (segW + 2), rect.y + 2, segW, rect.h - 4};
+        const bool sel = static_cast<int>(i) == selected_;
+        const bool hot = IsHot() && static_cast<int>(i) == hoverIndex_;
+        p.Fill(seg, sel ? c.accentDim : (hot ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel), 4);
+        const Color fg = sel ? c.accent : hot ? c.textPrimary : c.textSecondary;
+        float tx = seg.x;
+        if (!choices_[i].icon.empty()) {
+            const float tw = gfx::Text::Get().Measure(choices_[i].label, TextStyle::Body).width;
+            tx = seg.Cx() - (tw + 28) / 2;
+            p.Icon(choices_[i].icon, {tx, seg.Cy() - 10, 20, 20}, fg);
+            p.Text(choices_[i].label, {tx + 28, seg.y, tw + 1, seg.h}, TextStyle::Body, fg, HAlign::Leading, VAlign::Center, 0);
+        } else {
+            p.Text(choices_[i].label, seg, TextStyle::Body, fg, HAlign::Center);
+        }
+    }
+}
+
+// --- Dropdown -------------------------------------------------------------------------------
+
+Dropdown::Dropdown(std::vector<Choice> choices, int selected) : choices_(std::move(choices)), selected_(selected) {
+    interactive = true;
+    focusable = true;
+}
+
+void Dropdown::SetSelected(int i) {
+    selected_ = i;
+    Invalidate();
+}
+
+void Dropdown::SetChoices(std::vector<Choice> choices, int selected) {
+    choices_ = std::move(choices);
+    selected_ = selected;
+    InvalidateLayout();
+}
+
+Size Dropdown::MeasureContent(float availW, float) {
+    float w = 0;
+    for (auto& ch : choices_) w = std::max(w, gfx::Text::Get().Measure(ch.label, TextStyle::Body).width);
+    return {std::min(availW, std::max(160.0f, w + 56)), 36};
+}
+
+void Dropdown::Paint(Painter& p) {
+    const Palette& c = P();
+    const bool open = menu_ && GetHost() && GetHost()->IsPopupOpen(menu_);
+    p.Fill(rect, c.bgDeep, 5);
+    p.Fill(rect.Inset(2), IsHot() || open ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel, 4);
+    PaintFocusRing(p, rect, 5);
+    const bool has = selected_ >= 0 && selected_ < static_cast<int>(choices_.size());
+    const std::wstring& label = has ? choices_[static_cast<size_t>(selected_)].label : placeholder;
+    const Color fg = !IsEnabled() ? c.textDisabled : has ? (IsHot() ? c.textPrimary : c.textSecondary) : c.textTertiary;
+    p.Text(label, {rect.x + 16, rect.y, rect.w - 52, rect.h}, TextStyle::Body, fg);
+    p.Icon(open ? "chevron_up" : "chevron_down", {rect.Right() - 36, rect.Cy() - 10, 20, 20}, fg);
+}
+
+void Dropdown::OnClick() {
+    Host* host = GetHost();
+    if (!host) return;
+    if (menu_ && host->IsPopupOpen(menu_)) {
+        host->ClosePopup(menu_);
+        return;
+    }
+    std::vector<MenuItem> items;
+    for (size_t i = 0; i < choices_.size(); ++i) {
+        MenuItem m;
+        m.label = choices_[i].label;
+        m.icon = choices_[i].icon;
+        m.checked = static_cast<int>(i) == selected_;
+        m.action = [this, i] {
+            if (static_cast<int>(i) == selected_) return;
+            selected_ = static_cast<int>(i);
+            if (onChange) onChange(selected_);
+            Invalidate();
+        };
+        items.push_back(std::move(m));
+    }
+    menu_ = ShowMenu(host, rect, std::move(items), Place::Below, rect.w);
+}
+
+bool Dropdown::OnKeyDown(const KeyEvent& e) {
+    if (e.key != VK_UP && e.key != VK_DOWN) return false;
+    int i = std::clamp(selected_ + (e.key == VK_UP ? -1 : 1), 0, static_cast<int>(choices_.size()) - 1);
+    if (i != selected_) {
+        selected_ = i;
+        if (onChange) onChange(i);
+        Invalidate();
+    }
+    return true;
+}
+
+// --- Slider ---------------------------------------------------------------------------------
+
+Slider::Slider(float mn, float mx, float v, float st) : min(mn), max(mx), step(st), value_(v) {
+    interactive = true;
+    focusable = true;
+}
+
+void Slider::SetValue(float v) {
+    v = std::clamp(v, min, max);
+    if (step > 0) v = min + std::round((v - min) / step) * step;
+    value_ = v;
+    Invalidate();
+}
+
+void Slider::SetFromX(float x) {
+    const float t = std::clamp((x - rect.x - 6) / std::max(1.0f, rect.w - 12), 0.0f, 1.0f);
+    const float old = value_;
+    SetValue(min + (max - min) * t);
+    if (value_ != old && onChange) onChange(value_);
+}
+
+bool Slider::OnMouseDown(const MouseEvent& e) {
+    dragging_ = true;
+    SetFromX(e.x);
+    return true;
+}
+
+bool Slider::OnMouseMove(const MouseEvent& e) {
+    if (dragging_) SetFromX(e.x);
+    return dragging_;
+}
+
+bool Slider::OnMouseUp(const MouseEvent&) {
+    if (dragging_ && onCommit) onCommit(value_);
+    dragging_ = false;
+    Invalidate();
+    return true;
+}
+
+bool Slider::OnKeyDown(const KeyEvent& e) {
+    const float d = step > 0 ? step : (max - min) / 20;
+    float v = value_;
+    if (e.key == VK_LEFT || e.key == VK_DOWN) v -= d;
+    else if (e.key == VK_RIGHT || e.key == VK_UP) v += d;
+    else if (e.key == VK_HOME) v = min;
+    else if (e.key == VK_END) v = max;
+    else return false;
+    SetValue(v);
+    if (onChange) onChange(value_);
+    if (onCommit) onCommit(value_);
+    return true;
+}
+
+bool Slider::OnWheel(const WheelEvent& e) {
+    if (!IsFocused()) return false;
+    const float d = step > 0 ? step : (max - min) / 20;
+    SetValue(value_ + d * e.delta);
+    if (onChange) onChange(value_);
+    if (onCommit) onCommit(value_);
+    return true;
+}
+
+void Slider::Paint(Painter& p) {
+    const Palette& c = P();
+    const Rect track{rect.x + 6, rect.Cy() - 2, rect.w - 12, 4};
+    p.Fill(track, c.bgDeep, 2);
+    p.Stroke(track.Inset(-1), c.line, 3);
+    const float t = (max > min) ? (value_ - min) / (max - min) : 0;
+    const float x = track.x + track.w * t;
+    if (showFill) {
+        if (centerFill) {
+            const float mid = track.x + track.w * ((0 - min) / (max - min));
+            p.Fill({std::min(mid, x), track.y, std::abs(x - mid), track.h}, c.accentMid, 2);
+        } else {
+            p.Fill({track.x, track.y, x - track.x, track.h}, c.accentMid, 2);
+        }
+    }
+    const float r = dragging_ || IsHot() ? 7.0f : 6.0f;
+    p.FillCircle({x, rect.Cy()}, r, IsEnabled() ? c.accent : c.textDisabled);
+    if (ShowFocusRing()) p.Stroke({x - r - 3, rect.Cy() - r - 3, (r + 3) * 2, (r + 3) * 2}, c.accentMid, r + 3, 1.5f);
+}
+
+// --- TextBox --------------------------------------------------------------------------------
+
+TextBox::TextBox(std::wstring ph, std::string icon) : placeholder(std::move(ph)), leadingIcon(std::move(icon)) {
+    interactive = true;
+    focusable = true;
+    cursor = IDC_IBEAM;
+    height = Length::Px(34);
+}
+
+void TextBox::SetText(std::wstring text, bool notify) {
+    text_ = std::move(text);
+    caret_ = anchor_ = text_.size();
+    scroll_ = 0;
+    if (notify && onChange) onChange(text_);
+    Invalidate();
+}
+
+void TextBox::SelectAll() {
+    anchor_ = 0;
+    caret_ = text_.size();
+    Invalidate();
+}
+
+std::wstring TextBox::Shown() const {
+    return password ? std::wstring(text_.size(), L'•') : text_;
+}
+
+Rect TextBox::TextRect() const {
+    float l = leadingIcon.empty() ? 12.0f : 40.0f;
+    return {rect.x + l, rect.y, rect.w - l - 12, rect.h};
+}
+
+float TextBox::XOf(size_t index) const {
+    const std::wstring shown = Shown();
+    if (shown.empty() || index == 0) return 0;
+    IDWriteTextLayout* layout = gfx::Text::Get().Layout(shown, TextStyle::Body, 100000.0f, rect.h, HAlign::Leading,
+                                                        VAlign::Center, 0);
+    if (!layout) return 0;
+    float x = 0, y = 0;
+    DWRITE_HIT_TEST_METRICS m{};
+    layout->HitTestTextPosition(static_cast<UINT32>(index), FALSE, &x, &y, &m);
+    return x;
+}
+
+size_t TextBox::IndexAt(float x) const {
+    const std::wstring shown = Shown();
+    if (shown.empty()) return 0;
+    IDWriteTextLayout* layout = gfx::Text::Get().Layout(shown, TextStyle::Body, 100000.0f, rect.h, HAlign::Leading,
+                                                        VAlign::Center, 0);
+    if (!layout) return 0;
+    BOOL trailing = FALSE, inside = FALSE;
+    DWRITE_HIT_TEST_METRICS m{};
+    layout->HitTestPoint(x - TextRect().x + scroll_, rect.h / 2, &trailing, &inside, &m);
+    return std::min<size_t>(shown.size(), m.textPosition + (trailing ? m.length : 0));
+}
+
+Rect TextBox::CaretRect() const {
+    const Rect tr = TextRect();
+    return {tr.x + XOf(caret_) - scroll_, rect.Cy() - 9, 1, 18};
+}
+
+void TextBox::ResetBlink() {
+    caretOn_ = true;
+    Host* host = GetHost();
+    if (!host) return;
+    if (blinkTimer_) host->CancelTimer(blinkTimer_);
+    blinkTimer_ = host->StartTimer(530, [this] {
+        caretOn_ = !caretOn_;
+        Invalidate();
+    }, true);
+}
+
+void TextBox::OnFocusChanged(bool focused) {
+    Host* host = GetHost();
+    if (focused) {
+        ResetBlink();
+    } else {
+        if (host && blinkTimer_) host->CancelTimer(blinkTimer_);
+        blinkTimer_ = 0;
+        anchor_ = caret_;
+    }
+    Invalidate();
+}
+
+void TextBox::MoveCaret(size_t pos, bool extend) {
+    caret_ = std::min(pos, text_.size());
+    if (!extend) anchor_ = caret_;
+    // Keep the caret inside the visible text area.
+    const Rect tr = TextRect();
+    const float cx = XOf(caret_);
+    if (cx - scroll_ > tr.w - 2) scroll_ = cx - tr.w + 2;
+    if (cx - scroll_ < 0) scroll_ = cx;
+    if (scroll_ < 0) scroll_ = 0;
+    ResetBlink();
+    Invalidate();
+}
+
+void TextBox::Changed() {
+    if (onChange) onChange(text_);
+}
+
+void TextBox::DeleteSelection() {
+    if (caret_ == anchor_) return;
+    const size_t a = std::min(caret_, anchor_), b = std::max(caret_, anchor_);
+    text_.erase(a, b - a);
+    caret_ = anchor_ = a;
+}
+
+void TextBox::Insert(std::wstring_view s) {
+    if (readOnly) return;
+    DeleteSelection();
+    std::wstring clean;
+    for (wchar_t ch : s)
+        if (ch >= 0x20 && ch != 0x7F) clean.push_back(ch);
+    text_.insert(caret_, clean);
+    MoveCaret(caret_ + clean.size(), false);
+    Changed();
+}
+
+bool TextBox::OnChar(wchar_t ch) {
+    if (readOnly) return false;
+    Insert(std::wstring_view(&ch, 1));
+    return true;
+}
+
+bool TextBox::OnKeyDown(const KeyEvent& e) {
+    const bool shift = e.mods.shift, ctrl = e.mods.ctrl;
+    auto wordLeft = [&](size_t i) {
+        while (i > 0 && !IsWordChar(text_[i - 1])) --i;
+        while (i > 0 && IsWordChar(text_[i - 1])) --i;
+        return i;
+    };
+    auto wordRight = [&](size_t i) {
+        while (i < text_.size() && !IsWordChar(text_[i])) ++i;
+        while (i < text_.size() && IsWordChar(text_[i])) ++i;
+        return i;
+    };
+    HWND hwnd = GetHost() ? GetHost()->Hwnd() : nullptr;
+    switch (e.key) {
+        case VK_LEFT:
+            if (!shift && caret_ != anchor_) MoveCaret(std::min(caret_, anchor_), false);
+            else MoveCaret(ctrl ? wordLeft(caret_) : (caret_ > 0 ? caret_ - 1 : 0), shift);
+            return true;
+        case VK_RIGHT:
+            if (!shift && caret_ != anchor_) MoveCaret(std::max(caret_, anchor_), false);
+            else MoveCaret(ctrl ? wordRight(caret_) : caret_ + 1, shift);
+            return true;
+        case VK_HOME: MoveCaret(0, shift); return true;
+        case VK_END: MoveCaret(text_.size(), shift); return true;
+        case VK_BACK:
+            if (readOnly) return true;
+            if (caret_ == anchor_ && caret_ > 0) anchor_ = ctrl ? wordLeft(caret_) : caret_ - 1;
+            DeleteSelection();
+            MoveCaret(caret_, false);
+            Changed();
+            return true;
+        case VK_DELETE:
+            if (readOnly) return true;
+            if (caret_ == anchor_ && caret_ < text_.size()) anchor_ = ctrl ? wordRight(caret_) : caret_ + 1;
+            DeleteSelection();
+            MoveCaret(caret_, false);
+            Changed();
+            return true;
+        case VK_RETURN:
+            if (onSubmit) onSubmit(text_);
+            return onSubmit != nullptr;
+        case VK_ESCAPE:
+            if (onEscape) {
+                onEscape();
+                return true;
+            }
+            return false;
+        default: break;
+    }
+    if (ctrl) {
+        const size_t a = std::min(caret_, anchor_), b = std::max(caret_, anchor_);
+        switch (e.key) {
+            case 'A': SelectAll(); return true;
+            case 'C':
+                if (b > a && !password) SetClipboardText(hwnd, text_.substr(a, b - a));
+                return true;
+            case 'X':
+                if (b > a && !password && !readOnly) {
+                    SetClipboardText(hwnd, text_.substr(a, b - a));
+                    DeleteSelection();
+                    MoveCaret(caret_, false);
+                    Changed();
+                }
+                return true;
+            case 'V': Insert(ClipboardText(hwnd)); return true;
+            default: break;
+        }
+    }
+    // Printable keys arrive as WM_CHAR; claim them so window shortcuts don't fire.
+    return !ctrl && !e.mods.alt && e.key >= 0x20 && e.key < VK_F1 && e.key != VK_TAB && e.key != VK_UP &&
+           e.key != VK_DOWN && e.key != VK_PRIOR && e.key != VK_NEXT;
+}
+
+bool TextBox::OnMouseDown(const MouseEvent& e) {
+    selecting_ = true;
+    MoveCaret(IndexAt(e.x), e.mods.shift);
+    return true;
+}
+
+bool TextBox::OnMouseMove(const MouseEvent& e) {
+    if (!selecting_) return false;
+    MoveCaret(IndexAt(e.x), true);
+    return true;
+}
+
+bool TextBox::OnMouseUp(const MouseEvent&) {
+    selecting_ = false;
+    return true;
+}
+
+bool TextBox::OnDoubleClick(const MouseEvent& e) {
+    size_t i = IndexAt(e.x), a = i, b = i;
+    while (a > 0 && IsWordChar(text_[a - 1])) --a;
+    while (b < text_.size() && IsWordChar(text_[b])) ++b;
+    anchor_ = a;
+    MoveCaret(b, true);
+    return true;
+}
+
+void TextBox::Paint(Painter& p) {
+    const Palette& c = P();
+    const Color bg = background.a > 0 ? background : c.bgDeep;
+    p.Fill(rect, bg, 4);
+    if (IsFocused())
+        p.Stroke(rect, c.lineStrong, 4);
+    else if (IsHot())
+        p.Stroke(rect, c.line, 4);
+    if (!leadingIcon.empty()) p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, c.textTertiary);
+
+    const Rect tr = TextRect();
+    p.PushClip(tr);
+    const std::wstring shown = Shown();
+    if (shown.empty()) {
+        p.Text(placeholder, tr, TextStyle::Body, c.textTertiary);
+    } else {
+        if (IsFocused() && caret_ != anchor_) {
+            const float x1 = XOf(std::min(caret_, anchor_)), x2 = XOf(std::max(caret_, anchor_));
+            p.Fill({tr.x + x1 - scroll_, rect.Cy() - 10, x2 - x1, 20}, c.accentDim, 2);
+        }
+        p.Text(shown, {tr.x - scroll_, tr.y, 100000.0f, tr.h}, TextStyle::Body, IsEnabled() ? c.textPrimary : c.textDisabled,
+               HAlign::Leading, VAlign::Center, 0);
+    }
+    if (IsFocused() && caretOn_ && !readOnly) p.Fill(CaretRect(), c.textPrimary);
+    p.PopClip();
+}
+
+// --- AccentPicker -----------------------------------------------------------------------
+
+AccentPicker::AccentPicker(int selected) : selected_(selected) {
+    interactive = true;
+    focusable = true;
+}
+
+Size AccentPicker::MeasureContent(float, float) {
+    return {8 + kAccentCount * 36.0f, 36};
+}
+
+bool AccentPicker::OnMouseDown(const MouseEvent& e) {
+    const int i = static_cast<int>((e.x - rect.x - 4) / 36);
+    if (i >= 0 && i < kAccentCount && i != selected_) {
+        selected_ = i;
+        if (onChange) onChange(i);
+        Invalidate();
+    }
+    return true;
+}
+
+void AccentPicker::Paint(Painter& p) {
+    p.Fill(rect, P().bgDeep, 5);
+    for (int i = 0; i < kAccentCount; ++i) {
+        const Rect cell{rect.x + 4 + i * 36.0f, rect.y + 4, 32, rect.h - 8};
+        if (i == selected_) p.Fill(cell, P().bgSelected, 4);
+        p.Fill(cell.Center(18, 18), Theme::Get().AccentSwatch(i), 3);
+        if (i == selected_) p.Stroke(cell, P().accentMid, 4);
+    }
+    PaintFocusRing(p, rect, 5);
+}
+
+// --- ScrollView -----------------------------------------------------------------------------
+
+ScrollView::ScrollView() {
+    interactive = true;
+    clipChildren = true;
+    width = Length::Grow();
+    height = Length::Grow();
+}
+
+Size ScrollView::MeasureContent(float availW, float availH) {
+    Widget* c = Content();
+    if (!c) return {0, 0};
+    Size s = c->Measure(availW, kInf);
+    return {s.w, std::min(s.h, availH)};
+}
+
+void ScrollView::OnLayout() {
+    Widget* c = Content();
+    if (!c) return;
+    contentH_ = c->Measure(rect.w, kInf).h;
+    const float maxOff = MaxOffset();
+    if (offset_.Target() > maxOff) offset_.Set(maxOff);
+    c->Arrange({rect.x, rect.y - std::round(offset_.Get()), rect.w, std::max(contentH_, rect.h)});
+}
+
+void ScrollView::ScrollTo(float y, bool animate) {
+    y = std::clamp(y, 0.0f, MaxOffset());
+    if (animate)
+        offset_.To(y, 180, Ease::Out);
+    else
+        offset_.Set(y);
+    barVisible_.To(1, 80);
+    Host* host = GetHost();
+    if (host) {
+        if (hideTimer_) host->CancelTimer(hideTimer_);
+        hideTimer_ = host->StartTimer(900, [this] {
+            hideTimer_ = 0;
+            if (!dragging_ && !overBar_) barVisible_.To(0, 250);
+            Invalidate();
+        });
+    }
+    if (onScroll) onScroll(y);
+    InvalidateLayout();
+}
+
+void ScrollView::ScrollIntoView(const Rect& r) {
+    const float top = offset_.Target();
+    if (r.y < rect.y)
+        ScrollTo(top - (rect.y - r.y) - 8);
+    else if (r.Bottom() > rect.Bottom())
+        ScrollTo(top + (r.Bottom() - rect.Bottom()) + 8);
+}
+
+bool ScrollView::OnWheel(const WheelEvent& e) {
+    if (e.horizontal || MaxOffset() <= 0) return false;
+    ScrollTo(offset_.Target() - e.delta * 96.0f);
+    return true;
+}
+
+Rect ScrollView::ThumbRect() const {
+    if (contentH_ <= rect.h || rect.h <= 0) return {};
+    const float h = std::max(32.0f, rect.h * rect.h / contentH_);
+    const float t = offset_.Get() / MaxOffset();
+    const float w = overBar_ || dragging_ ? 8.0f : 4.0f;
+    return {rect.Right() - w - 3, rect.y + 2 + (rect.h - 4 - h) * t, w, h};
+}
+
+Widget* ScrollView::HitTest(float x, float y) {
+    if (!visible || !rect.Contains(x, y)) return nullptr;
+    if (MaxOffset() > 0 && x >= rect.Right() - 14) return this;
+    for (auto it = Children().rbegin(); it != Children().rend(); ++it)
+        if (Widget* hit = (*it)->HitTest(x, y)) return hit;
+    return this;
+}
+
+bool ScrollView::OnMouseDown(const MouseEvent& e) {
+    if (MaxOffset() <= 0 || e.x < rect.Right() - 14) return false;
+    const Rect thumb = ThumbRect();
+    if (!thumb.Contains(e.x, e.y) && !(e.y >= thumb.y && e.y < thumb.Bottom())) {
+        // Click on the track pages toward the click.
+        ScrollTo(offset_.Target() + (e.y < thumb.y ? -rect.h : rect.h) * 0.9f);
+        return true;
+    }
+    dragging_ = true;
+    dragStartY_ = e.y;
+    dragStartOffset_ = offset_.Get();
+    return true;
+}
+
+bool ScrollView::OnMouseMove(const MouseEvent& e) {
+    const bool over = MaxOffset() > 0 && e.x >= rect.Right() - 14;
+    if (over != overBar_) {
+        overBar_ = over;
+        if (over) barVisible_.To(1, 80);
+        Invalidate();
+    }
+    if (!dragging_) return false;
+    const Rect thumb = ThumbRect();
+    const float range = rect.h - 4 - thumb.h;
+    if (range > 0) ScrollTo(dragStartOffset_ + (e.y - dragStartY_) / range * MaxOffset(), false);
+    return true;
+}
+
+bool ScrollView::OnMouseUp(const MouseEvent&) {
+    dragging_ = false;
+    ScrollTo(offset_.Target(), false);
+    return true;
+}
+
+void ScrollView::OnMouseLeave() {
+    overBar_ = false;
+    if (!dragging_) barVisible_.To(0, 250);
+    Invalidate();
+}
+
+void ScrollView::PaintOver(Painter& p) {
+    const float k = std::max(barVisible_.Get(), overBar_ ? 1.0f : 0.0f);
+    if (k <= 0.01f) return;
+    const Rect thumb = ThumbRect();
+    if (thumb.Empty()) return;
+    p.Fill(thumb, (overBar_ || dragging_ ? P().textTertiary : P().lineStrong).Fade(k), thumb.w / 2);
+}
+
+// --- Panel ------------------------------------------------------------------------------
+
+void Panel::Paint(Painter& p) {
+    if (shadow) p.Shadow(rect, radius);
+    if (fill) p.Fill(rect, fill(), radius);
+    if (border) p.Stroke(rect, border(), radius);
+}
+
+// --- Menu -------------------------------------------------------------------------------
+
+namespace {
+
+class MenuPopup : public Widget {
+public:
+    MenuPopup(std::vector<MenuItem> items, float minWidth, MenuPopup* parentMenu)
+        : items_(std::move(items)), minWidth_(minWidth), parentMenu_(parentMenu) {
+        interactive = true;
+        focusable = true;
+        hasIcons_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return !m.icon.empty(); });
+        hasChecks_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return m.checked; });
+    }
+
+    MenuPopup* Root() {
+        MenuPopup* m = this;
+        while (m->parentMenu_) m = m->parentMenu_;
+        return m;
+    }
+
+    Size MeasureContent(float, float availH) override {
+        float w = minWidth_, h = kMenuPad * 2;
+        for (const MenuItem& m : items_) {
+            if (m.separator) {
+                h += kMenuSepH;
+                continue;
+            }
+            float iw = (hasIcons_ ? 52.0f : 16.0f) + gfx::Text::Get().Measure(m.label, TextStyle::Body).width + 16;
+            if (!m.shortcut.empty()) iw += 32 + gfx::Text::Get().Measure(m.shortcut, TextStyle::Body).width;
+            if (!m.submenu.empty() || hasChecks_) iw += 32;
+            w = std::max(w, iw);
+            h += kMenuItemH;
+        }
+        return {std::min(w, 480.0f), std::min(h, availH)};
+    }
+
+    int IndexAt(float y) const {
+        float cy = rect.y + kMenuPad;
+        for (size_t i = 0; i < items_.size(); ++i) {
+            const float h = items_[i].separator ? kMenuSepH : kMenuItemH;
+            if (y >= cy && y < cy + h) return items_[i].separator ? -1 : static_cast<int>(i);
+            cy += h;
+        }
+        return -1;
+    }
+
+    Rect ItemRect(int index) const {
+        float cy = rect.y + kMenuPad;
+        for (int i = 0; i < index; ++i) cy += items_[static_cast<size_t>(i)].separator ? kMenuSepH : kMenuItemH;
+        return {rect.x + 4, cy, rect.w - 8, kMenuItemH};
+    }
+
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        p.Shadow(rect, 6);
+        p.Fill(rect, c.bgMenu, 6);
+        p.Stroke(rect, c.line, 6);
+        float cy = rect.y + kMenuPad;
+        for (size_t i = 0; i < items_.size(); ++i) {
+            const MenuItem& m = items_[i];
+            if (m.separator) {
+                p.Fill({rect.x + 12, cy + kMenuSepH / 2, rect.w - 24, 1}, c.line);
+                cy += kMenuSepH;
+                continue;
+            }
+            const Rect row{rect.x + 4, cy, rect.w - 8, kMenuItemH};
+            const bool hot = static_cast<int>(i) == highlight_ && m.enabled;
+            if (hot) p.Fill(row, c.hover, 4);
+            const Color fg = !m.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            float x = row.x + 12;
+            if (hasIcons_) {
+                if (!m.icon.empty()) p.Icon(m.icon, {x, row.Cy() - 10, 20, 20}, fg, m.enabled ? c.accentMid : fg);
+                x += 36;
+            }
+            float right = row.Right() - 12;
+            if (!m.submenu.empty()) {
+                p.Icon("chevron_right", {right - 20, row.Cy() - 10, 20, 20}, fg);
+                right -= 28;
+            } else if (m.checked) {
+                if (m.radio)
+                    p.FillCircle({right - 10, row.Cy()}, 3.5f, c.accent);
+                else
+                    p.Icon("check", {right - 20, row.Cy() - 10, 20, 20}, c.accent);
+                right -= 28;
+            } else if (hasChecks_) {
+                right -= 28;
+            }
+            if (!m.shortcut.empty()) {
+                const float sw = gfx::Text::Get().Measure(m.shortcut, TextStyle::Body).width;
+                p.Text(m.shortcut, {right - sw, row.y, sw + 1, row.h}, TextStyle::Body, c.textTertiary,
+                       HAlign::Leading, VAlign::Center, 0);
+                right -= sw + 16;
+            }
+            p.Text(m.label, {x, row.y, right - x, row.h}, TextStyle::Body, m.checked && m.enabled ? c.textPrimary : fg);
+            cy += kMenuItemH;
+        }
+    }
+
+    bool OnMouseMove(const MouseEvent& e) override {
+        SetHighlight(IndexAt(e.y), false);
+        return true;
+    }
+
+    void OnMouseLeave() override {
+        if (!child_) SetHighlight(-1, false);
+    }
+
+    void OnClick() override {
+        const int i = IndexAt(GetHost()->MousePos().y);
+        Activate(i);
+    }
+
+    bool OnKeyDown(const KeyEvent& e) override {
+        const int n = static_cast<int>(items_.size());
+        auto step = [&](int delta) {
+            int i = highlight_;
+            for (int k = 0; k < n; ++k) {
+                i = (i + delta + n) % n;
+                if (!items_[static_cast<size_t>(i)].separator && items_[static_cast<size_t>(i)].enabled) break;
+            }
+            SetHighlight(i, false);
+        };
+        switch (e.key) {
+            case VK_DOWN: step(1); return true;
+            case VK_UP: step(-1); return true;
+            case VK_RETURN:
+            case VK_SPACE: Activate(highlight_); return true;
+            case VK_RIGHT:
+                if (highlight_ >= 0 && !items_[static_cast<size_t>(highlight_)].submenu.empty()) OpenSubmenu(highlight_, true);
+                return true;
+            case VK_LEFT:
+                if (parentMenu_) {
+                    GetHost()->ClosePopup(this);
+                    return true;
+                }
+                return false;
+            default: return false;
+        }
+    }
+
+private:
+    void SetHighlight(int i, bool fromKeyboard) {
+        if (i == highlight_) return;
+        highlight_ = i;
+        Invalidate();
+        Host* host = GetHost();
+        if (child_ && host) {
+            host->ClosePopup(child_);
+            child_ = nullptr;
+        }
+        if (i >= 0 && !items_[static_cast<size_t>(i)].submenu.empty() && items_[static_cast<size_t>(i)].enabled) {
+            if (submenuTimer_ && host) host->CancelTimer(submenuTimer_);
+            submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i] {
+                submenuTimer_ = 0;
+                if (highlight_ == i) OpenSubmenu(i, false);
+            }) : 0;
+        }
+    }
+
+    void OpenSubmenu(int i, bool focus) {
+        Host* host = GetHost();
+        if (!host || child_) return;
+        auto sub = std::make_unique<MenuPopup>(items_[static_cast<size_t>(i)].submenu, 180.0f, this);
+        MenuPopup* raw = sub.get();
+        PopupOptions o;
+        o.anchor = ItemRect(i).Offset(0, -kMenuPad);
+        o.place = Place::Right;
+        o.offset = 2;
+        o.focusContent = focus;
+        o.onDismiss = [this, raw] {
+            if (child_ == raw) child_ = nullptr;
+        };
+        child_ = static_cast<MenuPopup*>(host->ShowPopup(std::move(sub), o));
+        if (focus) raw->SetHighlight(0, true);
+    }
+
+    void Activate(int i) {
+        if (i < 0 || i >= static_cast<int>(items_.size())) return;
+        const MenuItem& m = items_[static_cast<size_t>(i)];
+        if (m.separator || !m.enabled) return;
+        if (!m.submenu.empty()) {
+            OpenSubmenu(i, true);
+            return;
+        }
+        Host* host = GetHost();
+        auto action = m.action;
+        host->ClosePopup(Root());  // also closes submenus stacked above it
+        if (action) host->Post(action);
+    }
+
+    std::vector<MenuItem> items_;
+    float minWidth_;
+    MenuPopup* parentMenu_;
+    MenuPopup* child_ = nullptr;
+    int highlight_ = -1;
+    bool hasIcons_ = false, hasChecks_ = false;
+    UINT_PTR submenuTimer_ = 0;
+};
+
+}  // namespace
+
+Widget* ShowMenu(Host* host, const Rect& anchor, std::vector<MenuItem> items, Place place, float minWidth) {
+    if (!host || items.empty()) return nullptr;
+    PopupOptions o;
+    o.anchor = anchor;
+    o.place = place;
+    return host->ShowPopup(std::make_unique<MenuPopup>(std::move(items), minWidth, nullptr), o);
+}
+
+Widget* ShowContextMenu(Host* host, Point at, std::vector<MenuItem> items) {
+    if (!host || items.empty()) return nullptr;
+    PopupOptions o;
+    o.anchor = {at.x, at.y, 0, 0};
+    o.place = Place::Below;
+    o.offset = 2;
+    return host->ShowPopup(std::make_unique<MenuPopup>(std::move(items), 220.0f, nullptr), o);
+}
+
+// --- Dialog --------------------------------------------------------------------------------
+
+namespace {
+
+class DialogHeader : public Widget {
+public:
+    DialogHeader(Dialog* dialog, std::wstring title) : title_(std::move(title)) {
+        height = Length::Px(52);
+        width = Length::Grow();
+        dir = Dir::Row;
+        align = Align::Center;
+        pad = {20, 0, 10, 0};
+        auto* label = Add<Label>(title_, TextStyle::Body, Tone::Secondary);
+        label->width = Length::Grow();
+        auto* close = Add<IconButton>("close", L"", 32, 20);
+        close->onClick = [dialog] { dialog->Close(); };
+    }
+
+private:
+    std::wstring title_;
+};
+
+}  // namespace
+
+Dialog::Dialog(std::wstring title, int w) {
+    width = Length::Px(static_cast<float>(w));
+    dir = Dir::Column;
+    interactive = true;  // swallow clicks on the panel background
+    Add<DialogHeader>(this, std::move(title));
+    body_ = Add<Widget>();
+    body_->dir = Dir::Column;
+    body_->width = Length::Grow();
+    body_->pad = Insets::All(20);
+    body_->gap = 12;
+    footer_ = Add<Widget>();
+    footer_->dir = Dir::Row;
+    footer_->width = Length::Grow();
+    footer_->pad = {20, 4, 20, 20};
+    footer_->gap = 8;
+    footer_->align = Align::Center;
+}
+
+void Dialog::Close() {
+    if (Host* host = GetHost()) host->ClosePopup(this);
+}
+
+bool Dialog::OnKeyDown(const KeyEvent& e) {
+    if (e.key == VK_ESCAPE) {
+        Close();
+        return true;
+    }
+    return false;
+}
+
+void Dialog::Paint(Painter& p) {
+    const Palette& c = P();
+    p.Shadow(rect, 10, 24, 10);
+    p.Fill(rect, c.bgRaised, 10);
+    // Header band, as in the design (darker strip with the title).
+    p.PushRoundClip(rect, 10);
+    p.Fill({rect.x, rect.y, rect.w, 52}, c.bgDeep);
+    p.PopClip();
+    p.Stroke(rect, c.line, 10);
+}
+
+Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog) {
+    if (!host) return nullptr;
+    Dialog* raw = dialog.get();
+    PopupOptions o;
+    o.place = Place::Center;
+    o.modal = true;
+    o.scrim = true;
+    o.dismissOnOutside = false;
+    o.dismissOnEscape = true;
+    o.onDismiss = [raw] {
+        if (raw->onClose) raw->onClose();
+    };
+    host->ShowPopup(std::move(dialog), o);
+    return raw;
+}
+
+// --- Toast ---------------------------------------------------------------------------------
+
+namespace {
+
+class ToastBubble : public Widget {
+public:
+    ToastBubble(std::wstring text, std::string icon) : text_(std::move(text)), icon_(std::move(icon)) {}
+    Size MeasureContent(float availW, float) override {
+        float w = gfx::Text::Get().Measure(text_, TextStyle::Body).width + 32 + (icon_.empty() ? 0 : 28);
+        return {std::min(w, availW), 40};
+    }
+    void Paint(Painter& p) override {
+        p.Shadow(rect, 8, 14, 6);
+        p.Fill(rect, P().bgMenu, 8);
+        p.Stroke(rect, P().line, 8);
+        float x = rect.x + 16;
+        if (!icon_.empty()) {
+            p.Icon(icon_, {x, rect.Cy() - 10, 20, 20}, P().textPrimary);
+            x += 28;
+        }
+        p.Text(text_, {x, rect.y, rect.Right() - x - 16, rect.h}, TextStyle::Body, P().textPrimary);
+    }
+
+private:
+    std::wstring text_;
+    std::string icon_;
+};
+
+Widget*& CurrentToast(Host* host) {
+    static std::map<Host*, Widget*> toasts;
+    return toasts[host];
+}
+
+}  // namespace
+
+void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms) {
+    if (!host) return;
+    Widget*& current = CurrentToast(host);
+    if (current && host->IsPopupOpen(current)) host->ClosePopup(current);
+    auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon));
+    const Size s = bubble->Measure(600, 40);
+    PopupOptions o;
+    o.place = Place::At;
+    o.anchor = {(host->ClientSize().w - s.w) / 2, 56, 0, 0};
+    o.passthrough = true;
+    o.focusContent = false;
+    o.dismissOnOutside = false;
+    o.dismissOnEscape = false;
+    Widget* raw = host->ShowPopup(std::move(bubble), o);
+    current = raw;
+    host->StartTimer(ms, [host, raw] {
+        Widget*& cur = CurrentToast(host);
+        if (cur == raw) cur = nullptr;
+        if (host->IsPopupOpen(raw)) host->ClosePopup(raw);
+    });
+}
+
+}  // namespace ui

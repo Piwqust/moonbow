@@ -4,3 +4,4 @@ third_party/_download/
 *.pdb
 *.obj
 *.res
+.claude/
