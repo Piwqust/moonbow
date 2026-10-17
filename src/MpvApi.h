@@ -19,6 +19,8 @@
     X(mpv_command)              \
     X(mpv_command_async)        \
     X(mpv_set_property_async)   \
+    X(mpv_get_property)         \
+    X(mpv_unobserve_property)   \
     X(mpv_observe_property)     \
     X(mpv_wait_event)           \
     X(mpv_set_wakeup_callback)  \

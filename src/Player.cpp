@@ -22,12 +22,21 @@ enum PropId : uint64_t {
     kPropHeight,
     kPropSpeed,
     kPropEof,
+    kPropSeekable,
+    kPropPausedForCache,
+    kPropBuffering,
+    kPropCacheTime,
+    kPropChapter,
+    kPropChapterList,
+    kPropMetadata,
+    kPropHwdec,
+    kPropGamma,
 };
 
 const mpv_node* MapGet(const mpv_node& map, const char* key) {
     if (map.format != MPV_FORMAT_NODE_MAP) return nullptr;
     for (int i = 0; i < map.u.list->num; ++i)
-        if (std::strcmp(map.u.list->keys[i], key) == 0) return &map.u.list->values[i];
+        if (_stricmp(map.u.list->keys[i], key) == 0) return &map.u.list->values[i];
     return nullptr;
 }
 
@@ -37,6 +46,13 @@ std::wstring NodeString(const mpv_node* n) {
 
 int64_t NodeInt(const mpv_node* n) {
     return n && n->format == MPV_FORMAT_INT64 ? n->u.int64 : 0;
+}
+
+double NodeDouble(const mpv_node* n) {
+    if (!n) return 0;
+    if (n->format == MPV_FORMAT_DOUBLE) return n->u.double_;
+    if (n->format == MPV_FORMAT_INT64) return static_cast<double>(n->u.int64);
+    return 0;
 }
 
 bool NodeFlag(const mpv_node* n) {
@@ -52,10 +68,9 @@ std::wstring Track::Label() const {
     else if (!lang.empty())
         label = lang;
     else
-        label = L"Дорожка " + std::to_wstring(id);
+        label = L"#" + std::to_wstring(id);
     if (!title.empty() && !lang.empty()) label += L" (" + lang + L")";
     if (!codec.empty()) label += L" · " + codec;
-    if (external) label += L" · внешняя";
     return label;
 }
 
@@ -79,7 +94,7 @@ bool Player::InitOnWorker(int64_t wid) {
 
     mpv_ = api_.mpv_create();
     if (!mpv_) {
-        error_ = L"mpv_create не удалось";
+        error_ = L"mpv_create failed";
         return false;
     }
 
@@ -101,8 +116,10 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("load-scripts", "no");
     opt("ytdl", "no");
     opt("terminal", "no");
-    opt("volume-max", "100");
+    opt("volume-max", "150");
     opt("save-position-on-quit", "yes");
+    opt("audio-display", "no");  // cover art is shown by our music view
+    opt("background-color", "#000000");
 
     std::wstring appData = KnownFolderPath(FOLDERID_RoamingAppData, L"Lumen");
     if (!appData.empty()) {
@@ -114,6 +131,8 @@ bool Player::InitOnWorker(int64_t wid) {
     }
     std::wstring shots = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
     if (!shots.empty()) opt("screenshot-dir", WideToUtf8(shots));
+
+    for (const auto& [name, value] : startOptions_) opt(name.c_str(), value);
 
     Trace("mpv initialize");
     int err = api_.mpv_initialize(mpv_);
@@ -135,19 +154,35 @@ bool Player::FinishStart(bool ok) {
         return false;
     }
 
-    api_.mpv_observe_property(mpv_, kPropTimePos, "time-pos", MPV_FORMAT_DOUBLE);
-    api_.mpv_observe_property(mpv_, kPropDuration, "duration", MPV_FORMAT_DOUBLE);
-    api_.mpv_observe_property(mpv_, kPropPause, "pause", MPV_FORMAT_FLAG);
-    api_.mpv_observe_property(mpv_, kPropVolume, "volume", MPV_FORMAT_DOUBLE);
-    api_.mpv_observe_property(mpv_, kPropMute, "mute", MPV_FORMAT_FLAG);
-    api_.mpv_observe_property(mpv_, kPropTitle, "media-title", MPV_FORMAT_STRING);
-    api_.mpv_observe_property(mpv_, kPropPath, "path", MPV_FORMAT_STRING);
-    api_.mpv_observe_property(mpv_, kPropTrackList, "track-list", MPV_FORMAT_NODE);
-    api_.mpv_observe_property(mpv_, kPropIdle, "idle-active", MPV_FORMAT_FLAG);
-    api_.mpv_observe_property(mpv_, kPropWidth, "dwidth", MPV_FORMAT_INT64);
-    api_.mpv_observe_property(mpv_, kPropHeight, "dheight", MPV_FORMAT_INT64);
-    api_.mpv_observe_property(mpv_, kPropSpeed, "speed", MPV_FORMAT_DOUBLE);
-    api_.mpv_observe_property(mpv_, kPropEof, "eof-reached", MPV_FORMAT_FLAG);
+    struct {
+        PropId id;
+        const char* name;
+        mpv_format format;
+    } const props[] = {
+        {kPropTimePos, "time-pos", MPV_FORMAT_DOUBLE},
+        {kPropDuration, "duration", MPV_FORMAT_DOUBLE},
+        {kPropPause, "pause", MPV_FORMAT_FLAG},
+        {kPropVolume, "volume", MPV_FORMAT_DOUBLE},
+        {kPropMute, "mute", MPV_FORMAT_FLAG},
+        {kPropTitle, "media-title", MPV_FORMAT_STRING},
+        {kPropPath, "path", MPV_FORMAT_STRING},
+        {kPropTrackList, "track-list", MPV_FORMAT_NODE},
+        {kPropIdle, "idle-active", MPV_FORMAT_FLAG},
+        {kPropWidth, "dwidth", MPV_FORMAT_INT64},
+        {kPropHeight, "dheight", MPV_FORMAT_INT64},
+        {kPropSpeed, "speed", MPV_FORMAT_DOUBLE},
+        {kPropEof, "eof-reached", MPV_FORMAT_FLAG},
+        {kPropSeekable, "seekable", MPV_FORMAT_FLAG},
+        {kPropPausedForCache, "paused-for-cache", MPV_FORMAT_FLAG},
+        {kPropBuffering, "cache-buffering-state", MPV_FORMAT_DOUBLE},
+        {kPropCacheTime, "demuxer-cache-time", MPV_FORMAT_DOUBLE},
+        {kPropChapter, "chapter", MPV_FORMAT_INT64},
+        {kPropChapterList, "chapter-list", MPV_FORMAT_NODE},
+        {kPropMetadata, "metadata", MPV_FORMAT_NODE},
+        {kPropHwdec, "hwdec-current", MPV_FORMAT_STRING},
+        {kPropGamma, "video-params/gamma", MPV_FORMAT_STRING},
+    };
+    for (const auto& p : props) api_.mpv_observe_property(mpv_, p.id, p.name, p.format);
     api_.mpv_set_wakeup_callback(mpv_, &Player::Wakeup, this);
 
     state_.ready = true;
@@ -167,19 +202,27 @@ unsigned Player::ProcessEvents() {
         mpv_event* ev = api_.mpv_wait_event(mpv_, 0);
         if (ev->event_id == MPV_EVENT_NONE) break;
         switch (ev->event_id) {
-            case MPV_EVENT_PROPERTY_CHANGE:
-                changes |= OnProperty(static_cast<mpv_event_property*>(ev->data), ev->reply_userdata);
+            case MPV_EVENT_PROPERTY_CHANGE: {
+                auto* prop = static_cast<mpv_event_property*>(ev->data);
+                if (ev->reply_userdata >= 1000) {
+                    auto it = observers_.find(ev->reply_userdata);
+                    if (it != observers_.end()) it->second(*prop);
+                } else {
+                    changes |= OnProperty(prop, ev->reply_userdata);
+                }
                 break;
+            }
             case MPV_EVENT_FILE_LOADED:
                 Trace("file loaded");
                 state_.fileLoaded = true;
+                state_.eof = false;
                 state_.lastError.clear();
                 changes |= kChangeFile | kChangeState;
                 break;
             case MPV_EVENT_END_FILE: {
                 auto* end = static_cast<mpv_event_end_file*>(ev->data);
                 if (end->reason == MPV_END_FILE_REASON_ERROR) {
-                    state_.lastError = L"Не удалось открыть файл: " + Utf8ToWide(api_.mpv_error_string(end->error));
+                    state_.lastError = Utf8ToWide(api_.mpv_error_string(end->error));
                     changes |= kChangeError;
                 }
                 break;
@@ -197,6 +240,9 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
     auto flag = [&] { return has && *static_cast<int*>(prop->data) != 0; };
     auto str = [&] { return has ? Utf8ToWide(*static_cast<char**>(prop->data)) : std::wstring(); };
     auto i64 = [&] { return has ? *static_cast<int64_t*>(prop->data) : int64_t{0}; };
+    auto node = [&]() -> const mpv_node* {
+        return has && prop->format == MPV_FORMAT_NODE ? static_cast<mpv_node*>(prop->data) : nullptr;
+    };
 
     switch (id) {
         case kPropTimePos: state_.position = dbl(); return kChangeTime;
@@ -204,36 +250,70 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
         case kPropPause: state_.paused = flag(); return kChangeState;
         case kPropVolume: state_.volume = has ? dbl() : 100.0; return kChangeVolume;
         case kPropMute: state_.mute = flag(); return kChangeVolume;
-        case kPropTitle: state_.title = str(); return kChangeState;
+        case kPropTitle: state_.title = str(); return kChangeMeta;
         case kPropPath: state_.path = str(); return kChangeFile;
         case kPropIdle:
             state_.idle = flag();
             if (state_.idle) {
                 state_.fileLoaded = false;
                 state_.position = state_.duration = 0;
+                state_.chapters.clear();
             }
             return kChangeState;
         case kPropWidth: state_.videoW = i64(); return kChangeVideoSize;
         case kPropHeight: state_.videoH = i64(); return kChangeVideoSize;
         case kPropSpeed: state_.speed = has ? dbl() : 1.0; return kChangeState;
-        case kPropEof: state_.eof = flag(); return kChangeState;
+        case kPropEof: {
+            const bool was = state_.eof;
+            state_.eof = flag();
+            return kChangeState | (state_.eof && !was ? kChangeEnd : 0u);
+        }
+        case kPropSeekable: state_.seekable = !has || flag(); return kChangeState;
+        case kPropPausedForCache: state_.buffering = flag(); return kChangeState;
+        case kPropBuffering: state_.bufferPercent = dbl(); return kChangeState;
+        case kPropCacheTime: state_.cacheTime = dbl(); return kChangeTime;
+        case kPropChapter: state_.chapter = has ? i64() : -1; return kChangeChapters;
+        case kPropHwdec: state_.hwdec = str(); return kChangeState;
+        case kPropGamma: {
+            const std::wstring g = str();
+            state_.hdr = g == L"pq" || g == L"hlg";
+            return kChangeState;
+        }
+        case kPropChapterList: {
+            state_.chapters.clear();
+            if (const mpv_node* n = node(); n && n->format == MPV_FORMAT_NODE_ARRAY)
+                for (int i = 0; i < n->u.list->num; ++i) {
+                    const mpv_node& c = n->u.list->values[i];
+                    state_.chapters.push_back({NodeString(MapGet(c, "title")), NodeDouble(MapGet(c, "time"))});
+                }
+            return kChangeChapters;
+        }
+        case kPropMetadata: {
+            state_.artist.clear();
+            state_.album.clear();
+            if (const mpv_node* n = node()) {
+                state_.artist = NodeString(MapGet(*n, "artist"));
+                if (state_.artist.empty()) state_.artist = NodeString(MapGet(*n, "album_artist"));
+                state_.album = NodeString(MapGet(*n, "album"));
+            }
+            return kChangeMeta;
+        }
         case kPropTrackList: {
             state_.tracks.clear();
-            if (has && prop->format == MPV_FORMAT_NODE) {
-                auto* node = static_cast<mpv_node*>(prop->data);
-                if (node->format == MPV_FORMAT_NODE_ARRAY) {
-                    for (int i = 0; i < node->u.list->num; ++i) {
-                        const mpv_node& t = node->u.list->values[i];
-                        Track track;
-                        track.id = NodeInt(MapGet(t, "id"));
-                        track.type = NodeString(MapGet(t, "type"));
-                        track.title = NodeString(MapGet(t, "title"));
-                        track.lang = NodeString(MapGet(t, "lang"));
-                        track.codec = NodeString(MapGet(t, "codec"));
-                        track.selected = NodeFlag(MapGet(t, "selected"));
-                        track.external = NodeFlag(MapGet(t, "external"));
-                        state_.tracks.push_back(std::move(track));
-                    }
+            state_.hasVideo = false;
+            if (const mpv_node* n = node(); n && n->format == MPV_FORMAT_NODE_ARRAY) {
+                for (int i = 0; i < n->u.list->num; ++i) {
+                    const mpv_node& t = n->u.list->values[i];
+                    Track track;
+                    track.id = NodeInt(MapGet(t, "id"));
+                    track.type = NodeString(MapGet(t, "type"));
+                    track.title = NodeString(MapGet(t, "title"));
+                    track.lang = NodeString(MapGet(t, "lang"));
+                    track.codec = NodeString(MapGet(t, "codec"));
+                    track.selected = NodeFlag(MapGet(t, "selected"));
+                    track.external = NodeFlag(MapGet(t, "external"));
+                    if (track.type == L"video" && !NodeFlag(MapGet(t, "albumart"))) state_.hasVideo = true;
+                    state_.tracks.push_back(std::move(track));
                 }
             }
             return kChangeTracks;
@@ -245,9 +325,9 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
 
 // Commands from the UI thread are async: mpv's video window is a child of our
 // window, so a synchronous call that waits on mpv's VO thread could deadlock.
-void Player::Command(std::initializer_list<const char*> args, bool async) {
+void Player::Cmd(std::initializer_list<const char*> args, bool async) {
     if (!mpv_) return;
-    const char* argv[8] = {};
+    const char* argv[10] = {};
     size_t n = 0;
     for (const char* a : args)
         if (n < std::size(argv) - 1) argv[n++] = a;
@@ -255,6 +335,14 @@ void Player::Command(std::initializer_list<const char*> args, bool async) {
         api_.mpv_command_async(mpv_, 0, argv);
     else
         api_.mpv_command(mpv_, argv);
+}
+
+void Player::Command(const std::vector<std::string>& args) {
+    if (!mpv_ || args.empty()) return;
+    std::vector<const char*> argv;
+    for (const std::string& a : args) argv.push_back(a.c_str());
+    argv.push_back(nullptr);
+    api_.mpv_command_async(mpv_, 0, argv.data());
 }
 
 void Player::SetDouble(const char* name, double value) {
@@ -267,56 +355,117 @@ void Player::SetString(const char* name, const std::string& value) {
     api_.mpv_set_property_async(mpv_, 0, name, MPV_FORMAT_STRING, &v);
 }
 
-void Player::Open(const std::wstring& path) {
+void Player::SetProperty(const char* name, double value) {
+    SetDouble(name, value);
+}
+
+void Player::SetProperty(const char* name, bool value) {
+    if (!mpv_) return;
+    int flag = value ? 1 : 0;
+    api_.mpv_set_property_async(mpv_, 0, name, MPV_FORMAT_FLAG, &flag);
+}
+
+void Player::SetProperty(const char* name, const std::string& value) {
+    SetString(name, value);
+}
+
+std::string Player::GetPropertyString(const char* name) {
+    if (!mpv_) return {};
+    char* v = nullptr;
+    if (api_.mpv_get_property(mpv_, name, MPV_FORMAT_STRING, &v) < 0 || !v) return {};
+    std::string out = v;
+    api_.mpv_free(v);
+    return out;
+}
+
+double Player::GetPropertyDouble(const char* name, double fallback) {
+    double v = fallback;
+    if (!mpv_ || api_.mpv_get_property(mpv_, name, MPV_FORMAT_DOUBLE, &v) < 0) return fallback;
+    return v;
+}
+
+uint64_t Player::Observe(const char* name, mpv_format format, PropertyCallback cb) {
+    if (!mpv_) return 0;
+    const uint64_t id = nextObserver_++;
+    observers_[id] = std::move(cb);
+    api_.mpv_observe_property(mpv_, id, name, format);
+    return id;
+}
+
+void Player::Unobserve(uint64_t id) {
+    if (!mpv_ || !id) return;
+    api_.mpv_unobserve_property(mpv_, id);
+    observers_.erase(id);
+}
+
+void Player::Open(const std::wstring& path, double start) {
     if (state_.fileLoaded) SaveWatchLater();
-    std::string utf8 = WideToUtf8(path);
-    Command({"loadfile", utf8.c_str(), "replace"});
+    const std::string utf8 = WideToUtf8(path);
+    if (start > 0) {
+        const std::string opts = "start=" + std::to_string(start);
+        Cmd({"loadfile", utf8.c_str(), "replace", "-1", opts.c_str()});
+    } else {
+        Cmd({"loadfile", utf8.c_str(), "replace"});
+    }
 }
 
 void Player::Stop() {
     if (state_.fileLoaded) SaveWatchLater();
-    Command({"stop"});
+    Cmd({"stop"});
 }
 
 void Player::TogglePause() {
     if (!state_.fileLoaded) return;
-    if (state_.eof && state_.paused) {
-        Command({"seek", "0", "absolute"});
-    }
-    Command({"cycle", "pause"});
+    if (state_.eof && state_.paused) Cmd({"seek", "0", "absolute"});
+    Cmd({"cycle", "pause"});
+}
+
+void Player::SetPause(bool paused) {
+    SetProperty("pause", paused);
 }
 
 void Player::SeekAbsolute(double seconds, bool exact) {
     if (!state_.fileLoaded) return;
     std::string pos = std::to_string(seconds < 0 ? 0 : seconds);
-    Command({"seek", pos.c_str(), exact ? "absolute+exact" : "absolute+keyframes"}, true);
+    Cmd({"seek", pos.c_str(), exact ? "absolute+exact" : "absolute+keyframes"});
 }
 
 void Player::SeekRelative(double seconds) {
     if (!state_.fileLoaded) return;
     std::string delta = std::to_string(seconds);
-    Command({"seek", delta.c_str(), "relative+exact"}, true);
+    Cmd({"seek", delta.c_str(), "relative+exact"});
+}
+
+void Player::SeekChapter(int delta) {
+    if (!state_.fileLoaded || state_.chapters.empty()) return;
+    std::string d = std::to_string(delta);
+    Cmd({"add", "chapter", d.c_str()});
 }
 
 void Player::FrameStep(bool back) {
     if (!state_.fileLoaded) return;
-    Command({back ? "frame-back-step" : "frame-step"});
+    Cmd({back ? "frame-back-step" : "frame-step"});
 }
 
 void Player::SetVolume(double volume) {
     if (volume < 0) volume = 0;
-    if (volume > 100) volume = 100;
+    if (volume > 150) volume = 150;
     state_.volume = volume;  // optimistic, so repeated wheel steps accumulate
     SetDouble("volume", volume);
 }
 
+void Player::SetMute(bool mute) {
+    state_.mute = mute;
+    SetProperty("mute", mute);
+}
+
 void Player::ToggleMute() {
-    Command({"cycle", "mute"});
+    SetMute(!state_.mute);
 }
 
 void Player::SetSpeed(double speed) {
     if (speed < 0.1) speed = 0.1;
-    if (speed > 4.0) speed = 4.0;
+    if (speed > 8.0) speed = 8.0;
     state_.speed = speed;
     SetDouble("speed", speed);
 }
@@ -326,23 +475,42 @@ void Player::SetTrack(const char* prop, int64_t id) {
 }
 
 void Player::CycleTrack(const char* prop) {
-    Command({"cycle", prop});
+    Cmd({"cycle", prop});
 }
 
-void Player::Screenshot() {
+void Player::AddSubtitle(const std::wstring& path) {
+    const std::string p = WideToUtf8(path);
+    Cmd({"sub-add", p.c_str(), "select"});
+}
+
+void Player::AddAudio(const std::wstring& path) {
+    const std::string p = WideToUtf8(path);
+    Cmd({"audio-add", p.c_str(), "select"});
+}
+
+void Player::Screenshot(const std::wstring& file) {
     if (!state_.fileLoaded) return;
-    Command({"screenshot", "video"});
+    if (file.empty()) {
+        Cmd({"screenshot", "video"});
+    } else {
+        const std::string f = WideToUtf8(file);
+        Cmd({"screenshot-to-file", f.c_str(), "video"});
+    }
+}
+
+void Player::SetRecording(const std::wstring& file) {
+    SetString("stream-record", WideToUtf8(file));
 }
 
 void Player::SaveWatchLater() {
-    if (state_.fileLoaded) Command({"write-watch-later-config"});
+    if (state_.fileLoaded) Cmd({"write-watch-later-config"});
 }
 
 void Player::Shutdown() {
     if (init_.joinable()) init_.join();
     if (mpv_) {
-        // Runs off the UI thread (see App WM_CLOSE), so a blocking call is fine here.
-        if (state_.fileLoaded) Command({"write-watch-later-config"}, false);
+        // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
+        if (state_.fileLoaded) Cmd({"write-watch-later-config"}, false);
         api_.mpv_set_wakeup_callback(mpv_, nullptr, nullptr);
         api_.mpv_terminate_destroy(mpv_);
         mpv_ = nullptr;
