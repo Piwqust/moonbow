@@ -35,6 +35,9 @@ $p = Start-Process "$env:TEMP\lumen-qa\build-rN\Lumen.exe" -ArgumentList "--new-
 - Library roots: `$dd\library.json` = `{"version":1,"roots":["C:\\Users\\wheny\\AppData\\Local\\Temp\\lumen-qa\\media"]}`.
 - Settings file: `$dd\settings.json` = `{"version":1,"values":{"key":value}}` (keys: see `src\core\SettingsSchema.cpp`).
   Set `"audio.startupVolumeMode":"fixed","audio.startupVolume":0` so nothing plays out loud.
+- Shortcut that does all of the above and prints the new PID:
+  `tools\dev\launch.ps1 -DataDir <dir> -Exe <exe> [-Fresh] [-Library <folder>] [-Settings '{"key":value}'] [-Onboarding] [files...]`
+  (startup volume is always forced to 0; `-Onboarding` keeps the first-run window).
 
 Tools (in `C:\Users\wheny\Desktop\CODE\lumen-player\tools\dev\`), all take `-ProcessId <your pid>`:
 
