@@ -300,6 +300,7 @@ void App::OnConfigChanged(const std::string& key) {
     }
     if (key == "playback.shuffle") queue_.SetShuffle(config_.GetBool("playback.shuffle"));
     if (key == "interface.alwaysOnTop") ApplyWindowOptions();
+    if (key == "privacy.rememberPosition") player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     if (key == "privacy.excludePatterns") history_.SetExcludePatterns(config_.GetWString("privacy.excludePatterns"));
     if (key.rfind("interface.", 0) == 0) {
         system_.SettingsChanged();
@@ -424,6 +425,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     // The GPU device (driver load) and libmpv start after the first paint.
     gfx::Gpu::Get().CreateDeviceAsync(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
     player_.SetStartOptions(MpvOptions(config_));
+    player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
     // Stores and the library scan load after the window is up.

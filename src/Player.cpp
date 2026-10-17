@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "core/Paths.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -119,6 +120,10 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("terminal", "no");
     opt("volume-max", "150");
     opt("save-position-on-quit", "yes");
+    // Per file only the position and the chosen tracks; delays, mute and the
+    // A-B loop are for the current file, not the next one.
+    opt("watch-later-options", "start,aid,sid,secondary-sid");
+    opt("reset-on-next-file", "audio-delay,sub-delay,ab-loop-a,ab-loop-b");
     opt("audio-display", "no");  // cover art is shown by our music view
     opt("background-color", "#000000");
 
@@ -503,15 +508,31 @@ void Player::SetRecording(const std::wstring& file) {
     SetString("stream-record", WideToUtf8(file));
 }
 
+// A file that was (nearly) finished starts from the beginning next time, the
+// way mpv and MPC-HC treat it.
+bool Player::NearEnd() const {
+    if (state_.eof) return true;
+    if (state_.duration <= 0) return false;
+    return state_.position >= state_.duration - std::max(5.0, state_.duration * 0.05);
+}
+
 void Player::SaveWatchLater() {
-    if (state_.fileLoaded) Cmd({"write-watch-later-config"});
+    if (!state_.fileLoaded) return;
+    if (NearEnd())
+        Cmd({"delete-watch-later-config"});
+    else if (rememberPosition)
+        Cmd({"write-watch-later-config"});
 }
 
 void Player::Shutdown() {
     if (init_.joinable()) init_.join();
     if (mpv_) {
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
-        if (state_.fileLoaded) Cmd({"write-watch-later-config"}, false);
+        // mpv writes the position itself on quit (save-position-on-quit): not for a finished file.
+        if (state_.fileLoaded && NearEnd()) {
+            api_.mpv_set_option_string(mpv_, "save-position-on-quit", "no");
+            Cmd({"delete-watch-later-config"}, false);
+        }
         api_.mpv_set_wakeup_callback(mpv_, nullptr, nullptr);
         api_.mpv_terminate_destroy(mpv_);
         mpv_ = nullptr;

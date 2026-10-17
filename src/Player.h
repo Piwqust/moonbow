@@ -91,6 +91,8 @@ public:
 
     // mpv options applied before mpv_initialize (from Config). Call before StartAsync.
     void SetStartOptions(std::vector<std::pair<std::string, std::string>> options) { startOptions_ = std::move(options); }
+    // privacy.rememberPosition: save the position when switching files and on exit.
+    bool rememberPosition = true;
 
     // `start` > 0 begins playback at that position (seconds); otherwise mpv's
     // watch-later resume applies.
@@ -114,6 +116,7 @@ public:
     // Starts writing the stream to `file` (empty stops). mpv "stream-record".
     void SetRecording(const std::wstring& file);
     void SaveWatchLater();
+    bool NearEnd() const;
 
     // Generic access for feature panels (filters, delays, zoom...). All async.
     void Command(const std::vector<std::string>& args);
