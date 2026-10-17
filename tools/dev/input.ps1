@@ -8,6 +8,7 @@
 #   tools\dev\input.ps1 -ProcessId 1234 -Wheel 300,200 -Delta -1
 #   tools\dev\input.ps1 -ProcessId 1234 -Key Space | -Key F | -Key Escape | -Type "hello"
 #   tools\dev\input.ps1 -ProcessId 1234 -Drag 100,100,400,100
+#   add -Ctrl / -Shift to any of these to hold the modifier (e.g. -Key P -Ctrl)
 param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Title = "",
       [string]$Click = "", [string]$Move = "", [string]$Wheel = "", [int]$Delta = 1, [string]$Drag = "",
       [switch]$Right, [switch]$Double, [string]$Key = "", [string]$Type = "", [switch]$Ctrl, [switch]$Shift)
@@ -68,9 +69,13 @@ if ($Wheel) {
   [LumenIn]::ClientToScreen($h, [ref]$pt) | Out-Null
   Post 0x20A ([int64](($Delta * 120) -shl 16)) (MakeLParam $pt.X $pt.Y)
 }
+# Held modifiers for this call (Lumen reads them only with --automation).
+$mods = ([int][bool]$Ctrl) -bor (2 * [int][bool]$Shift)
+if ($mods) { Post 0x802D $mods ([IntPtr]0) }
 if ($Key) {
   $vk = [int][System.Windows.Forms.Keys]::$Key
   Post 0x100 $vk ([IntPtr]1); Post 0x101 $vk ([IntPtr]0xC0000001)
 }
 if ($Type) { foreach ($ch in $Type.ToCharArray()) { Post 0x102 ([int]$ch) ([IntPtr]1) } }
+if ($mods) { Start-Sleep -Milliseconds 30; Post 0x802D 0 ([IntPtr]0) }
 Start-Sleep -Milliseconds 250

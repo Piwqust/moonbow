@@ -99,6 +99,9 @@ public:
     static constexpr UINT kDumpTreeMessage = WM_APP + 43;
     // Any thread may post this to ask the window for a repaint.
     static constexpr UINT kRepaintMessage = WM_APP + 44;
+    // --automation only: wParam = held modifiers (1 Ctrl, 2 Shift, 4 Alt) for the
+    // keys and clicks that follow, since posted input doesn't change GetKeyState.
+    static constexpr UINT kAutomationModsMessage = WM_APP + 45;
     void DumpTree(const std::wstring& path) const;
     // Re-applies DWM attributes (dark title/border) and repaints after a theme change.
     void OnThemeChanged();

@@ -78,6 +78,10 @@ void ForEachInTree(Widget* w, const std::function<void(Widget*)>& fn) {
 
 }  // namespace
 
+namespace {
+unsigned g_automationMods = 0;
+}  // namespace
+
 void Host::SetAutomation(bool on) {
     g_automation = on;
 }
@@ -648,7 +652,8 @@ LRESULT Host::NcHitTest(LPARAM lp) {
 }
 
 Mods Host::CurrentMods() const {
-    return {GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, GetKeyState(VK_MENU) < 0};
+    return {GetKeyState(VK_CONTROL) < 0 || (g_automationMods & 1), GetKeyState(VK_SHIFT) < 0 || (g_automationMods & 2),
+            GetKeyState(VK_MENU) < 0 || (g_automationMods & 4)};
 }
 
 // --- mouse --------------------------------------------------------------------------
@@ -1162,6 +1167,10 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case kRepaintMessage:
             RequestRender();
+            return 0;
+
+        case kAutomationModsMessage:
+            if (g_automation) g_automationMods = static_cast<unsigned>(wp);
             return 0;
 
         case kDumpTreeMessage: {
