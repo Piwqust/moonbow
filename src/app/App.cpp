@@ -308,7 +308,35 @@ void App::SaveUiState() {
     if (json::WriteFileAtomic(DataFilePath(L"ui.json"), json::Serialize(doc, true))) uiDirty_ = false;
 }
 
+void App::SaveWindowPlacement() {
+    if (!main_ || !main_->Hwnd() || main_->IsFullscreen() || !IsWindowVisible(main_->Hwnd())) return;
+    WINDOWPLACEMENT wp{sizeof(wp)};
+    if (!GetWindowPlacement(main_->Hwnd(), &wp)) return;
+    const RECT& r = wp.rcNormalPosition;
+    char buf[96];
+    snprintf(buf, sizeof(buf), "%ld,%ld,%ld,%ld,%d", r.left, r.top, r.right, r.bottom, wp.showCmd == SW_SHOWMAXIMIZED ? 1 : 0);
+    SetUiValue("window.placement", buf);
+}
+
+void App::RestoreWindowPlacement() {
+    if (!config_.GetBool("interface.rememberWindow")) return;
+    long l = 0, t = 0, r = 0, b = 0;
+    int max = 0;
+    if (sscanf_s(UiValue("window.placement").c_str(), "%ld,%ld,%ld,%ld,%d", &l, &t, &r, &b, &max) != 5) return;
+    if (r - l < 300 || b - t < 200) return;
+    // Only restore onto a monitor that still exists.
+    RECT rc{l, t, r, b};
+    if (!MonitorFromRect(&rc, MONITOR_DEFAULTTONULL)) return;
+    WINDOWPLACEMENT wp{sizeof(wp)};
+    GetWindowPlacement(main_->Hwnd(), &wp);
+    wp.rcNormalPosition = rc;
+    wp.showCmd = max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    wp.flags = 0;
+    SetWindowPlacement(main_->Hwnd(), &wp);
+}
+
 void App::FlushStores() {
+    SaveWindowPlacement();
     SaveHistoryPosition();
     config_.Flush();
     history_.Flush();
@@ -348,7 +376,9 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
 
     main_ = std::make_unique<MainWindow>();
     if (!main_->Create()) return 1;
-    main_->Show();
+    RestoreWindowPlacement();
+    if (!IsWindowVisible(main_->Hwnd())) main_->Show();
+    system_.Attach(main_->Hwnd());
     Trace("window shown");
     // The GPU device (driver load) and libmpv start after the first paint.
     gfx::Gpu::Get().CreateDeviceAsync(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
@@ -425,6 +455,7 @@ void App::OnPlayerEvents() {
         }
     }
     playerChanged.Emit(changes);
+    system_.Update(changes);
     if (changes & kChangeEnd) Next(false);
 }
 

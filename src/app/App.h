@@ -2,6 +2,7 @@
 #include "Player.h"
 #include "app/ImageCache.h"
 #include "app/Signal.h"
+#include "app/SystemIntegration.h"
 #include "core/Config.h"
 #include "library/Bookmarks.h"
 #include "library/History.h"
@@ -109,6 +110,7 @@ public:
     library::Favorites& favorites() { return favorites_; }
     library::Thumbnails& thumbnails() { return thumbnails_; }
     ImageCache& images() { return images_; }
+    SystemIntegration& system() { return system_; }
 
     // Small UI state that is not a user setting (ui.json): control bar layout,
     // per-page view modes, sidebar state, window placement.
@@ -168,6 +170,8 @@ private:
     void ApplyTheme();
     void OnConfigChanged(const std::string& key);
     void SaveHistoryPosition();
+    void SaveWindowPlacement();
+    void RestoreWindowPlacement();
     void LoadUiState();
     void SaveUiState();
 
@@ -180,6 +184,7 @@ private:
     library::Favorites favorites_;
     library::Thumbnails thumbnails_;
     ImageCache images_{thumbnails_};
+    SystemIntegration system_;
     std::map<std::string, std::string> ui_;
     bool uiDirty_ = false;
     double lastHistorySave_ = 0;

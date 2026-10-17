@@ -254,6 +254,7 @@ void MainWindow::PaintSkeleton(HDC dc) {
 }
 
 bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) {
+    if (TheApp().system().HandleMessage(msg, wp, lp, result)) return true;
     switch (msg) {
         case WM_APP_MPV_READY:
             TheApp().OnPlayerReady(wp != 0);
