@@ -112,9 +112,16 @@ bool History::RecordPlay(const std::wstring& path, const std::wstring& title, do
 
 bool History::UpdatePosition(const std::wstring& path, double position, double duration) {
     if (path.empty() || IsExcluded(path)) return false;
+    position = std::isfinite(position) ? std::max(0.0, position) : 0;
+    // Paused (or saved again within a second): nothing changed, so don't rewrite history.json.
+    if (!entries_.empty() && PathKey(entries_.front().path) == PathKey(path)) {
+        const HistoryEntry& f = entries_.front();
+        const bool sameDuration = !(duration > 0 && std::isfinite(duration)) || std::abs(f.duration - duration) < 1;
+        if (std::abs(f.position - position) < 1 && sameDuration && !f.title.empty()) return true;
+    }
     HistoryEntry* e = Touch(path);
     if (e->title.empty()) e->title = StemOf(path);
-    e->position = std::isfinite(position) ? std::max(0.0, position) : 0;
+    e->position = position;
     if (duration > 0 && std::isfinite(duration)) e->duration = duration;
     return true;
 }

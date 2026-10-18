@@ -1073,6 +1073,12 @@ void TestHistory() {
         CHECK(h.Dirty());
         CHECK(h.Flush());
         CHECK(!h.Dirty());
+
+        // Paused: the 3 s save repeats the same position and must not rewrite the file.
+        CHECK(h.UpdatePosition(L"E:\\Music\\b.mp3", 42, 200) && h.Dirty() && h.Flush());
+        CHECK(h.UpdatePosition(L"e:\\music\\B.mp3", 42.4, 200.2) && !h.Dirty());
+        CHECK(h.UpdatePosition(L"E:\\Music\\b.mp3", 43.5, 200) && h.Dirty() && h.Flush());
+        CHECK(h.Find(L"E:\\Music\\b.mp3")->position == 43.5);
     }
     {
         library::History h;
