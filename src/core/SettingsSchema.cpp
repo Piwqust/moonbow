@@ -1013,10 +1013,12 @@ void BuildMedia(Builder& b) {
               L"Язык меню DVD и Blu-ray, если на диске их несколько.")
         .Hidden();  // not implemented yet
     b.Number("playback.audioTrack", L"Default audio track", L"Аудиодорожка по умолчанию", 0, 99, 1, 0)
+        .Hint(L"Auto", L"Авто")
         .Desc(L"Track number to start with. 0 picks automatically by the preferred language.",
               L"С какой дорожки начинать. 0 — выбрать автоматически по предпочтительному языку.")
         .MpvBuild("aid", BuildAid, "auto");
     b.Number("playback.subtitleTrack", L"Default subtitle track", L"Дорожка субтитров по умолчанию", 0, 99, 1, 0)
+        .Hint(L"Auto", L"Авто")
         .Desc(L"Subtitle track number to start with. 0 picks automatically by the preferred language.",
               L"С какой дорожки субтитров начинать. 0 — выбрать автоматически по предпочтительному языку.")
         .MpvBuild("sid", BuildSid, "auto");
@@ -1091,14 +1093,14 @@ void BuildMedia(Builder& b) {
     b.inferred = true;
     b.Sec("quality", L"Image Quality", L"Качество изображения");
     {
-        auto q = b.Pick("video.quality", L"Image quality", L"Качество изображения",
+        auto q = b.Pick("video.quality", L"Preset", L"Пресет",
                         {{"fast", L"Fast", L"Быстро"},
                          {"balanced", L"Balanced", L"Сбалансированно"},
                          {"high", L"High quality", L"Максимум"}},
                         "balanced");
-        q.Desc(L"How the picture is scaled and processed on the graphics card. Fast suits weak or battery-powered "
+        q.Desc(L"Image quality preset: how the picture is scaled and processed on the graphics card. Fast suits weak or battery-powered "
                L"laptops; High quality needs a dedicated graphics card for 4K.",
-               L"Как видеокарта масштабирует и обрабатывает картинку. «Быстро» подходит слабым ноутбукам и работе "
+               L"Пресет качества изображения: как видеокарта масштабирует и обрабатывает картинку. «Быстро» подходит слабым ноутбукам и работе "
                L"от батареи; для «Максимума» в 4K нужна дискретная видеокарта.")
             .MpvBuild("scale", BuildScale, "lanczos")
             .MpvBuild("dscale", BuildFastScaler, "hermite")
@@ -1180,6 +1182,7 @@ void BuildMedia(Builder& b) {
         .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
     b.Number("video.targetPeak", L"Display peak brightness", L"Пиковая яркость экрана", 0, 10000, 10, 0)
         .Unit(L"nits", L"нит")
+        .Hint(L"Auto", L"Авто")
         .Desc(L"Brightest white your screen can show. 0 detects it automatically.",
               L"Самый яркий белый, который может показать экран. 0 — определить автоматически.")
         .MpvBuild("target-peak", BuildTargetPeak, "auto");
@@ -1202,10 +1205,10 @@ void BuildMedia(Builder& b) {
     // Enabled user shaders ("a.glsl|b.hook" in <data>\shaders); toggled in the player's quick settings.
     b.Sec("shaders", L"Shaders", L"Шейдеры");
     b.Text("video.shaders", L"Custom shaders", L"Свои шейдеры")
-        .Desc(L"Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Lumen, separated by |. Easier to "
-              L"turn on one by one in the player: Settings > Video > Shaders.",
-              L"Файлы шейдеров (.glsl, .hook) из папки shaders в %APPDATA%\\Lumen через |. Проще включать по одному "
-              L"в плеере: «Настройки > Видео > Шейдеры».")
+        .Desc(L"Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Lumen. Put files there and turn "
+              L"them on here or in the player's quick settings.",
+              L"Файлы шейдеров (.glsl, .hook) из папки shaders в %APPDATA%\\Lumen. Положите файлы туда и включайте "
+              L"их здесь или в быстрых настройках плеера.")
         .MpvBuild("glsl-shaders", BuildGlslShaders, "");
     b.inferred = false;
 
@@ -1227,7 +1230,7 @@ void BuildMedia(Builder& b) {
     b.Button("video.resetPicture", L"Reset picture", L"Сбросить изображение", "reset-picture", L"Reset", L"Сбросить");
 
     b.Sec("deinterlacing", L"Deinterlacing", L"Устранение чересстрочности");
-    b.Pick("video.deinterlace", L"Deinterlacing", L"Устранение чересстрочности",
+    b.Pick("video.deinterlace", L"Mode", L"Режим",
            {{"auto", L"Automatic", L"Автоматически"}, {"on", L"On", L"Вкл."}, {"off", L"Off", L"Выкл."}}, "auto")
         .Desc(L"Remove comb lines from interlaced video (TV recordings, DVDs). Automatic applies it only to "
               L"interlaced frames.",
@@ -1423,6 +1426,13 @@ void BuildMedia(Builder& b) {
         .Desc(L"Extra gain added on top of replay gain.", L"Дополнительное усиление поверх Replay Gain.")
         .When("audio.replayGain", "off", true)
         .Mpv("replaygain-preamp");
+    // Shown only while both are on: loudnorm re-levels what replay gain just set.
+    b.Info("audio.loudnessConflict", L"Loudness normalization re-levels the sound after Replay Gain, so Replay Gain "
+                                     L"has no audible effect. Keep one of them on.",
+           L"Выравнивание громкости заново меняет уровень после Replay Gain, и Replay Gain перестаёт влиять на звук. "
+           L"Оставьте что-то одно.",
+           "loudness-conflict")
+        .Inferred();
 
     b.Sec("effects", L"Effects", L"Эффекты");
     b.Toggle("audio.eq", L"Equalizer", L"Эквалайзер", false)
@@ -1628,6 +1638,8 @@ void BuildMedia(Builder& b) {
     b.inferred = false;
 
     b.Sec("appearance", L"Appearance", L"Оформление");
+    // A sample line drawn with the style below (settings/SettingsSubtitlePreview.cpp).
+    b.Info("subtitles.preview", L"Subtitle example", L"Пример субтитров", "subtitle-preview").Inferred();
     b.Text("subtitles.font", L"Font", L"Шрифт")
         .Hint(L"System, sans-serif", L"Системный, без засечек")
         .Desc(L"Font for text subtitles. Leave empty for the default sans-serif font.",
@@ -1772,7 +1784,7 @@ void BuildSystem(Builder& b) {
           L"Сеть и безопасность");
 
     b.Sec("buffering", L"Buffering", L"Буферизация");
-    b.Pick("network.buffering", L"Buffering", L"Буферизация",
+    b.Pick("network.buffering", L"Preload", L"Предзагрузка",
            {{"low", L"Low", L"Низкая"}, {"normal", L"Normal", L"Обычная"}, {"high", L"High", L"Высокая"},
             {"custom", L"Custom", L"Своя"}},
            "normal")
@@ -1798,6 +1810,31 @@ void BuildSystem(Builder& b) {
         .Unit(L"ms", L"мс")
         .When("network.buffering", "custom")
         .Hidden();  // not implemented yet
+
+    // On the main page: people who paste a YouTube link look here first.
+    b.Sec("web", L"Web Videos", L"Видео с сайтов");
+    b.inferred = true;
+    {
+        const std::wstring& ytdlp = YtDlpPath();
+        b.Toggle("network.ytdl", L"Open web pages with yt-dlp", L"Открывать веб-страницы через yt-dlp", true)
+            .Desc(ytdlp.empty() ? W(L"Play YouTube and similar links. Requires yt-dlp.exe next to Lumen or on PATH.")
+                                : L"Play YouTube and similar links with " + ytdlp,
+                  ytdlp.empty() ? W(L"Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Lumen "
+                                    L"или в PATH.")
+                                : L"Воспроизводить ссылки YouTube и похожих сайтов через " + ytdlp)
+            .MpvBuild("ytdl", BuildYtdl, "no")
+            .MpvBuild("script-opts", BuildScriptOpts);
+        // Lumen never downloads yt-dlp; without it, say where to put it.
+        ItemRef missing = b.Info("network.ytdlMissing", L"For YouTube links, put yt-dlp.exe next to Lumen.exe",
+                                 L"Для ссылок YouTube положите yt-dlp.exe рядом с Lumen.exe", "hint")
+                              .Desc(L"yt-dlp.exe was not found next to Lumen.exe or on PATH. Download it from the "
+                                    L"yt-dlp project yourself, put it there and restart Lumen.",
+                                    L"yt-dlp.exe не найден ни рядом с Lumen.exe, ни в PATH. Скачайте его с сайта "
+                                    L"проекта yt-dlp, положите туда и перезапустите Lumen.")
+                              .When("network.ytdl", "true");
+        if (!ytdlp.empty()) missing.Hidden();
+    }
+    b.inferred = false;
 
     b.Sec("proxy", L"Proxy", L"Прокси");
     b.Text("network.httpProxy", L"HTTP proxy", L"HTTP-прокси")
@@ -1839,26 +1876,6 @@ void BuildSystem(Builder& b) {
         .Hint(L"libmpv", L"libmpv")
         .Mpv("user-agent")
         .Reset("libmpv");
-    {
-        const std::wstring& ytdlp = YtDlpPath();
-        b.Toggle("network.ytdl", L"Open web pages with yt-dlp", L"Открывать веб-страницы через yt-dlp", true)
-            .Desc(ytdlp.empty() ? W(L"Play YouTube and similar links. Requires yt-dlp.exe next to Lumen or on PATH.")
-                                : L"Play YouTube and similar links with " + ytdlp,
-                  ytdlp.empty() ? W(L"Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Lumen "
-                                    L"или в PATH.")
-                                : L"Воспроизводить ссылки YouTube и похожих сайтов через " + ytdlp)
-            .MpvBuild("ytdl", BuildYtdl, "no")
-            .MpvBuild("script-opts", BuildScriptOpts);
-        // Lumen never downloads yt-dlp; without it, say where to put it.
-        ItemRef missing = b.Info("network.ytdlMissing", L"For YouTube links, put yt-dlp.exe next to Lumen.exe",
-                                 L"Для ссылок YouTube положите yt-dlp.exe рядом с Lumen.exe", "hint")
-                              .Desc(L"yt-dlp.exe was not found next to Lumen.exe or on PATH. Download it from the "
-                                    L"yt-dlp project yourself, put it there and restart Lumen.",
-                                    L"yt-dlp.exe не найден ни рядом с Lumen.exe, ни в PATH. Скачайте его с сайта "
-                                    L"проекта yt-dlp, положите туда и перезапустите Lumen.")
-                              .When("network.ytdl", "true");
-        if (!ytdlp.empty()) missing.Hidden();
-    }
 
     // ===== Performance =====
     b.Cat("performance", "system", "preferences", L"Performance", L"Производительность", L"Performance Settings",
@@ -1896,6 +1913,7 @@ void BuildSystem(Builder& b) {
               L"Ускоряет программное декодирование на слабых компьютерах ценой качества картинки.")
         .Mpv("vd-lavc-skiploopfilter");
     b.Number("performance.decodeThreads", L"Decoding threads", L"Потоки декодирования", 0, 64, 1, 0)
+        .Hint(L"Auto", L"Авто")
         .Desc(L"CPU threads for software decoding. 0 picks automatically.",
               L"Потоки процессора для программного декодирования. 0 — автоматически.")
         .MpvBuild("vd-lavc-threads", BuildDecodeThreads);
@@ -2034,6 +2052,7 @@ void BuildSystem(Builder& b) {
            "mkv")
         .Hidden();  // not implemented yet
     b.Number("recording.videoBitrate", L"Video bitrate", L"Битрейт видео", 0, 100000, 100, 0)
+        .Hint(L"Auto", L"Авто")
         .Unit(L"kbit/s", L"кбит/с")
         .Desc(L"0 lets the encoder choose from the preset.", L"0 — кодировщик выбирает сам по пресету.")
         .Hidden();  // not implemented yet
