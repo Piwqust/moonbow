@@ -10,13 +10,15 @@ The owner's request on 2026-10-18: "делай пункт 7". The owner's decisi
 
 | Agent | Area | Status |
 |---|---|---|
-| r7-music | crossfade, the visualizer (process loopback) | running |
-| r7-perfile | per-file settings | running |
-| r7-subwords | clicking a word in subtitles | running |
-| r7-skins | skins and token JSON, hot reload, contrast check | running |
-| r7-library | own tag parser, scan banner, "Новое"/"Битый файл" badges | running |
-| r7-leftovers | round 3 leftovers and unchecked areas (CPU filters live, mini player cover, R3-16, close time, recording and snapshots, handoff, tray) | running |
-| r7-online | HTTP module, LRCLIB, OpenSubtitles, TMDB | running |
+| r7-music | crossfade, the visualizer (process loopback) | ✅ merged |
+| r7-perfile | per-file settings | ✅ merged (+ coordinator follow-ups 18fb3bc) |
+| r7-subwords | clicking a word in subtitles | ✅ merged |
+| r7-skins | skins and token JSON, hot reload, contrast check | ✅ merged |
+| r7-library | own tag parser, scan banner, "Новое"/"Битый файл" badges | ✅ merged |
+| r7-leftovers | round 3 leftovers and unchecked areas (CPU filters live, mini player cover, R3-16, close time, recording and snapshots, handoff, tray) | ✅ merged |
+| r7-online | HTTP module, LRCLIB, OpenSubtitles, TMDB | ✅ merged (4b06089: SYLT lyrics reach the view) |
+
+All merged at 4b06089: 47 tests, 6431 checks, checks clean. Test exe: %TEMP%\lumen-qa\r7-m7. ⏳ The full sweep is running; then perf and the r7-verify agent.
 
 Not done, with reasons:
 - **slim libmpv:** needs the mpv sources downloaded and built; downloading is forbidden.
