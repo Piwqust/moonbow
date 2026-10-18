@@ -245,6 +245,16 @@ def clip_by_scrollers(n: Node):
     return r
 
 
+def overlay_root(n: Node, overlay: set):
+    """The nearest ancestor (or self) whose type is an overlay, None for in-flow widgets."""
+    p = n
+    while p is not None:
+        if p.type in overlay:
+            return p
+        p = p.parent
+    return None
+
+
 def is_leaf(n: Node):
     return not any(c.visible for c in n.children)
 
@@ -352,8 +362,8 @@ def check_tree(win: Window, allow: dict, emit):
                     continue
                 if a.type in overlay or b.type in overlay:
                     continue
-                if any(x.type in overlay for x in ancestors(a)) != any(x.type in overlay for x in ancestors(b)):
-                    continue  # one of them sits in an overlay (chip, toast...) over the other
+                if overlay_root(a, overlay) is not overlay_root(b, overlay):
+                    continue  # one of them sits in an overlay (mini player, chip, toast...) over the other
                 emit("overlap-cross", "medium", a, b, f"{a.label()} ∩ {b.label()} = {fmt_rect(r)}")
 
     # clip-parent / clip-window / offscreen: report the topmost offender only.
@@ -425,9 +435,12 @@ def check_tree(win: Window, allow: dict, emit):
             continue
         cx, cy = n.x + n.w / 2, n.y + n.h / 2
         crowded = None
+        root = overlay_root(n, overlay)
         for o in targets:
             if o is n or o.layer != n.layer or o in ancestors(n) or n in ancestors(o):
                 continue
+            if overlay_root(o, overlay) is not root:
+                continue  # one floats over the other (mini player over the grid): not neighbours
             if o.w < min_target or o.h < min_target:
                 d = math.hypot(o.x + o.w / 2 - cx, o.y + o.h / 2 - cy)
                 if d < min_target:
@@ -507,7 +520,7 @@ def check_hitmap(win: Window, text: str, step: int, state: str, allow: dict, emi
         why = ""
         if code in RESIZE:
             if framed and at_edge:
-                expected = True
+                continue  # the real resize border; it may cover the outer pixels of edge controls, like any Windows app
             else:
                 why = "resize border away from the real edge" if framed else f"resize border in a {state} window"
         elif code == "HTCAPTION":
@@ -569,6 +582,8 @@ def main(argv=None):
     ap.add_argument("--context", default="", help="scenario name, matched by allowlist rules with \"context\"")
     ap.add_argument("--window", default=None, help="audit only windows whose title matches this regex")
     ap.add_argument("--quiet", action="store_true", help="no markdown on stdout")
+    ap.add_argument("--md", help="also write the markdown report to this file (UTF-8)")
+    ap.add_argument("--hitmap-window", default=None, help="regex on the window title the hit map belongs to (default: the first window)")
     args = ap.parse_args(argv)
 
     allow = {}
@@ -610,7 +625,8 @@ def main(argv=None):
             findings.append(f)
 
         check_tree(win, allow, emit)
-        if hit_text is not None and wi == 0:
+        hit_win = next((i for i, w in enumerate(windows) if args.hitmap_window and re.search(args.hitmap_window, w.title)), 0)
+        if hit_text is not None and wi == hit_win:
             check_hitmap(win, hit_text, args.hitmap_step, state, allow, emit)
 
     # De-duplicate identical findings (same check, widget and detail).
@@ -633,7 +649,7 @@ def main(argv=None):
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=1)
 
-    if not args.quiet:
+    if not args.quiet or args.md:
         out = []
         out.append(f"# UI audit: {os.path.basename(args.tree)}" + (f" ({args.context})" if args.context else ""))
         out.append("")
@@ -659,8 +675,13 @@ def main(argv=None):
                 reasons[(f["check"], f["allowed"])] += 1
             for (c, why), n in sorted(reasons.items()):
                 out.append(f"- `{c}` x{n}: {why}")
-        sys.stdout.reconfigure(encoding="utf-8")
-        print("\n".join(out))
+        text = "\n".join(out) + "\n"
+        if args.md:
+            with open(args.md, "w", encoding="utf-8") as f:
+                f.write(text)
+        if not args.quiet:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stdout.write(text)
     return 0
 
 
