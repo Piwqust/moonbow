@@ -547,12 +547,14 @@ void AddFilesToQueue() {
     if (wasEmpty || !PS().fileLoaded) TheApp().PlayIndex(TheApp().queue().Current() < 0 ? 0 : TheApp().queue().Current());
 }
 
-// Repeat button with a small "1" for repeat-one.
+// Repeat button with a small "1" for repeat-one (the queue header and the control bar).
 class RepeatButton : public IconButton {
 public:
-    RepeatButton() : IconButton("repeat_right", Tr(L"Repeat")) {
-        width = Length::Px(30);
-        height = Length::Px(28);
+    explicit RepeatButton(bool header) : IconButton("repeat_right", Tr(L"Repeat")) {
+        if (header) {
+            width = Length::Px(30);
+            height = Length::Px(28);
+        }
         onClick = [] { Run(Action::ToggleRepeat); };
         conn_ = Connect(TheApp().queue().changed, [this] { Invalidate(); });
     }
@@ -605,7 +607,7 @@ public:
             ShowMenu(GetHost(), sort_->rect, std::move(items), Place::Below, 220);
         });
         if (!compact) {
-            header_->Add<RepeatButton>();
+            header_->Add<RepeatButton>(true);
             header_->Add<ShuffleButton>();
         }
         HeaderButton(header_, "remove", L"Remove selected", [this] {
@@ -856,8 +858,13 @@ public:
         width = Length::Grow();
         pad = {20, 20, 20, 20};
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-            if (m & (kChangeChapters | kChangeFile)) InvalidateLayout();
-            else if (m & (kChangeTime | kChangeState)) Invalidate();
+            if (m & (kChangeChapters | kChangeFile)) {
+                InvalidateLayout();
+            } else if (m & (kChangeTime | kChangeState)) {
+                // Time ticks only matter when they move the highlight to another chapter.
+                const int cur = CurrentChapter();
+                if (cur != paintedCurrent_) Invalidate();
+            }
         });
     }
     static constexpr float kPitch = 44, kRowH = 32;
@@ -891,7 +898,12 @@ public:
             return;
         }
         const int cur = CurrentChapter();
-        for (int i = 0; i < n; ++i) {
+        paintedCurrent_ = cur;
+        // Only the rows in view (an audiobook has hundreds of chapters).
+        const Rect clip = p.Clip();
+        const int first = std::max(0, static_cast<int>((clip.y - rect.y - pad.t) / kPitch) - 1);
+        const int last = std::min(n - 1, static_cast<int>((clip.Bottom() - rect.y - pad.t) / kPitch) + 1);
+        for (int i = first; i <= last; ++i) {
             const Chapter& ch = PS().chapters[static_cast<size_t>(i)];
             const Rect r = RowRect(i);
             const bool hot = i == hover_ && IsHot();
@@ -946,6 +958,7 @@ public:
 
 private:
     int hover_ = -1, selected_ = -1;
+    int paintedCurrent_ = -2;  // the chapter highlighted by the last paint
     ScopedConnection conn_;
 };
 
@@ -953,6 +966,10 @@ private:
 
 std::unique_ptr<Widget> BuildQueueTab(bool compact) {
     return std::make_unique<QueueTab>(compact);
+}
+
+std::unique_ptr<IconButton> MakeRepeatButton() {
+    return std::make_unique<RepeatButton>(false);
 }
 
 std::unique_ptr<Widget> BuildBookmarksTab() {

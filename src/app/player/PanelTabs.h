@@ -5,6 +5,10 @@
 
 #include <memory>
 
+namespace ui {
+class IconButton;
+}
+
 namespace app::panel {
 
 class Popover;
@@ -13,6 +17,8 @@ class Popover;
 std::unique_ptr<ui::Widget> BuildQueueTab(bool compact);
 std::unique_ptr<ui::Widget> BuildBookmarksTab();
 std::unique_ptr<ui::Widget> BuildChaptersTab();
+// The Repeat button that tells One from All (a small "1"), at the control bar's size.
+std::unique_ptr<ui::IconButton> MakeRepeatButton();
 
 // Tracks: 0 video, 1 audio, 2 subtitles.
 std::unique_ptr<ui::Widget> BuildTracksTab(int tab);

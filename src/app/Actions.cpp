@@ -687,14 +687,27 @@ bool VideoWheel(float delta, bool horizontal) {
         return true;
     }
     if (mode == "volume") {
-        const double step = std::clamp(c.GetDouble("audio.volumeStep"), 1.0, 25.0);
-        Player& p = TheApp().player();
-        if (PS().mute) p.SetMute(false);
-        p.SetVolume(std::round(PS().volume + step * delta));
-        Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), VolumeIcon(PS().volume, false));
+        WheelVolume(delta, true);
         return true;
     }
     return false;
+}
+
+void WheelVolume(float delta, bool toast) {
+    const double step = std::clamp(TheApp().config().GetDouble("audio.volumeStep"), 1.0, 25.0);
+    // A touchpad sends tenths of a notch: they add up to whole percents instead of each one
+    // rounding back to the same volume.
+    static double carry = 0;
+    if ((carry > 0 && delta < 0) || (carry < 0 && delta > 0)) carry = 0;
+    carry += step * delta;
+    const double whole = std::trunc(carry);
+    if (whole == 0) return;
+    carry -= whole;
+    Player& p = TheApp().player();
+    if (PS().mute) p.SetMute(false);
+    p.SetVolume(std::round(PS().volume) + whole);
+    if (toast)
+        Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), VolumeIcon(PS().volume, false));
 }
 
 const char* VolumeIcon(double volume, bool mute) {
