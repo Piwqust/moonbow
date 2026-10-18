@@ -1374,7 +1374,8 @@ void BuildMedia(Builder& b) {
              L"Для файлов из Проводника", true)
         .Desc(L"Also reuse the window for files opened from Explorer.",
               L"Использовать то же окно и для файлов, открытых из Проводника.")
-        .When("library.singleInstance", "true");
+        .When("library.singleInstance", "true")
+        .Hidden();  // not implemented yet: Explorer launches look like any other
     b.Toggle("library.enqueue", L"Add to the playlist instead of replacing it", L"Добавлять в плейлист, а не заменять",
              false)
         .Desc(L"Files opened in a running window are appended to the playlist.",

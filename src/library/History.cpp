@@ -26,7 +26,10 @@ bool History::Load() {
         return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) return false;
+    if (!doc) {
+        BackupCorruptFile(DataFilePath(L"history.json"));  // the next save would overwrite it
+        return false;
+    }
     const json::Value* items = doc->Find("items");
     if (!items) return true;
     for (const json::Value& v : items->AsArray()) {

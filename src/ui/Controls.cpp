@@ -967,6 +967,8 @@ void Panel::Paint(Painter& p) {
 
 namespace {
 
+// Long menus scroll, and typing filters the items (as in uosc): the query shows in a row on
+// top, Backspace edits it, Esc clears it before closing the menu.
 class MenuPopup : public Widget {
 public:
     MenuPopup(std::vector<MenuItem> items, float minWidth, MenuPopup* parentMenu)
@@ -975,6 +977,7 @@ public:
         focusable = true;
         hasIcons_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return !m.icon.empty(); });
         hasChecks_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return m.checked; });
+        Refilter();
     }
 
     MenuPopup* Root() {
@@ -983,6 +986,7 @@ public:
         return m;
     }
 
+    // The size stays that of the full list while filtering, so the menu doesn't jump.
     Size MeasureContent(float, float availH) override {
         float w = minWidth_, h = kMenuPad * 2;
         for (const MenuItem& m : items_) {
@@ -1000,18 +1004,22 @@ public:
     }
 
     int IndexAt(float y) const {
-        float cy = rect.y + kMenuPad;
-        for (size_t i = 0; i < items_.size(); ++i) {
-            const float h = items_[i].separator ? kMenuSepH : kMenuItemH;
-            if (y >= cy && y < cy + h) return items_[i].separator ? -1 : static_cast<int>(i);
+        if (y < rect.y + kMenuPad + HeaderH() || y >= rect.Bottom() - kMenuPad) return -1;
+        float cy = Top();
+        for (int i : visible_) {
+            const float h = RowH(i);
+            if (y >= cy && y < cy + h) return items_[static_cast<size_t>(i)].separator ? -1 : i;
             cy += h;
         }
         return -1;
     }
 
     Rect ItemRect(int index) const {
-        float cy = rect.y + kMenuPad;
-        for (int i = 0; i < index; ++i) cy += items_[static_cast<size_t>(i)].separator ? kMenuSepH : kMenuItemH;
+        float cy = Top();
+        for (int i : visible_) {
+            if (i == index) break;
+            cy += RowH(i);
+        }
         return {rect.x + 4, cy, rect.w - 8, kMenuItemH};
     }
 
@@ -1020,16 +1028,31 @@ public:
         p.Shadow(rect, 6);
         p.Fill(rect, c.bgMenu, 6);
         p.Stroke(rect, c.line, 6);
-        float cy = rect.y + kMenuPad;
-        for (size_t i = 0; i < items_.size(); ++i) {
-            const MenuItem& m = items_[i];
+        if (!filter_.empty()) {
+            const Rect row{rect.x + 4, rect.y + kMenuPad, rect.w - 8, kMenuItemH};
+            p.Icon("search", {row.x + 12, row.Cy() - 10, 20, 20}, c.textTertiary);
+            p.Text(filter_, {row.x + 48, row.y, row.w - 60, row.h}, TextStyle::Body, c.textPrimary, HAlign::Leading,
+                   VAlign::Center, gfx::kTextEllipsis);
+            p.Fill({rect.x + 12, row.Bottom() + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
+            if (visible_.empty())
+                p.Text(L"\u2014", {row.x + 48, row.Bottom() + kMenuSepH, row.w - 48, kMenuItemH}, TextStyle::Body,
+                       c.textTertiary, HAlign::Leading, VAlign::Center, 0);
+        }
+        p.PushClip({rect.x, rect.y + kMenuPad + HeaderH(), rect.w, rect.h - kMenuPad * 2 - HeaderH()});
+        float cy = Top();
+        for (int i : visible_) {
+            const MenuItem& m = items_[static_cast<size_t>(i)];
             if (m.separator) {
                 p.Fill({rect.x + 12, cy + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
                 cy += kMenuSepH;
                 continue;
             }
+            if (cy > rect.Bottom() || cy + kMenuItemH < rect.y) {
+                cy += kMenuItemH;
+                continue;
+            }
             const Rect row{rect.x + 4, cy, rect.w - 8, kMenuItemH};
-            const bool hot = static_cast<int>(i) == highlight_ && m.enabled;
+            const bool hot = i == highlight_ && m.enabled;
             if (hot) p.Fill(row, c.hover, 4);
             const Color fg = !m.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
             float x = row.x + 12;
@@ -1057,10 +1080,25 @@ public:
             p.Text(m.label, {x, row.y, right - x, row.h}, TextStyle::Body, m.checked && m.enabled ? c.textPrimary : fg);
             cy += kMenuItemH;
         }
+        p.PopClip();
+        if (MaxScroll() > 0) {  // thin position marker, like ScrollView's
+            const float trackH = rect.h - kMenuPad * 2 - HeaderH();
+            const float thumbH = std::max(24.0f, trackH * trackH / (trackH + MaxScroll()));
+            const float y = rect.y + kMenuPad + HeaderH() + (trackH - thumbH) * scroll_ / MaxScroll();
+            p.Fill({rect.Right() - 5, y, 3, thumbH}, c.lineStrong, 1.5f);
+        }
     }
 
     bool OnMouseMove(const MouseEvent& e) override {
         SetHighlight(IndexAt(e.y), false);
+        return true;
+    }
+
+    bool OnWheel(const WheelEvent& e) override {
+        if (MaxScroll() <= 0) return true;
+        scroll_ = std::clamp(scroll_ - e.delta * kMenuItemH * 2, 0.0f, MaxScroll());
+        SetHighlight(IndexAt(GetHost()->MousePos().y), false);
+        Invalidate();
         return true;
     }
 
@@ -1074,20 +1112,39 @@ public:
     }
 
     bool OnKeyDown(const KeyEvent& e) override {
-        const int n = static_cast<int>(items_.size());
         auto step = [&](int delta) {
-            int i = highlight_;
+            const int n = static_cast<int>(visible_.size());
+            if (n == 0) return;
+            int pos = static_cast<int>(std::find(visible_.begin(), visible_.end(), highlight_) - visible_.begin());
+            if (pos >= n) pos = delta > 0 ? -1 : n;
             for (int k = 0; k < n; ++k) {
-                i = (i + delta + n) % n;
-                if (!items_[static_cast<size_t>(i)].separator && items_[static_cast<size_t>(i)].enabled) break;
+                pos = (pos + delta + n) % n;
+                const MenuItem& m = items_[static_cast<size_t>(visible_[static_cast<size_t>(pos)])];
+                if (!m.separator && m.enabled) break;
             }
-            SetHighlight(i, false);
+            SetHighlight(visible_[static_cast<size_t>(pos)], true);
         };
         switch (e.key) {
             case VK_DOWN: step(1); return true;
             case VK_UP: step(-1); return true;
-            case VK_RETURN:
-            case VK_SPACE: Activate(highlight_); return true;
+            case VK_HOME: highlight_ = -1; step(1); return true;
+            case VK_END: highlight_ = -1; step(-1); return true;
+            case VK_RETURN: Activate(highlight_); return true;
+            case VK_SPACE:
+                if (!filter_.empty()) return true;  // typed into the query (WM_CHAR)
+                Activate(highlight_);
+                return true;
+            case VK_BACK:
+                if (!filter_.empty()) {
+                    filter_.pop_back();
+                    Refilter();
+                }
+                return true;
+            case VK_ESCAPE:
+                if (filter_.empty()) return false;
+                filter_.clear();
+                Refilter();
+                return true;
             case VK_RIGHT:
                 if (highlight_ >= 0 && !items_[static_cast<size_t>(highlight_)].submenu.empty()) OpenSubmenu(highlight_, true);
                 return true;
@@ -1097,12 +1154,73 @@ public:
                     return true;
                 }
                 return false;
-            default: return false;
+            default:
+                // Letters, digits and punctuation go to the query (OnChar), not to the
+                // window's single-key shortcuts.
+                return !e.mods.ctrl && !e.mods.alt &&
+                       ((e.key >= '0' && e.key <= 'Z') || (e.key >= VK_OEM_1 && e.key <= VK_OEM_8) ||
+                        (e.key >= VK_NUMPAD0 && e.key <= VK_DIVIDE));
         }
     }
 
+    bool OnChar(wchar_t ch) override {
+        if (ch < 0x20 || filter_.size() >= 40) return false;
+        if (ch == L' ' && filter_.empty()) return false;
+        filter_ += ch;
+        Refilter();
+        return true;
+    }
+
 private:
+    float HeaderH() const { return filter_.empty() ? 0.0f : kMenuItemH + kMenuSepH; }
+    float RowH(int i) const { return items_[static_cast<size_t>(i)].separator ? kMenuSepH : kMenuItemH; }
+    float Top() const { return rect.y + kMenuPad + HeaderH() - scroll_; }
+    float ContentH() const {
+        float h = 0;
+        for (int i : visible_) h += RowH(i);
+        return h;
+    }
+    float MaxScroll() const { return std::max(0.0f, ContentH() - (rect.h - kMenuPad * 2 - HeaderH())); }
+
+    static bool Matches(const std::wstring& label, const std::wstring& query) {
+        return FindNLSStringEx(LOCALE_NAME_USER_DEFAULT,
+                               FIND_FROMSTART | LINGUISTIC_IGNORECASE | LINGUISTIC_IGNOREDIACRITIC, label.c_str(),
+                               static_cast<int>(label.size()), query.c_str(), static_cast<int>(query.size()),
+                               nullptr, nullptr, nullptr, 0) >= 0;
+    }
+
+    void Refilter() {
+        visible_.clear();
+        for (size_t i = 0; i < items_.size(); ++i) {
+            const MenuItem& m = items_[i];
+            if (filter_.empty() || (!m.separator && Matches(m.label, filter_))) visible_.push_back(static_cast<int>(i));
+        }
+        scroll_ = 0;
+        if (!filter_.empty()) {
+            int first = -1;
+            for (int i : visible_)
+                if (items_[static_cast<size_t>(i)].enabled) {
+                    first = i;
+                    break;
+                }
+            SetHighlight(first, true);
+        }
+        Invalidate();
+    }
+
+    void ScrollIntoView(int i) {
+        if (i < 0 || rect.h <= 0) return;
+        const Rect r = ItemRect(i);
+        const float top = rect.y + kMenuPad + HeaderH(), bottom = rect.Bottom() - kMenuPad;
+        if (r.y < top)
+            scroll_ -= top - r.y;
+        else if (r.Bottom() > bottom)
+            scroll_ += r.Bottom() - bottom;
+        scroll_ = std::clamp(scroll_, 0.0f, MaxScroll());
+    }
+
     void SetHighlight(int i, bool fromKeyboard) {
+        if (fromKeyboard) ScrollIntoView(i);
         if (i == highlight_) return;
         highlight_ = i;
         Invalidate();
@@ -1134,7 +1252,7 @@ private:
             if (child_ == raw) child_ = nullptr;
         };
         child_ = static_cast<MenuPopup*>(host->ShowPopup(std::move(sub), o));
-        if (focus) raw->SetHighlight(0, true);
+        if (focus) raw->SetHighlight(raw->visible_.empty() ? -1 : raw->visible_.front(), true);
     }
 
     void Activate(int i) {
@@ -1152,10 +1270,13 @@ private:
     }
 
     std::vector<MenuItem> items_;
+    std::vector<int> visible_;  // indices into items_ that match the query, in order
+    std::wstring filter_;
     float minWidth_;
     MenuPopup* parentMenu_;
     MenuPopup* child_ = nullptr;
     int highlight_ = -1;
+    float scroll_ = 0;
     bool hasIcons_ = false, hasChecks_ = false;
     UINT_PTR submenuTimer_ = 0;
 };

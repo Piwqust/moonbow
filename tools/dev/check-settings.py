@@ -37,7 +37,8 @@ for key, chain in items:
     if re.search(r'Button\(|Info\(', chain[:40]):
         continue
     needle = '"' + key + '"'
-    if needle in code or needle in builders:
+    # main.cpp looks for '\"library.singleInstance\"' in the raw settings text.
+    if needle in code or needle in builders or needle.replace('"', '\\"') in code:
         continue
     # prefix lookups like GetString("audio.eq" + ...) are rare; report them for a manual look
     unused.append(key)

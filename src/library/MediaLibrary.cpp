@@ -437,7 +437,10 @@ bool MediaLibrary::Load() {
         return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) return false;
+    if (!doc) {
+        BackupCorruptFile(DataFilePath(L"library.json"));  // the next save would overwrite it
+        return false;
+    }
     std::vector<std::wstring> roots;
     if (const json::Value* list = doc->Find("roots"))
         for (const json::Value& r : list->AsArray())

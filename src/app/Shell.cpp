@@ -78,7 +78,7 @@ public:
         const float ix = owner_->Collapsed() ? rect.Cx() - 12 : rect.x + 12;
         p.Icon("add", {ix, rect.Cy() - 12, 24, 24}, fg);
         if (!owner_->Collapsed())
-            p.Text(Tr(L"Add item"), {rect.x + 48, rect.y, rect.w - 56, rect.h}, TextStyle::Body, fg);
+            p.Text(Tr(L"Add Item"), {rect.x + 48, rect.y, rect.w - 56, rect.h}, TextStyle::Body, fg);
     }
 
 private:
@@ -261,7 +261,7 @@ void NavSidebar::SetCollapsed(bool collapsed) {
     // Icons-only rail: the labels move into tooltips.
     for (auto& c : Children()) {
         if (auto* item = dynamic_cast<NavItem*>(c.get())) item->tooltip = collapsed ? Tr(item->Name()) : L"";
-        else c->tooltip = collapsed ? Tr(L"Add item") : L"";
+        else c->tooltip = collapsed ? Tr(L"Add Item") : L"";
         c->tooltipBeside = collapsed;
     }
     InvalidateLayout();

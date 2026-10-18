@@ -248,7 +248,7 @@ void RemoveSelected(Host* host) {
         return;
     }
     const Addon a = *g_list->Selected();
-    Confirm(host, Tr(L"Remove add-on?"), Fmt(Tr(L"“{0}” will be moved to the Recycle Bin."), {a.name}), Tr(L"Remove"), [a] {
+    Confirm(host, Tr(L"Remove add-on?"), Fmt(Tr(L"“{0}” will be moved to the Recycle Bin."), {a.name}), Tr(L"Delete"), [a] {
         // Recycle Bin, so a removal can be undone from Explorer.
         std::wstring from = a.path;
         from.push_back(L'\0');

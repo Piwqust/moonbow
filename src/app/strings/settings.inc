@@ -7,7 +7,6 @@
 {L"All settings in “{0}” return to their default values.", L"Все настройки раздела «{0}» вернутся к значениям по умолчанию."},
 {L"Reset", L"Сбросить"},
 {L"Browse", L"Обзор"},
-{L"Remove", L"Удалить"},
 {L"Not available yet", L"Пока недоступно"},
 {L"Clear history?", L"Очистить историю?"},
 {L"Expand settings", L"Развернуть настройки"},

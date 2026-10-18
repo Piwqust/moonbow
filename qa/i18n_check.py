@@ -2,7 +2,7 @@ import collections
 import pathlib
 import re
 
-root = pathlib.Path(r"C:\Users\wheny\Desktop\CODE\lumen-player\src")
+root = pathlib.Path(__file__).resolve().parent.parent / "src"
 order = [l.split('"')[1] for l in (root / "app/I18n.cpp").read_text(encoding="utf-8").splitlines()
          if '#include "app/strings/' in l]
 pat = re.compile(r'\{L"((?:[^"\\]|\\.)*)",\s*L"((?:[^"\\]|\\.)*)"\}')

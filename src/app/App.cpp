@@ -337,7 +337,10 @@ void App::LoadUiState() {
     if (!json::ReadFileUtf8(DataFilePath(L"ui.json"), &text)) return;
     std::string error;
     auto doc = json::Parse(text, &error);
-    if (!doc || !doc->IsObject()) return;
+    if (!doc || !doc->IsObject()) {
+        BackupCorruptFile(DataFilePath(L"ui.json"));
+        return;
+    }
     for (const auto& [k, v] : doc->AsObject())
         if (v.IsString()) ui_[k] = v.AsString();
 }
@@ -460,6 +463,13 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     ControlLayoutChanged().Connect([this] { SetUiValue("controls.layout", CurrentControlLayout().Serialize()); });
     main_->StartTimer(3000, [this] { FlushStores(); }, true);
     InitDialogs();
+    // Data files that could not be parsed were kept as *.corrupt-<time>.json (core/Paths.h).
+    if (std::vector<std::wstring> bad = TakeCorruptFileNotices(); !bad.empty()) {
+        std::wstring names;
+        for (const std::wstring& n : bad) names += (names.empty() ? L"" : L", ") + n;
+        ShowToast(main_.get(), Fmt(Tr(L"Couldn't read {0}. A copy was kept and the data starts anew."), {names}),
+                  "info", 8000);
+    }
     if (UiValue("onboarded") != "1") {
         app::ShowOnboarding([this] {
             SetUiValue("onboarded", "1");

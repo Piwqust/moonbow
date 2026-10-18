@@ -22,6 +22,7 @@ bool ReadDoc(const wchar_t* name, std::optional<json::Value>* doc) {
         return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
     }
     *doc = json::Parse(text);
+    if (!doc->has_value()) BackupCorruptFile(DataFilePath(name));  // the next save would overwrite it
     return doc->has_value();
 }
 
