@@ -51,6 +51,11 @@ bool ParseEpisode(std::wstring_view name, EpisodeInfo* out);
 // title, or empty when the name is not an episode.
 std::wstring EpisodeLabel(std::wstring_view name);
 
+// How well a subtitle file name fits a video (letters and digits only, case-insensitive): 100 same
+// name, 90 the subtitle adds a suffix ("Show_E01_English"), 70 the video adds one, 60 same
+// SxxEyy / NxNN episode, 0 no match. "lecture1" never matches "lecture10".
+int SubtitleMatchScore(const std::wstring& video, const std::wstring& sub);
+
 // Disc number of a "part of set" tag: "2/3" -> 2, "1" -> 1; 0 when there is no number.
 int ParseDiscNumber(std::wstring_view partOfSet);
 

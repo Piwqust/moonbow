@@ -1200,6 +1200,14 @@ void TestMediaTypes() {
     CHECK(library::PathKey(L"c:/Видео/Ёж.mkv") == library::PathKey(L"C:\\ВИДЕО\\ЁЖ.MKV"));
     CHECK(library::SearchFold(L"ЁЛКА Ёж") == L"елка еж");
     CHECK(library::UnixMsNow() > 1700000000000LL);
+
+    // Subtitle matching (Add Subtitles): a prefix whose number goes on is another file.
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Lecture 1.mp4", L"D:\\L\\lecture1.srt") == 100);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Show_E01.mkv", L"D:\\L\\Show_E01_English.srt") == 90);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Movie (2020).mkv", L"D:\\L\\Movie.srt") == 70);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Lecture 1.mp4", L"D:\\L\\Lecture 10.srt") == 0);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Lecture 10.mp4", L"D:\\L\\Lecture 1.srt") == 0);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Show.S01E02.mkv", L"D:\\L\\show 1x02.srt") == 60);
 }
 
 void TestEpisodesAndOrder() {

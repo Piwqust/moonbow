@@ -103,53 +103,6 @@ void AttachRemembered() {
 
 // --- matching --------------------------------------------------------------------------------
 
-std::wstring MatchKey(const std::wstring& path) {
-    std::wstring out;
-    for (wchar_t c : library::StemOf(path))
-        if (std::iswalnum(c)) out.push_back(static_cast<wchar_t>(std::towlower(c)));
-    return out;
-}
-
-// "s01e02" / "1x02" -> {1, 2}; {-1, -1} when there is none.
-std::pair<int, int> EpisodeOf(const std::wstring& path) {
-    const std::wstring s = Lower(library::StemOf(path));
-    for (size_t i = 0; i + 3 < s.size(); ++i) {
-        size_t j = i;
-        if (s[j] == L's' && std::iswdigit(s[j + 1])) {
-            ++j;
-            int season = 0, ep = 0;
-            while (j < s.size() && std::iswdigit(s[j])) season = season * 10 + (s[j++] - L'0');
-            if (j < s.size() && s[j] == L'e' && j + 1 < s.size() && std::iswdigit(s[j + 1])) {
-                ++j;
-                while (j < s.size() && std::iswdigit(s[j])) ep = ep * 10 + (s[j++] - L'0');
-                return {season, ep};
-            }
-        }
-    }
-    for (size_t i = 1; i + 1 < s.size(); ++i)
-        if (s[i] == L'x' && std::iswdigit(s[i - 1]) && std::iswdigit(s[i + 1])) {
-            size_t a = i;
-            while (a > 0 && std::iswdigit(s[a - 1])) --a;
-            size_t b = i + 1;
-            int season = 0, ep = 0;
-            for (size_t k = a; k < i; ++k) season = season * 10 + (s[k] - L'0');
-            while (b < s.size() && std::iswdigit(s[b])) ep = ep * 10 + (s[b++] - L'0');
-            if (i - a <= 2) return {season, ep};
-        }
-    return {-1, -1};
-}
-
-int MatchScore(const std::wstring& video, const std::wstring& sub) {
-    const std::wstring v = MatchKey(video), s = MatchKey(sub);
-    if (v.empty() || s.empty()) return 0;
-    if (s == v) return 100;
-    if (s.rfind(v, 0) == 0) return 90;  // "Show_E01_English" for "Show_E01"
-    if (v.rfind(s, 0) == 0 && s.size() * 2 > v.size()) return 70;
-    const auto ev = EpisodeOf(video), es = EpisodeOf(sub);
-    if (ev.first >= 0 && ev == es) return 60;
-    return 0;
-}
-
 std::vector<std::wstring> ListFiles(const std::wstring& folder, bool subtitles, bool subfolders) {
     std::vector<std::wstring> out;
     WIN32_FIND_DATAW fd;
@@ -208,7 +161,7 @@ struct SubsModel {
         for (const auto& v : videos) {
             std::vector<std::pair<int, std::wstring>> scored;
             for (const auto& s : subs)
-                if (int sc = MatchScore(v, s)) scored.push_back({sc, s});
+                if (int sc = library::SubtitleMatchScore(v, s)) scored.push_back({sc, s});
             if (scored.empty()) continue;
             std::stable_sort(scored.begin(), scored.end(), [](auto& a, auto& b) { return a.first > b.first; });
             auto& list = assign[library::PathKey(v)];
@@ -218,7 +171,7 @@ struct SubsModel {
         }
         if (!current.empty())
             for (const auto& s : subs)
-                if (MatchScore(current, s) >= 60) checked.insert(library::PathKey(s));
+                if (library::SubtitleMatchScore(current, s) >= 60) checked.insert(library::PathKey(s));
         if (!current.empty() && checked.empty() && subs.size() == 1) checked.insert(library::PathKey(subs[0]));
     }
     std::vector<std::wstring>& For(const std::wstring& video) { return assign[library::PathKey(video)]; }
@@ -314,7 +267,7 @@ public:
         std::vector<MenuItem> items;
         auto& subs = model_->For(video_);
         std::vector<std::pair<int, std::wstring>> ranked;
-        for (const auto& s : model_->subs) ranked.push_back({MatchScore(video_, s), s});
+        for (const auto& s : model_->subs) ranked.push_back({library::SubtitleMatchScore(video_, s), s});
         std::stable_sort(ranked.begin(), ranked.end(), [](auto& a, auto& b) { return a.first > b.first; });
         MenuItem none;
         none.label = Tr(L"No subtitles");
@@ -518,7 +471,7 @@ private:
             } else {
                 // Best matches for the current file first.
                 std::vector<std::pair<int, std::wstring>> ranked;
-                for (const auto& s : model_->subs) ranked.push_back({MatchScore(model_->current, s), s});
+                for (const auto& s : model_->subs) ranked.push_back({library::SubtitleMatchScore(model_->current, s), s});
                 std::stable_sort(ranked.begin(), ranked.end(), [](auto& a, auto& b) { return a.first > b.first; });
                 for (const auto& [score, s] : ranked) content->Add<SubRow>(model_, s, changed);
             }
