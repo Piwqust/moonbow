@@ -1396,12 +1396,10 @@ void BuildMedia(Builder& b) {
 
     b.advanced = true;
     b.inferred = true;
-    b.Toggle("library.scanOnStartup", L"Scan library folders on startup", L"Сканировать папки при запуске", true)
-        .When("library.enabled", "true");
+    b.Toggle("library.scanOnStartup", L"Scan library folders on startup", L"Сканировать папки при запуске", true);
     b.Toggle("library.readTags", L"Read duration and tags", L"Читать длительность и теги", true)
         .Desc(L"Read duration, artist and album from files. Slower on large network folders.",
-              L"Читать длительность, исполнителя и альбом из файлов. На больших сетевых папках медленнее.")
-        .When("library.enabled", "true");
+              L"Читать длительность, исполнителя и альбом из файлов. На больших сетевых папках медленнее.");
     b.Toggle("library.thumbnails", L"Show thumbnails", L"Показывать миниатюры", true)
         .Desc(L"Use Windows thumbnails for videos and embedded covers for music.",
               L"Брать миниатюры видео из Windows, а обложки — из музыкальных файлов.");

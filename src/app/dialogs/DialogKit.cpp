@@ -1,4 +1,5 @@
 #include "app/dialogs/DialogKit.h"
+#include "ui/Host.h"
 
 #include "app/library/LibraryCommon.h"
 #include "gfx/Text.h"
@@ -565,7 +566,7 @@ std::vector<std::wstring> PickFiles(HWND owner, bool multi, const std::vector<Fi
                                     const std::wstring& initialFolder) {
     std::vector<std::wstring> out;
     gfx::ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return out;
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return out;
     FILEOPENDIALOGOPTIONS opts = 0;
     dlg->GetOptions(&opts);
     opts |= FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST;
@@ -592,7 +593,7 @@ std::vector<std::wstring> PickFiles(HWND owner, bool multi, const std::vector<Fi
 
 std::wstring PickFolder(HWND owner, const std::wstring& initialFolder) {
     gfx::ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return {};
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return {};
     FILEOPENDIALOGOPTIONS opts = 0;
     dlg->GetOptions(&opts);
     dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);

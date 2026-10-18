@@ -127,6 +127,8 @@ void ShowVideoContextMenu(Host* host, Point at) {
     mute.checked = s.mute;
     audio.submenu.push_back(mute);
     items.push_back(audio);
+    items.push_back(MenuItem::Separator());
+    items.push_back(Item(L"Media information", Action::ShowInfo, "info"));
 
     MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
     subs.submenu = TrackItems(L"sub", "sid", true);
@@ -510,7 +512,7 @@ void MiniPlayer::Paint(Painter& p) {
     p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
     // overlay buttons are children, so they paint on top of it.
-    if (k > 0.01f) p.Fill(v, Color::Hex(0x000000, 0.55f * k), 4);
+    if (k > 0.01f) p.Fill(v, Color::Hex(0x000000, 0.72f * k), 4);
 }
 
 void MiniPlayer::PaintOver(Painter&) {}

@@ -1,4 +1,5 @@
 // Video / Audio / Subtitles track popover: embedded tracks with check marks, external
+#include "ui/Host.h"
 // tracks (add / remove), audio output devices and "Show Preferences".
 #include "Util.h"
 #include "app/App.h"
@@ -21,7 +22,7 @@ std::vector<std::wstring> PickFiles(int kind) {
     std::vector<std::wstring> out;
     MainWindow* w = TheApp().main();
     gfx::ComPtr<IFileOpenDialog> dlg;
-    if (!w || FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))))
+    if (!w || FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))))
         return out;
     FILEOPENDIALOGOPTIONS opts = 0;
     dlg->GetOptions(&opts);

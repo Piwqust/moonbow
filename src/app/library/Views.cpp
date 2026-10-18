@@ -1,4 +1,5 @@
 // Library pages: shared page base, folder browsing (Videos / Music folders), Recent and the
+#include "ui/Host.h"
 // CreateLibraryView factory. Home, Music, Network and Playlists live in Lib*.cpp.
 #include "Util.h"
 #include "app/Dialogs.h"
@@ -427,7 +428,7 @@ std::vector<MenuItem> Page::FolderMenu(const std::wstring& folder, library::Medi
     if (kind == library::MediaKind::Video)
         m.push_back(Item(L"Add Subtitles…", "subtitles", [folder] { ShowAddSubtitlesDialog(folder); }, !q.empty()));
     m.push_back(MenuItem::Separator());
-    m.push_back(Item(L"Show in File Explorer", "open", [folder] { ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
+    m.push_back(Item(L"Show in File Explorer", "open", [folder] { ui::Host::ShellOpen(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
     const auto& roots = TheApp().library().Roots();
     if (std::any_of(roots.begin(), roots.end(), [&](const std::wstring& r) { return SamePath(r, folder); })) {
         m.push_back(MenuItem::Separator());
@@ -589,7 +590,7 @@ public:
             const std::wstring name = FileNameOf(path);
             m.push_back(Item(L"Play All", "play", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
             m.push_back(Item(L"Show in File Explorer", "open",
-                             [path] { ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
+                             [path] { ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
             m.push_back(MenuItem::Separator());
         }
         m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));

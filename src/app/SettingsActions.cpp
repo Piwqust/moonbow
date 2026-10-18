@@ -1,4 +1,5 @@
 #include "app/SettingsActions.h"
+#include "ui/Host.h"
 
 #include "app/App.h"
 #include "app/FileAssociations.h"
@@ -44,10 +45,15 @@ bool RunSettingsAction(const std::string& action) {
             dir += L"\\scripts";
             CreateDirectoryW(dir.c_str(), nullptr);
         }
-        ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        ui::Host::ShellOpen(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return true;
     }
     if (action == "file-associations") {
+        // Background test instances never touch the registry.
+        if (ui::Host::Automation()) {
+            toast(L"Couldn't register file types", "info");
+            return true;
+        }
         if (RegisterFileAssociations()) {
             OpenDefaultAppsSettings();
             toast(L"Lumen is registered. Pick it in Default apps.", "check_selected");

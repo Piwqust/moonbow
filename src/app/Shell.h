@@ -53,6 +53,7 @@ public:
     LibraryView* View() const { return view_; }
     void FocusSearch();
     void Paint(ui::Painter& p) override;
+    void OnLayout() override;
 
 private:
     void Build();

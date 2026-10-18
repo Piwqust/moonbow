@@ -1,4 +1,5 @@
 // Settings > Extensions: list of mpv scripts in <data dir>\scripts with search, add and remove
+#include "ui/Host.h"
 // (design/ref/Settings-extensions_6575-17137.png).
 #include "app/I18n.h"
 #include "app/settings/SettingsUi.h"
@@ -212,7 +213,7 @@ public:
 
 void AddScripts(Host* host) {
     gfx::ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return;
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return;
     FILEOPENDIALOGOPTIONS opts = 0;
     dlg->GetOptions(&opts);
     dlg->SetOptions(opts | FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT);
@@ -291,7 +292,7 @@ std::unique_ptr<Widget> MakeAddonsToolbar(const std::vector<const Item*>& items,
         if (it->action == "find-extensions") {
             b->minW = 185;
             b->onClick = [] {
-                ShellExecuteW(nullptr, L"open", L"https://github.com/mpv-player/mpv/wiki/User-Scripts", nullptr, nullptr,
+                ui::Host::ShellOpen(nullptr, L"open", L"https://github.com/mpv-player/mpv/wiki/User-Scripts", nullptr, nullptr,
                               SW_SHOWNORMAL);
             };
         } else if (it->action == "add-extension") {

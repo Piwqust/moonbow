@@ -1,4 +1,5 @@
 // Schema rows of the settings window: one control per settings::ItemType, laid out as in
+#include "ui/Host.h"
 // design/ref/Settings-*.png (label column on the left, 320-wide control column on the right).
 #include "app/App.h"
 #include "app/I18n.h"
@@ -434,7 +435,7 @@ public:
             cc.rgbResult = RGB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
             cc.lpCustColors = custom;
             cc.Flags = CC_FULLOPEN | CC_RGBINIT;
-            if (ChooseColorW(&cc))
+            if (ui::Host::NativeUiAllowed() && ChooseColorW(&cc))
                 Cfg().SetString(it->key, HexOf((static_cast<uint32_t>(GetRValue(cc.rgbResult)) << 16) |
                                                (static_cast<uint32_t>(GetGValue(cc.rgbResult)) << 8) |
                                                GetBValue(cc.rgbResult)));
@@ -1137,7 +1138,7 @@ std::wstring PickPath(HWND owner, settings::PathKind kind, const std::wstring& c
     std::wstring out;
     gfx::ComPtr<IFileDialog> dlg;
     const bool save = kind == settings::PathKind::SaveFile;
-    if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+    if (FAILED(ui::Host::CoCreateDialog(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(&dlg))))
         return out;
     FILEOPENDIALOGOPTIONS opts = 0;

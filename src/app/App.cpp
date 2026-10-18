@@ -1,4 +1,5 @@
 #include "app/App.h"
+#include "ui/Host.h"
 
 #include "Trace.h"
 #include "Util.h"
@@ -222,7 +223,7 @@ QueueItem ItemFor(const std::wstring& path) {
 std::vector<std::wstring> FileDialog(HWND owner, bool folders, bool multi, bool subtitles) {
     std::vector<std::wstring> out;
     gfx::ComPtr<IFileOpenDialog> dlg;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return out;
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return out;
     FILEOPENDIALOGOPTIONS opts = 0;
     dlg->GetOptions(&opts);
     opts |= FOS_FORCEFILESYSTEM;
@@ -591,6 +592,7 @@ void App::FitWindowToVideo() {
     int x = (cur.left + cur.right) / 2 - w / 2, y = (cur.top + cur.bottom) / 2 - h / 2;
     x = std::clamp(x, static_cast<int>(work.left), std::max<int>(work.left, work.right - w));
     y = std::clamp(y, static_cast<int>(work.top), std::max<int>(work.top, work.bottom - h));
+    if (IsRectEmpty(&preFitRect_)) preFitRect_ = cur;
     SetWindowPos(main_->Hwnd(), nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
     fittedOnce_ = true;
 }
@@ -810,6 +812,15 @@ void App::ShowPlayer(bool show) {
     if (show == playerShown_) return;
     playerShown_ = show;
     if (!show && main_ && main_->IsFullscreen()) main_->SetFullscreen(false);
+    // Space and the arrows belong to the player once it is shown.
+    if (show && main_) main_->SetFocus(nullptr);
+    // Back in the library: undo the video-sized window.
+    if (!show && main_ && !IsRectEmpty(&preFitRect_)) {
+        if (!main_->IsWindowMaximized() && !IsIconic(main_->Hwnd()))
+            SetWindowPos(main_->Hwnd(), nullptr, preFitRect_.left, preFitRect_.top, preFitRect_.right - preFitRect_.left,
+                         preFitRect_.bottom - preFitRect_.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        preFitRect_ = {};
+    }
     if (main_) main_->UpdateScreen();
     screenChanged.Emit();
 }

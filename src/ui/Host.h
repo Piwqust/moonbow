@@ -142,6 +142,11 @@ public:
     static bool Automation();
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
+    // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
+    // cloaked, so background test runs never open them. Same signatures as the Win32 calls.
+    static HRESULT CoCreateDialog(REFCLSID clsid, LPUNKNOWN outer, DWORD context, REFIID iid, LPVOID* out);
+    static HINSTANCE ShellOpen(HWND hwnd, LPCWSTR verb, LPCWSTR file, LPCWSTR params, LPCWSTR dir, INT show);
+    static bool NativeUiAllowed() { return !Automation(); }
     static void ForgetWidget(Widget* w);
     static void ForgetSubtree(Widget* w);
 

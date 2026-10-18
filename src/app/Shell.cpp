@@ -219,6 +219,10 @@ void TitleBar::ShowAppMenu() {
         m.action = [a] { Run(a); };
         return m;
     };
+    if (TheApp().PlayerShown()) {
+        items.push_back(item(L"Library", "home", Action::GoHome));
+        items.push_back(MenuItem::Separator());
+    }
     items.push_back(item(L"Open file", "file", Action::OpenFile));
     items.push_back(item(L"Open folder", "folder", Action::OpenFolder));
     items.push_back(item(L"Open network stream", "streaming", Action::OpenNetwork));
@@ -449,6 +453,11 @@ void LibraryPane::FocusSearch() {
     GetHost()->SetFocus(search_, true);
     search_->SelectAll();
     InvalidateLayout();
+}
+
+void LibraryPane::OnLayout() {
+    if (!compact_ && search_) search_->width = Length::Px(std::clamp(rect.w - 520.0f, 140.0f, 324.0f));
+    Widget::OnLayout();
 }
 
 void LibraryPane::Paint(Painter& p) {

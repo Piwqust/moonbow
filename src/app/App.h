@@ -204,7 +204,8 @@ private:
     bool playerShown_ = false;
     std::wstring failedPath_, failedError_;
     double lastRestart_ = 0;
-    uint64_t recordedSerial_ = 0;  // PlayerState::loadSerial already counted in history  // Previous restarted the file at this time (ms)
+    uint64_t recordedSerial_ = 0;
+    RECT preFitRect_{};  // window rect before FitWindowToVideo grew it; empty when not fitted  // PlayerState::loadSerial already counted in history  // Previous restarted the file at this time (ms)
     std::vector<std::wstring> pendingOpen_;
     bool engineReady_ = false;
     bool fitPending_ = false;

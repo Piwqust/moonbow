@@ -90,6 +90,19 @@ bool Host::Automation() {
     return g_automation;
 }
 
+HRESULT Host::CoCreateDialog(REFCLSID clsid, LPUNKNOWN outer, DWORD context, REFIID iid, LPVOID* out) {
+    if (g_automation) {
+        if (out) *out = nullptr;
+        return E_ACCESSDENIED;
+    }
+    return CoCreateInstance(clsid, outer, context, iid, out);
+}
+
+HINSTANCE Host::ShellOpen(HWND hwnd, LPCWSTR verb, LPCWSTR file, LPCWSTR params, LPCWSTR dir, INT show) {
+    if (g_automation) return nullptr;
+    return ShellExecuteW(hwnd, verb, file, params, dir, show);
+}
+
 void Host::Activate(HWND hwnd) {
     if (g_automation || !hwnd) return;
     if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);

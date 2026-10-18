@@ -1,4 +1,5 @@
 // Home: Continue Watching, Listen Again, Frequently Visited Folders / Playlists, Frequently
+#include "ui/Host.h"
 // Listened Artists and Recently Added, each one row of cards with a title that opens the full
 // page (design/ref/Player_6261-15078.png). Searching shows matching videos and music instead.
 #include "Util.h"
@@ -123,7 +124,7 @@ private:
                 const std::wstring path = e.path;
                 m.push_back(Item(L"Play All", "play", [path] { TheApp().Open({path}); }));
                 m.push_back(Item(L"Show in File Explorer", "open", [path] {
-                    ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                    ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }));
             }
         }

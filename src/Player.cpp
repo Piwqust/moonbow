@@ -127,7 +127,8 @@ bool Player::InitOnWorker(int64_t wid) {
     // Per file only the position and the chosen tracks; delays, mute and the
     // A-B loop are for the current file, not the next one.
     opt("watch-later-options", "start,aid,sid,secondary-sid");
-    opt("reset-on-next-file", "audio-delay,sub-delay,ab-loop-a,ab-loop-b");
+    opt("reset-on-next-file",
+        "audio-delay,sub-delay,ab-loop-a,ab-loop-b,video-aspect-override,video-zoom,video-pan-x,video-pan-y,video-rotate");
     opt("audio-display", "no");  // cover art is shown by our music view
     opt("background-color", "#000000");
 

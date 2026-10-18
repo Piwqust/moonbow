@@ -41,6 +41,17 @@ LiveState& LiveState::Get() {
 LiveState::LiveState() {
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (!started_ && Mpv().Ready()) Start();
+        // mpv resets aspect/zoom per file (reset-on-next-file); forget our view of them too.
+        static std::wstring lastPath;
+        if ((m & kChangeFile) && Mpv().State().path != lastPath) {
+            lastPath = Mpv().State().path;
+            zoomMode = "fit";
+            aspect = "auto";
+            if (crop != "none") {
+                crop = "none";
+                ApplyCrop();
+            }
+        }
         if ((m & kChangeVideoSize) && crop != "none") ApplyCrop();
     });
     // Config writes the whole vf/af chains when mapped settings change; put ours back on top.

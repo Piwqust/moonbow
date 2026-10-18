@@ -1,4 +1,5 @@
 #include "app/library/LibraryCommon.h"
+#include "ui/Host.h"
 
 #include "Util.h"
 #include "app/Dialogs.h"
@@ -225,7 +226,7 @@ HWND MainHwnd() {
 std::wstring PickFolder() {
     std::wstring result;
     IFileOpenDialog* dlg = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
     DWORD opts = 0;
     dlg->GetOptions(&opts);
     dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
@@ -252,7 +253,7 @@ const COMDLG_FILTERSPEC kPlaylistFilter[] = {{L"M3U", L"*.m3u8;*.m3u"}};
 std::wstring PickPlaylistFile() {
     std::wstring result;
     IFileOpenDialog* dlg = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
     dlg->SetFileTypes(1, kPlaylistFilter);
     dlg->SetTitle(Tr(L"Import playlist"));
     if (SUCCEEDED(dlg->Show(MainHwnd()))) {
@@ -273,7 +274,7 @@ std::wstring PickPlaylistFile() {
 std::wstring PickPlaylistSaveFile(const std::wstring& suggestedName) {
     std::wstring result;
     IFileSaveDialog* dlg = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
+    if (FAILED(ui::Host::CoCreateDialog(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
     dlg->SetFileTypes(1, kPlaylistFilter);
     dlg->SetDefaultExtension(L"m3u8");
     std::wstring name = suggestedName;
@@ -330,11 +331,11 @@ void ShowInExplorer(const std::wstring& path) {
     if (path.empty() || IsUrl(path)) return;
     PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
     if (pidl) {
-        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        if (ui::Host::NativeUiAllowed()) SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
         ILFree(pidl);
         return;
     }
-    ShellExecuteW(nullptr, L"open", library::ParentFolder(path).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    ui::Host::ShellOpen(nullptr, L"open", library::ParentFolder(path).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 // --- menus ------------------------------------------------------------------------------

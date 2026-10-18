@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "app/LibraryView.h"
 
 #include "Player.h"
 #include "app/Actions.h"
@@ -111,6 +112,15 @@ bool MainWindow::Create() {
     BuildUi();
 
     onKey = [this](const KeyEvent& e) {
+        const bool arrow = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_LEFT || e.key == VK_RIGHT;
+        if (arrow && !TheApp().PlayerShown() && !Focus() && !e.mods.ctrl && !e.mods.alt && library_ && library_->View())
+            if (Widget* first = library_->View()->InitialFocus()) {
+                SetFocus(first, true);
+                if (first->OnKeyDown(e)) {
+                    RequestRender();
+                    return true;
+                }
+            }
         const Action a = ActionForKey(e);
         if (a == Action::None) return false;
         // Esc and F leave Picture in Picture first.
@@ -231,8 +241,12 @@ UINT ChromeHideDelay() {
 }
 
 bool ChromeAutoHides() {
-    return TheApp().config().GetString("interface.autoHide") != "never" &&
-           TheApp().config().GetBool("interface.controlsInFullscreen");
+    return TheApp().config().GetString("interface.autoHide") != "never";
+}
+
+// "Show controls in fullscreen" off: fullscreen is keyboard-only, the bar never comes up.
+bool FullscreenWithoutControls(const MainWindow* w) {
+    return w->IsFullscreen() && !TheApp().config().GetBool("interface.controlsInFullscreen");
 }
 
 }  // namespace
@@ -268,7 +282,12 @@ void MainWindow::PokeChrome() {
         if (chrome_.Target() != 1) chrome_.Set(1);
         return;
     }
-    if (chrome_.Target() < 1) {
+    if (FullscreenWithoutControls(this)) {
+        if (chrome_.Target() != 0) {
+            chrome_.To(0, 140);
+            RequestLayout();
+        }
+    } else if (chrome_.Target() < 1) {
         chrome_.To(1, 140);
         RequestLayout();
     }

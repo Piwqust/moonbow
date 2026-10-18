@@ -1,4 +1,5 @@
 #include "app/FileAssociations.h"
+#include "ui/Host.h"
 
 #include <windows.h>
 
@@ -97,7 +98,7 @@ bool FileAssociationsRegistered() {
 }
 
 void OpenDefaultAppsSettings() {
-    ShellExecuteW(nullptr, L"open", L"ms-settings:defaultapps?registeredAppUser=Lumen", nullptr, nullptr, SW_SHOWNORMAL);
+    ui::Host::ShellOpen(nullptr, L"open", L"ms-settings:defaultapps?registeredAppUser=Lumen", nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 }  // namespace app
