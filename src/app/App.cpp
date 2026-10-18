@@ -283,6 +283,7 @@ void App::FlushStores() {
         playlists_.Load();
         bookmarks_.Load();
         favorites_.Load();
+        Live().ReloadFileSettings();
         libraryChanged.Emit();
     }
     SaveWindowPlacement();
@@ -374,7 +375,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
             {L"history.json", L"watch history"},  {L"playlists.json", L"playlists"},
             {L"bookmarks.json", L"bookmarks"},    {L"favorites.json", L"favorites"},
             {L"library.json", L"library folders"}, {L"ui.json", L"window layout"},
-            {L"settings.json", L"settings"},
+            {L"settings.json", L"settings"},      {L"file-settings.json", L"per-file settings"},
         };
         std::wstring names;
         for (const std::wstring& n : bad) {

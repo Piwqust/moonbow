@@ -803,6 +803,11 @@ library::FileSettings& LiveState::Store() {
     return store_;
 }
 
+void LiveState::ReloadFileSettings() {
+    if (loader_.joinable()) loader_.join();
+    store_.Load();
+}
+
 library::FileOptions LiveState::FileSettingsStored() const {
     if (!fileOpen_) return {};
     if (FileSettingsAll()) return fileOpts_;

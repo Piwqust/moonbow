@@ -99,6 +99,8 @@ public:
     bool FileSettingsAll() const;  // playback.perFileAll too: more than the tracks and delays
     // What is remembered for the playing file (the parts the settings above apply).
     library::FileOptions FileSettingsStored() const;
+    // Re-reads the store from disk: this instance took the data folder over from one that exited.
+    void ReloadFileSettings();
     // Forgets what is remembered for the playing file and returns it to the defaults.
     void ResetFileSettings();
 

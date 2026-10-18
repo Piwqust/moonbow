@@ -894,8 +894,8 @@ void BuildApp(Builder& b) {
               L"например *\\Private\\*;*.tmp.mkv")
         .When("privacy.saveHistory", "true");
     b.Button("privacy.clearHistory", L"Clear history now", L"Очистить историю", "clear-history", L"Clear", L"Очистить")
-        .Desc(L"Forget all recently played items and saved positions. This cannot be undone.",
-              L"Забыть все недавние файлы и сохранённые позиции. Отменить нельзя.");
+        .Desc(L"Forget all recently played items, saved positions and per-file settings. This cannot be undone.",
+              L"Забыть все недавние файлы, сохранённые позиции и настройки отдельных файлов. Отменить нельзя.");
 
     b.Sec("network", L"Network", L"Сеть");
     b.Toggle("privacy.fetchMetadata", L"Fetch titles and cover art from the internet",

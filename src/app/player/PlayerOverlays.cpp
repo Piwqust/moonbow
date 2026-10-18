@@ -524,7 +524,7 @@ void NextEpisodeCard::CarryLanguages() {
     if (s.path != carryPath_) {
         const bool next = !carryPath_.empty() && episodes::IsNext(carryPath_, s.path);
         carryPath_ = s.path;
-        if (next) {
+        if (next && !Live().FileSettingsStored().HasTracks()) {
             Player& p = TheApp().player();
             auto pick = [&s](const wchar_t* type, const std::wstring& lang, const std::wstring& title) -> const Track* {
                 const Track* best = nullptr;
