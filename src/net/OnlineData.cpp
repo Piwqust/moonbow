@@ -314,6 +314,7 @@ SubtitleDownload ParseSubtitleDownload(const json::Value& doc) {
     d.fileName = doc.GetWString("file_name");
     d.message = doc.GetWString("message");
     d.resetTime = doc.GetWString("reset_time");
+    d.resetAt = ParseIsoUtc(doc.GetString("reset_time_utc"));
     if (const json::Value* v = doc.Find("remaining"); v && v->IsNumber()) d.remaining = static_cast<int>(v->AsInt());
     if (const json::Value* v = doc.Find("requests"); v && v->IsNumber()) d.requests = static_cast<int>(v->AsInt());
     return d;
@@ -399,6 +400,22 @@ EpisodeMeta ParseTmdbEpisode(const json::Value& doc) {
     e.rating = doc.GetNumber("vote_average");
     e.year = YearOf(doc.GetString("air_date"));
     return e;
+}
+
+int64_t ParseIsoUtc(const std::string& iso) {
+    SYSTEMTIME st{};
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, s = 0;
+    if (sscanf_s(iso.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &s) != 6) return 0;
+    st.wYear = static_cast<WORD>(y);
+    st.wMonth = static_cast<WORD>(mo);
+    st.wDay = static_cast<WORD>(d);
+    st.wHour = static_cast<WORD>(h);
+    st.wMinute = static_cast<WORD>(mi);
+    st.wSecond = static_cast<WORD>(s);
+    FILETIME ft{};
+    if (!SystemTimeToFileTime(&st, &ft)) return 0;
+    const uint64_t t = (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    return static_cast<int64_t>(t / 10000000ull) - 11644473600ll;
 }
 
 bool TmdbKeyIsBearer(const std::string& key) {

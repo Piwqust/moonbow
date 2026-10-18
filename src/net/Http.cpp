@@ -246,7 +246,10 @@ void Fetch(Job& job) {
     if (path.empty()) path = L"/";
     const bool secure = uc.nScheme == INTERNET_SCHEME_HTTPS;
 
-    if (!WaitForHost(host, &resp)) return;
+    if (!WaitForHost(host, &resp)) {
+        TraceRequest(json::ToWide(rq.method), host, path.substr(0, path.find(L'?')) + L" (held back, rate limit)", resp);
+        return;
+    }
     if (IsCancelled(job.id)) {
         resp.error = Error::Cancelled;
         return;
@@ -418,8 +421,12 @@ void Worker() {
             const bool woke = s.cv.wait_for(lock, kWorkerIdle, [&s] { return !s.queue.empty(); });
             --s.waiting;
             if (!woke) {
-                --s.threads;
-                // The session stays open: WinHttpOpen is cheap to keep and costly to repeat.
+                // The last worker closes the session too: WinHTTP would otherwise keep idle
+                // keep-alive sockets to the services open for minutes.
+                if (--s.threads == 0 && s.running == 0 && s.session) {
+                    WinHttpCloseHandle(s.session);
+                    s.session = nullptr;
+                }
                 return;
             }
         }

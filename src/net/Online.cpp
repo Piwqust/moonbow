@@ -452,10 +452,12 @@ void DownloadSubtitle(const SubtitleResult& item, const std::wstring& videoPath,
             if (d.remaining >= 0) Os().quota = d.remaining;
             if (resp.error == Error::None && resp.status == 406) {
                 // Daily quota used up: their message names the reset time.
-                out.error = d.resetTime.empty()
+                const int64_t left = d.resetAt - UnixNow();
+                out.error = left <= 0
                                 ? std::wstring(Tr(L"The OpenSubtitles download limit for today is used up."))
                                 : app::Fmt(Tr(L"The OpenSubtitles download limit for today is used up. It resets in {0}."),
-                                           {d.resetTime});
+                                           {app::Fmt(Tr(L"{0} h {1} min"), {std::to_wstring(left / 3600),
+                                                                             std::to_wstring(left % 3600 / 60)})});
                 Os().quota = 0;
                 done(out);
                 return;
@@ -1062,6 +1064,15 @@ void ClearAll() {
         [dir] {
             SharedDisk().Clear();
             DeleteFileW((dir + L"\\metadata.json").c_str());
+            // Leftovers of a save cut short by a crash ("metadata.json.<pid>.tmp").
+            WIN32_FIND_DATAW tf;
+            HANDLE th = FindFirstFileExW((dir + L"\\*.tmp").c_str(), FindExInfoBasic, &tf, FindExSearchNameMatch, nullptr, 0);
+            if (th != INVALID_HANDLE_VALUE) {
+                do {
+                    DeleteFileW((dir + L"\\" + tf.cFileName).c_str());
+                } while (FindNextFileW(th, &tf));
+                FindClose(th);
+            }
             const std::wstring images = dir + L"\\images";
             WIN32_FIND_DATAW fd;
             HANDLE h = FindFirstFileExW((images + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);

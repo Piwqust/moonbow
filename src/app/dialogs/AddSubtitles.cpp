@@ -719,6 +719,7 @@ public:
         status_ = frame_->Footer()->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
         status_->pad = {8, 0, 0, 0};
         status_->width = Length::Grow();
+        status_->interactive = true;  // the tooltip shows the whole line when it is cut
         frame_->onSubmit = [this] { Search(); };
         return frame;
     }
@@ -731,8 +732,8 @@ public:
         }
         Search();
         auto self = weak_from_this();
-        net::online::SubtitleQuota([self](int remaining, const std::wstring&) {
-            if (auto d = self.lock()) d->ShowQuota(remaining);
+        net::online::SubtitleQuota([self](int, const std::wstring& error) {
+            if (auto d = self.lock()) d->ShowQuota(error);
         });
     }
     Widget* FirstFocus() const { return query_; }
@@ -783,9 +784,19 @@ private:
         status_->SetText({});
     }
 
-    void ShowQuota(int remaining) {
-        if (closed_ || busy_) return;
-        status_->SetText(remaining >= 0 ? Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(remaining)}) : L"");
+    // The footer line: what the search found, the downloads left and a login note.
+    void ShowQuota(const std::wstring& note) {
+        if (closed_) return;
+        note_ = note;
+        if (!busy_) RefreshStatus();
+    }
+    void RefreshStatus() {
+        std::wstring s = found_;
+        if (const int q = net::online::LastSubtitleQuota(); q >= 0)
+            s += (s.empty() ? L"" : L" · ") + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(q)});
+        if (!note_.empty()) s += (s.empty() ? L"" : L" · ") + note_;
+        status_->SetText(s);
+        status_->tooltip = s;
         status_->InvalidateLayout();
     }
 
@@ -805,6 +816,7 @@ private:
             s.languages.push_back(OsLanguageCode(pick));
         busy_ = true;
         Message(Tr(L"Searching…"), {});
+        found_.clear();
         status_->SetText({});
         auto self = weak_from_this();
         net::online::SearchSubtitles(s, [self](const net::online::SubtitleSearchResult& r) {
@@ -817,10 +829,12 @@ private:
         busy_ = false;
         if (!r.ok) {
             Message(Tr(L"Couldn't search"), r.error);
+            RefreshStatus();
             return;
         }
         if (r.items.empty()) {
             Message(Tr(L"Nothing found"), Tr(L"Try another title, the season and episode, or all languages."));
+            RefreshStatus();
             return;
         }
         Widget* content = Content();
@@ -831,12 +845,9 @@ private:
             });
         int exact = 0;
         for (const auto& it : r.items) exact += it.hashMatch ? 1 : 0;
-        std::wstring s = Fmt(Tr(L"Found: {0}"), {std::to_wstring(r.items.size())});
-        if (exact) s += L" · " + Fmt(Tr(L"{0} for this exact file"), {std::to_wstring(exact)});
-        const int q = net::online::LastSubtitleQuota();
-        if (q >= 0) s += L" · " + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(q)});
-        status_->SetText(s);
-        status_->InvalidateLayout();
+        found_ = Fmt(Tr(L"Found: {0}"), {std::to_wstring(r.items.size())});
+        if (exact) found_ += L" · " + Fmt(Tr(L"{0} for this exact file"), {std::to_wstring(exact)});
+        RefreshStatus();
     }
 
     void Download(const net::SubtitleResult& item) {
@@ -876,6 +887,8 @@ private:
         if (MainWindow* w = TheApp().main()) {
             std::wstring msg = Fmt(Tr(L"Subtitles downloaded: {0}"), {library::FileNameOf(f.path)});
             if (f.inDataDir) msg = Fmt(Tr(L"Subtitles saved to Lumen's data folder: {0}"), {library::FileNameOf(f.path)});
+            if (const int left = net::online::LastSubtitleQuota(); left >= 0)
+                msg += L". " + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(left)});
             ShowToast(w, msg, "subtitles", 3000);
         }
     }
@@ -891,6 +904,7 @@ private:
     DButton* search_ = nullptr;
     ScrollView* scroll_ = nullptr;
     Label* status_ = nullptr;
+    std::wstring found_, note_;
     bool busy_ = false, closed_ = false;
 };
 

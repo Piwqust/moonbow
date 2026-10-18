@@ -1,7 +1,8 @@
-"""Local mock of the OpenSubtitles and TMDB APIs for testing Lumen's online features without keys.
+"""Local mock of the LRCLIB, OpenSubtitles and TMDB APIs for testing Lumen's online features without keys.
 
 Binds 127.0.0.1 only. Answers have the shape of the real services (recorded from their docs).
 Point a --automation Lumen at it with the hidden settings:
+  privacy.lrclibServer        = http://127.0.0.1:<port>
   privacy.opensubtitlesServer = http://127.0.0.1:<port>/api/v1
   privacy.tmdbServer          = http://127.0.0.1:<port>/3
   privacy.tmdbImageServer     = http://127.0.0.1:<port>/t/p
@@ -93,6 +94,8 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(25)
         if "ratelimit" in text:
             return self.send(429, {"message": "API rate limit exceeded"}, headers={"Retry-After": "3"})
+        if path.startswith("/api/get") or path.startswith("/api/search"):
+            return self.lrclib(path, q)
         if path.startswith("/api/v1/"):
             return self.opensubtitles(path[len("/api/v1"):], q, body)
         if path.startswith("/3/"):
@@ -149,6 +152,21 @@ class Handler(BaseHTTPRequestHandler):
                                    "reset_time": "23 hours", "reset_time_utc": "2026-10-19T12:00:00.000Z"})
         self.send(404, {"message": "not found"})
 
+    def lrclib(self, path, q):
+        # Lumen's own test lines (not a real song), synced.
+        record = {"id": 1, "trackName": q.get("track_name", [""])[0], "artistName": q.get("artist_name", [""])[0],
+                  "albumName": q.get("album_name", [""])[0], "duration": float(q.get("duration", ["0"])[0] or 0),
+                  "instrumental": False,
+                  "plainLyrics": "Mock line one\nMock line two\nMock line three",
+                  "syncedLyrics": "[00:00.50] Mock line one, from the test server\n[00:02.00] Строка два\n"
+                                  "[00:04.00] 第三行\n[00:06.00] Line four is a little longer than the others\n"
+                                  "[00:08.00] Mock line five"}
+        if "nothing" in record["trackName"].lower():
+            return self.send(404, {"code": 404, "name": "TrackNotFound", "message": "Failed to find specified track"})
+        if path.startswith("/api/search"):
+            return self.send(200, [record])
+        return self.send(200, record)
+
     def tmdb(self, path, q):
         key = q.get("api_key", [""])[0]
         auth = self.headers.get("Authorization") or ""
@@ -157,7 +175,9 @@ class Handler(BaseHTTPRequestHandler):
         query = q.get("query", [""])[0].lower()
         if path == "/search/movie":
             results = []
-            if "inception" in query:
+            # "matrix" and "nothing" have their own answers; anything else is Inception, so the
+            # shared test media (Chaptered Demo, Series S01E01...) gets a match too.
+            if "matrix" not in query and "nothing" not in query:
                 results = [
                     {"adult": False, "backdrop_path": "/s3TBrRGB1iav7gFOCNx3H31MoES.jpg", "genre_ids": [28, 878], "id": 27205,
                      "original_language": "en", "original_title": "Inception",
@@ -175,16 +195,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"page": 1, "results": results, "total_pages": 1, "total_results": len(results)})
         if path == "/search/tv":
             results = []
-            if "office" in query:
+            if "nothing" not in query:
                 results = [{"backdrop_path": "/mLyW3UTgi2lsMdtueYODcfAB9Ku.jpg", "first_air_date": "2005-03-24", "id": 2316,
                             "name": "The Office", "original_name": "The Office", "overview": "The everyday lives of office employees.",
                             "poster_path": "/7DJKHzAi83BmQrWLrYYOqcoKfhR.jpg", "vote_average": 8.6, "vote_count": 4000}]
             return self.send(200, {"page": 1, "results": results, "total_pages": 1, "total_results": len(results)})
         if path.startswith("/tv/2316/season/"):
-            parts = path.split("/")
-            return self.send(200, {"air_date": "2005-10-18", "episode_number": int(parts[5]), "id": 1,
+            parts = path.split("/")  # ['', 'tv', '2316', 'season', S, 'episode', E]
+            return self.send(200, {"air_date": "2005-10-18", "episode_number": int(parts[6]), "id": 1,
                                    "name": "Halloween", "overview": "Michael has to fire someone by the end of the day.",
-                                   "season_number": int(parts[3]), "still_path": "/wjpRo3DlBJwKUXvVxgM2HmBfn6V.jpg",
+                                   "season_number": int(parts[4]), "still_path": "/wjpRo3DlBJwKUXvVxgM2HmBfn6V.jpg",
                                    "vote_average": 7.9})
         self.send(404, {"status_code": 34, "status_message": "The resource you requested could not be found."})
 

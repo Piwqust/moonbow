@@ -724,7 +724,8 @@ private:
             auto* l = Add<Label>(waiting ? Tr(L"Looking this video up on TMDB…")
                                  : m && m->state == MediaMeta::State::Failed
                                      ? Tr(L"TMDB couldn't be reached. Lumen tries again next time.")
-                                     : Tr(L"TMDB has nothing for this file name."),
+                                 : m && m->manual ? Tr(L"Match reset: the file shows its own thumbnail.")
+                                                  : Tr(L"TMDB has nothing for this file name."),
                                  TextStyle::Body, Tone::Tertiary);
             l->wrap = true;
             l->width = Length::Grow();

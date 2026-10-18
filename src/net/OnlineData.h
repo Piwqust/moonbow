@@ -80,6 +80,7 @@ std::vector<SubtitleResult> ParseSubtitleSearch(const json::Value& doc);
 
 struct SubtitleDownload {
     std::wstring link, fileName, message, resetTime;
+    int64_t resetAt = 0;  // reset_time_utc as unix seconds, 0 when missing
     int remaining = -1, requests = -1;
 };
 SubtitleDownload ParseSubtitleDownload(const json::Value& doc);
@@ -125,5 +126,7 @@ EpisodeMeta ParseTmdbEpisode(const json::Value& doc);
 bool TmdbKeyIsBearer(const std::string& key);
 
 int YearOf(const std::string& isoDate);  // "2010-07-15" -> 2010, 0 when empty
+// "2026-10-19T12:00:00.000Z" -> unix seconds (UTC); 0 when it doesn't parse.
+int64_t ParseIsoUtc(const std::string& iso);
 
 }  // namespace net

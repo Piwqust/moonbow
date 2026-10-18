@@ -26,6 +26,7 @@
  L"Включите поиск субтитров и вставьте свой ключ API OpenSubtitles в «Настройки › Конфиденциальность»."},
 {L"OpenSubtitles sent an answer Lumen couldn't read.", L"OpenSubtitles прислал ответ, который Lumen не смог прочитать."},
 {L"The OpenSubtitles download limit for today is used up.", L"Дневной лимит загрузок OpenSubtitles исчерпан."},
+{L"{0} h {1} min", L"{0} ч {1} мин"},
 {L"The OpenSubtitles download limit for today is used up. It resets in {0}.",
  L"Дневной лимит загрузок OpenSubtitles исчерпан. Он обновится через {0}."},
 // --- metadata
@@ -80,6 +81,7 @@
 {L"Looking this video up on TMDB…", L"Поиск видео в TMDB…"},
 {L"TMDB couldn't be reached. Lumen tries again next time.", L"TMDB недоступен. Lumen попробует снова в следующий раз."},
 {L"TMDB has nothing for this file name.", L"В TMDB ничего не нашлось по имени файла."},
+{L"Match reset: the file shows its own thumbnail.", L"Совпадение сброшено: у файла снова своя миниатюра."},
 {L"Data from TMDB", L"Данные TMDB"},
 {L"Find Another Match", L"Другое совпадение"},
 {L"Find Another Match…", L"Найти другое совпадение…"},

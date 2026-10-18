@@ -2094,6 +2094,10 @@ void TestOnlineJson() {
     CHECK(net::TmdbKeyIsBearer("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ4In0.sig"));
     CHECK(!net::TmdbKeyIsBearer("0123456789abcdef0123456789abcdef"));
     CHECK(net::YearOf("") == 0 && net::YearOf("1999-03-31") == 1999);
+    CHECK(net::ParseIsoUtc("2026-10-19T12:00:00.000Z") == 1792411200);
+    CHECK(net::ParseIsoUtc("soon") == 0);
+    doc = json::Parse(R"({"remaining":0,"reset_time_utc":"1970-01-02T00:00:00Z"})");
+    CHECK(net::ParseSubtitleDownload(*doc).resetAt == 86400);
 }
 
 void TestSecretSettings() {
