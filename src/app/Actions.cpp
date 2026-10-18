@@ -526,6 +526,44 @@ void Run(Action a) {
     }
 }
 
+bool VideoSingleClick() {
+    const std::string mode = TheApp().config().GetString("controls.singleClick");
+    if (mode == "none") return false;
+    if (mode == "showControls") {
+        if (MainWindow* w = Win()) w->PokeChrome();
+        return true;
+    }
+    if (!PS().fileLoaded) return false;
+    Run(Action::PlayPause);
+    return true;
+}
+
+bool VideoDoubleClick() {
+    const std::string mode = TheApp().config().GetString("controls.doubleClick");
+    if (mode == "none") return false;
+    Run(mode == "playPause" ? Action::PlayPause : Action::Fullscreen);
+    return true;
+}
+
+bool VideoWheel(float delta, bool horizontal) {
+    const Config& c = TheApp().config();
+    if (c.GetBool("controls.reverseScroll")) delta = -delta;
+    const std::string mode = c.GetString(horizontal ? "controls.hwheel" : "controls.wheel");
+    if (mode == "seek") {
+        SeekBy(delta * Skip("controls.skipVeryShort", 3));  // up / right = forward
+        return true;
+    }
+    if (mode == "volume") {
+        const double step = std::clamp(c.GetDouble("audio.volumeStep"), 1.0, 25.0);
+        Player& p = TheApp().player();
+        if (PS().mute) p.SetMute(false);
+        p.SetVolume(std::round(PS().volume + step * delta));
+        Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), VolumeIcon(PS().volume, false));
+        return true;
+    }
+    return false;
+}
+
 const char* VolumeIcon(double volume, bool mute) {
     if (mute || volume <= 0) return "close_value-none";
     if (volume < 34) return "close_value-low";
