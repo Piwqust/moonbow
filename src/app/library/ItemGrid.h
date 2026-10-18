@@ -12,7 +12,8 @@
 
 namespace app::lib {
 
-enum class EntryKind : uint8_t { Media, Folder, Playlist, Album, Artist, Genre, Category, Action, Stream, Header };
+// Header = group title; Columns = the list's column titles (Rows style only, hidden otherwise).
+enum class EntryKind : uint8_t { Media, Folder, Playlist, Album, Artist, Genre, Category, Action, Stream, Header, Columns };
 
 struct Entry {
     EntryKind kind = EntryKind::Media;
@@ -29,6 +30,8 @@ struct Entry {
     bool watched = false;
     bool audio = false;  // media entry is audio (square cover placeholder)
     bool favorite = false;  // small heart mark
+    bool damaged = false;   // the scanner found the file unplayable: dimmed, with a warning mark
+    int track = 0;          // track number column (kColTrack), 0 = none
     int ref = -1;        // owner's index (queue position etc.)
 };
 
@@ -41,6 +44,15 @@ enum Columns : unsigned {
     kColSize = 1u << 3,
     kColDate = 1u << 4,
     kColTime = 1u << 5,  // date column shows "today 14:05"-style clock for recent items
+    kColTrack = 1u << 6,  // track number before the thumbnail
+};
+
+// Titles of the list columns, painted by an EntryKind::Columns entry. A column with a sort
+// value is clickable: the first click sorts by it, the next one reverses (":desc").
+enum ColumnHead : uint8_t { kHeadTrack, kHeadTitle, kHeadSubtitle, kHeadExtra, kHeadDuration, kHeadSize, kHeadDate, kHeadCount };
+struct ColumnTitle {
+    std::wstring label;  // translated
+    std::string sort;    // empty = not sortable
 };
 
 class ItemGrid : public ui::Widget {
@@ -58,6 +70,9 @@ public:
     unsigned columns = kColDuration;
     bool reorderable = false;  // Rows only
     bool roundImages = false;  // artist cards
+    ColumnTitle heads[kHeadCount];
+    std::string sort;  // current sort value, marks the sorted column
+    std::function<void(const std::string&)> onSort;  // a column title was clicked: the new sort value
 
     int Selected() const { return selected_; }
     void Select(int index, bool scrollIntoView = true);
@@ -91,6 +106,12 @@ public:
     void OnClick() override;
 
 private:
+    struct RowCells {
+        ui::Rect track, thumb, title, sub, extra, duration, size, date, heart;
+    };
+    RowCells MediaCells(const ui::Rect& r) const;
+    int HeadAt(int index, float x) const;
+    void PaintColumns(ui::Painter& p, const ui::Rect& r);
     struct Geometry {
         float cardW = 0, thumbH = 0, labelH = 0;
         int cols = 1;
@@ -118,6 +139,8 @@ private:
     int selected_ = -1;
     int hover_ = -1;
     bool hoverMore_ = false;
+    int hoverHead_ = -1;
+    bool anyFavorite_ = false;  // rows keep the heart slot on every row, so the columns line up
     int press_ = -1;
     ui::Point pressAt_;
     bool dragging_ = false;

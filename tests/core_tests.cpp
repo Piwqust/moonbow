@@ -952,6 +952,54 @@ void TestMediaTypes() {
     CHECK(library::UnixMsNow() > 1700000000000LL);
 }
 
+void TestEpisodesAndOrder() {
+    library::EpisodeInfo ep;
+    CHECK(library::ParseEpisode(L"Series S01E02", &ep) && ep.show == L"Series" && ep.season == 1 && ep.episode == 2);
+    CHECK(library::ParseEpisode(L"The.Show.s2e10.720p", &ep) && ep.show == L"The Show" && ep.season == 2 &&
+          ep.episode == 10);
+    CHECK(library::ParseEpisode(L"Show 1x03 - Pilot", &ep) && ep.show == L"Show" && ep.season == 1 && ep.episode == 3);
+    CHECK(library::ParseEpisode(L"S03E01E02", &ep) && ep.show.empty() && ep.season == 3 && ep.episode == 1);
+    CHECK(library::ParseEpisode(L"Шоу — S01E05", &ep) && ep.show == L"Шоу" && ep.episode == 5);
+    CHECK(!library::ParseEpisode(L"Clip 1920x1080", nullptr));
+    CHECK(!library::ParseEpisode(L"Seasons Greetings", nullptr));
+    CHECK(!library::ParseEpisode(L"Series S01", nullptr));
+    CHECK(!library::ParseEpisode(L"Chaptered Demo (1080p)", nullptr));
+    CHECK(!library::ParseEpisode(L"BS01E02", nullptr));  // glued to a word
+
+    const unsigned char mp4[] = {0, 0, 0, 0x20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 2, 0};
+    const unsigned char mkv[] = {0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 1, 0x42, 0xF7, 0x81, 1, 0x42};
+    const unsigned char text[] = {'n', 'o', 't', ' ', 'a', ' ', 'v', 'i', 'd', 'e', 'o', '!', '\n', 0};
+    CHECK(library::HeaderMatchesExtension(L"a.MP4", mp4, sizeof(mp4)));
+    CHECK(!library::HeaderMatchesExtension(L"a.mkv", mp4, sizeof(mp4)));
+    CHECK(library::HeaderMatchesExtension(L"a.webm", mkv, sizeof(mkv)));
+    CHECK(!library::HeaderMatchesExtension(L"fake.mkv", text, 12));
+    CHECK(!library::HeaderMatchesExtension(L"empty.mp4", mp4, 0));
+    CHECK(library::HeaderMatchesExtension(L"notes.txt", text, 3));     // not media: nothing to judge
+    CHECK(library::HeaderMatchesExtension(L"clip.rmvb", text, sizeof(text)));  // no rule for this container
+
+    // Album order: album first, then disc and track; untagged albums and unnumbered tracks last.
+    std::vector<library::MediaItem> v(6);
+    auto set = [&](size_t i, const wchar_t* album, int disc, int track, const wchar_t* title) {
+        v[i].album = album;
+        v[i].disc = disc;
+        v[i].track = track;
+        v[i].title = title;
+        v[i].path = std::wstring(L"C:\\m\\") + title + L".mp3";
+    };
+    set(0, L"B", 0, 1, L"b1");
+    set(1, L"A", 0, 2, L"a2");
+    set(2, L"A", 0, 1, L"a1");
+    set(3, L"", 0, 1, L"u1");
+    set(4, L"A", 2, 1, L"a-d2-1");
+    set(5, L"A", 0, 0, L"a-none");
+    std::vector<const library::MediaItem*> order;
+    for (const auto& m : v) order.push_back(&m);
+    library::SortItems(order, library::SortKey::Track);
+    std::wstring got;
+    for (const auto* m : order) got += m->title + L",";
+    CHECK(got == L"a1,a2,a-none,a-d2-1,b1,u1,");
+}
+
 std::shared_ptr<const library::Snapshot> ScanAndWait(library::MediaLibrary& lib, DWORD timeoutMs = 20000) {
     constexpr UINT kMsg = WM_APP + 41;
     lib.SetNotifyWindow(MessageWindow(), kMsg);
@@ -1232,6 +1280,7 @@ const TestCase kTests[] = {
     {"playlists", TestPlaylists},
     {"bookmarks_favorites", TestBookmarksFavorites},
     {"media_types", TestMediaTypes},
+    {"episodes_order", TestEpisodesAndOrder},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},
     {"thumbnails", TestThumbnails},

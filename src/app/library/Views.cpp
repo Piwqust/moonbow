@@ -183,6 +183,7 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
     grid_->onMenu = [this](int i, Point at) { ShowMenu(i, at); };
     grid_->onDelete = [this](int i) { Delete(i); };
     grid_->onMove = [this](int from, int to) { Move(from, to); };
+    grid_->onSort = [this](const std::string& value) { SetSort(value); };
 
     empty_ = Add<EmptyState>();
     empty_->visible = false;
@@ -247,6 +248,15 @@ void Page::AddHeader(const std::wstring& title, const std::wstring& right) {
     Push(std::move(e));
 }
 
+void Page::AddColumns(const std::string& sort, std::initializer_list<Column> columns) {
+    if (!list_ || compact_) return;
+    for (const Column& c : columns) heads_[c.head] = {Tr(c.label), c.sort};
+    headSort_ = sort;
+    Entry e;
+    e.kind = EntryKind::Columns;
+    Push(std::move(e));
+}
+
 HistoryInfo Page::Progress(const std::wstring& path) const {
     auto it = history_.find(library::PathKey(path));
     return it == history_.end() ? HistoryInfo{} : it->second;
@@ -279,6 +289,8 @@ int Page::AddMedia(const library::MediaItem& m) {
     e.progress = h.progress;
     e.watched = h.watched && !e.audio;
     e.favorite = Favorite(m.path);
+    e.damaged = m.damaged;
+    e.track = m.track;
     e.ref = static_cast<int>(queue_.size());
     queue_.push_back(MakeQueueItem(m.path, e.audio ? m.DisplayTitle() : std::wstring(), m.duration));
     return Push(std::move(e));
@@ -290,9 +302,20 @@ Entry Page::FolderEntry(const library::FolderNode& f, library::MediaKind kind) c
     e.title = f.name.empty() ? f.path : f.name;
     e.path = f.path;
     e.icon = "folder";
-    e.count = static_cast<int>(kind == library::MediaKind::Audio ? f.totalAudios
-                               : kind == library::MediaKind::Video ? f.totalVideos
-                                                                   : f.totalAudios + f.totalVideos);
+    // What the folder page shows: its subfolders with such media plus its own files, the same
+    // rule as the page's item count (not the files of all subfolders).
+    auto has = [kind](const library::FolderNode& n) {
+        return kind == library::MediaKind::Audio   ? n.totalAudios > 0
+               : kind == library::MediaKind::Video ? n.totalVideos > 0
+                                                   : n.totalAudios + n.totalVideos > 0;
+    };
+    int n = static_cast<int>(kind == library::MediaKind::Audio   ? f.audios
+                             : kind == library::MediaKind::Video ? f.videos
+                                                                 : f.audios + f.videos);
+    if (snap_)
+        for (int c : f.children)
+            if (c >= 0 && static_cast<size_t>(c) < snap_->folders.size() && has(snap_->folders[static_cast<size_t>(c)])) ++n;
+    e.count = n;
     return e;
 }
 
@@ -329,6 +352,8 @@ void Page::Refresh() {
     nextRoutes_.clear();
     nextActions_.clear();
     queue_.clear();
+    for (ColumnTitle& h : heads_) h = {};
+    headSort_.clear();
     Build();
 
     // Content = everything but group titles and "Add…" actions. The header counts the items
@@ -336,7 +361,7 @@ void Page::Refresh() {
     long long n = 0, categories = 0;
     bool actions = false;
     for (const Entry& e : entries_) {
-        if (e.kind == EntryKind::Header) continue;
+        if (e.kind == EntryKind::Header || e.kind == EntryKind::Columns) continue;
         if (e.kind == EntryKind::Action) {
             actions = true;
             continue;
@@ -362,6 +387,8 @@ void Page::Refresh() {
     grid_->SetStyle(CurrentStyle());
     grid_->columns = compact_ ? kColDuration : RowColumns();
     grid_->reorderable = Reorderable() && filter_.empty();
+    for (int h = 0; h < kHeadCount; ++h) grid_->heads[h] = heads_[h];
+    grid_->sort = headSort_;
     grid_->SetEntries(std::move(entries_));
     entries_.clear();
 
@@ -506,11 +533,7 @@ void Page::SortMedia(std::vector<const library::MediaItem*>& items, const std::s
         library::SortItems(items, library::SortKey::Name);
         byText([](const library::MediaItem* m) -> const std::wstring& { return m->album; });
     } else if (k == "track") {
-        library::SortItems(items, library::SortKey::Name);
-        std::stable_sort(items.begin(), items.end(), [&](const library::MediaItem* a, const library::MediaItem* b) {
-            if ((a->track > 0) != (b->track > 0)) return a->track > 0;  // numbered tracks first
-            return desc ? a->track > b->track : a->track < b->track;
-        });
+        library::SortItems(items, library::SortKey::Track, desc);  // album, disc, track, title
     } else if (k == "unwatched" || k == "watched") {
         library::SortItems(items, library::SortKey::Name);
         const bool watchedFirst = k == "watched";
@@ -551,6 +574,19 @@ public:
         list_ = ListModeFor(key_, false);
         const std::wstring name = FileNameOf(route_.path);
         queueName_ = route_.path.empty() ? std::wstring(Tr(SectionName(route_.section))) : name;
+        if (kind_ == library::MediaKind::Video) {
+            // A folder of episodes gets "Continue S01E02" and "Play All", like an album page.
+            next_ = toolbar_->Add<Button>(L"", ButtonKind::Primary, "play");
+            next_->onClick = [this] {
+                if (nextRef_ >= 0) PlayQueue(queue_, nextRef_, queueName_);
+            };
+            if (!compact) {
+                auto* all = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Secondary, "playback");
+                all->onClick = [this] {
+                    if (!episodeQueue_.empty()) PlayQueue(episodeQueue_, 0, queueName_);
+                };
+            }
+        }
         Refresh();
     }
 
@@ -620,6 +656,19 @@ protected:
         const bool desc = sort == "name:desc";
 
         const std::wstring path = Folder();
+        nextRef_ = -1;
+        episodeQueue_.clear();
+        UpdateToolbar();
+        if (video)
+            AddColumns(sort, {{kHeadTitle, L"Title", "name"},
+                              {kHeadDuration, L"Length", "duration"},
+                              {kHeadSize, L"Size", "size"},
+                              {kHeadDate, L"Modified", "date"}});
+        else
+            AddColumns(sort, {{kHeadTitle, L"Title", "name"},
+                              {kHeadSubtitle, L"Artist", ""},
+                              {kHeadDuration, L"Length", "duration"},
+                              {kHeadSize, L"Size", "size"}});
         if (!filter_.empty()) {
             std::vector<const library::MediaItem*> items;
             if (path.empty()) {
@@ -633,6 +682,7 @@ protected:
             }
             SortMedia(items, sort);
             for (const library::MediaItem* m : items) AddMedia(*m);
+            UpdateToolbar();
             return;
         }
 
@@ -660,7 +710,10 @@ protected:
         }
 
         const library::FolderNode* folder = snap_->Folder(path);
-        if (!folder) return;
+        if (!folder) {
+            UpdateToolbar();
+            return;
+        }
         auto children = snap_->Children(path);
         if (desc) std::reverse(children.begin(), children.end());
         for (const library::FolderNode* f : children)
@@ -671,7 +724,66 @@ protected:
             if (m.kind == kind_) items.push_back(&m);
         }
         SortMedia(items, sort);
-        for (const library::MediaItem* m : items) AddMedia(*m);
+        if (!(video && sort == "name" && AddEpisodes(items)))
+            for (const library::MediaItem* m : items) AddMedia(*m);
+        UpdateToolbar();
+    }
+
+    // Episodes ("Show S01E02", "Show 1x02") grouped by show and season, in episode order, with
+    // the rest of the folder after them. False (nothing added) when fewer than two files are episodes.
+    bool AddEpisodes(const std::vector<const library::MediaItem*>& items) {
+        struct Ep {
+            const library::MediaItem* m;
+            library::EpisodeInfo info;
+            std::wstring showKey;
+        };
+        std::vector<Ep> eps;
+        std::vector<const library::MediaItem*> rest;
+        for (const library::MediaItem* m : items) {
+            library::EpisodeInfo info;
+            if (library::ParseEpisode(m->name, &info))
+                eps.push_back({m, info, library::SearchFold(info.show)});
+            else
+                rest.push_back(m);
+        }
+        if (eps.size() < 2) return false;
+        std::stable_sort(eps.begin(), eps.end(), [](const Ep& a, const Ep& b) {
+            if (a.showKey != b.showKey) return StrCmpLogicalW(a.showKey.c_str(), b.showKey.c_str()) < 0;
+            if (a.info.season != b.info.season) return a.info.season < b.info.season;
+            return a.info.episode < b.info.episode;
+        });
+        std::wstring lastShow = L"\x01";
+        int lastSeason = -1;
+        const library::MediaItem* firstOpen = nullptr;  // first episode not watched to the end
+        for (const Ep& ep : eps) {
+            if (ep.showKey != lastShow || ep.info.season != lastSeason) {
+                const std::wstring season = Fmt(Tr(L"Season {0}"), static_cast<long long>(ep.info.season));
+                AddHeader(ep.info.show.empty() ? season : ep.info.show + L" · " + season);
+                lastShow = ep.showKey;
+                lastSeason = ep.info.season;
+            }
+            AddMedia(*ep.m);
+            const HistoryInfo h = Progress(ep.m->path);
+            if (!firstOpen && !h.watched) {
+                firstOpen = ep.m;
+                nextRef_ = static_cast<int>(queue_.size()) - 1;
+                wchar_t code[32];
+                swprintf_s(code, L"S%02dE%02d", ep.info.season, ep.info.episode);
+                nextLabel_ = h.progress > 0 ? Fmt(Tr(L"Continue {0}"), {std::wstring(code)})
+                                            : Fmt(Tr(L"Play {0}"), {std::wstring(code)});
+            }
+        }
+        episodeQueue_ = queue_;
+        if (!rest.empty()) AddHeader(Tr(L"Other videos"));
+        for (const library::MediaItem* m : rest) AddMedia(*m);
+        return true;
+    }
+
+    void UpdateToolbar() {
+        if (!next_) return;
+        const bool show = nextRef_ >= 0;
+        toolbar_->visible = show;
+        if (show) next_->SetText(nextLabel_);
     }
 
     void FillEmpty(EmptyState& e) override {
@@ -728,6 +840,10 @@ private:
     std::wstring Folder() const { return route_.path.empty() ? SoleRoot() : route_.path; }
 
     library::MediaKind kind_;
+    Button* next_ = nullptr;          // "Continue S01E02" in a folder of episodes
+    int nextRef_ = -1;                // its queue index
+    std::wstring nextLabel_;
+    std::vector<QueueItem> episodeQueue_;  // the episodes in order, for "Play All"
 };
 
 // --- Recent ----------------------------------------------------------------------------------------
@@ -804,11 +920,13 @@ protected:
             ++counts[DayBucket(he.lastPlayed)];
         }
         static const wchar_t* kGroups[] = {L"Today", L"Yesterday", L"Earlier"};
+        // With a single group its count would repeat the page header's.
+        const bool oneGroup = (counts[0] > 0) + (counts[1] > 0) + (counts[2] > 0) <= 1;
         for (const library::HistoryEntry* hp : shown) {
             const library::HistoryEntry& he = *hp;
             const int bucket = DayBucket(he.lastPlayed);
             if (grouped && bucket != lastBucket) {
-                AddHeader(Tr(kGroups[bucket]), CountItems(counts[bucket]));
+                AddHeader(Tr(kGroups[bucket]), oneGroup ? std::wstring() : CountItems(counts[bucket]));
                 lastBucket = bucket;
             }
             Push(Row(he.path, &he));

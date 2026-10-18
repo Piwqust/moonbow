@@ -39,7 +39,11 @@ struct MediaItem {
     std::wstring album;
     int track = 0;  // track number tag, 0 = none
     int year = 0;   // release year tag, 0 = none
+    int disc = 0;   // disc number tag, 0 = none
     bool offline = false;    // cloud placeholder (OneDrive etc.): content not on this disk
+    // The metadata pass found the file unplayable: its header isn't the promised container, or
+    // an MP4-family file has no readable length (truncated download). Never set for offline files.
+    bool damaged = false;
     std::wstring searchKey;  // SearchFold(name + title + artist + album)
 
     // Title tag when present, else the file name.
@@ -66,7 +70,8 @@ struct ScanStats {
     bool metadataSecondPass = false;  // true when the per-file cost was > 3 ms
 };
 
-enum class SortKey { Name, Date, Size, Duration };
+// Track = album order: album (untagged last), disc, track number (numbered first), then title.
+enum class SortKey { Name, Date, Size, Duration, Track };
 
 class Snapshot {
 public:

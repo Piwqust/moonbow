@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <map>
 #include <mutex>
 #include <random>
@@ -142,6 +143,49 @@ void PlayInOrder(std::vector<QueueItem> q, const std::wstring& name) {
 
 enum class MusicMode { Root, Songs, Albums, Artists, Genres, Album, Artist, Genre };
 
+// Cover of the album / artist page header: the embedded art of a track, or a placeholder.
+class CoverArt : public Widget {
+public:
+    CoverArt(float size, bool round) : size_(size), round_(round) {
+        width = Length::Px(size);
+        height = Length::Px(size);
+        imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
+    }
+    void SetImage(const std::wstring& path) {
+        if (path == image_) return;
+        image_ = path;
+        Invalidate();
+    }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const float radius = round_ ? rect.w / 2 : 12.0f;
+        ID2D1Bitmap* bmp = nullptr;
+        if (!image_.empty()) {
+            const float scale = GetHost() ? GetHost()->Scale() : 1.0f;
+            bmp = TheApp().images().Get(image_, static_cast<int>(std::ceil(size_ * scale)));
+        }
+        if (bmp) {
+            if (round_) {
+                p.PushRoundClip(rect, radius);
+                p.Image(bmp, rect, 0, true);
+                p.PopClip();
+            } else {
+                p.Fill(rect, c.bgDeep, radius);
+                p.Image(bmp, rect, radius, true);
+            }
+            return;
+        }
+        p.Fill(rect, c.bgCard, radius);
+        p.Icon(round_ ? "artist" : "album", rect.Center(64, 64), c.textTertiary, c.accentMid);
+    }
+
+private:
+    float size_;
+    bool round_;
+    std::wstring image_;
+    ScopedConnection imagesConn_;
+};
+
 struct Group {
     std::wstring name;     // display / route key
     std::wstring artist;   // albums: common artist, or empty when mixed
@@ -172,8 +216,36 @@ public:
                                  mode_ == MusicMode::Genre;
         list_ = ListModeFor(key_, listDefault);
         queueName_ = Title();
-        if (mode_ != MusicMode::Root && mode_ != MusicMode::Albums && mode_ != MusicMode::Artists &&
-            mode_ != MusicMode::Genres) {
+        if ((mode_ == MusicMode::Album || mode_ == MusicMode::Artist) && !compact) {
+            // Header: cover, what it is, the name, artist / albums, year · genre · songs · length,
+            // then the buttons.
+            toolbar_->gap = 24;
+            toolbar_->align = Align::End;
+            cover_ = toolbar_->Add<CoverArt>(168.0f, mode_ == MusicMode::Artist);
+            auto* info = toolbar_->Add<Widget>();
+            info->dir = Dir::Column;
+            info->gap = 6;
+            info->width = Length::Grow();
+            auto* kicker = info->Add<Label>(Tr(mode_ == MusicMode::Album ? L"Album" : L"Artist"), TextStyle::SmallMedium,
+                                            Tone::Tertiary);
+            kicker->width = Length::Grow();
+            auto* heading = info->Add<Label>(Title(), TextStyle::Display, Tone::Primary);
+            heading->width = Length::Grow();
+            byline_ = info->Add<Label>(L"", TextStyle::Large, Tone::Secondary);
+            byline_->width = Length::Grow();
+            meta_ = info->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
+            meta_->width = Length::Grow();
+            auto* buttons = info->Add<Widget>();
+            buttons->dir = Dir::Row;
+            buttons->gap = 8;
+            buttons->pad = {0, 10, 0, 0};
+            auto* play = buttons->Add<Button>(Tr(L"Play All"), ButtonKind::Primary, "play");
+            play->onClick = [this] { PlayInOrder(queue_, queueName_); };
+            auto* shuffle = buttons->Add<Button>(Tr(L"Shuffle"), ButtonKind::Secondary, "shuffle_right");
+            shuffle->onClick = [this] { PlayShuffled(queue_, queueName_); };
+            toolbar_->visible = true;
+        } else if (mode_ != MusicMode::Root && mode_ != MusicMode::Albums && mode_ != MusicMode::Artists &&
+                   mode_ != MusicMode::Genres) {
             auto* play = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Primary, "play");
             play->onClick = [this] { PlayInOrder(queue_, queueName_); };
             auto* shuffle = toolbar_->Add<Button>(Tr(L"Shuffle"), ButtonKind::Secondary, "shuffle_right");
@@ -211,6 +283,8 @@ public:
     }
 
     bool HasViewModes() const override { return !compact_ && mode_ != MusicMode::Root; }
+    // Song lists say "8 songs · 6:15" beside their buttons; the header doesn't repeat the count.
+    long long ItemCount() const override { return countShown_ ? -1 : count_; }
 
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;
@@ -261,20 +335,23 @@ protected:
     unsigned RowColumns() const override {
         if (mode_ == MusicMode::Albums || mode_ == MusicMode::Artists || mode_ == MusicMode::Genres || mode_ == MusicMode::Root)
             return kColSubtitle;
-        if (mode_ == MusicMode::Album) return kColSubtitle | kColDuration;  // every row has the same album
-        return kColSubtitle | kColExtra | kColDuration;
+        // Album page: every row has the same album (and usually artist); artist page: same artist.
+        if (mode_ == MusicMode::Album) return kColTrack | kColDuration | (mixedArtists_ ? kColSubtitle : 0u);
+        if (mode_ == MusicMode::Artist) return kColTrack | kColExtra | kColDuration;
+        return kColTrack | kColSubtitle | kColExtra | kColDuration;
     }
 
     void Build() override {
         if (!snap_) return;
         auto songs = snap_->Music();
-        const bool needGenres = mode_ == MusicMode::Genres || mode_ == MusicMode::Genre || mode_ == MusicMode::Root;
+        const bool needGenres = mode_ == MusicMode::Genres || mode_ == MusicMode::Genre || mode_ == MusicMode::Root ||
+                                mode_ == MusicMode::Album;
         if (needGenres) GenreIndex::Get().Request(*snap_);
         grid_->roundImages = mode_ == MusicMode::Artists;
 
         switch (mode_) {
             case MusicMode::Root: BuildRoot(songs); break;
-            case MusicMode::Songs: BuildSongs(songs, "title"); break;
+            case MusicMode::Songs: BuildSongs(songs, "track"); break;
             case MusicMode::Albums: BuildGroups(Groups(songs, MusicMode::Albums), EntryKind::Album, "album", L"album:"); break;
             case MusicMode::Artists:
                 BuildGroups(Groups(songs, MusicMode::Artists), EntryKind::Artist, "artist", L"artist:");
@@ -290,10 +367,25 @@ protected:
                                                                  : SameText(GenreIndex::Get().GenreOf(m->path), arg_);
                     if (in) v.push_back(m);
                 }
-                BuildSongs(v, mode_ == MusicMode::Album ? "track" : "album");
+                mixedArtists_ = false;
+                for (const library::MediaItem* m : v)
+                    if (!SameText(m->artist, v.front()->artist)) mixedArtists_ = true;
+                if (mode_ == MusicMode::Artist) {
+                    // The artist's albums first, then all of their songs.
+                    auto albums = Groups(v, MusicMode::Albums);
+                    const bool tagged = std::any_of(albums.begin(), albums.end(), [](const Group& g) { return !g.name.empty(); });
+                    if (tagged && folded_.empty()) {
+                        AddHeader(Tr(L"Albums"));
+                        BuildGroups(std::move(albums), EntryKind::Album, "album", L"album:", true);
+                        AddHeader(Tr(L"Songs"));
+                    }
+                }
+                BuildSongs(v, "track");
+                UpdateHeader(v);
                 break;
             }
         }
+        countShown_ = false;
         if (summary_) {
             double total = 0;
             for (const QueueItem& q : queue_) total += q.duration;
@@ -301,7 +393,48 @@ protected:
             if (total > 0) s += L" · " + FormatDuration(total);
             summary_->SetText(queue_.empty() ? std::wstring() : s);
             toolbar_->visible = !queue_.empty();
+            countShown_ = !queue_.empty() && summary_->visible;
         }
+        if (cover_) countShown_ = !queue_.empty() || !folded_.empty();
+    }
+
+    // Album / artist header: cover, byline and the facts line.
+    void UpdateHeader(const std::vector<const library::MediaItem*>& all) {
+        if (!cover_) return;
+        std::wstring image;
+        int year = 0;
+        std::wstring genre;
+        for (const library::MediaItem* m : all) {
+            if (image.empty() && !m->offline) image = m->path;
+            year = std::max(year, m->year);
+            if (genre.empty()) genre = GenreIndex::Get().GenreOf(m->path);
+        }
+        cover_->SetImage(image);
+        double total = 0;
+        for (const library::MediaItem* m : all) total += m->duration;
+        std::wstring facts;
+        auto add = [&](const std::wstring& part) {
+            if (part.empty()) return;
+            if (!facts.empty()) facts += L" · ";
+            facts += part;
+        };
+        if (mode_ == MusicMode::Album) {
+            byline_->SetText(mixedArtists_ ? std::wstring(Tr(L"Various artists"))
+                                           : ArtistLabel(all.empty() ? std::wstring() : all.front()->artist));
+            if (year > 0) add(std::to_wstring(year));
+            add(genre);
+        } else {
+            std::vector<std::wstring> albums;
+            for (const library::MediaItem* m : all)
+                if (!m->album.empty() &&
+                    std::none_of(albums.begin(), albums.end(), [&](const std::wstring& a) { return SameText(a, m->album); }))
+                    albums.push_back(m->album);
+            byline_->SetText(albums.empty() ? std::wstring() : CountAlbums(static_cast<long long>(albums.size())));
+        }
+        add(CountSongs(static_cast<long long>(all.size())));
+        if (total > 0) add(FormatDuration(total));
+        meta_->SetText(facts);
+        byline_->visible = !byline_->Text().empty();
     }
 
     void FillEmpty(EmptyState& e) override {
@@ -337,7 +470,7 @@ protected:
                              [target] { TheApp().Navigate(target); }));
             m.push_back(Item(L"Play", "playback", [q, name] { PlayInOrder(q, name); }));
             m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
-            m.push_back(Item(L"Play next", "next_twotone", [q] { PlayNext(q); }));
+            m.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(q); }));
             m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
             MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
             pl.submenu = AddToPlaylistMenu(q);
@@ -443,12 +576,31 @@ private:
         std::vector<const library::MediaItem*> filtered;
         for (const library::MediaItem* m : v)
             if (folded_.empty() || library::FoldedContains(m->searchKey, folded_)) filtered.push_back(m);
-        SortMedia(filtered, SortValue(defaultSort));
+        const std::string sort = SortValue(defaultSort);
+        SortMedia(filtered, sort);
+        if (mode_ == MusicMode::Album)
+            AddColumns(sort, {{kHeadTrack, L"#", "track"},
+                              {kHeadTitle, L"Title", "title"},
+                              {kHeadSubtitle, L"Artist", "artist"},
+                              {kHeadDuration, L"Length", "duration"}});
+        else if (mode_ == MusicMode::Artist)
+            AddColumns(sort, {{kHeadTrack, L"#", "track"},
+                              {kHeadTitle, L"Title", "title"},
+                              {kHeadExtra, L"Album", "album"},
+                              {kHeadDuration, L"Length", "duration"}});
+        else
+            AddColumns(sort, {{kHeadTrack, L"#", "track"},
+                              {kHeadTitle, L"Title", "title"},
+                              {kHeadSubtitle, L"Artist", "artist"},
+                              {kHeadExtra, L"Album", "album"},
+                              {kHeadDuration, L"Length", "duration"}});
         for (const library::MediaItem* m : filtered) AddMedia(*m);
     }
 
-    void BuildGroups(std::vector<Group> groups, EntryKind kind, const char* icon, const wchar_t* prefix) {
-        const std::string sort = SortValue("name");
+    // byArtist: the albums block of an artist page (no artist name on every album, years instead).
+    void BuildGroups(std::vector<Group> groups, EntryKind kind, const char* icon, const wchar_t* prefix,
+                     bool byArtist = false) {
+        const std::string sort = byArtist ? std::string("name") : SortValue("name");
         std::stable_sort(groups.begin(), groups.end(), [&](const Group& a, const Group& b) {
             if (sort == "count" && a.songs.size() != b.songs.size()) return a.songs.size() > b.songs.size();
             if (a.name.empty() != b.name.empty()) return b.name.empty();  // "Unknown" last
@@ -467,7 +619,12 @@ private:
             e.path = g.name;  // raw key (empty = unknown)
             e.icon = icon;
             // Albums always name the artist (like the songs list), artists and genres count songs.
-            if (kind == EntryKind::Album)
+            int year = 0;
+            for (const library::MediaItem* m : g.songs) year = std::max(year, m->year);
+            if (byArtist)
+                e.subtitle = year > 0 ? std::to_wstring(year) + L" · " + CountSongs(static_cast<long long>(g.songs.size()))
+                                      : CountSongs(static_cast<long long>(g.songs.size()));
+            else if (kind == EntryKind::Album)
                 e.subtitle = g.mixed ? std::wstring(Tr(L"Various artists")) : ArtistLabel(g.artist);
             else
                 e.subtitle = CountSongs(static_cast<long long>(g.songs.size()));
@@ -486,6 +643,11 @@ private:
     MusicMode mode_ = MusicMode::Root;
     std::wstring arg_;
     Label* summary_ = nullptr;
+    CoverArt* cover_ = nullptr;  // album / artist header (not in the side panel)
+    Label* byline_ = nullptr;
+    Label* meta_ = nullptr;
+    bool mixedArtists_ = false;
+    bool countShown_ = false;
     std::map<int, std::vector<const library::MediaItem*>> groupSongs_;
 };
 

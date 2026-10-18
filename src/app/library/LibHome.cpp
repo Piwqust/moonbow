@@ -58,10 +58,11 @@ public:
         grid_->SetEntries(std::move(entries_));
         entries_.clear();
     }
-    void SetGridStyle(GridStyle s, int rows) {
+    void SetGridStyle(GridStyle s, int rows, unsigned columns = kColDuration) {
         grid_->SetStyle(compact_ ? GridStyle::CompactRows : s);
         grid_->maxRows = compact_ && rows > 0 ? 3 : rows;
         grid_->stretch = rows == 0;
+        grid_->columns = columns;
     }
     ItemGrid* Grid() const { return grid_; }
     SectionTitle* Title() const { return title_; }
@@ -105,7 +106,11 @@ private:
         } else {
             const Route r = i < static_cast<int>(routes_.size()) ? routes_[static_cast<size_t>(i)] : Route{};
             auto open = actions_.size() > static_cast<size_t>(i) ? actions_[static_cast<size_t>(i)] : nullptr;
-            m.push_back(Item(L"Open", e.kind == EntryKind::Playlist ? "playlist" : "folder", [r, open] {
+            const char* openIcon = e.kind == EntryKind::Playlist ? "playlist"
+                                   : e.kind == EntryKind::Album  ? "album"
+                                   : e.kind == EntryKind::Artist ? "artist"
+                                                                 : "folder";
+            m.push_back(Item(L"Open", openIcon, [r, open] {
                 if (open) open();
                 else if (r.section != Section::Home) TheApp().Navigate(r);
             }));
@@ -152,8 +157,12 @@ public:
         content_->pad = compact ? Insets{12, 6, 12, 16} : Insets{28, 37, 20, 40};
         content_->gap = compact ? 26.0f : 77.0f;
 
-        results_[0] = AddSection(L"Videos", Route{Section::Videos, {}}, GridStyle::VideoCards);
-        results_[1] = AddSection(L"Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
+        // Search results: artists and albums first (they lead to many songs), then files.
+        results_[0] = AddSection(L"Artists", Route{Section::Music, L"artists"}, GridStyle::SquareCards);
+        results_[1] = AddSection(L"Albums", Route{Section::Music, L"albums"}, GridStyle::SquareCards);
+        results_[2] = AddSection(L"Videos", Route{Section::Videos, {}}, GridStyle::VideoCards);
+        results_[3] = AddSection(L"Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
+        results_[0]->Grid()->roundImages = true;
         continue_ = AddSection(L"Continue Watching", Route{Section::Recent, L"continue"}, GridStyle::VideoCards);
         listen_ = AddSection(L"Listen Again", Route{Section::Recent, L"audio"}, GridStyle::SquareCards);
         favorites_ = AddSection(L"Favorites", Route{Section::Recent, L"favorites"}, GridStyle::VideoCards);
@@ -163,7 +172,11 @@ public:
         artists_->Grid()->roundImages = true;
         added_ = AddSection(L"Recently Added", Route{Section::Videos, {}}, GridStyle::VideoCards);
         addedMusic_ = AddSection(L"Recently Added Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
-        for (HomeSection* s : results_) s->SetGridStyle(s == results_[0] ? GridStyle::VideoCards : GridStyle::SquareCards, 0);
+        results_[0]->SetGridStyle(GridStyle::SquareCards, 1);
+        results_[1]->SetGridStyle(GridStyle::SquareCards, 1);
+        results_[2]->SetGridStyle(GridStyle::VideoCards, 0);
+        // Songs are found by the dozen: list rows with artist and album read better than big covers.
+        results_[3]->SetGridStyle(GridStyle::Rows, 0, kColSubtitle | kColExtra | kColDuration);
 
         empty_ = Add<EmptyState>();
         empty_->visible = false;
@@ -226,6 +239,7 @@ private:
         e.icon = url ? "streaming" : e.audio ? "music" : "video";
         e.duration = m && m->duration > 0 ? m->duration : h ? h->duration : 0;
         e.favorite = TheApp().favorites().Contains(path);
+        e.damaged = m && m->damaged;
         return e;
     }
 
@@ -233,20 +247,21 @@ private:
         App& app = TheApp();
         auto snap = app.library().Current();
         library::History& hist = app.history();
-        count_ = static_cast<long long>(snap->items.size());
+        count_ = -1;  // Home is a mix of sections: no single count describes it
 
         const bool searching = !filter_.empty();
         for (HomeSection* s : All()) s->Clear();
 
         if (searching) {
-            int n = 0;
+            int n = SearchGroups(*snap);
             for (int k = 0; k < 2; ++k) {
-                HomeSection* s = results_[k];
+                HomeSection* s = results_[2 + k];
                 const library::MediaKind kind = k == 0 ? library::MediaKind::Video : library::MediaKind::Audio;
                 auto found = snap->Search(filter_, kind);
                 library::SortItems(found, library::SortKey::Name);
                 for (const library::MediaItem* m : found) {
                     Entry e = MediaCard(m->path, m, nullptr);
+                    if (k == 1) e.extra = AlbumLabel(m->album);
                     e.ref = s->AddQueue(MakeQueueItem(m->path, k == 1 ? m->DisplayTitle() : std::wstring(), m->duration));
                     s->AddEntry(std::move(e));
                     ++n;
@@ -275,6 +290,8 @@ private:
             e.icon = IsUrl(h.path) ? "streaming" : "video";
             e.progress = h.Progress();
             e.duration = h.duration;
+            if (h.duration > 0 && h.position > 0 && h.position < h.duration)
+                e.subtitle = Fmt(Tr(L"{0} left"), {FormatDuration(h.duration - h.position)});
             e.ref = continue_->AddQueue(MakeQueueItem(h.path, h.title, h.duration));
             continue_->AddEntry(std::move(e));
         }
@@ -441,6 +458,67 @@ private:
         headerChanged.Emit();
     }
 
+    // Artists and albums whose names match the search (each one card, opening its page).
+    // Returns how many were added.
+    int SearchGroups(const library::Snapshot& snap) {
+        const std::wstring q = library::SearchFold(filter_);
+        struct Hit {
+            std::wstring name, artist, image;
+            int songs = 0;
+            bool mixed = false;
+        };
+        std::map<std::wstring, Hit> artists, albums;  // folded name -> hit
+        for (const library::MediaItem& m : snap.items) {
+            if (m.kind != library::MediaKind::Audio) continue;
+            if (!m.artist.empty()) {
+                Hit& a = artists[library::SearchFold(m.artist)];
+                if (a.name.empty()) a.name = m.artist;
+                if (a.image.empty() && !m.offline) a.image = m.path;
+                ++a.songs;
+            }
+            if (!m.album.empty()) {
+                Hit& b = albums[library::SearchFold(m.album)];
+                if (b.name.empty()) {
+                    b.name = m.album;
+                    b.artist = m.artist;
+                }
+                if (b.artist != m.artist) b.mixed = true;
+                if (b.image.empty() && !m.offline) b.image = m.path;
+                ++b.songs;
+            }
+        }
+        int n = 0;
+        for (const auto& [key, a] : artists) {
+            if (!library::FoldedContains(key, q)) continue;
+            Entry e;
+            e.kind = EntryKind::Artist;
+            e.title = a.name;
+            e.subtitle = CountSongs(a.songs);
+            e.icon = "artist";
+            e.image = a.image;
+            results_[0]->AddEntry(std::move(e), Route{Section::Music, L"artist:" + a.name});
+            ++n;
+        }
+        const int artistHits = n;
+        for (const auto& [key, b] : albums) {
+            const std::wstring by = b.mixed ? std::wstring(Tr(L"Various artists")) : ArtistLabel(b.artist);
+            if (!library::FoldedContains(key, q) && !library::FoldedContains(library::SearchFold(by), q)) continue;
+            Entry e;
+            e.kind = EntryKind::Album;
+            e.title = b.name;
+            e.subtitle = by;
+            e.icon = "album";
+            e.image = b.image;
+            results_[1]->AddEntry(std::move(e), Route{Section::Music, L"album:" + b.name});
+            ++n;
+        }
+        results_[0]->Title()->text = Fmt(Tr(L"Artists · {0}"), static_cast<long long>(artistHits));
+        results_[1]->Title()->text = Fmt(Tr(L"Albums · {0}"), static_cast<long long>(n - artistHits));
+        results_[0]->Commit({});
+        results_[1]->Commit({});
+        return n;
+    }
+
     bool compact_;
     std::wstring filter_;
     long long count_ = 0;
@@ -448,7 +526,7 @@ private:
     Widget* content_ = nullptr;
     ScanBadge* scan_ = nullptr;
     EmptyState* empty_ = nullptr;
-    HomeSection* results_[2] = {};
+    HomeSection* results_[4] = {};  // artists, albums, videos, music
     HomeSection *continue_ = nullptr, *listen_ = nullptr, *favorites_ = nullptr, *folders_ = nullptr,
                 *playlists_ = nullptr, *artists_ = nullptr, *added_ = nullptr, *addedMusic_ = nullptr;
     ScopedConnection libConn_, playerConn_;
@@ -460,8 +538,7 @@ private:
     }
     std::vector<HomeSection*> All() const {
         auto v = Sections();
-        v.push_back(results_[0]);
-        v.push_back(results_[1]);
+        for (HomeSection* r : results_) v.push_back(r);
         return v;
     }
 };

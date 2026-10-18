@@ -25,6 +25,21 @@ bool IsCardStyle(GridStyle s) {
     return s == GridStyle::VideoCards || s == GridStyle::SquareCards;
 }
 
+// Group titles and column titles: painted, never selected.
+bool IsLabel(EntryKind k) {
+    return k == EntryKind::Header || k == EntryKind::Columns;
+}
+
+constexpr float kColumnsH = 32, kTrackW = 28, kDurationW = 76;
+
+// Warning mark on the artwork of a file the scanner found unplayable.
+void PaintDamagedMark(Painter& p, Point center, float radius) {
+    const Palette& c = P();
+    p.FillCircle(center, radius, c.bgBase.Fade(0.88f));
+    p.Text(L"!", {center.x - radius, center.y - radius, radius * 2, radius * 2}, radius >= 10 ? TextStyle::BodyStrong : TextStyle::Micro,
+           c.danger, HAlign::Center, VAlign::Center, 0);
+}
+
 // When Enter opened the page, its grid lands on the first item with a focus ring.
 uint64_t g_keyActivateTick = 0;
 
@@ -63,13 +78,16 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
     selected_ = -1;
     if (!selPath.empty() || !selTitle.empty())
         for (size_t i = 0; i < entries_.size(); ++i)
-            if (entries_[i].kind != EntryKind::Header && entries_[i].path == selPath && entries_[i].title == selTitle) {
+            if (!IsLabel(entries_[i].kind) && entries_[i].path == selPath && entries_[i].title == selTitle) {
                 selected_ = static_cast<int>(i);
                 break;
             }
     hover_ = -1;
+    hoverHead_ = -1;
     press_ = -1;
     dragging_ = false;
+    anyFavorite_ = false;
+    for (const Entry& e : entries_) anyFavorite_ |= e.favorite;
     ++version_;
     InvalidateLayout();
 }
@@ -82,7 +100,7 @@ void ItemGrid::SetStyle(GridStyle s) {
 }
 
 bool ItemGrid::Selectable(int i) const {
-    return i >= 0 && i < static_cast<int>(entries_.size()) && entries_[static_cast<size_t>(i)].kind != EntryKind::Header &&
+    return i >= 0 && i < static_cast<int>(entries_.size()) && !IsLabel(entries_[static_cast<size_t>(i)].kind) &&
            !slots_.empty() && static_cast<size_t>(i) < slots_.size() && slots_[static_cast<size_t>(i)].w > 0;
 }
 
@@ -103,7 +121,15 @@ void ItemGrid::Compute(float w) {
         const float minCard = style_ == GridStyle::VideoCards ? kVideoMinW : kSquareMinW;
         int cols = std::max(1, static_cast<int>(std::floor((w + kCardGapX) / (minCard + kCardGapX))));
         geo_.cols = cols;
-        geo_.cardW = stretch ? (w - kCardGapX * static_cast<float>(cols - 1)) / static_cast<float>(cols) : minCard;
+        // Fixed-size cards (Home) grow a little in wide windows instead of leaving most of a
+        // maximized window empty.
+        const float grow = std::clamp(w / 1500.0f, 1.0f, 1.5f);
+        if (!stretch && grow > 1) {
+            cols = std::max(1, static_cast<int>(std::floor((w + kCardGapX) / (minCard * grow + kCardGapX))));
+            geo_.cols = cols;
+        }
+        geo_.cardW = stretch ? (w - kCardGapX * static_cast<float>(cols - 1)) / static_cast<float>(cols)
+                             : std::floor(minCard * grow);
         if (geo_.cardW > w) geo_.cardW = w;
         geo_.thumbH = style_ == GridStyle::VideoCards ? std::round(geo_.cardW * kVideoRatio) : std::round(geo_.cardW);
         bool subs = false;
@@ -124,6 +150,17 @@ void ItemGrid::Compute(float w) {
         const Entry& e = entries_[i];
         if (limited) {
             slots_[i] = {0, bottom, 0, 0};
+            continue;
+        }
+        if (e.kind == EntryKind::Columns) {
+            // Column titles belong to list rows only.
+            if (cards || style_ == GridStyle::CompactRows || (maxRows > 0 && rows >= maxRows)) {
+                slots_[i] = {0, y, 0, 0};
+                continue;
+            }
+            slots_[i] = {0, y, w, kColumnsH};
+            y += kColumnsH;
+            bottom = y;
             continue;
         }
         if (e.kind == EntryKind::Header) {
@@ -196,7 +233,7 @@ bool ItemGrid::JustOpened() const {
 int ItemGrid::VisibleCount() const {
     int n = 0;
     for (size_t i = 0; i < slots_.size() && i < entries_.size(); ++i)
-        if (slots_[i].w > 0 && entries_[i].kind != EntryKind::Header) ++n;
+        if (slots_[i].w > 0 && !IsLabel(entries_[i].kind)) ++n;
     return n;
 }
 
@@ -278,9 +315,10 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const Rect t{r.x, r.y, r.w, geo_.thumbH};
     const bool sel = i == selected_;
     const bool pressed = hot && IsPressed();
-    const float dim = e.watched ? 0.55f : 1.0f;
+    const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
 
     PaintThumb(p, e, t, kCardRadius, 48, dim);
+    if (e.damaged) PaintDamagedMark(p, {t.Right() - 20, t.y + 20}, 12);
 
     // Progress line along the bottom edge, clipped by the rounded corners.
     if (e.progress > 0) {
@@ -292,6 +330,7 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     // Badges: duration for media, item count for folders.
     std::wstring badge;
     if (e.kind == EntryKind::Media && !e.audio && e.duration > 0) badge = FormatDuration(e.duration);
+    if (e.damaged) badge = Tr(L"Damaged");
     if ((e.kind == EntryKind::Folder || e.kind == EntryKind::Playlist) && e.count > 0 && style_ == GridStyle::VideoCards)
         badge = std::to_wstring(e.count);
     if (!badge.empty()) {
@@ -329,7 +368,7 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Stroke(t.Inset(-3), focused ? c.accentMid : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
     }
 
-    const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : e.watched ? c.textTertiary : c.textSecondary;
+    const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : (e.watched || e.damaged) ? c.textTertiary : c.textSecondary;
     const float ly = t.Bottom() + kLabelGap;
     p.Text(e.title, {r.x, ly - 2, r.w, kLineH + 4}, TextStyle::Large, fg);
     if (!e.subtitle.empty())
@@ -356,9 +395,13 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const bool dragSource = dragging_ && i == press_;
     if (dragSource) p.PushOpacity(0.35f);
 
-    const Rect t{r.x, r.Cy() - kThumb / 2, kThumb, kThumb};
+    const bool compactRow = style_ == GridStyle::CompactRows;
+    const RowCells cells = MediaCells(r);
+    const Rect t = compactRow ? Rect{r.x, r.Cy() - kThumb / 2, kThumb, kThumb} : cells.thumb;
+    if (!compactRow && (columns & kColTrack) && e.track > 0)
+        p.Text(std::to_wstring(e.track), cells.track, TextStyle::Mono, now ? c.accent : c.textTertiary, HAlign::Trailing);
     const bool iconRow = e.kind != EntryKind::Media && e.kind != EntryKind::Album && e.image.empty();
-    const float dim = e.watched ? 0.55f : 1.0f;
+    const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
     if (iconRow) {
         std::string icon = e.icon.empty() ? "folder" : e.icon;
         const Color ic = hot || sel ? c.textPrimary : c.textSecondary;
@@ -371,14 +414,15 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
             p.Fill(t, c.scrim, 2);
             p.Icon("play", t.Center(18, 18), c.accent);
         }
+        if (e.damaged) PaintDamagedMark(p, {t.Right() - 2, t.Bottom() - 2}, 7);
     }
 
     const Color fg = now ? c.accent
                      : e.kind == EntryKind::Action ? (hot ? c.textPrimary : c.textTertiary)
                      : (hot || sel)                ? c.textPrimary
-                     : e.watched                   ? c.textTertiary
+                     : (e.watched || e.damaged)    ? c.textTertiary
                                                    : c.textSecondary;
-    float x = r.x + kThumb + 10;
+    float x = t.Right() + 10;
     float right = r.Right();
     const bool menu = e.kind != EntryKind::Action && e.kind != EntryKind::Category && onMenu;
     if (menu) {
@@ -389,8 +433,8 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         }
         right -= 36;
     }
-    if (e.favorite) {
-        p.Icon("favorite_active", {right - 16, r.Cy() - 8, 16, 16}, c.textSecondary);
+    if (compact ? e.favorite : anyFavorite_) {
+        if (e.favorite) p.Icon("favorite_active", {right - 16, r.Cy() - 8, 16, 16}, c.textSecondary);
         right -= 28;
     }
 
@@ -422,7 +466,9 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         const float reserved = ((columns & kColDate) && w > 720 ? 112.0f : 0.0f) +
                                ((columns & kColSize) && w > 600 ? 96.0f : 0.0f) + ((columns & kColDuration) ? 80.0f : 0.0f);
         // Categories carry their own noun ("8 songs", "3 artists").
-        const std::wstring count = e.kind == EntryKind::Category && !e.subtitle.empty() ? e.subtitle : CountItems(e.count);
+        const std::wstring count = e.kind == EntryKind::Category && !e.subtitle.empty() ? e.subtitle
+                                   : e.kind == EntryKind::Album                         ? CountSongs(e.count)
+                                                                                        : CountItems(e.count);
         if (e.count >= 0) p.Text(count, {right - 160, r.y, 160, r.h}, TextStyle::Body, c.textTertiary, HAlign::Trailing);
         right -= std::max(reserved, e.count >= 0 ? 176.0f : 0.0f);
     } else {
@@ -433,8 +479,12 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         }
         if (columns & kColSize)
             cell(e.size > 0 ? FormatSize(e.size) : std::wstring(), w > 600 ? 80.0f : 0.0f, TextStyle::Body, HAlign::Trailing);
-        if (columns & kColDuration)
-            cell(e.duration > 0 ? FormatDuration(e.duration) : std::wstring(), 64, TextStyle::Mono, HAlign::Trailing);
+        if (columns & kColDuration) {
+            if (e.damaged && !(e.duration > 0))
+                cell(Tr(L"Damaged"), kDurationW, TextStyle::Small, HAlign::Trailing);
+            else
+                cell(e.duration > 0 ? FormatDuration(e.duration) : std::wstring(), kDurationW, TextStyle::Mono, HAlign::Trailing);
+        }
     }
 
     const float flex = right - x;
@@ -454,6 +504,91 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
     if (extra) p.Text(e.extra, {cx, r.y, flex - (cx - x) - 16, r.h}, body, c.textTertiary);
     if (dragSource) p.PopOpacity();
+}
+
+// Cells of a media row (and of the column titles above the rows). Mirrors PaintRow.
+ItemGrid::RowCells ItemGrid::MediaCells(const Rect& r) const {
+    RowCells cells;
+    float x = r.x;
+    if (columns & kColTrack) {
+        cells.track = {x, r.y, kTrackW, r.h};
+        x += kTrackW + 12;
+    }
+    cells.thumb = {x, r.Cy() - kThumb / 2, kThumb, kThumb};
+    x += kThumb + 10;
+    float right = r.Right();
+    if (onMenu) right -= 36;
+    if (anyFavorite_) {
+        cells.heart = {right - 16, r.Cy() - 8, 16, 16};
+        right -= 28;
+    }
+    const float w = r.w;
+    auto take = [&](Rect& out, float cw) {
+        if (cw <= 0) return;
+        out = {right - cw, r.y, cw, r.h};
+        right -= cw + 16;
+    };
+    if (columns & kColDate) take(cells.date, w > 720 ? 96.0f : 0.0f);
+    if (columns & kColSize) take(cells.size, w > 600 ? 80.0f : 0.0f);
+    if (columns & kColDuration) take(cells.duration, kDurationW);
+    const float flex = right - x;
+    const bool sub = (columns & kColSubtitle) != 0, extra = (columns & kColExtra) != 0;
+    float titleW = flex;
+    if (sub && extra) titleW = flex * 0.44f;
+    else if (sub || extra) titleW = flex * 0.6f;
+    cells.title = {x, r.y, titleW - 16, r.h};
+    float cx = x + titleW;
+    const float rest = flex - titleW;
+    if (sub) {
+        const float sw = extra ? rest / 2 : rest;
+        cells.sub = {cx, r.y, sw - 16, r.h};
+        cx += sw;
+    }
+    if (extra) cells.extra = {cx, r.y, flex - (cx - x) - 16, r.h};
+    return cells;
+}
+
+int ItemGrid::HeadAt(int index, float x) const {
+    if (index < 0 || entries_[static_cast<size_t>(index)].kind != EntryKind::Columns) return -1;
+    const RowCells cells = MediaCells(ItemRect(index));
+    const Rect* rects[kHeadCount] = {&cells.track, &cells.title, &cells.sub, &cells.extra,
+                                     &cells.duration, &cells.size, &cells.date};
+    for (int h = 0; h < kHeadCount; ++h) {
+        const Rect& cr = *rects[h];
+        if (cr.w <= 0 || heads[h].label.empty() || heads[h].sort.empty()) continue;
+        // The title column also owns the thumbnail space before it.
+        const float left = h == kHeadTitle ? cells.thumb.x : cr.x;
+        if (x >= left - 4 && x < cr.Right() + 8) return h;
+    }
+    return -1;
+}
+
+void ItemGrid::PaintColumns(Painter& p, const Rect& r) {
+    const Palette& c = P();
+    const RowCells cells = MediaCells(r);
+    const Rect* rects[kHeadCount] = {&cells.track, &cells.title, &cells.sub, &cells.extra,
+                                     &cells.duration, &cells.size, &cells.date};
+    const size_t colon = sort.find(':');
+    const std::string base = colon == std::string::npos ? sort : sort.substr(0, colon);
+    const bool desc = colon != std::string::npos;
+    for (int h = 0; h < kHeadCount; ++h) {
+        const Rect& cr = *rects[h];
+        const ColumnTitle& head = heads[h];
+        if (cr.w <= 0 || head.label.empty()) continue;
+        const bool active = !head.sort.empty() && head.sort == base;
+        const bool hot = h == hoverHead_ && IsHot();
+        const Color col = hot ? c.textPrimary : active ? c.textSecondary : c.textTertiary;
+        const bool trailing = h == kHeadTrack || h == kHeadDuration || h == kHeadSize || h == kHeadDate;
+        const float tw = std::min(cr.w, std::ceil(p.Measure(head.label, TextStyle::SmallMedium).width));
+        Rect text = cr;
+        if (active && trailing) text.w -= 16;  // room for the arrow on the left of the right edge
+        p.Text(head.label, text, TextStyle::SmallMedium, col, trailing ? HAlign::Trailing : HAlign::Leading);
+        if (active) {
+            const float ax = trailing ? text.Right() + 2 : cr.x + tw + 4;
+            p.Icon(desc ? "arrow_down" : "arrow_up", {ax, r.Cy() - 7, 14, 14}, col);
+        }
+    }
+    p.Fill({r.x - 8, r.Bottom() - 1, r.w + 16, 1}, c.line);
 }
 
 void ItemGrid::PaintHeader(Painter& p, int i, const Rect& r) {
@@ -487,6 +622,10 @@ void ItemGrid::Paint(Painter& p) {
             PaintHeader(p, i, r);
             continue;
         }
+        if (e.kind == EntryKind::Columns) {
+            PaintColumns(p, r);
+            continue;
+        }
         const bool hot = i == hover_ && IsHot() && !dragging_;
         const bool playing = !now.empty() && e.kind == EntryKind::Media && SamePath(e.path, now);
         if (IsCardStyle(style_))
@@ -508,6 +647,19 @@ void ItemGrid::Paint(Painter& p) {
 
 void ItemGrid::UpdateHover(float x, float y) {
     const int i = IndexAt(x, y);
+    const int head = HeadAt(i, x);
+    if (head != hoverHead_) {
+        hoverHead_ = head;
+        Invalidate();
+    }
+    if (head >= 0) {
+        cursor = IDC_HAND;
+        if (hover_ != -1) {
+            hover_ = -1;
+            Invalidate();
+        }
+        return;
+    }
     const int h = Selectable(i) ? i : -1;
     bool more = false;
     if (h >= 0 && !IsCardStyle(style_)) more = MoreButtonRect(ItemRect(h)).Inset(-4).Contains(x, y);
@@ -527,6 +679,14 @@ bool ItemGrid::OnMouseDown(const MouseEvent& e) {
     const int i = IndexAt(e.x, e.y);
     press_ = -1;
     dragging_ = false;
+    if (!JustOpened() && onSort) {
+        const int head = HeadAt(i, e.x);
+        if (head >= 0) {
+            const std::string& key = heads[head].sort;
+            onSort(sort == key ? key + ":desc" : key);  // rebuilds the entries, not this grid
+            return true;
+        }
+    }
     if (JustOpened() || !Selectable(i)) return true;
     Select(i, false);
     press_ = i;
@@ -596,6 +756,7 @@ void ItemGrid::OnClick() {
 
 bool ItemGrid::OnDoubleClick(const MouseEvent& e) {
     const int i = IndexAt(e.x, e.y);
+    if (HeadAt(i, e.x) >= 0) return OnMouseDown(e);  // a quick second click on a column title reverses again
     if (JustOpened() || !Selectable(i)) return true;
     Select(i, false);
     const EntryKind k = entries_[static_cast<size_t>(i)].kind;
@@ -606,6 +767,7 @@ bool ItemGrid::OnDoubleClick(const MouseEvent& e) {
 
 void ItemGrid::OnMouseLeave() {
     hover_ = -1;
+    hoverHead_ = -1;
     hoverMore_ = false;
     Invalidate();
 }
