@@ -1734,6 +1734,23 @@ void BuildMedia(Builder& b) {
               L"Заменять шрифты и цвета субтитров .ass. Может испортить караоке и надписи.")
         .MpvBool("sub-ass-override", "force", "scale");
 
+    // Read by app/player/SubWords.cpp. The links open in the browser only on a click.
+    b.Sec("words", L"Words in Subtitles", L"Слова в субтитрах");
+    b.Toggle("subtitles.wordPicker", L"Pick words on pause", L"Выбор слов на паузе", true)
+        .Desc(L"On pause, a click on a word in the subtitles copies it or looks it up in a dictionary or a translator. "
+              L"Shift-click or drag to pick several words; W does it from the keyboard.",
+              L"На паузе щелчок по слову в субтитрах копирует его или ищет в словаре и переводчике. Несколько слов — "
+              L"щелчок с Shift или протягивание; с клавиатуры — W.");
+    b.Text("subtitles.dictionaryUrl", L"Dictionary link", L"Ссылка на словарь",
+           "https://{lang}.wiktionary.org/w/index.php?search={text}")
+        .Desc(L"Opened in the browser. {text} is replaced with the words, {lang} with the interface language.",
+              L"Открывается в браузере. {text} заменяется словами, {lang} — языком интерфейса.")
+        .When("subtitles.wordPicker", "true");
+    b.Text("subtitles.translateUrl", L"Translator link", L"Ссылка на переводчик",
+           "https://translate.google.com/?sl=auto&tl={lang}&text={text}&op=translate")
+        .Desc(L"Opened in the browser, like the dictionary link.", L"Открывается в браузере, как и ссылка на словарь.")
+        .When("subtitles.wordPicker", "true");
+
     // ===== Library =====
     b.Cat("library", "media", "folder", L"Library", L"Медиатека", L"Playlists, Folders & Files",
           L"Плейлисты, папки и файлы");

@@ -1915,6 +1915,18 @@ void TestSubtitleText() {
     CHECK(StripAssTags(L"unclosed {brace") == L"unclosed {brace");
     CHECK(StripAssTags(L"{comment only}").empty());
     CHECK(StripAssTags(LR"({\k20}Ka{\k30}ra{\k25}o{\k40}ke)") == L"Karaoke");
+    // Italic and bold per character, through the trimming: SRT's <i> arrives as {\i1}.
+    std::vector<uint8_t> marks{9};
+    CHECK(StripAssTags(LR"(plain {\i1}slanted{\i0} {\b700}heavy{\r} end)", nullptr, &marks) ==
+          L"plain slanted heavy end");
+    CHECK(marks.size() == 23 && marks[0] == 0 && marks[6] == kItalic && marks[12] == kItalic && marks[13] == 0 &&
+          marks[14] == kBold && marks[18] == kBold && marks[20] == 0);
+    CHECK(StripAssTags(LR"(  {\i1}one\N\N two{\i0}  )", nullptr, &marks) == L"one\ntwo");
+    CHECK(marks.size() == 7 && marks[0] == kItalic && marks[3] == 0 && marks[4] == kItalic);
+    CHECK(StripAssTags(LR"({\b1}bold{\b0} {\i1\b1}both)", nullptr, &marks) == L"bold both");
+    CHECK(marks.size() == 9 && marks[0] == kBold && marks[4] == 0 && marks[5] == (kItalic | kBold));
+    CHECK(StripAssTags(L"no styling", nullptr, &marks) == L"no styling" && marks.empty());
+    CHECK(StripAssTags(LR"({\b400}normal weight)", nullptr, &marks) == L"normal weight" && marks.empty());
 
     // One event per line: a sign at the top, a line with a hard break (\N), a drawing only.
     const auto events =

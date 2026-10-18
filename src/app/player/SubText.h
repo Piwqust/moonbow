@@ -12,11 +12,15 @@
 namespace app::subtext {
 
 // One subtitle event as shown: plain text ('\n' between its lines) and its numpad alignment
-// (1-3 bottom, 4-6 middle, 7-9 top; 2 when the event doesn't say).
+// (1-3 bottom, 4-6 middle, 7-9 top; 2 when the event doesn't say). `marks` holds kItalic and
+// kBold per character of `text` (empty when the event has neither).
 struct Event {
     std::wstring text;
     int align = 2;
+    std::vector<uint8_t> marks;
 };
+
+inline constexpr uint8_t kItalic = 1, kBold = 2;
 
 // A word: [start, start + length) in the event's text, UTF-16 units.
 struct Span {
@@ -38,16 +42,21 @@ inline int LegacyAlign(int a) {
     return 0;
 }
 
-// Reads the tags of one override block {…}: the first alignment and the drawing mode.
-inline void ParseBlock(std::wstring_view block, int& align, bool& drawing) {
+// Reads the tags of one override block {…}: the first alignment, the drawing mode and the
+// italic / bold state (\i1, \b1 or a weight of 600 and more; \r goes back to plain).
+inline void ParseBlock(std::wstring_view block, int& align, bool& drawing, uint8_t& mark) {
     for (size_t i = 0; i < block.size(); ++i) {
         if (block[i] != L'\\') continue;
         std::wstring_view rest = block.substr(i + 1);
         auto number = [](std::wstring_view s, size_t from) {
             int v = 0;
             size_t k = from;
-            while (k < s.size() && IsDigit(s[k]) && v < 1000) v = v * 10 + (s[k++] - L'0');
+            while (k < s.size() && IsDigit(s[k]) && v < 100000) v = v * 10 + (s[k++] - L'0');
             return k > from ? v : -1;
+        };
+        auto flag = [&](uint8_t bit, int v, int on) {
+            if (v < 0) return;
+            mark = v >= on ? static_cast<uint8_t>(mark | bit) : static_cast<uint8_t>(mark & ~bit);
         };
         if (rest.size() >= 3 && rest[0] == L'a' && rest[1] == L'n' && IsDigit(rest[2])) {
             const int v = number(rest, 2);
@@ -57,6 +66,13 @@ inline void ParseBlock(std::wstring_view block, int& align, bool& drawing) {
             if (align == 0 && v) align = v;
         } else if (rest.size() >= 2 && rest[0] == L'p' && IsDigit(rest[1])) {
             drawing = number(rest, 1) > 0;  // \p1 starts vector drawing commands, \p0 ends them
+        } else if (rest.size() >= 2 && rest[0] == L'i' && IsDigit(rest[1])) {
+            flag(kItalic, number(rest, 1), 1);
+        } else if (rest.size() >= 2 && rest[0] == L'b' && IsDigit(rest[1])) {
+            const int v = number(rest, 1);
+            flag(kBold, v, v > 1 ? 600 : 1);  // \b1, or a weight such as \b700
+        } else if (!rest.empty() && rest[0] == L'r' && (rest.size() == 1 || rest[1] == L'\\' || rest[1] == L'}')) {
+            mark = 0;
         }
     }
 }
@@ -65,9 +81,11 @@ inline bool IsSpace(wchar_t c) {
     return c == L' ' || c == L'\t' || c == L'\r' || c == 0x00A0 || c == 0x3000 || (c >= 0x2000 && c <= 0x200B);
 }
 
-// Trims each line, drops empty lines, keeps single '\n' between the rest.
-inline std::wstring TidyLines(const std::wstring& s) {
+// Trims each line, drops empty lines, keeps single '\n' between the rest. `marks`, when given,
+// runs alongside `s` and is tidied the same way.
+inline std::wstring TidyLines(const std::wstring& s, std::vector<uint8_t>* marks = nullptr) {
     std::wstring out;
+    std::vector<uint8_t> kept;
     size_t from = 0;
     while (from <= s.size()) {
         size_t nl = s.find(L'\n', from);
@@ -76,11 +94,16 @@ inline std::wstring TidyLines(const std::wstring& s) {
         while (a < b && IsSpace(s[a])) ++a;
         while (b > a && IsSpace(s[b - 1])) --b;
         if (b > a) {
-            if (!out.empty()) out += L'\n';
+            if (!out.empty()) {
+                out += L'\n';
+                if (marks) kept.push_back(0);
+            }
             out.append(s, a, b - a);
+            if (marks) kept.insert(kept.end(), marks->begin() + static_cast<ptrdiff_t>(a), marks->begin() + static_cast<ptrdiff_t>(b));
         }
         from = nl + 1;
     }
+    if (marks) *marks = std::move(kept);
     return out;
 }
 
@@ -88,18 +111,27 @@ inline std::wstring TidyLines(const std::wstring& s) {
 
 // One ASS event's Text field as plain text: override blocks {…} removed, vector drawings
 // (\p1 … \p0) dropped, \N a line break, \n a space (libass breaks there only in wrap style 2),
-// \h a no-break space. `align` gets the event's first \an (or legacy \a), 0 if none.
-inline std::wstring StripAssTags(std::wstring_view s, int* align = nullptr) {
+// \h a no-break space. `align` gets the event's first \an (or legacy \a), 0 if none; `marks`
+// gets kItalic / kBold per character, or stays empty when no character has either.
+inline std::wstring StripAssTags(std::wstring_view s, int* align = nullptr, std::vector<uint8_t>* marks = nullptr) {
     std::wstring out;
+    std::vector<uint8_t> m;
     out.reserve(s.size());
     int a = 0;
     bool drawing = false;
+    uint8_t mark = 0;
+    bool any = false;
+    auto put = [&](wchar_t c) {
+        out += c;
+        m.push_back(mark);
+        any |= mark != 0;
+    };
     for (size_t i = 0; i < s.size(); ++i) {
         const wchar_t c = s[i];
         if (c == L'{') {
             const size_t close = s.find(L'}', i + 1);
             if (close != std::wstring_view::npos) {
-                detail::ParseBlock(s.substr(i + 1, close - i - 1), a, drawing);
+                detail::ParseBlock(s.substr(i + 1, close - i - 1), a, drawing, mark);
                 i = close;
                 continue;
             }
@@ -108,14 +140,21 @@ inline std::wstring StripAssTags(std::wstring_view s, int* align = nullptr) {
         if (drawing) continue;
         if (c == L'\\' && i + 1 < s.size()) {
             const wchar_t n = s[i + 1];
-            if (n == L'N') { out += L'\n'; ++i; continue; }
-            if (n == L'n') { out += L' '; ++i; continue; }
-            if (n == L'h') { out += static_cast<wchar_t>(0x00A0); ++i; continue; }
+            if (n == L'N') { put(L'\n'); ++i; continue; }
+            if (n == L'n') { put(L' '); ++i; continue; }
+            if (n == L'h') { put(static_cast<wchar_t>(0x00A0)); ++i; continue; }
         }
-        out += c;
+        put(c);
     }
     if (align) *align = a;
-    return detail::TidyLines(out);
+    std::wstring text = detail::TidyLines(out, &m);
+    if (marks) {
+        any = false;
+        for (uint8_t k : m) any |= k != 0;
+        if (any) *marks = std::move(m);
+        else marks->clear();
+    }
+    return text;
 }
 
 // mpv's sub-text/ass: the Text fields of every event on screen, one per line. Events with no
@@ -127,8 +166,9 @@ inline std::vector<Event> ParseEvents(std::wstring_view ass) {
         size_t nl = ass.find(L'\n', from);
         if (nl == std::wstring_view::npos) nl = ass.size();
         int align = 0;
-        std::wstring text = StripAssTags(ass.substr(from, nl - from), &align);
-        if (!text.empty()) events.push_back({std::move(text), align ? align : 2});
+        std::vector<uint8_t> marks;
+        std::wstring text = StripAssTags(ass.substr(from, nl - from), &align, &marks);
+        if (!text.empty()) events.push_back({std::move(text), align ? align : 2, std::move(marks)});
         from = nl + 1;
     }
     return events;
