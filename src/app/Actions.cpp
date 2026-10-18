@@ -297,7 +297,7 @@ void ChangeSpeed(double delta, bool reset = false) {
 
 void Zoom(double delta, bool reset = false) {
     Player& p = TheApp().player();
-    double z = reset ? 0 : p.GetPropertyDouble("video-zoom", 0) + delta;
+    double z = reset ? 0 : Live().V().zoom + delta;
     z = std::clamp(z, -2.0, 3.0);
     p.SetProperty("video-zoom", z);
     Toast(Fmt(Tr(L"Zoom {0}%"), static_cast<long long>(std::lround(std::pow(2.0, z) * 100))), "zoom");
@@ -501,12 +501,12 @@ void Run(Action a) {
             break;
         case Action::ABLoop: {
             // mpv's ab-loop cycles: set A, set B, clear.
-            const std::string pa = p.GetPropertyString("ab-loop-a"), pb = p.GetPropertyString("ab-loop-b");
+            const LiveValues& v = Live().V();
             p.Command({"ab-loop"});
-            if (pa.empty() || pa == "no")
+            if (std::isnan(v.abA))
                 Toast(Fmt(Tr(L"Loop start {0}"), {Clock(s.position)}), "repeat_right");
-            else if (pb.empty() || pb == "no")
-                Toast(Fmt(Tr(L"Loop {0} – {1}"), {Clock(std::atof(pa.c_str())), Clock(s.position)}), "repeat_right");
+            else if (std::isnan(v.abB))
+                Toast(Fmt(Tr(L"Loop {0} – {1}"), {Clock(v.abA), Clock(s.position)}), "repeat_right");
             else
                 Toast(Tr(L"Loop off"), "repeat_right");
             break;
@@ -546,7 +546,7 @@ void Run(Action a) {
         }
         case Action::AudioDelayUp:
         case Action::AudioDelayDown: {
-            const double d = p.GetPropertyDouble("audio-delay", 0) + (a == Action::AudioDelayUp ? 0.05 : -0.05);
+            const double d = Live().V().audioDelay + (a == Action::AudioDelayUp ? 0.05 : -0.05);
             p.SetProperty("audio-delay", d);
             Toast(Fmt(Tr(L"Audio delay {0} ms"), static_cast<long long>(std::lround(d * 1000))), "audio");
             break;
@@ -562,14 +562,14 @@ void Run(Action a) {
                 Toast(Tr(L"Subtitles hidden"), "subtitles");
                 break;
             }
-            const bool shown = p.GetPropertyString("sub-visibility") != "no";
+            const bool shown = Live().V().subVisible;
             p.Command({"cycle", "sub-visibility"});
             Toast(shown ? Tr(L"Subtitles hidden") : Tr(L"Subtitles shown"), "subtitles");
             break;
         }
         case Action::SubtitleDelayUp:
         case Action::SubtitleDelayDown: {
-            const double d = p.GetPropertyDouble("sub-delay", 0) + (a == Action::SubtitleDelayUp ? 0.05 : -0.05);
+            const double d = Live().V().subDelay + (a == Action::SubtitleDelayUp ? 0.05 : -0.05);
             p.SetProperty("sub-delay", d);
             Toast(Fmt(Tr(L"Subtitle delay {0} ms"), static_cast<long long>(std::lround(d * 1000))), "subtitles");
             break;
@@ -665,12 +665,16 @@ void Run(Action a) {
             break;
         }
         case Action::Rotate: {
-            const int r = (static_cast<int>(p.GetPropertyDouble("video-rotate", 0)) + 90) % 360;
+            const int r = (static_cast<int>(Live().V().rotate) + 90) % 360;
             p.SetProperty("video-rotate", std::to_string(r));  // a choice option: mpv rejects a double
             Toast(Fmt(Tr(L"Rotation {0}°"), r), "refresh");
             break;
         }
-        case Action::Deinterlace: p.Command({"cycle", "deinterlace"}); Toast(Tr(L"Deinterlace toggled"), "video"); break;
+        case Action::Deinterlace: {
+            const std::string& d = Live().ToggleDeinterlace();
+            Toast(std::wstring(Tr(L"Deinterlace")) + L": " + Tr(d == "yes" ? L"On" : d == "no" ? L"Off" : L"Auto"), "video");
+            break;
+        }
         case Action::ToggleStats: {
             // "Developer mode" is the persistent switch; PlayerView shows the panel while it is on.
             const bool on = !app.config().GetBool("general.developerMode");

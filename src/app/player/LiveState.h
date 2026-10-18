@@ -57,6 +57,7 @@ public:
     void SetCrop(const std::string& c);
     void ApplyCrop();
     void SetDeinterlace(const std::string& d);
+    const std::string& ToggleDeinterlace();  // returns the new value
     void SetColorFx(bool negate, bool grayscale);
     void ResetPicture();  // brightness... hue back to 0
 
@@ -103,6 +104,8 @@ public:
     void ReloadFileSettings();
     // Forgets what is remembered for the playing file and returns it to the defaults.
     void ResetFileSettings();
+    // Stores the last change for the playing file and writes the store now (the session ends).
+    void FlushFileSettings();
 
 private:
     LiveState();
@@ -122,6 +125,7 @@ private:
     void FixTracks();
     void ScheduleCapture();
     void Capture(bool notify = true);
+    void CaptureNow();
     void LeaveFile();
     void ScheduleSave();
     void ForgetAllFileSettings();
