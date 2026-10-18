@@ -304,6 +304,8 @@ private:
                 if (edge < 72) a *= std::max(0.0f, edge / 72);
                 if (line.time >= 0) lineRects_[i] = r;
             }
+            // A pause in synced lyrics shows as dots; a stanza break in plain text stays blank.
+            if (line.text.empty() && !synced) continue;
             const std::wstring_view text = line.text.empty() ? std::wstring_view(L"\u00B7 \u00B7 \u00B7") : line.text;
             p.Text(text, r, synced ? TextStyle::Section : TextStyle::Large, Color::Mix(bg, white, a),
                    HAlign::Leading, VAlign::Top, gfx::kTextWrap);
