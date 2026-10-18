@@ -51,7 +51,8 @@ struct State {
     std::condition_variable cv;
     std::deque<std::shared_ptr<Job>> queue;
     std::vector<std::shared_ptr<Job>> completed;
-    std::unordered_set<uint64_t> cancelled;
+    std::unordered_set<uint64_t> open;       // ids not delivered yet
+    std::unordered_set<uint64_t> cancelled;  // a subset of open
     int threads = 0, waiting = 0, running = 0;
     bool posted = false;
     HWND wnd = nullptr;
@@ -82,6 +83,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         bool dropped = false;
         {
             std::lock_guard lock(s.mu);
+            s.open.erase(job->id);
             dropped = s.cancelled.erase(job->id) > 0;
         }
         if (dropped) continue;
@@ -405,7 +407,8 @@ void Process(Job& job) {
     }
     Fetch(job);
     if (resp.error != Error::None || rq.cacheKey.empty()) return;
-    const int64_t ttl = resp.Ok() ? rq.cacheTtl : resp.status == 404 ? rq.cache404 : 0;
+    // A 200 that isn't JSON (a captive portal's page, a proxy error) is not an answer to keep.
+    const int64_t ttl = resp.Ok() ? (json::Parse(resp.body) ? rq.cacheTtl : 0) : resp.status == 404 ? rq.cache404 : 0;
     if (ttl > 0) {
         SharedDisk().Put(rq.cacheKey, resp.status, resp.body, ttl);
         SharedMemory().Put(rq.cacheKey, CacheEntry{resp.status, UnixNow() + ttl, resp.body});
@@ -458,6 +461,7 @@ uint64_t Enqueue(std::shared_ptr<Job> job) {
     Window();
     std::lock_guard lock(s.mu);
     job->id = s.nextId++;
+    s.open.insert(job->id);
     s.queue.push_back(job);
     WakeWorkerLocked(s);
     return job->id;
@@ -480,6 +484,7 @@ uint64_t Send(Request request, Callback done) {
         ++s.cacheHits;
         std::lock_guard lock(s.mu);
         job->id = s.nextId++;
+        s.open.insert(job->id);
         s.completed.push_back(job);
         PostCompletedLocked(s);
         return job->id;
@@ -498,7 +503,8 @@ void Cancel(uint64_t id) {
     if (!id) return;
     State& s = S();
     std::lock_guard lock(s.mu);
-    s.cancelled.insert(id);
+    // An answer already delivered has nothing left to cancel (and its id would stay forever).
+    if (s.open.count(id)) s.cancelled.insert(id);
 }
 
 bool Offline() {

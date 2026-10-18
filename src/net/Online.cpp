@@ -12,6 +12,7 @@
 #include "ui/Host.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cwctype>
 #include <deque>
@@ -144,6 +145,7 @@ bool MetadataToggle() {
 
 namespace {
 std::string g_rejectedTmdbKey;  // the key TMDB answered 401 to
+uint64_t g_metaStamp = 1;       // bumped by everything that can change what Meta() answers
 }
 
 bool MetadataKeyRejected() {
@@ -315,6 +317,8 @@ void EnsureLogin(std::function<void(const std::wstring& error)> done) {
                     s.credentials = creds;
                     s.base = l.baseUrl.empty() || ui::Host::Automation() ? std::wstring()
                                                                           : L"https://" + l.baseUrl + L"/api/v1";
+                    // The key and the token go to this host: only their own.
+                    if (!OsHostAllowed(s.base)) s.base.clear();
                     if (l.allowed >= 0 && s.quota < 0) s.quota = l.allowed;
                     done({});
                     return;
@@ -487,8 +491,10 @@ void DownloadSubtitle(const SubtitleResult& item, const std::wstring& videoPath,
                             ext = file.substr(dot);
                         }
                         std::wstring p = folder + L"\\" + file;
-                        for (int i = 2; GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES && i < 100; ++i)
+                        for (int i = 2; GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; ++i) {
+                            if (i == 100) return std::wstring();  // never replace the 99th copy
                             p = folder + L"\\" + stem + L"." + std::to_wstring(i) + ext;
+                        }
                         return p;
                     };
                     auto writable = [](const std::wstring& p) {
@@ -566,10 +572,12 @@ public:
         return it == items_.end() ? nullptr : &it->second;
     }
     MediaMeta& Put(const std::wstring& key, const std::wstring& path) {
+        ++g_metaStamp;
         paths_[key] = path;
         return items_[key];
     }
     void Erase(const std::wstring& key) {
+        ++g_metaStamp;
         items_.erase(key);
         paths_.erase(key);
     }
@@ -580,6 +588,7 @@ public:
     ImageState& Image(const std::wstring& file) { return images_[file]; }
     void Save();
     void Clear() {
+        ++g_metaStamp;
         items_.clear();
         paths_.clear();
         images_.clear();
@@ -693,12 +702,11 @@ void MetaStore::Load() {
                 } while (FindNextFileW(h, &fd));
                 FindClose(h);
             }
-            // Old search answers would only take room.
-            SharedDisk().Prune();
         },
         [this, out, gen] {
             loading_ = false;
             loaded_ = true;
+            ++g_metaStamp;
             if (gen == generation_) {
                 for (size_t i = 0; i < out->items.size(); ++i) {
                     paths_[out->items[i].first] = out->paths[i];
@@ -758,6 +766,7 @@ Request TmdbRequest(const std::wstring& pathAndQuery) {
 void NoteTmdbAnswer(const Response& r) {
     if (r.error == Error::None && r.status == 401) {
         g_rejectedTmdbKey = Trimmed(Cfg().GetString("privacy.tmdbKey"));
+        ++g_metaStamp;
         ChangedSignal().Emit();
     }
 }
@@ -778,15 +787,17 @@ Lookup& Q() {
 
 void RunNext();
 
-void Finish(const std::wstring& key, uint64_t gen) {
+void Finish(uint64_t gen) {
     Q().busy = false;
-    if (gen == Store().Generation()) {
-        Store().Save();
+    const bool current = gen == Store().Generation();
+    if (current) {
         ChangedSignal().Emit();
         TheApp().images().Refresh();
     }
-    (void)key;
     RunNext();
+    // One save when the queue stops (empty, paused, offline), not one per file: a save builds the
+    // whole store on the UI thread.
+    if (current && !Q().busy) Store().Save();
 }
 
 void FetchImage(const char* size, const std::string& tmdbPath) {
@@ -804,6 +815,15 @@ void FetchImage(const char* size, const std::string& tmdbPath) {
         if (gen != Store().Generation()) return;
         ImageState& s = Store().Image(file);
         s.requested = false;
+        std::string type = resp.Header("content-type");
+        for (char& c : type) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (resp.Ok() && !resp.fromCache && type.rfind("image/", 0) != 0) {
+            // A 200 page instead of the picture (a captive portal): keepExisting would keep it
+            // for good, so it goes, and the next session asks again.
+            Async([file] { DeleteFileW(file.c_str()); });
+            s.requested = true;
+            return;
+        }
         if (resp.Ok()) {
             s.have = true;
             ChangedSignal().Emit();
@@ -823,7 +843,7 @@ void ApplyEpisode(const std::wstring& key, uint64_t gen, MetaMatch show, int sea
         NoteTmdbAnswer(resp);
         if (gen != Store().Generation()) return;
         MediaMeta* m = Store().Find(key);
-        if (!m) return Finish(key, gen);
+        if (!m) return Finish(gen);
         m->state = MediaMeta::State::Matched;
         m->manual = manual;
         m->tv = true;
@@ -846,7 +866,7 @@ void ApplyEpisode(const std::wstring& key, uint64_t gen, MetaMatch show, int sea
                 m->still = e.still;
             }
         if (resp.error != Error::None && !manual) m->state = MediaMeta::State::Failed;
-        Finish(key, gen);
+        Finish(gen);
     });
 }
 
@@ -865,9 +885,9 @@ void StartLookup(const std::wstring& key) {
     const uint64_t gen = Store().Generation();
     Send(std::move(r), [key, gen, g, tv](const Response& resp) {
         NoteTmdbAnswer(resp);
-        if (gen != Store().Generation()) return Finish(key, gen);
+        if (gen != Store().Generation()) return Finish(gen);
         MediaMeta* m = Store().Find(key);
-        if (!m) return Finish(key, gen);
+        if (!m) return Finish(gen);
         if (resp.error == Error::None && resp.status == 429 && ++Q().retries[key] <= 2) {
             // Back off and try this one again later (twice; then it waits for the next session).
             m->state = MediaMeta::State::Queued;
@@ -880,7 +900,7 @@ void StartLookup(const std::wstring& key) {
         if (!resp.Ok()) {
             // Offline, a timeout or a bad key: nothing is saved, the next session asks again.
             m->state = MediaMeta::State::Failed;
-            return Finish(key, gen);
+            return Finish(gen);
         }
         auto doc = json::Parse(resp.body);
         const std::vector<MetaMatch> results = doc ? ParseTmdbSearch(*doc, tv) : std::vector<MetaMatch>{};
@@ -888,7 +908,7 @@ void StartLookup(const std::wstring& key) {
         m->checked = UnixNow();
         if (pick < 0) {
             m->state = MediaMeta::State::NotFound;
-            return Finish(key, gen);
+            return Finish(gen);
         }
         const MetaMatch& best = results[static_cast<size_t>(pick)];
         if (tv) return ApplyEpisode(key, gen, best, g.season, g.episode, false);
@@ -901,7 +921,7 @@ void StartLookup(const std::wstring& key) {
         m->rating = best.rating;
         m->poster = best.poster;
         m->backdrop = best.backdrop;
-        Finish(key, gen);
+        Finish(gen);
     });
 }
 
@@ -923,7 +943,9 @@ VideoGuess Guess(const std::wstring& path) {
     return GuessVideo(path);
 }
 
-const MediaMeta* Meta(const std::wstring& path) {
+namespace {
+
+const MediaMeta* FindOrQueue(const std::wstring& path) {
     if (!MetadataOn() || path.empty() || path.find(L"://") != std::wstring::npos) return nullptr;
     if (library::KindOf(path) != library::MediaKind::Video) return nullptr;
     MetaStore& store = Store();
@@ -946,6 +968,20 @@ const MediaMeta* Meta(const std::wstring& path) {
     }
     RunNext();
     return &fresh;
+}
+
+}  // namespace
+
+const MediaMeta* Meta(const std::wstring& path) {
+    // A card asks twice per paint (its artwork, then year and rating): the second ask is free.
+    static std::wstring lastPath;
+    static const MediaMeta* last = nullptr;
+    static uint64_t lastStamp = 0;
+    if (lastStamp == g_metaStamp && path == lastPath) return last;
+    last = FindOrQueue(path);
+    lastPath = path;
+    lastStamp = g_metaStamp;
+    return last;
 }
 
 std::wstring CardImage(const std::wstring& path) {
@@ -1057,6 +1093,9 @@ void ClearAll() {
     SharedMemory().Clear();
     Q().queue.clear();
     Store().Clear();
+    // The empty store goes to disk after any save still in flight, which could otherwise land
+    // after the delete below and bring the data back.
+    Store().Save();
     Os().quota = -1;
     const std::wstring dir = OnlineDir();
     if (dir.empty()) return;
@@ -1102,6 +1141,7 @@ void Init() {
         else if (key == "library.metadata")
             c.SetBool("privacy.fetchMetadata", c.GetString("library.metadata") == "internet");
         syncing = false;
+        ++g_metaStamp;
         if (!MetadataOn()) Q().queue.clear();
         ChangedSignal().Emit();
         TheApp().images().Refresh();
@@ -1109,6 +1149,7 @@ void Init() {
     Cfg().Subscribe("privacy.fetchMetadata", sync);
     Cfg().Subscribe("library.metadata", sync);
     Cfg().Subscribe("privacy.tmdbKey", [](const std::string&) {
+        ++g_metaStamp;
         ChangedSignal().Emit();
         TheApp().images().Refresh();
     });

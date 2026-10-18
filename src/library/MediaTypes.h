@@ -47,6 +47,9 @@ struct EpisodeInfo {
     std::wstring title;  // text after the marker up to release tags ("Pilot" in "Show.S01E01.Pilot.1080p")
 };
 bool ParseEpisode(std::wstring_view name, EpisodeInfo* out);
+// A word of a release name that ends the title: "1080p", "WEB-DL", "x264", "Remastered"...
+// Case and dashes are ignored.
+bool IsReleaseTag(std::wstring_view word);
 // Card title of an episode file: "S01E02 · Pilot", "S01E02 · Show" when the name has no episode
 // title, or empty when the name is not an episode.
 std::wstring EpisodeLabel(std::wstring_view name);

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cwchar>
 #include <cwctype>
 
 namespace net {
@@ -78,21 +79,6 @@ bool IsYear(const std::wstring& t) {
     return y >= 1900 && y <= 2099;
 }
 
-bool IsReleaseTag(const std::wstring& token) {
-    std::wstring t = LowerW(token);
-    t.erase(std::remove(t.begin(), t.end(), L'-'), t.end());
-    static const wchar_t* const kTags[] = {
-        L"2160p", L"1080p", L"1080i", L"720p", L"576p", L"480p", L"4k", L"uhd", L"hdr", L"hdr10", L"dv",
-        L"bluray", L"bdrip", L"brrip", L"bdremux", L"remux", L"webrip", L"webdl", L"web", L"hdtv", L"hdrip",
-        L"dvdrip", L"dvd", L"dvdscr", L"x264", L"x265", L"h264", L"h265", L"hevc", L"avc", L"xvid", L"divx",
-        L"aac", L"ac3", L"dts", L"ddp5", L"dd5", L"atmos", L"10bit", L"8bit", L"proper", L"repack", L"extended",
-        L"unrated", L"imax", L"remastered", L"multi", L"dubbed", L"subbed",
-    };
-    for (const wchar_t* tag : kTags)
-        if (t == tag) return true;
-    return false;
-}
-
 std::vector<std::wstring> Tokens(const std::wstring& name) {
     std::vector<std::wstring> out;
     std::wstring cur;
@@ -146,7 +132,7 @@ std::wstring CleanTitle(const std::wstring& name, int* year) {
             found = _wtoi(t.c_str());
             break;
         }
-        if (!words.empty() && IsReleaseTag(t)) break;
+        if (!words.empty() && library::IsReleaseTag(t)) break;
         words.push_back(t);
     }
     if (year) *year = found;
@@ -339,14 +325,18 @@ int ParseSubtitleQuota(const json::Value& doc) {
 }
 
 std::wstring SubtitleFileName(const std::wstring& videoPath, const std::wstring& language, const std::wstring& fileName) {
+    // The server names the file: only a subtitle extension is kept (never .lnk/.hta, "a\b" or an
+    // NTFS stream "x.:s"). IsSubtitlePath ignores a dot before a slash.
     std::wstring ext = L"srt";
-    const size_t dot = fileName.rfind(L'.');
-    if (dot != std::wstring::npos && dot + 1 < fileName.size() && fileName.size() - dot <= 5)
-        ext = LowerW(fileName.substr(dot + 1));
+    if (library::IsSubtitlePath(fileName)) ext = LowerW(fileName.substr(fileName.rfind(L'.') + 1));
     std::wstring lang;
     for (wchar_t c : language)
         if (std::iswalnum(c) || c == L'-') lang.push_back(static_cast<wchar_t>(std::towlower(c)));
+    // A stream URL's stem may hold characters a file name can't ("watch?v=a", "host:8080").
     std::wstring name = library::StemOf(videoPath);
+    for (wchar_t& c : name)
+        if (c < 0x20 || std::wcschr(L"<>:\"/\\|?*", c)) c = L'_';
+    while (!name.empty() && (name.back() == L'.' || name.back() == L' ')) name.pop_back();
     if (name.empty()) name = L"subtitles";
     if (!lang.empty()) name += L"." + lang;
     return name + L"." + ext;

@@ -110,6 +110,9 @@ private:
     Token nextToken_ = 1;
     std::wstring path_;
     bool dirty_ = false;
+    bool readOnly_ = false;  // the file exists but could not be read: never overwrite it
+    // Secrets sealed on another account or PC: written back as they were until replaced.
+    std::unordered_map<std::string, std::string> sealedKept_;
 };
 
 // --- libmpv mapping ------------------------------------------------------------------------

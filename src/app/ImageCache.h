@@ -44,13 +44,14 @@ private:
     };
     static int Bucket(int sizePx);
     static std::wstring Key(const std::wstring& path, int bucket);
+    void NoteMissing(const std::wstring& key);
 
     library::Thumbnails& thumbs_;
     std::unordered_map<std::wstring, Entry> entries_;
     std::list<std::wstring> lru_;
     std::unordered_map<std::wstring, uint64_t> pending_;  // key -> cookie
     std::unordered_map<uint64_t, std::wstring> cookies_;
-    std::unordered_map<std::wstring, bool> missing_;
+    std::unordered_set<std::wstring> missing_;
     std::unordered_set<uint64_t> wanted_;  // cookies of pending requests asked for since the last EndFrame
     size_t bytes_ = 0;                     // GPU bitmap pixels
     uint64_t nextCookie_ = 1;

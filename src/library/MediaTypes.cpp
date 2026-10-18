@@ -145,6 +145,23 @@ int64_t FileTimeToUnixMs(uint64_t t) {
     return static_cast<int64_t>((t - kEpochDiff) / 10000);
 }
 
+bool IsReleaseTag(std::wstring_view word) {
+    static constexpr std::wstring_view kTags[] = {
+        L"2160p",  L"1080p",  L"1080i",  L"720p",   L"576p",   L"480p",     L"4k",     L"uhd",     L"hdr",
+        L"hdr10",  L"dv",     L"bluray", L"bdrip",  L"brrip",  L"bdremux",  L"remux",  L"webrip",  L"webdl",
+        L"web",    L"hdtv",   L"hdrip",  L"dvdrip", L"dvd",    L"dvdscr",   L"x264",   L"x265",    L"h264",
+        L"h265",   L"hevc",   L"avc",    L"xvid",   L"divx",   L"aac",      L"ac3",    L"dts",     L"ddp5",
+        L"dd5",    L"atmos",  L"10bit",  L"8bit",   L"proper", L"repack",   L"extended", L"unrated", L"imax",
+        L"remastered", L"multi", L"dubbed", L"subbed", L"internal",
+    };
+    std::wstring w;
+    for (wchar_t c : word)
+        if (c != L'-') w.push_back(static_cast<wchar_t>(std::towlower(c)));
+    for (std::wstring_view t : kTags)
+        if (w == t) return true;
+    return false;
+}
+
 // --- episodes --------------------------------------------------------------------------------
 
 namespace {
@@ -177,19 +194,6 @@ std::wstring ShowName(std::wstring_view s) {
     size_t b = 0;
     while (b < out.size() && junk(out[b])) ++b;
     return out.substr(b);
-}
-
-// Release tags end an episode title ("Pilot.1080p.WEB-DL.x264" -> "Pilot").
-bool IsReleaseTag(std::wstring_view word) {
-    static constexpr std::wstring_view kTags[] = {
-        L"480p", L"576p", L"720p", L"1080p", L"1080i", L"2160p", L"4k",  L"uhd",   L"web",    L"web-dl", L"webdl",
-        L"webrip", L"hdtv", L"hdrip", L"bluray", L"bdrip", L"brrip", L"dvdrip", L"x264", L"x265", L"h264", L"h265",
-        L"hevc", L"avc", L"hdr", L"hdr10", L"dv", L"aac", L"ac3", L"dts", L"proper", L"repack", L"multi", L"internal"};
-    std::wstring w(word);
-    for (wchar_t& c : w) c = static_cast<wchar_t>(std::towlower(c));
-    for (std::wstring_view t : kTags)
-        if (w == t) return true;
-    return false;
 }
 
 std::wstring EpisodeTitle(std::wstring_view rest) {
