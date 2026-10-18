@@ -6,6 +6,7 @@
 #include <list>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace library {
 class Thumbnails;
@@ -23,7 +24,7 @@ public:
     // `sizePx` is the longest side wanted in physical pixels (rounded up to a bucket).
     ID2D1Bitmap* Get(const std::wstring& path, int sizePx);
     bool Missing(const std::wstring& path, int sizePx) const;  // the file has no thumbnail
-    // Drops queued requests that are not in the most recent Get() calls (call after painting a list).
+    // Drops queued requests that no Get() asked for since the previous call (once per painted frame).
     void EndFrame();
     // Called by the app when the thumbnail service posts completions.
     void OnCompleted();
@@ -34,6 +35,7 @@ public:
 private:
     struct Entry {
         gfx::ComPtr<ID2D1Bitmap> bitmap;
+        size_t bytes = 0;
         uint32_t generation = 0;
         std::list<std::wstring>::iterator lru;
     };
@@ -46,6 +48,8 @@ private:
     std::unordered_map<std::wstring, uint64_t> pending_;  // key -> cookie
     std::unordered_map<uint64_t, std::wstring> cookies_;
     std::unordered_map<std::wstring, bool> missing_;
+    std::unordered_set<uint64_t> wanted_;  // cookies of pending requests asked for since the last EndFrame
+    size_t bytes_ = 0;                     // GPU bitmap pixels
     uint64_t nextCookie_ = 1;
 };
 

@@ -153,6 +153,7 @@ public:
 protected:
     // Subclass hooks.
     virtual void OnLayoutDone() {}
+    virtual void OnFramePainted() {}  // after the tree and popups are drawn, before Present
     virtual void PaintBackground(Painter&) {}
     virtual bool HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result);
     virtual void OnResize() {}
@@ -214,6 +215,7 @@ private:
     bool active_ = true;
 
     bool renderPending_ = false;
+    bool gpuPainted_ = false;  // a GPU frame is on screen: WM_PAINT skips the GDI skeleton
     bool layoutDirty_ = true;
     bool fullscreen_ = false;
     WINDOWPLACEMENT placement_{sizeof(WINDOWPLACEMENT)};

@@ -62,6 +62,10 @@ bool Gpu::CreateDeviceObjects() {
     if (FAILED(d3d_.As(&dxgiDevice_)) || FAILED(dxgiDevice_->GetAdapter(&adapter)) ||
         FAILED(adapter->GetParent(IID_PPV_ARGS(&dxgi_))))
         return false;
+    // One queued frame: Present waits for vsync instead of letting frames pile up,
+    // so what is on screen is at most one frame behind the latest input.
+    ComPtr<IDXGIDevice1> dxgi1;
+    if (SUCCEEDED(dxgiDevice_.As(&dxgi1))) dxgi1->SetMaximumFrameLatency(1);
     if (FAILED(d2dFactory_->CreateDevice(dxgiDevice_.Get(), &d2dDevice_)) ||
         FAILED(d2dDevice_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &ctx_)))
         return false;

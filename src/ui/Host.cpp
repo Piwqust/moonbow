@@ -1,5 +1,6 @@
 #include "ui/Host.h"
 
+#include "Trace.h"
 #include "gfx/Text.h"
 #include "ui/Theme.h"
 
@@ -20,7 +21,6 @@ namespace ui {
 namespace {
 
 constexpr wchar_t kHostClass[] = L"LumenHost";
-constexpr UINT WM_APP_RENDER = WM_APP + 40;
 constexpr UINT WM_APP_POST = WM_APP + 41;
 constexpr float kResizeBorder = 6.0f;
 constexpr UINT kTooltipDelayMs = 550;
@@ -294,9 +294,14 @@ bool Host::Create(const HostOptions& options) {
                      static_cast<int>(std::lround(options.height * Scale())), SWP_NOMOVE | SWP_NOZORDER);
     }
     ApplyDwmAttributes();
-    SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
-    dropTarget_ = new DropTarget(this);
-    if (FAILED(RegisterDragDrop(hwnd_, dropTarget_))) DragAcceptFiles(hwnd_, TRUE);  // OLE not initialized
+    // No SWP_FRAMECHANGED here: WM_NCCALCSIZE already ran during CreateWindowExW with
+    // options_ set, and the extra frame change costs ~10 ms before the first paint.
+    // Drag and drop is registered after the first frame (RegisterDragDrop costs a few ms).
+    Post([this] {
+        if (!hwnd_ || dropTarget_) return;
+        dropTarget_ = new DropTarget(this);
+        if (FAILED(RegisterDragDrop(hwnd_, dropTarget_))) DragAcceptFiles(hwnd_, TRUE);  // OLE not initialized
+    });
     if (gfx::Gpu::Get().Ready()) surface_.Attach(hwnd_, static_cast<float>(dpi_));
     return true;
 }
@@ -552,10 +557,13 @@ void Host::SetCursorHidden(bool hidden) {
 
 // --- scheduling -----------------------------------------------------------------------
 
+// Frames are drawn from WM_PAINT, which Windows delivers only when no input or posted
+// messages are waiting: clicks, keys and wheel ticks are handled before the next frame even
+// while an animation runs (a posted render message would be served ahead of input).
 void Host::RequestRender() {
     if (renderPending_ || !hwnd_) return;
     renderPending_ = true;
-    PostMessageW(hwnd_, WM_APP_RENDER, 0, 0);
+    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void Host::RequestLayout() {
@@ -593,11 +601,40 @@ void Host::DoLayout() {
     OnLayoutDone();
 }
 
+namespace {
+
+// LUMEN_TRACE frame statistics: once a second, frame count and the worst layout,
+// paint and present times (ms) go to the trace file.
+struct FrameStats {
+    int frames = 0;
+    double layout = 0, paint = 0, present = 0, maxLayout = 0, maxPaint = 0, maxPresent = 0, since = 0;
+    void Add(double l, double p, double pr) {
+        static const bool enabled = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+        if (!enabled) return;
+        ++frames;
+        layout += l, paint += p, present += pr;
+        maxLayout = std::max(maxLayout, l), maxPaint = std::max(maxPaint, p), maxPresent = std::max(maxPresent, pr);
+        const double now = AnimFloat::Now();
+        if (since == 0) since = now;
+        if (now - since < 1000) return;
+        char line[200];
+        snprintf(line, sizeof line, "frames %d  layout avg %.2f max %.2f  paint avg %.2f max %.2f  present avg %.2f max %.2f",
+                 frames, layout / frames, maxLayout, paint / frames, maxPaint, present / frames, maxPresent);
+        Trace(line);
+        *this = {};
+    }
+};
+FrameStats g_frameStats;
+
+}  // namespace
+
 void Host::Render() {
     renderPending_ = false;
     if (!hwnd_ || IsIconic(hwnd_)) return;
-    const bool animating = AnimFloat::TickAll(AnimFloat::Now());
+    const double t0 = AnimFloat::Now();
+    const bool animating = AnimFloat::TickAll(t0);
     if (layoutDirty_ || animating) DoLayout();
+    const double t1 = AnimFloat::Now();
 
     ID2D1DeviceContext5* ctx = surface_.Begin();
     if (!ctx) return;
@@ -618,7 +655,13 @@ void Host::Render() {
         }
         PaintDropOverlay(p);
     }
-    if (!surface_.End()) RequestLayout();
+    OnFramePainted();
+    const double t2 = AnimFloat::Now();
+    if (surface_.End())
+        gpuPainted_ = true;
+    else
+        RequestLayout();
+    g_frameStats.Add(t1 - t0, t2 - t1, AnimFloat::Now() - t2);
     gfx::Text::Get().EndFrame();
     if (AnimFloat::AnyActive()) RequestRender();
 }
@@ -943,8 +986,10 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
     switch (msg) {
         case WM_NCCALCSIZE:
-            if (options_.customFrame && wp == TRUE) {
-                if (!fullscreen_ && IsZoomed(hwnd_)) {
+            // Also the wp == FALSE call during CreateWindowExW: the whole window is client area
+            // from the start, without a SWP_FRAMECHANGED round trip afterwards.
+            if (options_.customFrame) {
+                if (wp == TRUE && !fullscreen_ && IsZoomed(hwnd_)) {
                     auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
                     const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
                     const int fx = GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad;
@@ -1161,9 +1206,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd_, &ps);
-            PaintSkeleton(dc);
+            if (!gpuPainted_) PaintSkeleton(dc);
             EndPaint(hwnd_, &ps);
-            if (!renderPending_) RequestRender();
+            Render();
             return 0;
         }
 
@@ -1193,10 +1238,6 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (onDropFiles && !files.empty()) onDropFiles(std::move(files));
             return 0;
         }
-
-        case WM_APP_RENDER:
-            if (renderPending_) Render();
-            return 0;
 
         case kDeviceReadyMessage:
             if (!gfx::Gpu::Get().Ready() && !gfx::Gpu::Get().FinishDevice()) {

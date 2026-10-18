@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace gfx {
 
@@ -43,8 +44,11 @@ struct TextMetrics {
 class Text {
 public:
     static Text& Get();
+    ~Text() { WaitReady(); }
 
-    bool Init(HINSTANCE instance);
+    // Loads the fonts on a worker thread (~10 ms) while the window is created; the first
+    // layout waits for it. DirectWrite objects are free-threaded.
+    void InitAsync(HINSTANCE instance);
     float Size(TextStyle s) const;
     float LineHeight(TextStyle s) const;
 
@@ -58,6 +62,8 @@ public:
 
 private:
     IDWriteTextFormat* Format(TextStyle style);
+    void WaitReady();
+    bool LoadFonts(HINSTANCE instance);
 
     ComPtr<IDWriteFontCollection1> fonts_;
     ComPtr<IDWriteInMemoryFontFileLoader> loader_;
@@ -67,6 +73,7 @@ private:
     const wchar_t* family_ = L"Inter";
     struct Impl;
     Impl* impl_ = nullptr;
+    std::thread fontThread_;
 };
 
 }  // namespace gfx

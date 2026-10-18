@@ -7,11 +7,16 @@ namespace app {
 
 namespace {
 
-constexpr size_t kMaxBitmaps = 800;
+// Decoded pixels of the thumbnail service are only a second-level cache (the shell keeps
+// its own on disk), the GPU copies are what painting uses.
+constexpr size_t kGpuBytes = 128u << 20;
+constexpr size_t kServiceBytes = 48u << 20;
 
 }  // namespace
 
-ImageCache::ImageCache(library::Thumbnails& thumbs) : thumbs_(thumbs) {}
+ImageCache::ImageCache(library::Thumbnails& thumbs) : thumbs_(thumbs) {
+    thumbs_.SetMemoryLimit(kServiceBytes);
+}
 
 int ImageCache::Bucket(int sizePx) {
     // A few fixed sizes keep the cache small and the shell cache warm.
@@ -40,6 +45,7 @@ ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
             return it->second.bitmap.Get();
         }
         // Device was recreated: rebuild from the service's pixel cache.
+        bytes_ -= it->second.bytes;
         lru_.erase(it->second.lru);
         entries_.erase(it);
     }
@@ -55,10 +61,16 @@ ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
             lru_.push_front(key);
             Entry& e = entries_[key];
             e.bitmap = bmp;
+            e.bytes = pixels->Bytes();
             e.generation = gpu.Generation();
             e.lru = lru_.begin();
-            while (entries_.size() > kMaxBitmaps) {
-                entries_.erase(lru_.back());
+            bytes_ += e.bytes;
+            while (bytes_ > kGpuBytes && lru_.size() > 1) {
+                auto old = entries_.find(lru_.back());
+                if (old != entries_.end()) {
+                    bytes_ -= old->second.bytes;
+                    entries_.erase(old);
+                }
                 lru_.pop_back();
             }
             return bmp.Get();
@@ -68,16 +80,33 @@ ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
         missing_[key] = true;
         return nullptr;
     }
-    if (!pending_.count(key)) {
+    auto p = pending_.find(key);
+    if (p == pending_.end()) {
         const uint64_t cookie = nextCookie_++;
         pending_[key] = cookie;
         cookies_[cookie] = key;
+        wanted_.insert(cookie);
         thumbs_.Request(path, bucket, cookie);
+    } else {
+        wanted_.insert(p->second);
     }
     return nullptr;
 }
 
-void ImageCache::EndFrame() {}
+void ImageCache::EndFrame() {
+    if (pending_.size() > wanted_.size()) {
+        thumbs_.CancelAllExcept(wanted_);
+        for (auto it = cookies_.begin(); it != cookies_.end();) {
+            if (wanted_.count(it->first)) {
+                ++it;
+                continue;
+            }
+            pending_.erase(it->second);
+            it = cookies_.erase(it);
+        }
+    }
+    wanted_.clear();
+}
 
 void ImageCache::OnCompleted() {
     bool any = false;
@@ -96,6 +125,7 @@ void ImageCache::OnCompleted() {
 void ImageCache::Clear() {
     entries_.clear();
     lru_.clear();
+    bytes_ = 0;
     missing_.clear();
 }
 

@@ -309,6 +309,12 @@ void MainWindow::PokeChrome() {
     });
 }
 
+// Thumbnails that were queued for tiles no longer painted (scrolled away, page left) are
+// dropped, so the visible ones don't wait behind them.
+void MainWindow::OnFramePainted() {
+    TheApp().images().EndFrame();
+}
+
 void MainWindow::OnLayoutDone() {
     // Where should the video be this frame?
     Rect target{};

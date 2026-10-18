@@ -102,8 +102,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     // OLE (STA COM + drag and drop targets).
     OleInitialize(nullptr);
     int code = 1;
-    if (gfx::Gpu::Get().CreateFactories() && gfx::Text::Get().Init(instance))
+    if (gfx::Gpu::Get().CreateFactories()) {
+        gfx::Text::Get().InitAsync(instance);
         code = gallery ? app::RunGallery() : app::App::Get().Run(instance, files);
+    }
     OleUninitialize();
     if (mutex) CloseHandle(mutex);
     return code;

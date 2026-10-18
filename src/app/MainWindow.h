@@ -52,6 +52,7 @@ public:
 protected:
     bool HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) override;
     void OnLayoutDone() override;
+    void OnFramePainted() override;
     void PaintSkeleton(HDC dc) override;
 
 private:

@@ -70,8 +70,21 @@ Text& Text::Get() {
     return text;
 }
 
-bool Text::Init(HINSTANCE instance) {
+void Text::InitAsync(HINSTANCE instance) {
     impl_ = new Impl();
+    fontThread_ = std::thread([this, instance] {
+        if (!LoadFonts(instance)) {
+            MessageBoxW(nullptr, L"DirectWrite is not available.", L"Lumen", MB_ICONERROR);
+            ExitProcess(1);
+        }
+    });
+}
+
+void Text::WaitReady() {
+    if (fontThread_.joinable()) fontThread_.join();
+}
+
+bool Text::LoadFonts(HINSTANCE instance) {
     IDWriteFactory5* dw = Gpu::Get().DWrite();
     ComPtr<IDWriteFontSetBuilder1> builder;
     bool bundled = SUCCEEDED(dw->CreateInMemoryFontFileLoader(&loader_)) &&
@@ -128,6 +141,7 @@ IDWriteTextFormat* Text::Format(TextStyle style) {
 
 IDWriteTextLayout* Text::Layout(std::wstring_view text, TextStyle style, float maxWidth, float maxHeight, HAlign h,
                                 VAlign v, uint8_t flags) {
+    WaitReady();
     const uint32_t params = static_cast<uint32_t>(style) | (static_cast<uint32_t>(h) << 8) |
                             (static_cast<uint32_t>(v) << 12) | (static_cast<uint32_t>(flags) << 16);
     LayoutKey key{std::wstring(text), params, Quantize(maxWidth), Quantize(maxHeight)};
