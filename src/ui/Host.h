@@ -250,6 +250,8 @@ private:
     Widget* tooltipFor_ = nullptr;
     Widget* tooltipWidget_ = nullptr;
     UINT_PTR tooltipTimer_ = 0;
+    std::wstring tooltipText_;  // what the bubble (or its timer) shows: a change re-arms it
+    Rect tooltipRect_;          // tooltipFor_'s rect then: the bubble goes when the widget moves
 
     std::map<UINT_PTR, std::pair<std::function<void()>, bool>> timers_;
     std::vector<UINT_PTR> workIds_;  // StartWorkTimer timers still pending
