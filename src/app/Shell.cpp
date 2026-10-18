@@ -184,6 +184,13 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     });
     routeConn_ = Connect(TheApp().routeChanged, [this] { Refresh(); });
     screenConn_ = Connect(TheApp().screenChanged, [this] { Refresh(); });
+    // Tooltips are translated when set: again on a language switch (maximize's in Refresh).
+    tips_ = {{moreBtn_, L"Menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
+             {min, L"Minimize"}, {fullBtn_, L"Fullscreen"}, {close, L"Close"}};
+    langConn_ = Connect(TheApp().languageChanged, [this] {
+        for (const auto& [w, english] : tips_) w->tooltip = Tr(english);
+        Refresh();
+    });
     Refresh();
 }
 
@@ -282,6 +289,7 @@ NavSidebar::NavSidebar() {
     Add<AddItem>(this);
     width = Length::Px(200);
     routeConn_ = Connect(TheApp().routeChanged, [this] { Invalidate(); });
+    langConn_ = Connect(TheApp().languageChanged, [this] { SetCollapsed(collapsed_); });  // the rail's tooltips
 }
 
 NavSidebar::~NavSidebar() = default;
@@ -465,6 +473,7 @@ LibraryPane::LibraryPane(bool compact) : compact_(compact) {
     });
     // Header and page strings are translated when built: rebuild on a language switch.
     langConn_ = Connect(TheApp().languageChanged, [this] {
+        ClosePagePopups();
         headerConn_.Reset();
         view_ = nullptr;
         ClearChildren();
@@ -483,6 +492,12 @@ void LibraryPane::Build() {
 }
 
 LibraryPane::~LibraryPane() = default;
+
+// Menus opened from the page (sort, "⋯", a row's) call back into it, and Alt+Left, the Back
+// key or a language switch can rebuild it while one is open: they go first.
+void LibraryPane::ClosePagePopups() {
+    if (Host* host = GetHost()) host->CloseAllPopups();
+}
 
 void LibraryPane::BuildHeader() {
     header_ = Add<Widget>();
@@ -547,6 +562,7 @@ void LibraryPane::ShowRoute(const Route& route) {
     const Route from = route_;
     const bool hadView = view_ != nullptr;
     route_ = route;
+    if (hadView) ClosePagePopups();
     headerConn_.Reset();
     body_->ClearChildren();
     auto view = CreateLibraryView(route, compact_);
