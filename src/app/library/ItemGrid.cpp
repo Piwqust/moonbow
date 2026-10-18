@@ -15,6 +15,8 @@ namespace {
 // Measurements from the Figma file (Player_6261-15078, 970-4028, sidebar_848-1996).
 constexpr float kVideoMinW = 316, kVideoRatio = 178.0f / 316.0f;
 constexpr float kSquareMinW = 200;
+// Narrow windows keep two columns of smaller cards rather than one huge card per row.
+constexpr float kVideoNarrowW = 220, kSquareNarrowW = 150;
 constexpr float kCardGapX = 20, kVideoGapY = 40, kSquareGapY = 32;
 constexpr float kLabelGap = 20, kLineH = 19, kSubGap = 10;
 constexpr float kCardRadius = 12;
@@ -32,12 +34,26 @@ bool IsLabel(EntryKind k) {
 
 constexpr float kColumnsH = 32, kTrackW = 28, kDurationW = 76;
 
-// Warning mark on the artwork of a file the scanner found unplayable.
-void PaintDamagedMark(Painter& p, Point center, float radius) {
+constexpr float kChipH = 20;
+
+// "Damaged" chip of a file the scanner found unplayable: a warning triangle and the word, the
+// same on cards (the badge slot) and on list rows (after the title).
+float DamagedChipWidth(Painter& p) {
+    return 6 + 14 + 5 + std::ceil(p.Measure(Tr(L"Damaged"), TextStyle::Small).width) + 8;
+}
+
+void PaintDamagedChip(Painter& p, const Rect& b, Color bg) {
     const Palette& c = P();
-    p.FillCircle(center, radius, c.bgBase.Fade(0.88f));
-    p.Text(L"!", {center.x - radius, center.y - radius, radius * 2, radius * 2}, radius >= 10 ? TextStyle::BodyStrong : TextStyle::Micro,
-           c.danger, HAlign::Center, VAlign::Center, 0);
+    p.Fill(b, bg, 4);
+    const float x = b.x + 6, cy = b.Cy();
+    const Point top{x + 7, cy - 6}, left{x, cy + 5.5f}, right{x + 14, cy + 5.5f};
+    p.Line(top, left, c.danger, 1.5f);
+    p.Line(left, right, c.danger, 1.5f);
+    p.Line(right, top, c.danger, 1.5f);
+    p.Fill({x + 6.25f, cy - 2.5f, 1.5f, 4.5f}, c.danger);
+    p.Fill({x + 6.25f, cy + 2.75f, 1.5f, 1.5f}, c.danger);
+    p.Text(Tr(L"Damaged"), {x + 19, b.y, b.Right() - x - 19 - 6, b.h}, TextStyle::Small, c.textPrimary, HAlign::Leading,
+           VAlign::Center, 0);
 }
 
 // When Enter opened the page, its grid lands on the first item with a focus ring.
@@ -120,6 +136,8 @@ void ItemGrid::Compute(float w) {
     if (cards) {
         const float minCard = style_ == GridStyle::VideoCards ? kVideoMinW : kSquareMinW;
         int cols = std::max(1, static_cast<int>(std::floor((w + kCardGapX) / (minCard + kCardGapX))));
+        const float narrowCard = style_ == GridStyle::VideoCards ? kVideoNarrowW : kSquareNarrowW;
+        if (stretch && cols < 2 && w >= 2 * narrowCard + kCardGapX) cols = 2;
         geo_.cols = cols;
         // Fixed-size cards (Home) grow a little in wide windows instead of leaving most of a
         // maximized window empty.
@@ -312,13 +330,19 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
 void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const Palette& c = P();
     const Entry& e = entries_[static_cast<size_t>(i)];
-    const Rect t{r.x, r.y, r.w, geo_.thumbH};
+    Rect t{r.x, r.y, r.w, geo_.thumbH};
+    if (e.kind == EntryKind::Action && geo_.cols == 1) {
+        // "Add…" tiles have the size of the cards beside them; in one column they keep the
+        // design's card size instead of filling a narrow page alone.
+        const bool video = style_ == GridStyle::VideoCards;
+        const float tileW = video ? kVideoMinW : kSquareMinW;
+        if (t.w > tileW) t = {t.x, t.y, tileW, video ? std::round(tileW * kVideoRatio) : tileW};
+    }
     const bool sel = i == selected_;
     const bool pressed = hot && IsPressed();
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
 
     PaintThumb(p, e, t, kCardRadius, 48, dim);
-    if (e.damaged) PaintDamagedMark(p, {t.Right() - 20, t.y + 20}, 12);
 
     // Progress line along the bottom edge, clipped by the rounded corners.
     if (e.progress > 0) {
@@ -327,13 +351,15 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.PopClip();
     }
 
-    // Badges: duration for media, item count for folders.
+    // Badges: duration for media, item count for folders, the warning chip for damaged files.
     std::wstring badge;
     if (e.kind == EntryKind::Media && !e.audio && e.duration > 0) badge = FormatDuration(e.duration);
-    if (e.damaged) badge = Tr(L"Damaged");
     if ((e.kind == EntryKind::Folder || e.kind == EntryKind::Playlist) && e.count > 0 && style_ == GridStyle::VideoCards)
         badge = std::to_wstring(e.count);
-    if (!badge.empty()) {
+    if (e.damaged) {
+        const float cw = std::min(DamagedChipWidth(p), t.w - 16);
+        PaintDamagedChip(p, {t.Right() - 8 - cw, t.Bottom() - 8 - kChipH, cw, kChipH}, c.bgBase.Fade(0.82f));
+    } else if (!badge.empty()) {
         const float tw = std::ceil(p.Measure(badge, TextStyle::MonoSmall).width);
         const float bh = 20, by = t.Bottom() - 8 - bh - (e.progress > 0 ? 4 : 0);
         const Rect b{t.Right() - 8 - tw - 12, by, tw + 12, bh};
@@ -402,7 +428,9 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Text(std::to_wstring(e.track), cells.track, TextStyle::Mono, now ? c.accent : c.textTertiary, HAlign::Trailing);
     const bool iconRow = e.kind != EntryKind::Media && e.kind != EntryKind::Album && e.image.empty();
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
-    if (iconRow) {
+    if (t.w <= 0) {
+        // No artwork column: the track number (accent while playing) carries the row.
+    } else if (iconRow) {
         std::string icon = e.icon.empty() ? "folder" : e.icon;
         const Color ic = hot || sel ? c.textPrimary : c.textSecondary;
         p.Icon(icon, t.Center(24, 24), ic, c.accentMid);
@@ -414,7 +442,6 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
             p.Fill(t, c.scrim, 2);
             p.Icon("play", t.Center(18, 18), c.accent);
         }
-        if (e.damaged) PaintDamagedMark(p, {t.Right() - 2, t.Bottom() - 2}, 7);
     }
 
     const Color fg = now ? c.accent
@@ -422,7 +449,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
                      : (hot || sel)                ? c.textPrimary
                      : (e.watched || e.damaged)    ? c.textTertiary
                                                    : c.textSecondary;
-    float x = t.Right() + 10;
+    float x = compactRow ? t.Right() + 10 : cells.title.x;
     float right = r.Right();
     const bool menu = e.kind != EntryKind::Action && e.kind != EntryKind::Category && onMenu;
     if (menu) {
@@ -479,12 +506,8 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         }
         if (columns & kColSize)
             cell(e.size > 0 ? FormatSize(e.size) : std::wstring(), w > 600 ? 80.0f : 0.0f, TextStyle::Body, HAlign::Trailing);
-        if (columns & kColDuration) {
-            if (e.damaged && !(e.duration > 0))
-                cell(Tr(L"Damaged"), kDurationW, TextStyle::Small, HAlign::Trailing);
-            else
-                cell(e.duration > 0 ? FormatDuration(e.duration) : std::wstring(), kDurationW, TextStyle::Mono, HAlign::Trailing);
-        }
+        if (columns & kColDuration)
+            cell(e.duration > 0 ? FormatDuration(e.duration) : std::wstring(), kDurationW, TextStyle::Mono, HAlign::Trailing);
     }
 
     const float flex = right - x;
@@ -494,7 +517,15 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     float titleW = flex;
     if (sub && extra) titleW = flex * 0.44f;
     else if (sub || extra) titleW = flex * 0.6f;
-    p.Text(e.title, {x, r.y, titleW - 16, r.h}, body, fg);
+    if (e.damaged) {
+        // The chip follows the title (shortened if needed), in the title's own column.
+        const float cw = DamagedChipWidth(p);
+        const float textW = std::min(std::ceil(p.Measure(e.title, body).width) + 1, std::max(0.0f, titleW - 16 - cw - 8));
+        p.Text(e.title, {x, r.y, textW, r.h}, body, fg);
+        if (titleW - 16 >= cw) PaintDamagedChip(p, {x + textW + 8, r.Cy() - kChipH / 2, cw, kChipH}, c.bgCard);
+    } else {
+        p.Text(e.title, {x, r.y, titleW - 16, r.h}, body, fg);
+    }
     float cx = x + titleW;
     const float rest = flex - titleW;
     if (sub) {
@@ -514,8 +545,12 @@ ItemGrid::RowCells ItemGrid::MediaCells(const Rect& r) const {
         cells.track = {x, r.y, kTrackW, r.h};
         x += kTrackW + 12;
     }
-    cells.thumb = {x, r.Cy() - kThumb / 2, kThumb, kThumb};
-    x += kThumb + 10;
+    if (thumbs) {
+        cells.thumb = {x, r.Cy() - kThumb / 2, kThumb, kThumb};
+        x += kThumb + 10;
+    } else {
+        cells.thumb = {x, r.Cy(), 0, 0};
+    }
     float right = r.Right();
     if (onMenu) right -= 36;
     if (anyFavorite_) {
@@ -588,7 +623,7 @@ void ItemGrid::PaintColumns(Painter& p, const Rect& r) {
             p.Icon(desc ? "arrow_down" : "arrow_up", {ax, r.Cy() - 7, 14, 14}, col);
         }
     }
-    p.Fill({r.x - 8, r.Bottom() - 1, r.w + 16, 1}, c.line);
+    p.Fill({r.x, r.Bottom() - 1, r.w, 1}, c.line);  // the content's edges, like the page header
 }
 
 void ItemGrid::PaintHeader(Painter& p, int i, const Rect& r) {

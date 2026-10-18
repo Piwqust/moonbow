@@ -70,6 +70,7 @@ public:
     unsigned columns = kColDuration;
     bool reorderable = false;  // Rows only
     bool roundImages = false;  // artist cards
+    bool thumbs = true;        // Rows: artwork before the title (album pages show only the track number)
     ColumnTitle heads[kHeadCount];
     std::string sort;  // current sort value, marks the sorted column
     std::function<void(const std::string&)> onSort;  // a column title was clicked: the new sort value
