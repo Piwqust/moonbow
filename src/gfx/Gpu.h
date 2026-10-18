@@ -6,7 +6,6 @@
 #include <dcomp.h>
 #include <dwrite_3.h>
 #include <dxgi1_2.h>
-#include <wincodec.h>
 #include <wrl/client.h>
 
 #include <cstdint>
@@ -57,7 +56,6 @@ public:
     ID2D1DeviceContext5* Ctx() const { return ctx_.Get(); }
     IDCompositionDevice* DComp() const { return dcomp_.Get(); }
     IDWriteFactory5* DWrite() const { return dwrite_.Get(); }
-    IWICImagingFactory* Wic() const { return wic_.Get(); }
 
     ~Gpu();
 
@@ -78,7 +76,6 @@ private:
 
     ComPtr<ID2D1Factory6> d2dFactory_;
     ComPtr<IDWriteFactory5> dwrite_;
-    ComPtr<IWICImagingFactory> wic_;
     ComPtr<ID3D11Device> d3d_;
     ComPtr<IDXGIDevice> dxgiDevice_;
     ComPtr<IDXGIFactory2> dxgi_;

@@ -39,10 +39,8 @@ bool Gpu::CreateFactories() {
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory6), &opts,
                                  reinterpret_cast<void**>(d2dFactory_.GetAddressOf()))))
         return false;
-    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory5),
-                                   reinterpret_cast<IUnknown**>(dwrite_.GetAddressOf()))))
-        return false;
-    return SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic_)));
+    return SUCCEEDED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory5),
+                                         reinterpret_cast<IUnknown**>(dwrite_.GetAddressOf())));
 }
 
 void Gpu::StartDevice() {
