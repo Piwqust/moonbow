@@ -631,6 +631,9 @@ FrameStats g_frameStats;
 void Host::Render() {
     renderPending_ = false;
     if (!hwnd_ || IsIconic(hwnd_)) return;
+    // Nothing to draw with until the device is up (the GDI skeleton covers the window): the first
+    // layout then runs with the first frame, not inside ShowWindow, where it waited for the fonts.
+    if (!gfx::Gpu::Get().Ready()) return;
     const double t0 = AnimFloat::Now();
     const bool animating = AnimFloat::TickAll(t0);
     if (layoutDirty_ || animating) DoLayout();
@@ -657,10 +660,12 @@ void Host::Render() {
     }
     OnFramePainted();
     const double t2 = AnimFloat::Now();
-    if (surface_.End())
+    if (surface_.End()) {
+        if (!gpuPainted_) Trace("first frame");
         gpuPainted_ = true;
-    else
+    } else {
         RequestLayout();
+    }
     g_frameStats.Add(t1 - t0, t2 - t1, AnimFloat::Now() - t2);
     gfx::Text::Get().EndFrame();
     if (AnimFloat::AnyActive()) RequestRender();
@@ -1239,13 +1244,24 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
 
-        case kDeviceReadyMessage:
-            if (!gfx::Gpu::Get().Ready() && !gfx::Gpu::Get().FinishDevice()) {
-                MessageBoxW(hwnd_, L"Direct3D 11 / DirectComposition is not available.", L"Lumen", MB_ICONERROR);
+        case kDeviceReadyMessage: {
+            // Sent for the quick WARP device and again for the hardware one (gfx/Gpu.h).
+            gfx::Gpu& gpu = gfx::Gpu::Get();
+            const bool hadDevice = gpu.Ready();
+            if (!gpu.FinishDevice()) {
+                if (gpu.DeviceFailed())
+                    MessageBoxW(hwnd_, L"Direct3D 11 / DirectComposition is not available.", L"Lumen", MB_ICONERROR);
                 return 0;
             }
-            for (Host* h : Registry()) h->OnDeviceReady();
+            for (Host* h : Registry()) {
+                if (hadDevice)
+                    h->RequestLayout();  // Surface::Begin rebuilds for the new device generation
+                else
+                    h->OnDeviceReady();
+            }
+            Trace(hadDevice ? "hardware device" : "first device");
             return 0;
+        }
 
         case kRepaintMessage:
             RequestRender();

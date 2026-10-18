@@ -432,8 +432,8 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     ApplyWindowOptions();
     system_.Attach(main_->Hwnd());
     Trace("window shown");
-    // The GPU device (driver load) and libmpv start after the first paint.
-    gfx::Gpu::Get().CreateDeviceAsync(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
+    // The GPU device started in wWinMain; libmpv starts after the window is up.
+    gfx::Gpu::Get().NotifyWhenReady(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
     {
         auto options = MpvOptions(config_);
         // general.extraOptions: "--deband=yes --sub-ass-override=force" (applied at start).

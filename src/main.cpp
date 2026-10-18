@@ -99,6 +99,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return 0;
     }
 
+    // The GPU driver takes ~150 ms to load: start it now, alongside OLE, fonts, settings and the
+    // window, instead of after the window is shown.
+    if (!gallery) gfx::Gpu::Get().StartDevice();
+
     // OLE (STA COM + drag and drop targets).
     OleInitialize(nullptr);
     int code = 1;

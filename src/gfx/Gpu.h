@@ -10,6 +10,7 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <mutex>
 #include <thread>
 
 namespace gfx {
@@ -24,11 +25,24 @@ public:
 
     // Device-independent factories (D2D, DirectWrite, WIC). Cheap; call first.
     bool CreateFactories();
-    // Creates the D3D11 device on a worker thread (driver load is slow), then
-    // posts doneMessage to notifyWnd.
-    void CreateDeviceAsync(HWND notifyWnd, UINT doneMessage);
-    // On the UI thread after doneMessage: D2D device/context and DComp device.
+    // The hardware D3D11 device takes ~150 ms to create (the driver loads), so StartDevice() (at
+    // process start) creates it on a worker thread, right after a WARP (software) device that is
+    // ready in a few ms: the first frames are drawn with WARP, then everything moves to
+    // the hardware device. NotifyWhenReady() posts `doneMessage` to the window for each device
+    // that becomes available (at once for one that already is); the window then calls
+    // FinishDevice() on the UI thread.
+    void StartDevice();
+    void NotifyWhenReady(HWND notifyWnd, UINT doneMessage);
+    void CreateDeviceAsync(HWND notifyWnd, UINT doneMessage) {
+        StartDevice();
+        NotifyWhenReady(notifyWnd, doneMessage);
+    }
+    // On the UI thread after doneMessage: switches to the best device available so far (WARP, then
+    // hardware) and builds the D2D device/context and DComp device. True when the device changed;
+    // surfaces then rebuild through Generation().
     bool FinishDevice();
+    // Both workers are done and no device could be created.
+    bool DeviceFailed();
     bool Ready() const { return ctx_ != nullptr; }
 
     // Recreates all device objects after DXGI device removal. Surfaces notice
@@ -51,8 +65,15 @@ private:
     bool CreateDeviceObjects();
     void ReleaseDeviceObjects();
 
+    void PostReady();  // notifyMutex_ held
+
     std::thread deviceThread_;
-    ComPtr<ID3D11Device> pendingDevice_;
+    std::mutex notifyMutex_;  // guards everything below up to usingHardware_
+    HWND notifyWnd_ = nullptr;
+    UINT notifyMsg_ = 0;
+    bool hardwareDone_ = false, warpDone_ = false;
+    ComPtr<ID3D11Device> hardwareDevice_, warpDevice_;
+    bool usingHardware_ = false;
     uint32_t generation_ = 0;
 
     ComPtr<ID2D1Factory6> d2dFactory_;

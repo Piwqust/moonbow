@@ -6,17 +6,20 @@ namespace gfx {
 
 namespace {
 
-ComPtr<ID3D11Device> CreateD3DDevice() {
+ComPtr<ID3D11Device> CreateDevice(D3D_DRIVER_TYPE type) {
     const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
                                         D3D_FEATURE_LEVEL_10_0};
     const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     ComPtr<ID3D11Device> device;
-    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, levels,
-                                   static_cast<UINT>(std::size(levels)), D3D11_SDK_VERSION, &device, nullptr, nullptr);
-    if (FAILED(hr))
-        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, levels,
-                               static_cast<UINT>(std::size(levels)), D3D11_SDK_VERSION, &device, nullptr, nullptr);
+    HRESULT hr = D3D11CreateDevice(nullptr, type, nullptr, flags, levels, static_cast<UINT>(std::size(levels)),
+                                   D3D11_SDK_VERSION, &device, nullptr, nullptr);
     return SUCCEEDED(hr) ? device : nullptr;
+}
+
+// Hardware, or WARP when there is no usable GPU.
+ComPtr<ID3D11Device> CreateD3DDevice() {
+    ComPtr<ID3D11Device> device = CreateDevice(D3D_DRIVER_TYPE_HARDWARE);
+    return device ? device : CreateDevice(D3D_DRIVER_TYPE_WARP);
 }
 
 }  // namespace
@@ -42,17 +45,63 @@ bool Gpu::CreateFactories() {
     return SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic_)));
 }
 
-void Gpu::CreateDeviceAsync(HWND notifyWnd, UINT doneMessage) {
-    deviceThread_ = std::thread([this, notifyWnd, doneMessage] {
-        pendingDevice_ = CreateD3DDevice();
-        PostMessageW(notifyWnd, doneMessage, 0, 0);
+void Gpu::StartDevice() {
+    if (deviceThread_.joinable() || d3d_) return;
+    // One thread, WARP first: two threads raced for the loader lock, and while the GPU driver's
+    // DLLs loaded under it WARP could not start either.
+    deviceThread_ = std::thread([this] {
+        ComPtr<ID3D11Device> warp = CreateDevice(D3D_DRIVER_TYPE_WARP);
+        {
+            std::lock_guard lock(notifyMutex_);
+            warpDevice_ = std::move(warp);
+            warpDone_ = true;
+            PostReady();
+        }
+        ComPtr<ID3D11Device> device = CreateD3DDevice();
+        std::lock_guard lock(notifyMutex_);
+        hardwareDevice_ = std::move(device);
+        hardwareDone_ = true;
+        PostReady();
     });
 }
 
+void Gpu::PostReady() {
+    if (notifyWnd_) PostMessageW(notifyWnd_, notifyMsg_, 0, 0);
+}
+
+void Gpu::NotifyWhenReady(HWND notifyWnd, UINT doneMessage) {
+    std::lock_guard lock(notifyMutex_);
+    notifyWnd_ = notifyWnd;
+    notifyMsg_ = doneMessage;
+    if (hardwareDone_ || warpDone_) PostReady();
+}
+
 bool Gpu::FinishDevice() {
-    if (deviceThread_.joinable()) deviceThread_.join();
-    d3d_ = std::move(pendingDevice_);
+    ComPtr<ID3D11Device> next;
+    {
+        std::lock_guard lock(notifyMutex_);
+        if (usingHardware_) return false;
+        if (hardwareDone_ && hardwareDevice_) {
+            next = std::move(hardwareDevice_);
+            usingHardware_ = true;
+            warpDevice_.Reset();
+        } else if (!Ready() && warpDevice_) {
+            next = std::move(warpDevice_);
+        } else {
+            return false;
+        }
+    }
+    if (Ready()) ReleaseDeviceObjects();
+    d3d_ = std::move(next);
+    if (CreateDeviceObjects()) return true;
+    ReleaseDeviceObjects();
+    d3d_ = CreateDevice(D3D_DRIVER_TYPE_WARP);  // the hardware device was unusable after all
     return CreateDeviceObjects();
+}
+
+bool Gpu::DeviceFailed() {
+    std::lock_guard lock(notifyMutex_);
+    return !Ready() && hardwareDone_ && warpDone_ && !hardwareDevice_ && !warpDevice_;
 }
 
 bool Gpu::CreateDeviceObjects() {
