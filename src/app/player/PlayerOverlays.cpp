@@ -146,8 +146,14 @@ void StatsOverlay::Observe() {
         v.maxFall = NodeNum(NodeGet(n, "max-fall"));
         dirty_ = true;
     }));
-    num("audio-params/samplerate", &Values::sampleRate);
-    num("audio-params/channel-count", &Values::channels);
+    // The whole map, not "audio-params/samplerate": a sub-property observer misses the new
+    // value after an audio track switch and stays at "—".
+    observers_.push_back(p.Observe("audio-params", MPV_FORMAT_NODE, [this](const mpv_event_property& e) {
+        const mpv_node* n = e.format == MPV_FORMAT_NODE ? static_cast<const mpv_node*>(e.data) : nullptr;
+        v_->sampleRate = NodeNum(NodeGet(n, "samplerate"));
+        v_->channels = NodeNum(NodeGet(n, "channel-count"));
+        dirty_ = true;
+    }));
     // Values like avsync change every frame: repaint on a slow clock instead of per event.
     timer_ = window_->StartTimer(500, [this] {
         if (!dirty_) return;
