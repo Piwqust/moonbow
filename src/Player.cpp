@@ -161,6 +161,12 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("input-cursor", "no");
     opt("cursor-autohide", "no");
     opt("load-scripts", "no");
+    // mpv's built-in clients Lumen has its own UI for: each is a Lua VM (or thread) to start and
+    // tear down with every launch and exit. mpv's own media session would also sit next to
+    // Lumen's in the Windows media flyout (app/SystemIntegration).
+    for (const char* name : {"load-stats-overlay", "load-console", "load-select", "load-positioning",
+                             "load-commands", "load-context-menu", "media-controls"})
+        opt(name, "no");
     opt("ytdl", "no");
     opt("terminal", "no");
     opt("volume-max", "150");
@@ -694,6 +700,7 @@ void Player::SaveWatchLater() {
 void Player::Shutdown() {
     if (init_.joinable()) init_.join();
     if (mpv_) {
+        Trace("close: player shutdown");
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
         if (state_.fileLoaded) {
             if (NearEnd())
