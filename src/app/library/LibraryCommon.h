@@ -5,6 +5,7 @@
 #include "ui/Controls.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,10 @@ std::wstring FormatClock(int64_t unixMs);      // "14:05"
 // 0 = today, 1 = yesterday, 2 = earlier (local time).
 int DayBucket(int64_t unixMs);
 bool IsUrl(const std::wstring& path);
+// "C:\..." or "\\server\...": a folder route or path, not a sub-page key or a URL.
+bool LooksLikeFolder(const std::wstring& path);
+// "1 284" (a no-break space) in Russian, "1,284" in English.
+std::wstring Grouped(long long n);
 // "12 songs" / "12 песен", "3 plays" / "3 прослушивания", "5 albums" / "5 альбомов".
 std::wstring CountSongs(long long n);
 std::wstring CountPlays(long long n);
@@ -64,6 +69,9 @@ std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item
 bool SamePath(const std::wstring& a, const std::wstring& b);
 // Current media of the player (empty when nothing is loaded).
 std::wstring NowPlayingPath();
+// The "New" chip: a library file found since the user last looked at the library, and never
+// played (any history entry counts: a file played already is not news).
+bool ShowsNew(const library::MediaItem& m, bool played);
 
 // --- queue / playback -------------------------------------------------------------------
 QueueItem MakeQueueItem(const std::wstring& path, const std::wstring& title = {}, double duration = 0);
@@ -76,6 +84,8 @@ void AddToQueue(std::vector<QueueItem> items);
 void AddFolderToLibrary();
 void RemoveLibraryRoot(const std::wstring& folder);
 void RescanLibrary();
+// Forgets the history, saved positions, per-file settings and what the online services sent.
+void ClearHistory();
 
 // --- shell ------------------------------------------------------------------------------
 void ShowInExplorer(const std::wstring& path);
@@ -83,13 +93,17 @@ std::wstring PickPlaylistFile();               // .m3u/.m3u8 open dialog, empty 
 std::wstring PickPlaylistSaveFile(const std::wstring& suggestedName);
 
 // --- menus ------------------------------------------------------------------------------
+// The items a menu acts on, shared by its actions: a page's queue can hold 20 000 songs, and
+// menus copy their items (and so the actions' captures) several times.
+using SharedQueue = std::shared_ptr<const std::vector<QueueItem>>;
+SharedQueue ShareQueue(std::vector<QueueItem> items);
 // "Add to playlist" submenu: existing playlists + "New playlist…".
-std::vector<ui::MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items);
+std::vector<ui::MenuItem> AddToPlaylistMenu(SharedQueue items);
 ui::MenuItem Item(const wchar_t* label, const char* icon, std::function<void()> action, bool enabled = true);
 
 // Standard menu for media files (Play, Play next, Add to queue, Add to playlist, Watched,
 // Favorite, Show in Explorer, Go to folder). `queue`/`index` are what "Play" starts.
-std::vector<ui::MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem> queue, int index,
+std::vector<ui::MenuItem> MediaMenu(const std::wstring& path, SharedQueue queue, int index,
                                     const std::wstring& queueName, bool goToFolder = true);
 
 // --- prompts ----------------------------------------------------------------------------

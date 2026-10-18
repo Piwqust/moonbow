@@ -12,6 +12,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
+#include "app/library/LibraryCommon.h"
 #include "core/Json.h"
 #include "core/Paths.h"
 #include "gfx/Text.h"
@@ -99,7 +100,9 @@ void AttachRemembered() {
     auto it = pairs.find(library::PathKey(s.path));
     if (it == pairs.end()) return;
     for (const auto& sub : it->second.second)
-        if (!AutoLoadedByMpv(s.path, sub) && PathFileExistsW(sub.c_str())) TheApp().player().AddSubtitle(sub);
+        // MaybeExists doesn't look at network paths (a NAS that is off blocks the UI thread for
+        // its timeout); sub-add of a missing one just fails in mpv.
+        if (!AutoLoadedByMpv(s.path, sub) && lib::MaybeExists(sub)) TheApp().player().AddSubtitle(sub);
 }
 
 // --- matching --------------------------------------------------------------------------------
@@ -526,16 +529,27 @@ private:
         auto& store = Store();
         const std::wstring playing = TheApp().player().State().fileLoaded ? TheApp().player().State().path : L"";
         int videos = 0;
-        auto remember = [&](const std::wstring& video, const std::vector<std::wstring>& subs) {
+        // Remembered subtitles this dialog doesn't list (downloaded into the data folder, or from
+        // another source folder) were never shown to be unticked: they stay.
+        std::set<std::wstring> listed;
+        for (const auto& s : model_->subs) listed.insert(library::PathKey(s));
+        auto remember = [&](const std::wstring& video, const std::vector<std::wstring>& picked) {
             const std::wstring key = library::PathKey(video);
+            std::vector<std::wstring> before, subs = picked;
+            if (auto old = store.pairs.find(key); old != store.pairs.end()) before = old->second.second;
+            for (const auto& s : before)
+                if (!listed.count(library::PathKey(s)) && std::find(subs.begin(), subs.end(), s) == subs.end())
+                    subs.push_back(s);
             if (subs.empty()) {
                 store.pairs.erase(key);
                 return;
             }
             store.pairs[key] = {video, subs};
-            ++videos;
+            if (!picked.empty()) ++videos;
+            // The remembered ones are loaded already (AttachRemembered).
             if (!playing.empty() && library::PathKey(playing) == key)
-                for (const auto& s : subs) TheApp().player().AddSubtitle(s);
+                for (const auto& s : picked)
+                    if (std::find(before.begin(), before.end(), s) == before.end()) TheApp().player().AddSubtitle(s);
         };
         if (model_->fileMode) {
             std::vector<std::wstring> subs;
@@ -602,12 +616,6 @@ std::string OsLanguageCode(const std::string& code) {
     return code;
 }
 
-std::wstring Grouped(long long n) {
-    std::wstring s = std::to_wstring(n);
-    for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), L" ");
-    return s;
-}
-
 // One search result: the release name, then language, downloads, rating and the flags.
 class OnlineSubRow : public Widget {
 public:
@@ -622,7 +630,7 @@ public:
             if (pick_ && IsEnabled()) pick_(r_);
         };
         std::wstring d = LanguageName(WideToUtf8(r_.language));
-        d += L" · " + Grouped(r_.downloads) + L" " +
+        d += L" · " + lib::Grouped(r_.downloads) + L" " +
              (CurrentLanguage() == Language::Russian ? Plural(r_.downloads, L"загрузка", L"загрузки", L"загрузок")
                                                      : r_.downloads == 1 ? L"download" : L"downloads");
         if (r_.rating > 0 && r_.votes > 0) {
@@ -973,6 +981,13 @@ void ShowAddSubtitlesDialog(const std::wstring& folderOrPlaylist) {
     for (const auto& v : model->videos) {
         auto it = Store().pairs.find(library::PathKey(v));
         if (it != Store().pairs.end()) model->For(v) = it->second.second;
+    }
+    if (auto it = Store().pairs.find(library::PathKey(model->current)); !model->current.empty() && it != Store().pairs.end()) {
+        std::set<std::wstring> remembered, shown;
+        for (const auto& sub : it->second.second) remembered.insert(library::PathKey(sub));
+        for (const auto& sub : model->subs)
+            if (remembered.count(library::PathKey(sub))) shown.insert(library::PathKey(sub));
+        if (!shown.empty()) model->checked = std::move(shown);
     }
 
     auto dialog = std::make_shared<SubsDialog>(w, model);

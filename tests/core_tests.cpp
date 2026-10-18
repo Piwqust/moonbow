@@ -546,6 +546,11 @@ void TestConfigValues() {
     CHECK(c.GetDouble("audio.eq60") == 8);
     CHECK(c.GetDouble("audio.eqPreamp") == -7);
     CHECK(!c.ApplyEqPreset("nope"));
+    // "none" flattens the bands (the player panel relies on it; it used to do nothing).
+    CHECK(c.ApplyEqPreset("none"));
+    CHECK(c.GetString("audio.eqPreset") == "none");
+    CHECK(c.GetDouble("audio.eq60") == 0);
+    CHECK(c.GetDouble("audio.eqPreamp") == 0);
 
     c.ResetAll();
     CHECK(c.GetString("general.theme") == "dark");
