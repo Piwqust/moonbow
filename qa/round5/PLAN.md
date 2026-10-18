@@ -14,7 +14,7 @@ Hibernation is off on this PC, so this command sleeps (S3). The sleep is the ver
 2. ✅ Test hooks merged: tree dump v2, command.ps1, --scale, WM_MOUSELEAVE. Test exe: %TEMP%\lumen-qa\r5-v2\Lumen.exe; rebuild it from main after merges.
 3. ✅ Flows hunt, report in flows.md (FL-01…FL-14). FL-01: the side panel was dead in fullscreen, the likely cause of the owner's queue bug.
 4. ✅ Fixer r5-fix-flows merged (3a8f8d5): FL-01…FL-14 (FL-09 rejected) plus audit items 3, 4, 5, 8, 16 and 17 and the player items from "Остальные". Test exe: %TEMP%\lumen-qa\r5-v4.
-5. ⏳ Fixer r5-fix-audit: the other confirmed items of AUDIT-PONYTAIL.md.
+5. ✅ Fixer r5-fix-audit merged (67222df): report in audit-fixes.md. Long paths rejected; the leftover dead code in Player.*/app/player/* and the unused <sstream> in App.cpp go to final cleanup after r5-fix-player. Test exe: r5-v6. ⏳ r5-fix-library started on top of 67222df; it also takes the window-drag relayout and menu filter highlighting.
 6. ✅ r5-tools-sweep merged: ui-audit.py, sweep.ps1, scenarios.json, make-worstcase.ps1, audit-baseline.md (289 scenarios in 6 min). The dump clip flag now uses glyph ink (f4bdf30). Test exe with it: %TEMP%\lumen-qa\r5-v3. The baseline's dialog items went to r5-fix-settings and its onboarding items to r5-fix-audit.
 7. ✅ Hunters r5-player-eye (player-visual.md, PV-01…PV-18) and r5-settings-eye (settings-dialogs.md, SD-01…SD-22), both merged.
    - ✅ Fixer r5-fix-settings merged (e9cd441): SD-01…SD-22, W-08, baseline #1/#2/#3/#5/#6/#14-16, the About dialog. Skipped: menu filter highlighting (MenuPopup conflict); this can be done after r5-fix-audit. Test exe: r5-v5.
