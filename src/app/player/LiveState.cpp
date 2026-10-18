@@ -1,5 +1,6 @@
 #include "app/player/LiveState.h"
 
+#include "Trace.h"
 #include "Util.h"
 #include "app/App.h"
 #include "app/I18n.h"
@@ -7,6 +8,7 @@
 #include "core/Json.h"
 #include "core/SettingsSchema.h"
 #include "gfx/Gpu.h"
+#include "library/MediaTypes.h"
 #include "ui/Controls.h"
 
 #include <dxgi1_6.h>
@@ -125,6 +127,40 @@ std::string ConfigHwdec() {
     return settings::kAutoHwdec;
 }
 
+// --- per-file settings: the values a file opens with when nothing is stored for it ------------
+
+// What a setting maps to for one mpv option, or `fallback`.
+std::string ConfigOption(const char* key, const char* option, const char* fallback) {
+    for (const auto& [name, value] : MpvOptionFor(Cfg(), key))
+        if (name == option) return value;
+    return fallback;
+}
+
+double DefaultSpeed() {
+    const double s = Cfg().GetDouble("playback.speed");
+    return s > 0 ? s : 1.0;
+}
+
+double DefaultSubPos() {
+    return Cfg().GetDouble("subtitles.position");
+}
+
+std::string DefaultDeinterlace() {
+    return ConfigOption("video.deinterlace", "deinterlace", "no");
+}
+
+// video-zoom of a LiveState zoom mode (they also set video-unscaled).
+double ModeZoom(const std::string& mode) {
+    if (mode == "quarter") return -2;
+    if (mode == "half") return -1;
+    if (mode == "double") return 1;
+    return 0;
+}
+
+bool ExcludedFromMemory(const std::wstring& path) {
+    return TheApp().history().IsExcluded(path);
+}
+
 // Settings whose mpv mapping rewrites the whole vf chain (dropping Lumen's labelled filters).
 bool RewritesVf(const std::string& key) {
     const settings::Item* item = settings::FindItem(key);
@@ -144,20 +180,21 @@ LiveState& LiveState::Get() {
 LiveState::LiveState() {
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (!started_ && Mpv().Ready()) Start();
-        // mpv resets aspect, zoom and rotation per file (reset-on-next-file); forget our view of
-        // them too. Flip is a filter, which mpv keeps: drop it here, so all the transforms follow
-        // one rule (the Video tab says so).
+        // Crop goes back to its setting for every file.
         static std::wstring lastPath;
         if ((m & kChangeFile) && Mpv().State().path != lastPath) {
             lastPath = Mpv().State().path;
-            zoomMode = "fit";
-            aspect = "auto";
-            if (flip != 0) {
-                flip = 0;
-                ApplyVideoFilters();
-            }
             LoadCropSetting();
             ApplyCrop();
+        }
+        if ((m & kChangeFile) && Mpv().FileSettled() && Mpv().State().loadSerial != fileSerial_) BeginFile(true);
+        if (fileOpen_ && (m & kChangeTracks)) {
+            if (trackFixPending_) FixTracks();
+            ScheduleCapture();
+        }
+        if (fileOpen_ && (m & kChangeState) && Mpv().State().speed != lastSpeed_) {
+            lastSpeed_ = Mpv().State().speed;
+            ScheduleCapture();
         }
         // hwdec-current and the HDR flag arrive as state changes.
         if (m & kChangeFile) ForgetDisplayHdr();
@@ -179,7 +216,31 @@ LiveState::LiveState() {
             Notify();
         }
         if (key.rfind("audio.", 0) == 0) ApplyAudioFilters();
+        if (key == "playback.perFile" || key == "playback.perFileAll") {
+            Mpv().confirmTracks = FileSettingsOn();
+            // From now on for the playing file too (what it opened with is its starting point).
+            if (Mpv().FileSettled()) BeginFile(false);
+        }
     });
+    Player& p = Mpv();
+    p.confirmTracks = FileSettingsOn();
+    p.fileOptions = [this](const std::wstring& path) { return FileOptionsFor(path); };
+    p.beforeLeave = [this] { LeaveFile(); };
+    TheApp().history().onCleared = [this] { ForgetAllFileSettings(); };
+    // A full store (5000 files) takes ~9 ms to parse: read it while mpv starts, not in the first Open.
+    if (FileSettingsOn())
+        loader_ = std::thread([this] {
+            Trace("file settings load");
+            store_.Load();
+            Trace("file settings loaded");
+        });
+}
+
+LiveState::~LiveState() {
+    if (loader_.joinable()) loader_.join();
+    // At exit: the last change may still wait for its capture (the window and its timers are gone).
+    if (captureTimer_) Capture(false);
+    if (store_.Loaded()) store_.Flush();
 }
 
 void LiveState::LoadCropSetting() {
@@ -201,6 +262,11 @@ void LiveState::Start() {
 }
 
 void LiveState::Notify() {
+    ScheduleCapture();
+    Repaint();
+}
+
+void LiveState::Repaint() {
     // Several properties arrive in one ProcessEvents batch; repaint once.
     if (notifyPosted_) return;
     MainWindow* w = TheApp().main();
@@ -235,6 +301,16 @@ void LiveState::ObserveAll() {
     num("hue", &LiveValues::hue);
     num("video-zoom", &LiveValues::zoom);
     num("video-rotate", &LiveValues::rotate);
+    num("video-pan-x", &LiveValues::panX);
+    num("video-pan-y", &LiveValues::panY);
+    // The Video tab's Deinterlace follows mpv, also when the D key cycles it.
+    p.Observe("deinterlace", MPV_FORMAT_STRING, [this](const mpv_event_property& e) {
+        if (e.format != MPV_FORMAT_STRING || !e.data) return;
+        const char* s = *static_cast<char**>(e.data);
+        if (!s || deinterlace == s) return;
+        deinterlace = s;
+        Notify();
+    });
     auto ab = [this, &p](const char* name, double LiveValues::*field) {
         p.Observe(name, MPV_FORMAT_STRING, [this, field](const mpv_event_property& e) {
             double v = NAN;
@@ -667,9 +743,10 @@ void LiveState::ApplyPreset(int index) {
     if (!v || !v->IsObject()) return;
     Player& p = Mpv();
     p.SetSpeed(v->GetNumber("speed", 1));
-    for (const char* name : {"audio-delay", "sub-delay", "brightness", "contrast", "saturation", "gamma", "hue",
-                             "video-rotate"})
+    for (const char* name : {"audio-delay", "sub-delay", "brightness", "contrast", "saturation", "gamma", "hue"})
         p.SetProperty(name, v->GetNumber(name, 0));
+    // A choice option: mpv rejects a double.
+    p.SetProperty("video-rotate", std::to_string(((v->GetInt("video-rotate", 0) % 360) + 360) % 360));
     p.SetProperty("sub-scale", v->GetNumber("sub-scale", 1));
     p.SetProperty("sub-pos", v->GetNumber("sub-pos", 100));
     SetZoomMode(v->GetString("zoom", "fit"));
@@ -694,7 +771,8 @@ void LiveState::DeletePreset(int index) {
 void LiveState::ResetToDefaults() {
     Player& p = Mpv();
     p.SetSpeed(1);
-    for (const char* name : {"audio-delay", "sub-delay", "video-rotate"}) p.SetProperty(name, 0.0);
+    for (const char* name : {"audio-delay", "sub-delay"}) p.SetProperty(name, 0.0);
+    p.SetProperty("video-rotate", std::string("0"));  // a choice option: mpv rejects a double
     p.SetProperty("sub-scale", 1.0);
     p.SetProperty("sub-pos", 100.0);
     ResetPicture();
@@ -707,6 +785,316 @@ void LiveState::ResetToDefaults() {
     SetStereoMode("stereo");
     activePreset = -1;
     Notify();
+}
+
+// --- per-file settings ------------------------------------------------------------------------
+
+bool LiveState::FileSettingsOn() const {
+    return Cfg().GetBool("playback.perFile");
+}
+
+bool LiveState::FileSettingsAll() const {
+    return FileSettingsOn() && Cfg().GetBool("playback.perFileAll");
+}
+
+library::FileSettings& LiveState::Store() {
+    if (loader_.joinable()) loader_.join();
+    if (!store_.Loaded()) store_.Load();
+    return store_;
+}
+
+library::FileOptions LiveState::FileSettingsStored() const {
+    if (!fileOpen_) return {};
+    if (FileSettingsAll()) return fileOpts_;
+    library::FileOptions o;  // the rest waits for playback.perFileAll
+    o.aid = fileOpts_.aid;
+    o.sid = fileOpts_.sid;
+    o.secondarySid = fileOpts_.secondarySid;
+    o.audioFile = fileOpts_.audioFile;
+    o.subFile = fileOpts_.subFile;
+    o.audioDelay = fileOpts_.audioDelay;
+    o.subDelay = fileOpts_.subDelay;
+    return o;
+}
+
+// Player::Open / QueueNext. With playback.perFileAll every file also gets the speed, deinterlacing
+// and subtitle position and size it should start with, stored or default: mpv keeps those from
+// file to file otherwise, and one file's values would leak into the next.
+std::string LiveState::FileOptionsFor(const std::wstring& path) {
+    if (!FileSettingsOn()) return {};
+    library::FileOptions o;
+    if (!ExcludedFromMemory(path))
+        if (const library::FileOptions* f = Store().Find(path)) o = *f;
+    std::string out;
+    auto add = [&out](const char* name, const std::string& value) {
+        if (!out.empty()) out += ',';
+        out += name;
+        out += '=';
+        out += value;
+    };
+    auto track = [](int64_t id) { return id > 0 ? std::to_string(id) : std::string("no"); };
+    // The tracks always: a file without a stored choice gets the configured one, not the choice
+    // mpv's watch-later put back for the previous file (it outlives that file on a gapless move).
+    // A sidecar track is picked (or added) once the file has loaded, see FixTracks.
+    add("aid", o.aid && !o.audioFile ? track(*o.aid) : ConfigOption("playback.audioTrack", "aid", "auto"));
+    add("sid", o.sid && !o.subFile ? track(*o.sid) : ConfigOption("playback.subtitleTrack", "sid", "auto"));
+    add("secondary-sid", o.secondarySid ? track(*o.secondarySid) : std::string("no"));
+    if (o.audioDelay) add("audio-delay", Num(*o.audioDelay));
+    if (o.subDelay) add("sub-delay", Num(*o.subDelay));
+    if (!FileSettingsAll()) return out;
+    add("speed", Num(o.speed.value_or(DefaultSpeed())));
+    if (o.aspect) add("video-aspect-override", *o.aspect);
+    if (o.zoomMode) {
+        add("video-unscaled", "yes");
+        add("video-zoom", Num(ModeZoom(*o.zoomMode)));
+    } else if (o.zoom) {
+        add("video-zoom", Num(*o.zoom));
+    }
+    if (o.panX) add("video-pan-x", Num(*o.panX));
+    if (o.panY) add("video-pan-y", Num(*o.panY));
+    if (o.rotate) add("video-rotate", Num(*o.rotate));
+    add("deinterlace", o.deinterlace.value_or(DefaultDeinterlace()));
+    if (o.abA) add("ab-loop-a", Num(*o.abA));
+    if (o.abB) add("ab-loop-b", Num(*o.abB));
+    add("sub-pos", Num(o.subPos.value_or(DefaultSubPos())));
+    add("sub-scale", Num(o.subScale.value_or(1.0)));
+    return out;
+}
+
+void LiveState::BeginFile(bool loaded) {
+    Player& p = Mpv();
+    const PlayerState& s = p.State();
+    MainWindow* w = TheApp().main();
+    if (captureTimer_ && w) w->CancelTimer(captureTimer_);
+    captureTimer_ = 0;
+    if (loaded) {
+        fileSerial_ = s.loadSerial;
+        filePath_ = p.LoadedPath();
+    }
+    const bool on = FileSettingsOn() && !filePath_.empty() && !ExcludedFromMemory(filePath_);
+    const bool all = on && FileSettingsAll();
+    fileOpen_ = on;
+    fileOpts_ = {};
+    if (on)
+        if (const library::FileOptions* f = Store().Find(filePath_)) {
+            fileOpts_ = *f;
+            if (loaded) Store().Touch(filePath_);  // least recently used goes first; saved with the next write
+        }
+    // Only a choice the user makes from now on changes the stored tracks: a sidecar that is gone
+    // stays remembered, mpv's pick in its place is not the user's.
+    for (int k = 0; k < 3; ++k) {
+        trackBase_[k] = p.TrackChoices(k);
+        tracksTouched_[k] = false;
+    }
+    tracksTrusted_ = !loaded;
+    trackFixPending_ = loaded && on && fileOpts_.HasTracks();
+    lastSpeed_ = s.speed;
+    if (loaded) {
+        // The transforms are per file (reset-on-next-file in Player.cpp; flip is our filter, which
+        // mpv keeps): back to the defaults, or to what this file had, which mpv got with loadfile.
+        zoomMode = all && fileOpts_.zoomMode ? *fileOpts_.zoomMode : "fit";
+        aspect = all && fileOpts_.aspect ? *fileOpts_.aspect : "auto";
+        const int wantFlip = all && fileOpts_.flip ? *fileOpts_.flip : 0;
+        if (flip != wantFlip) {
+            flip = wantFlip;
+            ApplyVideoFilters();
+        }
+        if (trackFixPending_) FixTracks();
+    }
+    Repaint();
+}
+
+// The stored track ids must exist in this file (it may have been remuxed), and sidecar tracks are
+// found by their file, or added again when mpv did not load them by itself.
+void LiveState::FixTracks() {
+    Player& p = Mpv();
+    if (!p.TracksConfirmed() && !tracksTrusted_) return;
+    trackFixPending_ = false;
+    const std::vector<Track>& tracks = p.State().tracks;
+    auto byId = [&tracks](const wchar_t* type, int64_t id) {
+        return std::any_of(tracks.begin(), tracks.end(), [&](const Track& t) { return t.type == type && t.id == id; });
+    };
+    auto byFile = [&tracks](const wchar_t* type, const std::wstring& file) -> const Track* {
+        const std::wstring key = library::PathKey(file);
+        for (const Track& t : tracks)
+            if (t.type == type && t.external && !t.file.empty() && library::PathKey(t.file) == key) return &t;
+        return nullptr;
+    };
+    const library::FileOptions o = fileOpts_;
+    if (o.audioFile) {
+        if (const Track* t = byFile(L"audio", *o.audioFile)) {
+            if (!t->selected) p.SetTrack("aid", t->id);
+        } else {
+            p.AddAudio(*o.audioFile);  // a file that is gone only fails inside mpv
+        }
+    } else if (o.aid && *o.aid > 0 && !byId(L"audio", *o.aid)) {
+        p.SetProperty("aid", std::string("auto"));
+    }
+    if (o.subFile) {
+        if (const Track* t = byFile(L"sub", *o.subFile)) {
+            if (!t->selected) p.SetTrack("sid", t->id);
+        } else {
+            p.AddSubtitle(*o.subFile);
+        }
+    } else if (o.sid && *o.sid > 0 && !byId(L"sub", *o.sid)) {
+        p.SetProperty("sid", std::string("auto"));
+    }
+    if (o.secondarySid && *o.secondarySid > 0 && !byId(L"sub", *o.secondarySid))
+        p.SetProperty("secondary-sid", std::string("no"));
+    // Our own picks are not the user's.
+    for (int k = 0; k < 3; ++k) trackBase_[k] = p.TrackChoices(k);
+}
+
+void LiveState::ScheduleCapture() {
+    if (!fileOpen_ || captureTimer_) return;
+    MainWindow* w = TheApp().main();
+    if (!w) return;
+    // A moment later, so a slider drag is stored once, and values mpv puts back when it moves on
+    // to the next file by itself (gapless) are never taken for this file's.
+    captureTimer_ = w->StartTimer(300, [this] {
+        captureTimer_ = 0;
+        Capture();
+    });
+}
+
+void LiveState::Capture(bool notify) {
+    Player& p = Mpv();
+    const PlayerState& s = p.State();
+    if (!fileOpen_ || !FileSettingsOn() || !p.FileSettled() || s.loadSerial != fileSerial_) return;
+    auto round3 = [](double v) { return std::round(v * 1000) / 1000; };
+    auto num = [&round3](std::optional<double>& field, double v, double def, double eps) {
+        if (std::isfinite(v) && std::abs(v - def) > eps) field = round3(v);
+        else field.reset();
+    };
+    library::FileOptions o = fileOpts_;  // keeps what the current settings don't cover
+    if ((p.TracksConfirmed() || tracksTrusted_) && !trackFixPending_) {
+        for (int k = 0; k < 3; ++k)
+            if (p.TrackChoices(k) != trackBase_[k]) tracksTouched_[k] = true;
+        // The selected track of a kind: by id, a sidecar by its file, 0 when that kind is off.
+        auto track = [&s](const wchar_t* type, int64_t skip, std::optional<int64_t>* id, std::optional<std::wstring>* file) {
+            const Track* sel = nullptr;
+            bool any = false;
+            for (const Track& t : s.tracks) {
+                if (t.type != type) continue;
+                any = true;
+                if (t.selected && t.id != skip && !sel) sel = &t;
+            }
+            if (!any) return;  // nothing to choose from (yet): keep what is stored
+            id->reset();
+            file->reset();
+            if (!sel) *id = 0;
+            else if (sel->external && !sel->file.empty()) *file = sel->file;
+            else *id = sel->id;
+        };
+        if (tracksTouched_[0]) track(L"audio", 0, &o.aid, &o.audioFile);
+        if (tracksTouched_[1]) track(L"sub", v_.secondarySid, &o.sid, &o.subFile);
+        if (tracksTouched_[2]) {
+            o.secondarySid.reset();
+            for (const Track& t : s.tracks)
+                if (t.type == L"sub" && t.id == v_.secondarySid && !t.external) o.secondarySid = t.id;
+        }
+    }
+    num(o.audioDelay, v_.audioDelay, 0, 0.0005);
+    num(o.subDelay, v_.subDelay, 0, 0.0005);
+    if (FileSettingsAll()) {
+        num(o.speed, s.speed, DefaultSpeed(), 0.001);
+        o.aspect.reset();
+        if (aspect != "auto") o.aspect = aspect;
+        o.zoomMode.reset();
+        o.zoom.reset();
+        if (zoomMode != "fit") o.zoomMode = zoomMode;
+        else num(o.zoom, v_.zoom, 0, 0.001);
+        num(o.panX, v_.panX, 0, 0.001);
+        num(o.panY, v_.panY, 0, 0.001);
+        num(o.rotate, v_.rotate, 0, 0.5);
+        o.flip.reset();
+        if (flip != 0) o.flip = flip;
+        o.deinterlace.reset();
+        if (!deinterlace.empty() && deinterlace != DefaultDeinterlace()) o.deinterlace = deinterlace;
+        o.abA.reset();
+        o.abB.reset();
+        if (!std::isnan(v_.abA)) o.abA = round3(v_.abA);
+        if (!std::isnan(v_.abB)) o.abB = round3(v_.abB);
+        num(o.subPos, v_.subPos, DefaultSubPos(), 0.5);
+        num(o.subScale, v_.subScale, 1, 0.001);
+    }
+    if (o == fileOpts_) return;
+    fileOpts_ = o;
+    Store().Put(filePath_, o);
+    ScheduleSave();
+    if (notify) Repaint();
+}
+
+void LiveState::LeaveFile() {
+    if (captureTimer_) {
+        if (MainWindow* w = TheApp().main()) w->CancelTimer(captureTimer_);
+        captureTimer_ = 0;
+        Capture(false);  // the user's last change, made a moment ago
+    }
+    fileOpen_ = false;
+}
+
+void LiveState::ScheduleSave() {
+    MainWindow* w = TheApp().main();
+    if (saveTimer_ || !w) return;
+    saveTimer_ = w->StartTimer(2000, [this] {
+        saveTimer_ = 0;
+        store_.Flush();
+    });
+}
+
+void LiveState::ResetFileSettings() {
+    if (filePath_.empty()) return;
+    if (captureTimer_) {
+        if (MainWindow* w = TheApp().main()) w->CancelTimer(captureTimer_);
+        captureTimer_ = 0;
+        Capture(false);
+    }
+    const library::FileOptions old = FileSettingsStored();
+    if (Store().Remove(filePath_)) ScheduleSave();
+    fileOpts_ = {};
+    // Back to what the file opens with when nothing is stored.
+    Player& p = Mpv();
+    if (old.aid || old.audioFile) p.SetProperty("aid", std::string("auto"));
+    if (old.sid || old.subFile) p.SetProperty("sid", std::string("auto"));
+    if (old.secondarySid) p.SetProperty("secondary-sid", std::string("no"));
+    if (old.audioDelay) p.SetProperty("audio-delay", 0.0);
+    if (old.subDelay) p.SetProperty("sub-delay", 0.0);
+    if (old.speed) p.SetSpeed(DefaultSpeed());
+    if (old.aspect) SetAspect("auto");
+    if (old.zoomMode || old.zoom) SetZoomMode("fit");
+    if (old.panX) p.SetProperty("video-pan-x", 0.0);
+    if (old.panY) p.SetProperty("video-pan-y", 0.0);
+    if (old.rotate) p.SetProperty("video-rotate", std::string("0"));
+    if (old.flip) SetFlip(0);
+    if (old.deinterlace) p.SetProperty("deinterlace", DefaultDeinterlace());
+    if (old.abA || old.abB) {
+        p.SetProperty("ab-loop-a", std::string("no"));
+        p.SetProperty("ab-loop-b", std::string("no"));
+    }
+    if (old.subPos) p.SetProperty("sub-pos", DefaultSubPos());
+    if (old.subScale) p.SetProperty("sub-scale", 1.0);
+    for (int k = 0; k < 3; ++k) {
+        trackBase_[k] = p.TrackChoices(k);
+        tracksTouched_[k] = false;
+    }
+    trackFixPending_ = false;
+    Repaint();
+}
+
+// History > Clear (and Settings > Privacy > Clear history): per-file settings are history too.
+// The playing file is not remembered again until it is opened anew.
+void LiveState::ForgetAllFileSettings() {
+    if (captureTimer_) {
+        if (MainWindow* w = TheApp().main()) w->CancelTimer(captureTimer_);
+        captureTimer_ = 0;
+    }
+    Store().Clear();
+    store_.Flush();
+    fileOpts_ = {};
+    fileOpen_ = false;
+    trackFixPending_ = false;
+    Repaint();
 }
 
 }  // namespace app

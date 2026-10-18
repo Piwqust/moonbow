@@ -187,9 +187,11 @@ bool History::Remove(const std::wstring& path) {
 }
 
 void History::Clear() {
-    if (entries_.empty()) return;
-    entries_.clear();
-    dirty_ = true;
+    if (!entries_.empty()) {
+        entries_.clear();
+        dirty_ = true;
+    }
+    if (onCleared) onCleared();
 }
 
 }  // namespace library

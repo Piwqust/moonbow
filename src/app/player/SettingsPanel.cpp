@@ -12,8 +12,10 @@
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace app::panel {
 
@@ -365,6 +367,62 @@ void SetShaderEnabled(const std::string& name, bool on) {
     Cfg().SetString("video.shaders", joined);
 }
 
+// --- per-file settings ------------------------------------------------------------------------
+
+// What is remembered for the playing file, one "Label: value" line each, or what to expect.
+std::wstring FileSettingsText() {
+    if (!Live().FileSettingsOn()) return Tr(L"Track choices and delays are not remembered.");
+    const library::FileOptions o = Live().FileSettingsStored();
+    if (o.Empty())
+        return Live().FileSettingsAll() ? Tr(L"Nothing is remembered for this file yet. What you change here is kept for it.")
+                                        : Tr(L"Nothing is remembered for this file yet. Tracks and delays you change are kept for it.");
+    std::wstring t;
+    auto line = [&t](const wchar_t* label, const std::wstring& value) {
+        if (!t.empty()) t += L'\n';
+        t += Tr(label);
+        t += L": ";
+        t += value;
+    };
+    auto track = [](const wchar_t* type, int64_t id) -> std::wstring {
+        if (id <= 0) return Tr(L"Off");
+        int n = 0;
+        for (const Track& tr : PS().tracks) {
+            if (tr.type != type) continue;
+            ++n;
+            if (tr.id == id) return TrackName(tr, n);
+        }
+        return L"#" + std::to_wstring(id);
+    };
+    if (o.audioFile) line(L"Audio Track", library::FileNameOf(*o.audioFile));
+    else if (o.aid) line(L"Audio Track", track(L"audio", *o.aid));
+    if (o.subFile) line(L"Subtitle Track", library::FileNameOf(*o.subFile));
+    else if (o.sid) line(L"Subtitle Track", track(L"sub", *o.sid));
+    if (o.secondarySid) line(L"Secondary Subtitles", track(L"sub", *o.secondarySid));
+    if (o.audioDelay) line(L"Audio Track Delay", FormatSeconds(*o.audioDelay));
+    if (o.subDelay) line(L"Subtitle Track Delay", FormatSeconds(*o.subDelay));
+    if (o.speed) line(L"Speed", FormatNumber(*o.speed) + L"x");
+    if (o.aspect) line(L"Aspect Ratio", Utf8ToWide(*o.aspect));
+    if (o.zoomMode) {
+        const std::string& m = *o.zoomMode;
+        line(L"Zoom", Tr(m == "quarter" ? L"1:4 Quarter" : m == "half" ? L"1:2 Half" : m == "double" ? L"2:1 Double" : L"1:1 Original"));
+    } else if (o.zoom) {
+        line(L"Zoom", FormatNumber(std::pow(2.0, *o.zoom) * 100, 0) + L"%");
+    }
+    if (o.panX || o.panY) line(L"Pan", L"x " + FormatNumber(o.panX.value_or(0)) + L", y " + FormatNumber(o.panY.value_or(0)));
+    if (o.rotate) line(L"Rotate", FormatNumber(*o.rotate) + L"°");
+    if (o.flip) line(L"Flip", Tr(*o.flip == 2 ? L"Vertical" : L"Horizontal"));
+    if (o.deinterlace) line(L"Deinterlace", Tr(*o.deinterlace == "yes" ? L"On" : *o.deinterlace == "no" ? L"Off" : L"Auto"));
+    if (o.abA || o.abB) {
+        std::wstring ab;
+        if (o.abA) ab = L"A " + FormatTime(*o.abA, true);
+        if (o.abB) ab += (ab.empty() ? L"" : L" – ") + std::wstring(L"B ") + FormatTime(*o.abB, true);
+        line(L"A-B Loop", ab);
+    }
+    if (o.subPos) line(L"Subtitle Position", FormatNumber(std::round(*o.subPos), 0) + L"%");
+    if (o.subScale) line(L"Subtitle Size", FormatNumber(*o.subScale * 100, 0) + L"%");
+    return t;
+}
+
 std::unique_ptr<Widget> Page(SyncPage** out) {
     auto sv = std::make_unique<ScrollView>();
     sv->width = Length::Grow();
@@ -454,6 +512,33 @@ std::unique_ptr<Widget> PlaybackTab() {
     AddBoxRange(page, sp, Tr(L"Speed"), speed, [] { return PS().speed; },
                 [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); },
                 [](double v) { return FormatNumber(v) + L"x"; });
+
+    // What Lumen remembers for the playing file (playback.perFile, LiveState).
+    AddSectionLine(page);
+    AddSectionTitle(page, Tr(L"This File's Settings"));
+    Widget* fs = AddSection(page);
+    AddConfigToggle(page, fs, Tr(L"Remember for Each File"), "playback.perFile");
+    auto* stored = fs->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
+    stored->pad = {4, 0, 0, 0};
+    stored->wrap = true;
+    auto* fsgap = fs->Add<Widget>();
+    fsgap->height = Length::Px(10);
+    auto* reset = fs->Add<FlatButton>(Tr(L"Reset for This File"), "refresh");
+    reset->tooltip = Tr(L"Forget what is remembered for this file and go back to the defaults");
+    reset->onClick = [] { Live().ResetFileSettings(); };
+    auto* fsbottom = fs->Add<Widget>();
+    fsbottom->height = Length::Px(12);
+    auto syncStored = [stored, reset] {
+        const std::wstring t = FileSettingsText();
+        if (t != stored->Text()) stored->SetText(t);
+        const bool any = Live().FileSettingsOn() && !Live().FileSettingsStored().Empty();
+        if (reset->visible != any) {
+            reset->visible = any;
+            reset->InvalidateLayout();
+        }
+    };
+    syncStored();
+    page->OnSync(syncStored);
     return root;
 }
 
@@ -471,7 +556,7 @@ std::unique_ptr<Widget> VideoTab() {
         page, s, Tr(L"Rotate"), [] { return FormatNumber(Live().V().rotate) + L"°"; },
         [](double v) {
             const int r = ((static_cast<int>(std::lround(v)) % 360) + 360) % 360;
-            TheApp().player().SetProperty("video-rotate", static_cast<double>(r));
+            TheApp().player().SetProperty("video-rotate", std::to_string(r));  // a choice option: mpv rejects a double
         });
     AddChoice(page, s, Tr(L"Zoom"),
               {{Tr(L"Fit to Window"), "fit", ""},
@@ -505,10 +590,19 @@ std::unique_ptr<Widget> VideoTab() {
               [] { return Live().deinterlace; }, [](const std::string& v) { Live().SetDeinterlace(v); });
     {
         // The rule for the next file (Player.cpp reset-on-next-file, LiveState's file change).
-        auto* note = s->Add<Label>(Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only."),
-                                   TextStyle::Small, Tone::Tertiary);
+        auto* note = s->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
         note->pad = {4, 4, 0, 0};
         note->wrap = true;
+        // ...and come back with it when per-file settings remember them (LiveState).
+        auto sync = [note] {
+            const std::wstring t =
+                Live().FileSettingsAll()
+                    ? Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only and are remembered for it.")
+                    : Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only.");
+            if (t != note->Text()) note->SetText(t);
+        };
+        sync();
+        page->OnSync(sync);
     }
     auto* bottom = s->Add<Widget>();
     bottom->height = Length::Px(8);

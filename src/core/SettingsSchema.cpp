@@ -1033,6 +1033,20 @@ void BuildMedia(Builder& b) {
               L"С какой дорожки субтитров начинать. 0 — выбрать автоматически по предпочтительному языку.")
         .MpvBuild("sid", BuildSid, "auto");
 
+    // app/player/LiveState (library/FileSettings): restored through loadfile options.
+    b.Sec("perFile", L"Per-File Settings", L"Настройки для каждого файла");
+    b.Toggle("playback.perFile", L"Remember settings for each file", L"Запоминать настройки для каждого файла", true)
+        .Desc(L"The audio and subtitle tracks you pick and their delays come back the next time the file opens.",
+              L"Выбранные аудиодорожка и субтитры и их задержки вернутся, когда файл откроется снова.");
+    b.Toggle("playback.perFileAll", L"Also remember speed, picture and subtitle position",
+             L"Запоминать также скорость, изображение и положение субтитров", false)
+        .Desc(L"Speed, aspect ratio, zoom, rotation, flip, deinterlacing, the A-B loop and the subtitle position and "
+              L"size are kept per file too. Every file then starts with its own values or the defaults.",
+              L"Скорость, соотношение сторон, масштаб, поворот, отражение, деинтерлейсинг, повтор A-B, положение и "
+              L"размер субтитров тоже запоминаются для каждого файла. Тогда каждый файл начинается со своих значений "
+              L"или со значений по умолчанию.")
+        .When("playback.perFile", "true");
+
     b.Sec("order", L"Order", L"Порядок");
     b.Pick("playback.repeat", L"Repeat", L"Повтор",
            {{"off", L"Off", L"Выкл."}, {"one", L"Current item", L"Текущий файл"}, {"all", L"All items", L"Все файлы"}},

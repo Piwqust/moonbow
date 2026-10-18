@@ -6,6 +6,7 @@
 
 #include "MediaTypes.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -68,7 +69,10 @@ public:
     std::vector<FolderStat> FrequentFolders(size_t max = 10) const;
 
     bool Remove(const std::wstring& path);
+    // Forgets every entry, then runs onCleared (also when the history was already empty): the
+    // other per-file memories (FileSettings) are cleared with it.
     void Clear();
+    std::function<void()> onCleared;
 
 private:
     HistoryEntry* Touch(const std::wstring& path);  // find or create, move to front

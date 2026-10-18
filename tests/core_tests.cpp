@@ -9,6 +9,7 @@
 #include "../src/core/ShellText.h"
 #include "../src/app/player/Lyrics.h"
 #include "../src/library/Bookmarks.h"
+#include "../src/library/FileSettings.h"
 #include "../src/library/History.h"
 #include "../src/library/MediaLibrary.h"
 #include "../src/library/MediaTypes.h"
@@ -1106,6 +1107,171 @@ void TestHistory() {
     (void)dir;
 }
 
+void TestFileSettings() {
+    std::wstring dir = FreshDataDir(L"filesettings");
+    const std::wstring file = dir + L"\\file-settings.json";
+    library::FileOptions a;
+    a.aid = 2;
+    a.sid = 0;  // subtitles off
+    a.subDelay = 0.5;
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && fs.size() == 0 && !fs.Dirty());
+        CHECK(fs.Find(L"D:\\Видео\\Фильм.mkv") == nullptr);
+        CHECK(fs.Put(L"D:\\Видео\\Фильм.mkv", a) && fs.Dirty());
+        CHECK(!fs.Put(L"d:/видео/фильм.MKV", a));  // same file, same values: nothing to write
+        const library::FileOptions* f = fs.Find(L"D:\\ВИДЕО\\ФИЛЬМ.MKV");
+        CHECK(f && f->aid == 2 && f->sid == 0 && f->subDelay == 0.5 && !f->audioDelay && f->HasBasic());
+        CHECK(fs.Find(L"D:\\Видео\\Другой.mkv") == nullptr);  // nothing leaks to another file
+
+        library::FileOptions all;
+        all.audioFile = L"E:\\Сериал\\s01e01.rus.mka";
+        all.subFile = L"E:\\Сериал\\s01e01.eng.srt";
+        all.secondarySid = 3;
+        all.audioDelay = -0.25;
+        all.speed = 1.25;
+        all.aspect = "2.35:1";
+        all.zoomMode = "half";
+        all.panX = 0.1;
+        all.panY = -0.2;
+        all.rotate = 90;
+        all.flip = 1;
+        all.deinterlace = "yes";
+        all.abA = 12.5;
+        all.abB = 30;
+        all.subPos = 80;
+        all.subScale = 1.5;
+        CHECK(fs.Put(L"E:\\Сериал\\s01e01.mkv", all));
+        CHECK(fs.size() == 2);
+        CHECK(fs.Flush() && !fs.Dirty());
+
+        // Setting everything back to the defaults removes the file.
+        CHECK(fs.Put(L"C:\\gone.mkv", a) && fs.size() == 3);
+        CHECK(fs.Put(L"c:\\GONE.mkv", library::FileOptions{}) && fs.size() == 2 && !fs.Find(L"C:\\gone.mkv"));
+        CHECK(!fs.Put(L"C:\\never.mkv", library::FileOptions{}));
+        CHECK(fs.Remove(L"E:\\СЕРИАЛ\\S01E01.MKV") && !fs.Remove(L"E:\\Сериал\\s01e01.mkv"));
+        CHECK(fs.Put(L"E:\\Сериал\\s01e01.mkv", all));
+    }  // the destructor saves
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && fs.size() == 2);
+        const library::FileOptions* f = fs.Find(L"E:\\Сериал\\s01e01.mkv");
+        CHECK(f && f->audioFile == L"E:\\Сериал\\s01e01.rus.mka" && f->subFile == L"E:\\Сериал\\s01e01.eng.srt");
+        CHECK(f && f->secondarySid == 3 && f->audioDelay == -0.25 && f->speed == 1.25 && f->aspect == "2.35:1");
+        CHECK(f && f->zoomMode == "half" && f->panX == 0.1 && f->panY == -0.2 && f->rotate == 90 && f->flip == 1);
+        CHECK(f && f->deinterlace == "yes" && f->abA == 12.5 && f->abB == 30 && f->subPos == 80 && f->subScale == 1.5);
+        CHECK(f && !f->aid && !f->sid && !f->zoom);
+        const library::FileOptions* g = fs.Find(L"D:\\Видео\\Фильм.mkv");
+        CHECK(g && *g == a);
+        fs.Clear();
+        CHECK(fs.size() == 0 && fs.Dirty() && fs.Flush());
+    }
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && fs.size() == 0);
+    }
+
+    // Values that would break mpv's "a=1,b=2" loadfile options are dropped; bad numbers too.
+    WriteFile(file, R"({"version":1,"files":[
+        {"path":"C:\\a.mkv","used":5,"aspect":"16:9,script=x.lua","zoomMode":"huge","deinterlace":"yes,vf=x",
+         "speed":0,"subScale":-1,"aid":-4,"flip":7,"sid":1},
+        {"path":"C:\\b.mkv","used":6},
+        {"path":"","used":7,"aid":1},
+        {"path":"C:\\c.mkv","used":8,"aid":"two","audioDelay":"x","rotate":180}]})");
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && fs.size() == 2);  // b has nothing stored, the unnamed one has no file
+        const library::FileOptions* f = fs.Find(L"C:\\a.mkv");
+        CHECK(f && f->sid == 1 && !f->aspect && !f->zoomMode && !f->deinterlace && !f->speed && !f->subScale &&
+              !f->aid && !f->flip);
+        const library::FileOptions* c = fs.Find(L"C:\\c.mkv");
+        CHECK(c && !c->aid && !c->audioDelay && c->rotate == 180);
+    }
+
+    // The wrong shape is kept as a backup, not loaded as empty and overwritten.
+    WriteFile(file, R"({"files":{}})");
+    {
+        library::FileSettings fs;
+        CHECK(!fs.Load() && fs.size() == 0);
+    }
+    CHECK(CountFiles(dir, L"file-settings.corrupt-*.json") == 1);
+    WriteFile(file, "{not json");
+    {
+        library::FileSettings fs;
+        CHECK(!fs.Load());
+        fs.Put(L"C:\\new.mkv", a);  // saved over the broken file: its copy is the backup
+    }
+    CHECK(CountFiles(dir, L"file-settings.corrupt-*.json") == 2);
+    TakeCorruptFileNotices();
+
+    // A file that is locked while it loads is never overwritten afterwards.
+    const std::string locked = R"({"version":1,"files":[{"path":"C:\\keep.mkv","used":1,"aid":2}]})";
+    WriteFile(file, locked);
+    {
+        library::FileSettings fs;
+        HANDLE lock = CreateFileW(file.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        CHECK(lock != INVALID_HANDLE_VALUE);
+        CHECK(!fs.Load() && fs.size() == 0);
+        CloseHandle(lock);
+        fs.Put(L"C:\\other.mkv", a);
+        CHECK(!fs.Flush());
+    }
+    std::string after;
+    CHECK(json::ReadFileUtf8(file, &after) && after == locked);
+
+    // At most 5000 files; the least recently used (changed or opened) go first.
+    DeleteFileW(file.c_str());
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load());
+        library::FileOptions o;
+        auto t0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < 5100; ++i) {
+            o.audioDelay = 0.001 * (i + 1);
+            fs.Put(L"F:\\bulk\\" + std::to_wstring(i) + L".mkv", o);
+            if (i == 4000) fs.Touch(L"F:\\bulk\\0.mkv");  // opened again: newer than 1..4000
+        }
+        const double putMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        CHECK(fs.size() == library::FileSettings::kMaxEntries);
+        CHECK(fs.Find(L"F:\\bulk\\0.mkv") != nullptr);
+        CHECK(fs.Find(L"F:\\bulk\\1.mkv") == nullptr && fs.Find(L"F:\\bulk\\100.mkv") == nullptr);
+        CHECK(fs.Find(L"F:\\bulk\\101.mkv") != nullptr);
+        CHECK(fs.Find(L"F:\\bulk\\5099.mkv") != nullptr);
+        // The lookup a file open makes stays negligible with a full store.
+        t0 = std::chrono::steady_clock::now();
+        int found = 0;
+        for (int i = 0; i < 10000; ++i) found += fs.Find(L"F:\\bulk\\" + std::to_wstring(i % 5100) + L".mkv") != nullptr;
+        const double findUs = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / 10000;
+        CHECK(found > 9000);
+        CHECK_MSG(findUs < 50, "%.2f us per lookup", findUs);
+        t0 = std::chrono::steady_clock::now();
+        CHECK(fs.Save());
+        const double saveMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        library::FileSettings again;
+        t0 = std::chrono::steady_clock::now();
+        CHECK(again.Load() && again.size() == library::FileSettings::kMaxEntries);
+        const double loadMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        CHECK(again.Find(L"F:\\bulk\\0.mkv") && again.Find(L"F:\\bulk\\5099.mkv")->audioDelay == 5.1);
+        WIN32_FILE_ATTRIBUTE_DATA fa{};
+        GetFileAttributesExW(file.c_str(), GetFileExInfoStandard, &fa);
+        std::printf("  5000 files: %u KB, put x5100 %.1f ms, lookup %.2f us, save %.1f ms, load %.1f ms\n",
+                    static_cast<unsigned>(fa.nFileSizeLow / 1024), putMs, findUs, saveMs, loadMs);
+    }
+
+    // History > Clear clears this store too (LiveState sets History::onCleared), even with no history.
+    {
+        library::History h;
+        CHECK(h.Load());
+        int cleared = 0;
+        h.onCleared = [&cleared] { ++cleared; };
+        h.Clear();
+        CHECK(cleared == 1);
+        h.RecordPlay(L"C:\\x.mkv");
+        h.Clear();
+        CHECK(cleared == 2 && h.size() == 0);
+    }
+}
+
 void TestPlaylists() {
     std::wstring dir = FreshDataDir(L"playlists");
     std::string id;
@@ -1946,6 +2112,7 @@ const TestCase kTests[] = {
     {"corrupt_backup", TestCorruptBackup},
     {"hidden_condition", TestHiddenCondition},
     {"history", TestHistory},
+    {"file_settings", TestFileSettings},
     {"playlists", TestPlaylists},
     {"bookmarks_favorites", TestBookmarksFavorites},
     {"media_types", TestMediaTypes},

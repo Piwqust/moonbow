@@ -102,6 +102,24 @@ public:
     // privacy.rememberPosition: save the position when switching files and on exit.
     bool rememberPosition = true;
 
+    // Per-file settings (app/player/LiveState). `fileOptions` gives the options a file opens with
+    // ("aid=2,sub-delay=0.5", empty = none): Open and QueueNext pass them to loadfile, so mpv
+    // applies them before the file starts and drops them when it ends (file-local options).
+    std::function<std::string(const std::wstring& path)> fileOptions;
+    // Runs on the UI thread at the start of Open and Stop, while the old file is still loaded.
+    std::function<void()> beforeLeave;
+    // Read the track list once more after each file loads (TracksConfirmed).
+    bool confirmTracks = false;
+    // The file of the latest MPV_EVENT_FILE_LOADED. FileSettled(): that file is loaded and has not
+    // been left yet (Open, Stop, or mpv starting or ending a file).
+    const std::wstring& LoadedPath() const { return loadedPath_; }
+    bool FileSettled() const { return state_.fileLoaded && settledSerial_ != 0 && settledSerial_ == state_.loadSerial; }
+    // State().tracks was read after the current file loaded, so it is that file's list.
+    bool TracksConfirmed() const { return tracksSerial_ != 0 && tracksSerial_ == state_.loadSerial; }
+    // Track choices made through Player (SetTrack, CycleTrack, AddAudio/AddSubtitle, SetProperty of
+    // aid/sid/secondary-sid), counted per kind: 0 audio, 1 subtitles, 2 secondary subtitles.
+    uint32_t TrackChoices(int kind) const { return kind >= 0 && kind < 3 ? trackChoices_[kind] : 0; }
+
     // `start` > 0 begins playback at that position (seconds); otherwise mpv's
     // watch-later resume applies.
     void Open(const std::wstring& path);
@@ -187,4 +205,12 @@ private:
     double advancedDuration_ = 0;
     double endedDuration_ = 0;  // duration of the file at its MPV_EVENT_END_FILE
     uint64_t nextObserver_ = 1000;
+    // Per-file settings (see fileOptions).
+    std::string LoadfileOptions(const std::wstring& path) const;
+    void CountTrackChoice(const char* prop);
+    decltype(&::mpv_get_property_async) getAsync_ = nullptr;  // not in MpvApi: only confirmTracks needs it
+    std::wstring loadedPath_;
+    uint64_t settledSerial_ = 0;
+    uint64_t tracksSerial_ = 0;
+    uint32_t trackChoices_[3] = {};
 };

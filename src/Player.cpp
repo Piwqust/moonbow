@@ -63,6 +63,8 @@ double NodeDouble(const mpv_node* n) {
 
 // reply_userdata of QueueNext's loadfile; the low bits carry Player::queueGen_.
 constexpr uint64_t kAppendReply = 1ull << 40;
+// reply_userdata of the track list read after a file loads; the low bits carry its loadSerial.
+constexpr uint64_t kTracksReply = 1ull << 41;
 
 bool NodeFlag(const mpv_node* n) {
     return n && n->format == MPV_FORMAT_FLAG && n->u.flag;
@@ -136,6 +138,7 @@ bool Player::InitOnWorker(int64_t wid) {
     if (!api_.Load(ExeDir() + L"libmpv-2.dll", &error_)) return false;
     Trace("mpv dll loaded");
     requestLog_ = reinterpret_cast<decltype(requestLog_)>(GetProcAddress(api_.module, "mpv_request_log_messages"));
+    getAsync_ = reinterpret_cast<decltype(getAsync_)>(GetProcAddress(api_.module, "mpv_get_property_async"));
 
     mpv_ = api_.mpv_create();
     if (!mpv_) {
@@ -293,6 +296,7 @@ unsigned Player::ProcessEvents() {
                 break;
             }
             case MPV_EVENT_START_FILE: {
+                settledSerial_ = 0;
                 // Forget the previous file's size, so window fitting waits for this one's.
                 state_.videoW = state_.videoH = 0;
                 changes |= kChangeVideoSize;
@@ -327,10 +331,22 @@ unsigned Player::ProcessEvents() {
                     }
                 }
                 break;
+            case MPV_EVENT_GET_PROPERTY_REPLY:
+                // The list as mpv had it after the file loaded: a track-list change event may still
+                // be on its way, and none comes when the list equals the previous file's.
+                if (ev->reply_userdata == kTracksReply + state_.loadSerial && ev->error >= 0) {
+                    changes |= OnProperty(static_cast<mpv_event_property*>(ev->data), kPropTrackList);
+                    tracksSerial_ = state_.loadSerial;
+                }
+                break;
             case MPV_EVENT_FILE_LOADED:
                 Trace("file loaded");
                 state_.fileLoaded = true;
                 ++state_.loadSerial;
+                settledSerial_ = state_.loadSerial;
+                loadedPath_ = startedPath_;
+                if (confirmTracks && getAsync_)
+                    getAsync_(mpv_, kTracksReply + state_.loadSerial, "track-list", MPV_FORMAT_NODE);
                 state_.eof = false;
                 state_.lastError.clear();
                 state_.failedPath.clear();
@@ -360,6 +376,7 @@ unsigned Player::ProcessEvents() {
                 // Property changes come after queued events, so the duration is still this
                 // file's; by START_FILE of the next one it can already be gone.
                 endedDuration_ = state_.duration;
+                settledSerial_ = 0;
                 if (end->reason == MPV_END_FILE_REASON_ERROR) {
                     state_.lastError = Utf8ToWide(api_.mpv_error_string(end->error));
                     state_.failedPath = startedPath_;
@@ -521,6 +538,7 @@ void Player::SetProperty(const char* name, bool value) {
 }
 
 void Player::SetProperty(const char* name, const std::string& value) {
+    CountTrackChoice(name);
     SetString(name, value);
 }
 
@@ -554,6 +572,8 @@ void Player::Unobserve(uint64_t id) {
 }
 
 void Player::Open(const std::wstring& path) {
+    if (beforeLeave) beforeLeave();
+    settledSerial_ = 0;
     if (state_.fileLoaded) SaveWatchLater();
     // "replace" clears mpv's playlist, the queued next file included.
     queuedNext_.clear();
@@ -562,10 +582,20 @@ void Player::Open(const std::wstring& path) {
     ++queueGen_;
     startedPath_ = path;
     const std::string utf8 = WideToUtf8(path);
-    Cmd({"loadfile", utf8.c_str(), "replace"});
+    const std::string opts = LoadfileOptions(path);
+    if (opts.empty())
+        Cmd({"loadfile", utf8.c_str(), "replace"});
+    else
+        Cmd({"loadfile", utf8.c_str(), "replace", "-1", opts.c_str()});
+}
+
+std::string Player::LoadfileOptions(const std::wstring& path) const {
+    return fileOptions && !path.empty() ? fileOptions(path) : std::string();
 }
 
 void Player::Stop() {
+    if (beforeLeave) beforeLeave();
+    settledSerial_ = 0;
     if (state_.fileLoaded) SaveWatchLater();
     queuedNext_.clear();
     queuedEntry_ = 0;
@@ -583,7 +613,8 @@ void Player::QueueNext(const std::wstring& path) {
     Cmd({"playlist-clear"});
     if (path.empty()) return;
     const std::string utf8 = WideToUtf8(path);
-    const char* argv[] = {"loadfile", utf8.c_str(), "append", nullptr};
+    const std::string opts = LoadfileOptions(path);
+    const char* argv[] = {"loadfile", utf8.c_str(), "append", opts.empty() ? nullptr : "-1", opts.c_str(), nullptr};
     api_.mpv_command_async(mpv_, kAppendReply + queueGen_, argv);
 }
 
@@ -670,20 +701,31 @@ void Player::SetSpeed(double speed) {
     SetDouble("speed", speed);
 }
 
+void Player::CountTrackChoice(const char* prop) {
+    const std::string_view p = prop;
+    if (p == "aid") ++trackChoices_[0];
+    if (p == "sid") ++trackChoices_[1];
+    if (p == "secondary-sid") ++trackChoices_[2];
+}
+
 void Player::SetTrack(const char* prop, int64_t id) {
+    CountTrackChoice(prop);
     SetString(prop, id > 0 ? std::to_string(id) : "no");
 }
 
 void Player::CycleTrack(const char* prop) {
+    CountTrackChoice(prop);
     Cmd({"cycle", prop});
 }
 
 void Player::AddSubtitle(const std::wstring& path) {
+    CountTrackChoice("sid");
     const std::string p = WideToUtf8(path);
     Cmd({"sub-add", p.c_str(), "select"});
 }
 
 void Player::AddAudio(const std::wstring& path) {
+    CountTrackChoice("aid");
     const std::string p = WideToUtf8(path);
     Cmd({"audio-add", p.c_str(), "select"});
 }
