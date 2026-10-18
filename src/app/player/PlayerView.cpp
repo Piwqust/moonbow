@@ -392,6 +392,7 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     side_->visible = false;
     auto* rail = side_->Add<NavSidebar>();
     rail->SetCollapsed(true);
+    rail->SetInPlayer(true);
     sidePane_ = side_->Add<LibraryPane>(true);
     sidePane_->width = Length::Px(kSidePanel);
 
