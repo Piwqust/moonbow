@@ -131,6 +131,9 @@ public:
     // nothing may touch the player, and files sent by a new instance are refused.
     void BeginQuit();  // also saves the window placement while the window is still shown
     bool Quitting() const { return quitting_; }
+    // WM_ENDSESSION: Windows logs off or shuts down and may end the process as soon as this
+    // returns. Closes as usual and waits (up to 3 s) until the stores and watch-later are written.
+    void EndSession();
 
     // --- signals --------------------------------------------------------------------
     Signal<unsigned> playerChanged;  // PlayerChange mask
@@ -191,10 +194,12 @@ private:
     int historyPos_ = 0;
     bool playerShown_ = false;
     std::wstring failedPath_, failedError_;
-    double lastRestart_ = 0;
-    uint64_t recordedSerial_ = 0;
-    RECT preFitRect_{};  // window rect before FitWindowToVideo grew it; empty when not fitted  // PlayerState::loadSerial already counted in history  // Previous restarted the file at this time (ms)
+    double lastRestart_ = 0;      // Previous restarted the file at this time (ms)
+    uint64_t recordedSerial_ = 0;  // PlayerState::loadSerial already counted in history
+    RECT preFitRect_{};  // window rect before FitWindowToVideo grew it; empty when not fitted
     std::vector<std::wstring> pendingOpen_;
+    std::vector<std::wstring> forwarded_;  // files other launches handed over together (OnCopyData)
+    double forwardedAt_ = 0;
     int pendingIndex_ = -1;  // PlayIndex before mpv was ready: the queue is built, play this item
     bool engineReady_ = false;
     bool fitPending_ = false;

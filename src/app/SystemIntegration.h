@@ -22,6 +22,8 @@ public:
     void Update(unsigned changes);
     // Re-reads the interface.* settings (tray icon, taskbar progress, media controls).
     void SettingsChanged();
+    // The thumbnail buttons' tooltips follow general.language.
+    void LanguageChanged();
 
 private:
     struct Impl;

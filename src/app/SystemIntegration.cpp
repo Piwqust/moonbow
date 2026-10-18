@@ -131,34 +131,43 @@ struct SystemIntegration::Impl {
         return play != nullptr;
     }
 
-    void AddButtons() {
-        if (!taskbar || buttonsAdded || !EnsureIcons()) return;
-        THUMBBUTTON b[3]{};
+    // The three thumbnail buttons, with tooltips in the current language.
+    void FillButtons(THUMBBUTTON (&b)[3]) const {
         const struct {
             UINT id;
             HICON icon;
             const wchar_t* tip;
-        } defs[] = {{kBtnPrev, prev, L"Previous"}, {kBtnPlay, play, L"Play"}, {kBtnNext, next, L"Next"}};
+        } defs[] = {{kBtnPrev, prev, Tr(L"Previous")},
+                    {kBtnPlay, shownPlaying ? pause : play, shownPlaying ? Tr(L"Pause") : Tr(L"Play")},
+                    {kBtnNext, next, Tr(L"Next")}};
         for (int i = 0; i < 3; ++i) {
+            b[i] = {};
             b[i].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
             b[i].iId = defs[i].id;
             b[i].hIcon = defs[i].icon;
-            wcscpy_s(b[i].szTip, defs[i].tip);
+            wcsncpy_s(b[i].szTip, defs[i].tip, _TRUNCATE);
             b[i].dwFlags = THBF_ENABLED;
         }
+    }
+
+    void AddButtons() {
+        if (!taskbar || buttonsAdded || !EnsureIcons()) return;
+        THUMBBUTTON b[3];
+        FillButtons(b);
         buttonsAdded = SUCCEEDED(taskbar->ThumbBarAddButtons(hwnd, 3, b));
     }
 
+    void UpdateButtons() {
+        if (!buttonsAdded) return;
+        THUMBBUTTON b[3];
+        FillButtons(b);
+        taskbar->ThumbBarUpdateButtons(hwnd, 3, b);
+    }
+
     void UpdatePlayButton(bool playing) {
-        if (!buttonsAdded || playing == shownPlaying) return;
+        if (playing == shownPlaying) return;
         shownPlaying = playing;
-        THUMBBUTTON b{};
-        b.dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
-        b.iId = kBtnPlay;
-        b.hIcon = playing ? pause : play;
-        wcscpy_s(b.szTip, playing ? L"Pause" : L"Play");
-        b.dwFlags = THBF_ENABLED;
-        taskbar->ThumbBarUpdateButtons(hwnd, 1, &b);
+        UpdateButtons();
     }
 
     // The notification needs the icon too, so either setting shows it.
@@ -295,6 +304,10 @@ void SystemIntegration::Attach(HWND window) {
     ChangeWindowMessageFilterEx(window, WM_COMMAND, MSGFLT_ALLOW, nullptr);
     impl_->InitSmtc();
     impl_->SyncTray();
+}
+
+void SystemIntegration::LanguageChanged() {
+    impl_->UpdateButtons();
 }
 
 void SystemIntegration::SettingsChanged() {

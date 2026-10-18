@@ -462,6 +462,10 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             Destroy();
             *result = 0;
             return true;
+        case WM_ENDSESSION:
+            if (wp) TheApp().EndSession();
+            *result = 0;
+            return true;
         case WM_COPYDATA: {
             auto* cds = reinterpret_cast<COPYDATASTRUCT*>(lp);
             if (cds && cds->dwData == kCopyDataCommand && Host::Automation()) {
@@ -485,8 +489,11 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
                 return true;
             }
             if (!cds || cds->dwData != kCopyDataOpen) return false;
-            // Closing: refuse, so the sending instance opens the files itself (main.cpp).
-            if (TheApp().Quitting()) {
+            // Closing: refuse, so the sending instance opens the files itself (main.cpp). Also when
+            // the close is queued already: the files would come after it and be dropped.
+            MSG queued;
+            if (TheApp().Quitting() ||
+                PeekMessageW(&queued, Hwnd(), WM_CLOSE, WM_CLOSE, PM_NOREMOVE | PM_QS_POSTMESSAGE)) {
                 *result = FALSE;
                 return true;
             }

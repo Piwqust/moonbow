@@ -48,7 +48,6 @@ public:
     // Queue index of `path` after mpv moved on to it: `hint` (the index handed to mpv) when it
     // still holds that file, else the copy that plays soonest after the current item, -1 if gone.
     int IndexOfStarted(const std::wstring& path, int hint) const;
-    double TotalDuration() const;
 
     Signal<> changed;
 
