@@ -382,5 +382,7 @@ Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog);
 
 // Transient message at the top center of the window.
 void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 1600);
+// Closes the toast on screen, if any (e.g. when the file it was about is replaced).
+void DismissToast(Host* host);
 
 }  // namespace ui

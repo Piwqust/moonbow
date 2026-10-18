@@ -1389,8 +1389,10 @@ class ToastBubble : public Widget {
 public:
     ToastBubble(std::wstring text, std::string icon) : text_(std::move(text)), icon_(std::move(icon)) {}
     Size MeasureContent(float availW, float) override {
+        // Capped here, not only by the caller: placement measures again with the window width,
+        // and a long title (CJK file names) then came out wider than the box it was centred for.
         float w = gfx::Text::Get().Measure(text_, TextStyle::Body).width + 32 + (icon_.empty() ? 0 : 28);
-        return {std::min(w, availW), 40};
+        return {std::min({w, availW, kToastMaxW}), 40};
     }
     void Paint(Painter& p) override {
         p.Shadow(rect, 8, 14, 6);
@@ -1401,10 +1403,12 @@ public:
             p.Icon(icon_, {x, rect.Cy() - 10, 20, 20}, P().textPrimary);
             x += 28;
         }
-        p.Text(text_, {x, rect.y, rect.Right() - x - 16, rect.h}, TextStyle::Body, P().textPrimary);
+        p.Text(text_, {x, rect.y, rect.Right() - x - 16, rect.h}, TextStyle::Body, P().textPrimary, HAlign::Leading,
+               VAlign::Center, gfx::kTextEllipsis);
     }
 
 private:
+    static constexpr float kToastMaxW = 600;
     std::wstring text_;
     std::string icon_;
 };
@@ -1436,6 +1440,13 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms) {
         if (cur == raw) cur = nullptr;
         if (host->IsPopupOpen(raw)) host->ClosePopup(raw);
     });
+}
+
+void DismissToast(Host* host) {
+    if (!host) return;
+    Widget*& current = CurrentToast(host);
+    if (current && host->IsPopupOpen(current)) host->ClosePopup(current);
+    current = nullptr;
 }
 
 }  // namespace ui
