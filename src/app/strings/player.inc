@@ -309,3 +309,4 @@
 {L"Skip intro", L"Пропустить заставку"},
 {L"Skip credits", L"Пропустить титры"},
 {L"scroll to change, right-click for 1×", L"колесо меняет, правый щелчок — 1×"},
+{L"No audio tracks", L"Нет аудиодорожек"},

@@ -594,10 +594,9 @@ void BuildApp(Builder& b) {
               L"Зарегистрировать Lumen для видео- и аудиофайлов и выбрать его в разделе «Приложения по умолчанию».");
 
     b.Sec("diagnostics", L"Diagnostics", L"Диагностика");
-    b.Toggle("general.developerMode", L"Developer mode", L"Режим разработчика", false)
-        .Desc(L"Show technical details: decoder, frame drops and timing statistics over the video.",
-              L"Показывать технические подробности поверх видео: декодер, пропуски кадров, тайминги.")
-        .Hidden();  // not implemented yet
+    b.Toggle("general.developerMode", L"Playback statistics", L"Статистика воспроизведения", false)
+        .Desc(L"Show technical details over the video: decoder, zero-copy, frame drops, bitrate, cache and A/V sync (Ctrl+Shift+I).",
+              L"Показывать технические подробности поверх видео: декодер, работа без копирования, пропуски кадров, битрейт, кэш и синхронизацию (Ctrl+Shift+I).");
     b.Toggle("general.saveLog", L"Save a log", L"Сохранять журнал", false)
         .Desc(L"Write playback messages to a log file. Useful when reporting a problem.",
               L"Записывать сообщения воспроизведения в файл. Пригодится, если нужно сообщить о проблеме.")
@@ -702,6 +701,13 @@ void BuildApp(Builder& b) {
     b.Toggle("interface.controlsInFullscreen", L"Show controls in fullscreen", L"Панель в полноэкранном режиме", true)
         .Desc(L"Show the control bar when you move the mouse in fullscreen. When off, use the keyboard only.",
               L"Показывать панель при движении мыши в полноэкранном режиме. Если выключить — только клавиатура.");
+    b.Pick("interface.thinProgress", L"Thin progress line", L"Тонкая полоска прогресса",
+           {{"never", L"Never", L"Никогда"},
+            {"fullscreen", L"In fullscreen", L"В полноэкранном режиме"},
+            {"always", L"Always", L"Всегда"}},
+           "fullscreen")
+        .Desc(L"Show a thin progress line along the bottom of the video while the controls are hidden.",
+              L"Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.");
 
     b.Sec("notifications", L"Notifications and System Tray", L"Уведомления и системный трей");
     b.inferred = true;

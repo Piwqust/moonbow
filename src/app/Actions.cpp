@@ -399,10 +399,25 @@ void Run(Action a) {
             p.ToggleMute();
             Toast(PS().mute ? Tr(L"Muted") : Tr(L"Sound on"), VolumeIcon(PS().volume, PS().mute));
             break;
-        case Action::CycleAudio:
-            p.CycleTrack("aid");
+        case Action::CycleAudio: {
+            // Real tracks only: mpv's "cycle aid" also passes through "no", which silenced
+            // files with a single track (turning sound off is M / the tracks panel).
+            std::vector<int64_t> ids;
+            int current = -1;
+            for (const Track& t : p.State().tracks)
+                if (t.type == L"audio") {
+                    if (t.selected) current = static_cast<int>(ids.size());
+                    ids.push_back(t.id);
+                }
+            if (ids.size() <= 1) {
+                Toast(ids.empty() ? Tr(L"No audio tracks") : Fmt(Tr(L"Audio: {0}"), {SelectedTrackText(L"audio")}),
+                      "audio");
+                break;
+            }
+            p.SetProperty("aid", std::to_string(ids[static_cast<size_t>(current + 1) % ids.size()]));
             ExpectOsd(PendingOsd::Audio);
             break;
+        }
         case Action::AudioDelayUp:
         case Action::AudioDelayDown: {
             const double d = p.GetPropertyDouble("audio-delay", 0) + (a == Action::AudioDelayUp ? 0.05 : -0.05);
