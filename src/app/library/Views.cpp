@@ -78,18 +78,6 @@ constexpr double kBannerDelayMs = 1000;  // scans shorter than this never show t
 constexpr UINT kBannerPollMs = 250;
 uint64_t g_bannerHidden = 0;  // the scan generation whose banner the user hid
 
-// "1 284" (a no-break space) in Russian, "1,284" in English.
-std::wstring Grouped(size_t n) {
-    const std::wstring digits = std::to_wstring(n);
-    const wchar_t sep = CurrentLanguage() == Language::Russian ? L' ' : L',';
-    std::wstring out;
-    for (size_t i = 0; i < digits.size(); ++i) {
-        if (i > 0 && (digits.size() - i) % 3 == 0) out += sep;
-        out += digits[i];
-    }
-    return out;
-}
-
 }  // namespace
 
 ScanBanner::ScanBanner(bool compact) : compact_(compact) {
@@ -159,11 +147,13 @@ void ScanBanner::Poll() {
     if (show) {
         std::wstring text;
         float fraction = -1;
+        const long long total = static_cast<long long>(pr.total);
         if (pr.counting || pr.total == 0) {
-            text = Fmt(Tr(compact_ ? L"Indexing… files found: {0}" : L"Indexing your library… files found: {0}"), {Grouped(pr.total)});
+            text = Fmt(Tr(compact_ ? L"Indexing… files found: {0}" : L"Indexing your library… files found: {0}"), {Grouped(total)});
         } else {
             const size_t done = std::min(pr.done, pr.total);
-            text = Fmt(Tr(compact_ ? L"Indexing… {0} of {1}" : L"Indexing your library… {0} of {1}"), {Grouped(done), Grouped(pr.total)});
+            text = Fmt(Tr(compact_ ? L"Indexing… {0} of {1}" : L"Indexing your library… {0} of {1}"),
+                       {Grouped(static_cast<long long>(done)), Grouped(total)});
             fraction = static_cast<float>(static_cast<double>(done) / static_cast<double>(pr.total));
         }
         if (text != text_ || fraction != fraction_) {
@@ -270,6 +260,11 @@ void TakeFreeFocus(LibraryView& view, bool compact, bool& done) {
         if (w->visible) h->SetFocus(w);
 }
 
+void MarkSeenIfShown(Section section, bool compact) {
+    if (compact || TheApp().PlayerShown()) return;
+    if (section == Section::Home || section == Section::Videos || section == Section::Music) TheApp().library().MarkSeen();
+}
+
 // --- view state (Back / Forward) -----------------------------------------------------------------
 
 void SaveSelection(const ItemGrid& grid, ViewState& st) {
@@ -340,7 +335,9 @@ void Page::OnLayout() {
 ViewState Page::SaveState() const {
     ViewState st;
     if (empty_->visible) return st;
-    st.scroll = scroll_->Offset();
+    // An offset in a filtered list means nothing in the full one Back shows: the selection
+    // alone brings its entry into view.
+    if (filter_.empty()) st.scroll = scroll_->Offset();
     SaveSelection(*grid_, st);
     return st;
 }
@@ -397,6 +394,7 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
     });
     screenConn_ = Connect(TheApp().screenChanged, [this] {
         if (stale_ && !TheApp().PlayerShown()) Refresh();
+        else MarkSeenIfShown(route_.section, compact_);
     });
 }
 
@@ -502,7 +500,7 @@ int Page::AddMedia(const library::MediaItem& m) {
     e.watched = h.watched && !e.audio;
     e.favorite = Favorite(m.path);
     e.damaged = m.damaged;
-    e.isNew = !h.watched && h.progress < 0 && TheApp().library().IsNew(m);  // a file played already is not news
+    e.isNew = ShowsNew(m, h.played);
     e.track = m.track;
     e.ref = static_cast<int>(queue_.size());
     queue_.push_back(MakeQueueItem(m.path, e.audio ? m.DisplayTitle() : std::wstring(), m.duration));
@@ -551,6 +549,7 @@ void Page::Refresh() {
     history_.clear();
     for (const library::HistoryEntry& h : app.history().Entries()) {
         HistoryInfo info;
+        info.played = true;
         const double p = h.Progress();
         if (h.duration > 0 && p >= 0.95) {
             info.watched = true;
@@ -607,7 +606,7 @@ void Page::Refresh() {
     entries_.clear();
 
     scan_->Update(showEmpty);  // the empty state explains the scan itself
-    if (!compact_) app.library().MarkSeen();  // what this page shows as new is not new next session
+    MarkSeenIfShown(route_.section, compact_);
 
     empty_->visible = showEmpty;
     if (showEmpty) {
@@ -658,16 +657,16 @@ std::vector<QueueItem> Page::FolderQueue(const std::wstring& folder, library::Me
 
 std::vector<MenuItem> Page::FolderMenu(const std::wstring& folder, library::MediaKind kind, Section section) const {
     std::vector<MenuItem> m;
-    auto q = FolderQueue(folder, kind);
+    const SharedQueue q = ShareQueue(FolderQueue(folder, kind));
     const std::wstring name = FileNameOf(folder).empty() ? folder : FileNameOf(folder);
     m.push_back(Item(L"Open", "folder", [folder, section] { TheApp().Navigate(Route{section, folder}); }));
-    m.push_back(Item(L"Play All", "playback", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
-    m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }, !q.empty()));
-    MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr, !q.empty());
-    if (!q.empty()) pl.submenu = AddToPlaylistMenu(q);
+    m.push_back(Item(L"Play All", "playback", [q, name] { PlayQueue(*q, 0, name); }, !q->empty()));
+    m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(*q); }, !q->empty()));
+    MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr, !q->empty());
+    if (!q->empty()) pl.submenu = AddToPlaylistMenu(q);
     m.push_back(std::move(pl));
     if (kind == library::MediaKind::Video)
-        m.push_back(Item(L"Add Subtitles…", "subtitles", [folder] { ShowAddSubtitlesDialog(folder); }, !q.empty()));
+        m.push_back(Item(L"Add Subtitles…", "subtitles", [folder] { ShowAddSubtitlesDialog(folder); }, !q->empty()));
     m.push_back(MenuItem::Separator());
     m.push_back(Item(L"Show in File Explorer", "open", [folder] { ui::Host::ShellOpen(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
     const auto& roots = TheApp().library().Roots();
@@ -687,7 +686,7 @@ void Page::ShowMenu(int index, Point at) {
     if (!e || !GetHost()) return;
     std::vector<MenuItem> items;
     if (e->kind == EntryKind::Media) {
-        items = MediaMenu(e->path, queue_, e->ref, queueName_);
+        items = MediaMenu(e->path, ShareQueue(queue_), e->ref, queueName_);
     } else if (e->kind == EntryKind::Folder) {
         const Route* r = RouteAt(index);
         const Section sec = r ? r->section : route_.section;
@@ -706,8 +705,9 @@ void Page::SetSort(const std::string& value) {
     Refresh();
 }
 
-void Page::SortMenuItems(std::vector<MenuItem>& out, const std::vector<std::pair<const wchar_t*, std::string>>& options) {
-    const std::string cur = SortValue(options.empty() ? std::string() : options.front().second);
+void Page::SortMenuItems(std::vector<MenuItem>& out, const std::vector<std::pair<const wchar_t*, std::string>>& options,
+                         const std::string& fallback) {
+    const std::string cur = SortValue(!fallback.empty() || options.empty() ? fallback : options.front().second);
     for (const auto& [label, value] : options) {
         MenuItem m;
         m.label = Tr(label);
@@ -815,20 +815,10 @@ public:
             {L"Title A-Z", "name"},          {L"Title Z-A", "name:desc"},     {L"Newest First", "date:desc"},
             {L"Oldest First", "date"},       {L"Largest First", "size:desc"}, {L"Smallest First", "size"},
             {L"Longest First", "duration:desc"}, {L"Shortest First", "duration"}};
-        if (kind_ == library::MediaKind::Video) {
+        if (kind_ == library::MediaKind::Video)
             o.insert(o.begin(), {{L"Unwatched First", "unwatched"}, {L"Watched First", "watched"}});
-            // Keep "Title A-Z" as the default although unwatched comes first in the list.
-        }
-        const std::string cur = SortValue("name");
-        for (const auto& [label, value] : o) {
-            MenuItem item;
-            item.label = Tr(label);
-            item.radio = true;
-            item.checked = cur == value;
-            const std::string v = value;
-            item.action = [this, v] { SetSort(v); };
-            m.push_back(std::move(item));
-        }
+        // "Title A-Z" stays the default although unwatched comes first in the list.
+        SortMenuItems(m, o, "name");
         return m;
     }
 
@@ -836,9 +826,9 @@ public:
         std::vector<MenuItem> m;
         const std::wstring path = Folder();
         if (!path.empty()) {
-            auto q = FolderQueue(path, kind_);
+            const SharedQueue q = ShareQueue(FolderQueue(path, kind_));
             const std::wstring name = FileNameOf(path);
-            m.push_back(Item(L"Play All", "playback", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
+            m.push_back(Item(L"Play All", "playback", [q, name] { PlayQueue(*q, 0, name); }, !q->empty()));
             m.push_back(Item(L"Show in File Explorer", "open",
                              [path] { ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
             m.push_back(MenuItem::Separator());
@@ -1116,13 +1106,11 @@ public:
             m.push_back(MenuItem::Separator());
         }
         m.push_back(Item(L"Clear History…", "remove", [] {
-            ShowConfirm(Tr(L"Clear history"), Tr(L"Recently played items and saved positions will be forgotten."),
-                        Tr(L"Clear"), [] {
-                            TheApp().history().Clear();
-                            TheApp().history().Flush();
-                            TheApp().libraryChanged.Emit();
-                        });
-        }, TheApp().history().size() > 0));
+            ShowConfirm(Tr(L"Clear history"),
+                        Tr(L"Recently played items, saved positions, per-file settings and online data (posters, "
+                           L"descriptions, lyrics) will be forgotten."),
+                        Tr(L"Clear"), [] { ClearHistory(); });
+        }));  // always enabled: per-file settings and online data may be there without any history
         return m;
     }
 

@@ -395,12 +395,17 @@ private:
         while (!f.empty() && (f.back() == L'\\' || f.back() == L'/') && f.size() > 3) f.pop_back();
         folder_ = f;
         auto& lib = TheApp().library();
+        bool changed = false;
         if (!added_.empty() && library::PathKey(added_) != library::PathKey(f)) {
-            lib.RemoveRoot(added_);
+            changed = lib.RemoveRoot(added_);
             added_.clear();
         }
         if (IsDir(f) && added_.empty()) {
             if (lib.AddRoot(f)) added_ = f;
+            changed = true;
+        }
+        // Also when the new text is no folder: the old root is gone from disk and the snapshot too.
+        if (changed) {
             lib.Save();
             lib.Rescan();
         }
