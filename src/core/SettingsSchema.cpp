@@ -1202,7 +1202,7 @@ void BuildMedia(Builder& b) {
 
     b.Sec("framing", L"Framing", L"Кадрирование");
     b.Pick("video.aspect", L"Aspect ratio", L"Соотношение сторон",
-           {{"auto", L"Automatic", L"Автоматически", "-1"},
+           {{"auto", L"Automatic", L"Автоматически", "no"},
             {"16:9", L"16:9", L"16:9", "16:9"},
             {"4:3", L"4:3", L"4:3", "4:3"},
             {"21:9", L"21:9", L"21:9", "21:9"},

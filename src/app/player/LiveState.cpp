@@ -377,7 +377,7 @@ void LiveState::SetZoomMode(const std::string& mode) {
 
 void LiveState::SetAspect(const std::string& a) {
     aspect = a;
-    Mpv().SetProperty("video-aspect-override", a == "auto" ? std::string("-1") : a);
+    Mpv().SetProperty("video-aspect-override", a == "auto" ? std::string("no") : a);
     Notify();
 }
 

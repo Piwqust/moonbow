@@ -498,7 +498,7 @@ void Run(Action a) {
         case Action::ZoomOut: Zoom(-0.1); break;
         case Action::ZoomReset: Zoom(0, true); break;
         case Action::CycleAspect: {
-            const char* values[] = {"-1", "16:9", "4:3", "2.35:1", "1:1"};
+            const char* values[] = {"no", "16:9", "4:3", "2.35:1", "1:1"};
             const wchar_t* labels[] = {L"Default", L"16:9", L"4:3", L"2.35:1", L"1:1"};
             // Continue from the real override (it resets per file and can be set elsewhere).
             const double ratios[] = {-1, 16.0 / 9, 4.0 / 3, 2.35, 1};

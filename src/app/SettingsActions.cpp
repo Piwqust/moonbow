@@ -35,7 +35,7 @@ bool RunSettingsAction(const std::string& action) {
         p.SetProperty("video-pan-x", 0.0);
         p.SetProperty("video-pan-y", 0.0);
         p.SetProperty("video-rotate", 0.0);
-        p.SetProperty("video-aspect-override", std::string("-1"));
+        p.SetProperty("video-aspect-override", std::string("no"));
         toast(L"Picture reset", "video");
         return true;
     }
