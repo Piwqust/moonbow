@@ -404,8 +404,10 @@ private:
 // Shows `dialog` centered with a scrim. The dialog closes itself via Close().
 Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog);
 
-// Transient message at the top center of the window.
-void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 1600);
+// Transient message at the top center of the window. With an action ("Open folder") the toast
+// takes clicks on its button; without one the mouse passes through it.
+void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 1600, std::wstring actionLabel = {},
+               std::function<void()> action = {});
 // Closes the toast on screen, if any (e.g. when the file it was about is replaced).
 void DismissToast(Host* host);
 

@@ -143,6 +143,41 @@ void Toast(const std::wstring& text, const char* icon = "") {
     g_toastSerial = PS().loadSerial;
 }
 
+// A saved snapshot or recording: the toast stays longer and offers "Open folder" (`show` is the
+// file to select in Explorer, or the folder to open).
+void SavedToast(const std::wstring& text, const char* icon, const std::wstring& show, bool selectFile) {
+    if (!Win() || !TheApp().config().GetBool("interface.osdMessages")) return;
+    ShowToast(Win(), text, icon, 4000, Tr(L"Open folder"), [show, selectFile] {
+        if (selectFile)
+            lib::ShowInExplorer(show);
+        else
+            ui::Host::ShellOpen(nullptr, L"open", show.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    });
+    g_toastAt = ui::AnimFloat::Now();
+    g_toastSerial = PS().loadSerial;
+}
+
+// Creates `dir` with its parents and checks that a file can be written there. mpv creates neither
+// the screenshot folder nor the recording's and reports failures only in its log, so the toast
+// said "saved" for files that never appeared.
+bool PrepareOutputFolder(const std::wstring& dir) {
+    if (dir.empty()) return false;
+    const int made = SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    if (made != ERROR_SUCCESS && made != ERROR_ALREADY_EXISTS && made != ERROR_FILE_EXISTS) return false;
+    const DWORD attr = GetFileAttributesW(dir.c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) return false;
+    const std::wstring probe = dir + L"\\.lumen-write-test";
+    HANDLE h = CreateFileW(probe.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    CloseHandle(h);
+    return true;
+}
+
+void CantSaveToast(const std::wstring& dir) {
+    if (Win()) ShowToast(Win(), Fmt(Tr(L"Can't save to {0}"), {dir}), "info", 4000);
+}
+
 // Messages about things mpv reports back a moment later.
 enum class PendingOsd { None, Audio, Subtitles, Chapter };
 PendingOsd g_pendingOsd = PendingOsd::None;
@@ -542,31 +577,42 @@ void Run(Action a) {
             break;
         case Action::Snapshot: {
             if (!s.fileLoaded) break;
-            p.Screenshot({}, app.config().GetBool("video.screenshotSubtitles"));
             std::wstring dir = Utf8ToWide(app.config().GetString("video.screenshotDir"));
             if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
-            Toast(Fmt(Tr(L"Snapshot saved to {0}"), {dir}), "snapshot");
+            if (!PrepareOutputFolder(dir)) {
+                CantSaveToast(dir);
+                break;
+            }
+            p.Screenshot({}, app.config().GetBool("video.screenshotSubtitles"));
+            SavedToast(Fmt(Tr(L"Snapshot saved to {0}"), {dir}), "snapshot", dir, false);
             break;
         }
         case Action::Record: {
-            static std::wstring dir;  // where the running recording goes
+            static std::wstring dir, file;  // where the running recording goes
             // mpv's option is the truth: it is cleared when the file changes or closes
             // (reset-on-next-file), where a flag of our own went stale.
             const bool start = p.GetPropertyString("stream-record").empty();
             if (start) {
                 dir = Utf8ToWide(app.config().GetString("recording.folder"));
                 if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
-                CreateDirectoryW(dir.c_str(), nullptr);
+                if (!PrepareOutputFolder(dir)) {
+                    CantSaveToast(dir);
+                    break;
+                }
                 SYSTEMTIME t;
                 GetLocalTime(&t);
                 wchar_t name[64];
-                swprintf_s(name, L"\\Lumen %04d-%02d-%02d %02d-%02d-%02d.mkv", t.wYear, t.wMonth, t.wDay, t.wHour,
-                           t.wMinute, t.wSecond);
-                p.SetRecording(dir + name);
+                swprintf_s(name, L"\\Lumen %04d-%02d-%02d %02d-%02d-%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                           t.wSecond);
+                // Two recordings within one second: mpv would overwrite the first.
+                file = dir + name + L".mkv";
+                for (int n = 2; GetFileAttributesW(file.c_str()) != INVALID_FILE_ATTRIBUTES; ++n)
+                    file = dir + name + L" (" + std::to_wstring(n) + L").mkv";
+                p.SetRecording(file);
                 Toast(Tr(L"Recording started"), "record");
             } else {
                 p.SetRecording(L"");
-                Toast(Fmt(Tr(L"Recording saved to {0}"), {dir}), "record");
+                SavedToast(Fmt(Tr(L"Recording saved to {0}"), {dir}), "record", file, true);
             }
             break;
         }

@@ -1602,12 +1602,26 @@ namespace {
 
 class ToastBubble : public Widget {
 public:
-    ToastBubble(std::wstring text, std::string icon) : text_(std::move(text)), icon_(std::move(icon)) {}
+    ToastBubble(std::wstring text, std::string icon, std::wstring actionLabel, std::function<void()> action)
+        : text_(std::move(text)), icon_(std::move(icon)) {
+        dir = Dir::None;
+        if (action) {
+            action_ = Add<Button>(std::move(actionLabel), ButtonKind::Ghost);
+            action_->tooltip = text_;  // the message is often a path cut with an ellipsis
+            action_->onClick = std::move(action);
+        }
+    }
     Size MeasureContent(float availW, float) override {
         // Capped here, not only by the caller: placement measures again with the window width,
         // and a long title (CJK file names) then came out wider than the box it was centred for.
         float w = gfx::Text::Get().Measure(text_, TextStyle::Body).width + 32 + (icon_.empty() ? 0 : 28);
+        if (action_) w += action_->Measure(availW, 32).w + 4;
         return {std::min({w, availW, kToastMaxW}), 40};
+    }
+    void OnLayout() override {
+        if (!action_) return;
+        const float bw = action_->Measure(rect.w, 32).w;
+        action_->Arrange({rect.Right() - 4 - bw, rect.y + 4, bw, 32});
     }
     void Paint(Painter& p) override {
         p.Shadow(rect, 8, 14, 6);
@@ -1618,7 +1632,8 @@ public:
             p.Icon(icon_, {x, rect.Cy() - 10, 20, 20}, P().textPrimary);
             x += 28;
         }
-        p.Text(text_, {x, rect.y, rect.Right() - x - 16, rect.h}, TextStyle::Body, P().textPrimary, HAlign::Leading,
+        const float right = action_ ? action_->rect.x - 4 : rect.Right() - 16;
+        p.Text(text_, {x, rect.y, std::max(0.0f, right - x), rect.h}, TextStyle::Body, P().textPrimary, HAlign::Leading,
                VAlign::Center, gfx::kTextEllipsis);
     }
 
@@ -1626,6 +1641,7 @@ private:
     static constexpr float kToastMaxW = 600;
     std::wstring text_;
     std::string icon_;
+    Button* action_ = nullptr;
 };
 
 struct ToastSlot {
@@ -1640,18 +1656,27 @@ ToastSlot& CurrentToast(Host* host) {
 
 }  // namespace
 
-void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms) {
+void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::wstring actionLabel,
+               std::function<void()> action) {
     if (!host) return;
     static uint64_t nextId = 1;
     ToastSlot& current = CurrentToast(host);
     if (current.widget && host->IsPopupOpen(current.widget)) host->ClosePopup(current.widget);
-    auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon));
+    const bool clickable = static_cast<bool>(action);
+    if (clickable) {
+        // Clicking closes the toast too; posted, as the click runs inside the toast's own widget.
+        action = [host, act = std::move(action)] {
+            act();
+            host->Post([host] { DismissToast(host); });
+        };
+    }
+    auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon), std::move(actionLabel), std::move(action));
     const Size s = bubble->Measure(600, 40);
     PopupOptions o;
     o.place = Place::At;
     const float y = host->toastTop ? host->toastTop(s.h) : 56.0f;
     o.anchor = {(host->ClientSize().w - s.w) / 2, y, 0, 0};
-    o.passthrough = true;
+    o.passthrough = !clickable;
     o.focusContent = false;
     o.dismissOnOutside = false;
     o.dismissOnEscape = false;
