@@ -156,8 +156,10 @@ private:
     std::unordered_set<std::wstring> favorites_;  // PathKey
     ColumnTitle heads_[kHeadCount];
     std::string headSort_;
-    ScopedConnection libConn_, playerConn_, langConn_;
+    ScopedConnection libConn_, playerConn_, screenConn_, langConn_;
     bool focusTaken_ = false;
+    bool stale_ = false;  // a file started or stopped while the player screen hid the page
+    SearchDebounce searchDebounce_;
 };
 
 std::unique_ptr<LibraryView> MakeHomePage(bool compact);

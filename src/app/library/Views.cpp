@@ -191,8 +191,15 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
 
     libConn_ = Connect(TheApp().libraryChanged, [this] { Refresh(); });
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-        // Watched progress and history change when a file starts or stops.
-        if (m & kChangeFile) Refresh();
+        // Watched progress and history change when a file starts or stops. Behind the player
+        // screen nobody sees the page: rebuild it when the library shows again, not on every
+        // track of an album (a 20 000-song list costs a few hundred ms).
+        if (!(m & kChangeFile)) return;
+        if (!compact_ && TheApp().PlayerShown()) stale_ = true;
+        else Refresh();
+    });
+    screenConn_ = Connect(TheApp().screenChanged, [this] {
+        if (stale_ && !TheApp().PlayerShown()) Refresh();
     });
 }
 
@@ -209,10 +216,12 @@ void Page::SetViewMode(ViewMode m) {
 }
 
 void Page::SetFilter(const std::wstring& text) {
-    if (text == filter_) return;
-    filter_ = text;
-    Refresh();
-    if (scroll_) scroll_->ScrollTo(0, false);
+    searchDebounce_.Run(this, text, [this, text] {
+        if (text == filter_) return;
+        filter_ = text;
+        Refresh();
+        if (scroll_) scroll_->ScrollTo(0, false);
+    });
 }
 
 GridStyle Page::CurrentStyle() const {
@@ -335,6 +344,7 @@ const Route* Page::RouteAt(int index) const {
 }
 
 void Page::Refresh() {
+    stale_ = false;
     App& app = TheApp();
     snap_ = app.library().Current();
     folded_ = filter_.empty() ? std::wstring() : library::SearchFold(filter_);
@@ -1001,7 +1011,7 @@ protected:
         for (auto it = favs.rbegin(); it != favs.rend(); ++it) {
             const std::wstring& path = *it;
             const library::MediaItem* m = snap_ && !IsUrl(path) ? snap_->FindItem(path) : nullptr;
-            if (!m && !IsUrl(path) && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            if (!m && !IsUrl(path) && !MaybeExists(path)) continue;
             const library::HistoryEntry* he = TheApp().history().Find(path);
             Entry e = Row(path, he);
             if (!Matches(e.title + L" " + e.subtitle + L" " + path)) {

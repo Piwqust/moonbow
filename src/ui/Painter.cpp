@@ -39,10 +39,6 @@ void Painter::Stroke(const Rect& r, Color c, float radius, float width) {
     }
 }
 
-void Painter::Line(Point a, Point b, Color c, float width) {
-    ctx_->DrawLine({a.x, a.y}, {b.x, b.y}, Brush(c), width);
-}
-
 void Painter::FillCircle(Point center, float radius, Color c) {
     ctx_->FillEllipse(D2D1::Ellipse({center.x, center.y}, radius, radius), Brush(c));
 }

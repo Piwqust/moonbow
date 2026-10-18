@@ -56,11 +56,6 @@ bool WriteTypes(const wchar_t* const (&exts)[N], const wchar_t* progId) {
     return ok;
 }
 
-template <size_t N>
-void RemoveTypes(const wchar_t* const (&exts)[N], const wchar_t* progId) {
-    for (const wchar_t* ext : exts) RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), progId);
-}
-
 }  // namespace
 
 bool RegisterFileAssociations() {
@@ -76,25 +71,6 @@ bool RegisterFileAssociations() {
     ok &= SetValue(L"Software\\RegisteredApplications", L"Lumen", kCapabilities);
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;
-}
-
-void UnregisterFileAssociations() {
-    RemoveTypes(kVideo, kVideoProgId);
-    RemoveTypes(kAudio, kAudioProgId);
-    RemoveTypes(kPlaylists, kPlaylistProgId);
-    for (const wchar_t* id : {kVideoProgId, kAudioProgId, kPlaylistProgId})
-        RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + id).c_str());
-    RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\Lumen.exe");
-    RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Lumen");
-    RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Lumen");
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-}
-
-bool FileAssociationsRegistered() {
-    wchar_t buf[512];
-    DWORD size = sizeof(buf);
-    return RegGetValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Lumen", RRF_RT_REG_SZ, nullptr, buf,
-                        &size) == ERROR_SUCCESS;
 }
 
 void OpenDefaultAppsSettings() {

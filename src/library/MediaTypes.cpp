@@ -296,4 +296,56 @@ bool HeaderMatchesExtension(std::wstring_view path, const unsigned char* h, size
     return true;
 }
 
+static std::wstring SubtitleMatchKey(const std::wstring& path) {
+    std::wstring out;
+    for (wchar_t c : StemOf(path))
+        if (std::iswalnum(c)) out.push_back(static_cast<wchar_t>(std::towlower(c)));
+    return out;
+}
+
+// "s01e02" / "1x02" -> {1, 2}; {-1, -1} when there is none.
+static std::pair<int, int> SubtitleEpisodeOf(const std::wstring& path) {
+    std::wstring s = StemOf(path);
+    for (auto& c : s) c = static_cast<wchar_t>(std::towlower(c));
+    for (size_t i = 0; i + 3 < s.size(); ++i) {
+        size_t j = i;
+        if (s[j] == L's' && std::iswdigit(s[j + 1])) {
+            ++j;
+            int season = 0, ep = 0;
+            while (j < s.size() && std::iswdigit(s[j])) season = season * 10 + (s[j++] - L'0');
+            if (j < s.size() && s[j] == L'e' && j + 1 < s.size() && std::iswdigit(s[j + 1])) {
+                ++j;
+                while (j < s.size() && std::iswdigit(s[j])) ep = ep * 10 + (s[j++] - L'0');
+                return {season, ep};
+            }
+        }
+    }
+    for (size_t i = 1; i + 1 < s.size(); ++i)
+        if (s[i] == L'x' && std::iswdigit(s[i - 1]) && std::iswdigit(s[i + 1])) {
+            size_t a = i;
+            while (a > 0 && std::iswdigit(s[a - 1])) --a;
+            size_t b = i + 1;
+            int season = 0, ep = 0;
+            for (size_t k = a; k < i; ++k) season = season * 10 + (s[k] - L'0');
+            while (b < s.size() && std::iswdigit(s[b])) ep = ep * 10 + (s[b++] - L'0');
+            if (i - a <= 2) return {season, ep};
+        }
+    return {-1, -1};
+}
+
+int SubtitleMatchScore(const std::wstring& video, const std::wstring& sub) {
+    const std::wstring v = SubtitleMatchKey(video), s = SubtitleMatchKey(sub);
+    if (v.empty() || s.empty()) return 0;
+    if (s == v) return 100;
+    // A prefix whose number goes on is another file: "lecture1" is not "lecture10".
+    auto numberGoesOn = [](const std::wstring& shorter, const std::wstring& longer) {
+        return std::iswdigit(shorter.back()) && std::iswdigit(longer[shorter.size()]);
+    };
+    if (s.rfind(v, 0) == 0 && !numberGoesOn(v, s)) return 90;  // "Show_E01_English" for "Show_E01"
+    if (v.rfind(s, 0) == 0 && s.size() * 2 > v.size() && !numberGoesOn(s, v)) return 70;
+    const auto ev = SubtitleEpisodeOf(video), es = SubtitleEpisodeOf(sub);
+    if (ev.first >= 0 && ev == es) return 60;
+    return 0;
+}
+
 }  // namespace library

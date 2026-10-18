@@ -525,12 +525,6 @@ void Host::CloseAllPopups() {
     while (!popups_.empty()) ClosePopupAt(popups_.size() - 1);
 }
 
-void Host::RepositionPopup(Widget* content) {
-    for (Popup& p : popups_)
-        if (p.content.get() == content) PlacePopup(p);
-    RequestRender();
-}
-
 void Host::PlacePopup(Popup& popup) {
     const Size client = ClientSize();
     const PopupOptions& o = popup.options;
@@ -645,10 +639,17 @@ UINT_PTR Host::StartTimer(UINT ms, std::function<void()> fn, bool repeat) {
     return id;
 }
 
+UINT_PTR Host::StartWorkTimer(UINT ms, std::function<void()> fn) {
+    const UINT_PTR id = StartTimer(ms, std::move(fn));
+    workIds_.push_back(id);
+    return id;
+}
+
 void Host::CancelTimer(UINT_PTR id) {
     if (!id) return;
     ::KillTimer(hwnd_, id);
     timers_.erase(id);
+    workIds_.erase(std::remove(workIds_.begin(), workIds_.end(), id), workIds_.end());
 }
 
 void Host::DoLayout() {
@@ -1114,7 +1115,8 @@ void AppendText(std::string& out, const TextRecord& t, const Rect& owner) {
 }  // namespace
 
 bool Host::Idle() const {
-    return hwnd_ && !layoutDirty_ && !renderPending_ && posted_.empty() && !AnimFloat::AnyActive();
+    return hwnd_ && !layoutDirty_ && !renderPending_ && posted_.empty() && workIds_.empty() &&
+           !AnimFloat::AnyActive();
 }
 
 void Host::DumpTree(const std::wstring& path) {
@@ -1498,6 +1500,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 timers_.erase(it);
             }
             fn();
+            workIds_.erase(std::remove(workIds_.begin(), workIds_.end(), wp), workIds_.end());
             return 0;
         }
 

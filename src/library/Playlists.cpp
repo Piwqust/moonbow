@@ -49,11 +49,12 @@ bool ValidUtf8(std::string_view s) {
            s.empty();
 }
 
-std::wstring AnsiToWide(std::string_view s) {
+std::wstring AnsiToWide(std::string_view s, unsigned codePage) {
     if (s.empty()) return {};
-    int n = MultiByteToWideChar(CP_ACP, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+    if (!codePage) codePage = json::LegacyCodePage();
+    int n = MultiByteToWideChar(codePage, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
     std::wstring out(static_cast<size_t>(std::max(n, 0)), L'\0');
-    MultiByteToWideChar(CP_ACP, 0, s.data(), static_cast<int>(s.size()), out.data(), n);
+    MultiByteToWideChar(codePage, 0, s.data(), static_cast<int>(s.size()), out.data(), n);
     return out;
 }
 
@@ -68,12 +69,12 @@ void Trim(std::wstring& s) {
 
 // --- M3U ----------------------------------------------------------------------------------------
 
-bool ReadM3u(const std::wstring& path, std::vector<PlaylistItem>* items) {
+bool ReadM3u(const std::wstring& path, std::vector<PlaylistItem>* items, unsigned codePage) {
     if (!items) return false;
     items->clear();
     std::string raw;
     if (!json::ReadFileUtf8(path, &raw)) return false;  // strips a UTF-8 BOM
-    std::wstring text = ValidUtf8(raw) ? json::ToWide(raw) : AnsiToWide(raw);
+    std::wstring text = ValidUtf8(raw) ? json::ToWide(raw) : AnsiToWide(raw, codePage);
     std::wstring base = ParentFolder(path);
 
     double pendingDuration = 0;
@@ -130,17 +131,21 @@ bool Playlists::Load() {
     loaded_ = true;
     lists_.clear();
     dirty_ = false;
+    readOnly_ = false;
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"playlists.json"), &text)) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        readOnly_ = true;  // locked by a backup or sync tool: saving now would wipe it
+        return false;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) {
+    // Valid JSON of the wrong shape ([], "playlists": {}) is as unreadable as broken JSON.
+    const json::Value* lists = doc && doc->IsObject() ? doc->Find("playlists") : nullptr;
+    if (!doc || !doc->IsObject() || (lists && !lists->IsArray())) {
         BackupCorruptFile(DataFilePath(L"playlists.json"));  // the next save would overwrite it
         return false;
     }
-    const json::Value* lists = doc->Find("playlists");
     if (!lists) return true;
     for (const json::Value& v : lists->AsArray()) {
         Playlist p;
@@ -165,6 +170,7 @@ bool Playlists::Load() {
 }
 
 bool Playlists::Save() {
+    if (readOnly_) return false;
     json::Value lists = json::Value::MakeArray();
     for (const Playlist& p : lists_) {
         json::Value v = json::Value::MakeObject();

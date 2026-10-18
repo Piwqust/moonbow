@@ -73,7 +73,6 @@ public:
     Widget* PopupAt(size_t i) const { return i < popups_.size() ? popups_[i].content.get() : nullptr; }
     bool IsPopupOpen(const Widget* content) const;
     // Re-measures and re-places a popup after its content changed size.
-    void RepositionPopup(Widget* content);
 
     // --- focus / pointer ---------------------------------------------------------------
     void SetFocus(Widget* w, bool fromKeyboard = false);
@@ -135,6 +134,9 @@ public:
     void Post(std::function<void()> fn);
     // Calls fn after ms (once, or repeatedly). Returns an id for CancelTimer.
     UINT_PTR StartTimer(UINT ms, std::function<void()> fn, bool repeat = false);
+    // A one-shot timer for work the user already asked for (a debounced search): Idle() is false
+    // until it has run or been cancelled, so tests that wait for idle see its result.
+    UINT_PTR StartWorkTimer(UINT ms, std::function<void()> fn);
     void CancelTimer(UINT_PTR id);
 
     std::function<bool(const KeyEvent&)> onKey;               // unhandled keys
@@ -250,6 +252,7 @@ private:
     UINT_PTR tooltipTimer_ = 0;
 
     std::map<UINT_PTR, std::pair<std::function<void()>, bool>> timers_;
+    std::vector<UINT_PTR> workIds_;  // StartWorkTimer timers still pending
     UINT_PTR nextTimer_ = 100;
     std::vector<std::function<void()>> posted_;
 };

@@ -39,10 +39,8 @@ bool Gpu::CreateFactories() {
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory6), &opts,
                                  reinterpret_cast<void**>(d2dFactory_.GetAddressOf()))))
         return false;
-    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory5),
-                                   reinterpret_cast<IUnknown**>(dwrite_.GetAddressOf()))))
-        return false;
-    return SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic_)));
+    return SUCCEEDED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory5),
+                                         reinterpret_cast<IUnknown**>(dwrite_.GetAddressOf())));
 }
 
 void Gpu::StartDevice() {
@@ -228,9 +226,19 @@ ID2D1DeviceContext5* Surface::Begin() {
     if (!gpu.Ready() || !hwnd_) return nullptr;
     if (!swap_ || generation_ != gpu.Generation()) {
         Drop();
-        if (!Build()) return nullptr;
+        if (!Build()) Drop();
+    } else if (!target_) {
+        BuildTarget();
     }
-    if (!target_) return nullptr;
+    if (!target_) {
+        // A resize or DPI change can be the first to meet a removed device (driver update, TDR);
+        // End() never runs then, so recover here or the window stays blank.
+        if (FAILED(gpu.D3D()->GetDeviceRemovedReason())) {
+            Drop();
+            if (gpu.RecreateDevice() && !Build()) Drop();
+        }
+        if (!target_) return nullptr;
+    }
     ID2D1DeviceContext5* ctx = gpu.Ctx();
     ctx->SetTarget(target_.Get());
     ctx->SetDpi(dpi_, dpi_);

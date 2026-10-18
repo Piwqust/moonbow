@@ -728,7 +728,8 @@ void BuildApp(Builder& b) {
               L"Если выключено, ошибки появляются короткими сообщениями поверх видео.");
     b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
         .Desc(L"Look for a new version of Lumen once a day. Nothing else is sent.",
-              L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.");
+              L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.")
+        .Hidden();  // not implemented yet
     b.Button("general.fileAssociations", L"Make Lumen the default player", L"Сделать Lumen плеером по умолчанию",
              "file-associations", L"Set up", L"Настроить")
         .Inferred()
@@ -900,7 +901,8 @@ void BuildApp(Builder& b) {
     b.Toggle("privacy.fetchMetadata", L"Fetch titles and cover art from the internet",
              L"Загружать названия и обложки из интернета", false)
         .Desc(L"Look up missing titles and album art online. File names are sent to the metadata service.",
-              L"Искать недостающие названия и обложки в интернете. Имена файлов передаются сервису метаданных.");
+              L"Искать недостающие названия и обложки в интернете. Имена файлов передаются сервису метаданных.")
+        .Hidden();  // not implemented yet
     b.Toggle("privacy.lastfmSubmit", L"Submit played tracks to last.fm", L"Отправлять прослушанное в last.fm", false)
         .Desc(L"Scrobble the songs you listen to your last.fm profile.",
               L"Отмечать прослушанные песни в вашем профиле last.fm (скробблинг).")
@@ -1769,7 +1771,8 @@ void BuildMedia(Builder& b) {
            "file")
         .Desc(L"Where titles, artists and covers come from. Internet lookups follow the Privacy settings.",
               L"Откуда брать названия, исполнителей и обложки. Поиск в интернете подчиняется настройкам "
-              L"конфиденциальности.");
+              L"конфиденциальности.")
+        .Hidden();  // not implemented yet
     b.Toggle("library.enabled", L"Use the media library", L"Использовать медиатеку", true)
         .Desc(L"Index your media folders for the Home, Video and Music pages.",
               L"Индексировать папки с медиа для разделов «Главная», «Видео» и «Музыка».")

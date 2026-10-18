@@ -275,6 +275,14 @@ void App::RestoreWindowPlacement() {
 }
 
 void App::FlushStores() {
+    if (RetryClaimDataDir()) {
+        // The first instance has exited: start saving, from what it left on disk.
+        history_.Load();
+        playlists_.Load();
+        bookmarks_.Load();
+        favorites_.Load();
+        libraryChanged.Emit();
+    }
     SaveWindowPlacement();
     SaveHistoryPosition();
     config_.Flush();
@@ -339,18 +347,8 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     Trace("window shown");
     // The GPU device started in wWinMain; libmpv starts after the window is up.
     gfx::Gpu::Get().NotifyWhenReady(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
-    {
-        auto options = MpvOptions(config_);
-        // general.extraOptions: "--deband=yes --sub-ass-override=force" (applied at start).
-        std::istringstream extra(config_.GetString("general.extraOptions"));
-        for (std::string tok; extra >> tok;) {
-            while (!tok.empty() && tok[0] == '-') tok.erase(0, 1);
-            const size_t eq = tok.find('=');
-            if (tok.empty()) continue;
-            options.emplace_back(tok.substr(0, eq), eq == std::string::npos ? "yes" : tok.substr(eq + 1));
-        }
-        player_.SetStartOptions(std::move(options));
-    }
+    // MpvOptions already expands general.extraOptions (quotes, --no-x) and puts it last.
+    player_.SetStartOptions(MpvOptions(config_));
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 

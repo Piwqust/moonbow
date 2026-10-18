@@ -29,6 +29,32 @@ std::wstring CountEpisodes(long long n);  // "1 выпуск"
 // Tag labels for untagged songs: "Unknown artist" / "Unknown album".
 std::wstring ArtistLabel(const std::wstring& artist);
 std::wstring AlbumLabel(const std::wstring& album);
+// False only for a local file that is gone. Network paths (\\server\share, mapped drives)
+// count as present without a look: with the NAS off, GetFileAttributesW blocks the UI thread
+// for the network timeout on every page rebuild.
+bool MaybeExists(const std::wstring& path);
+// Albums are told apart by name and folder ("Greatest Hits" by Queen and by ABBA are two). A
+// "CD1" / "Disc 2" subfolder counts as its parent, so a multi-disc album stays one.
+std::wstring AlbumFolderKey(const library::MediaItem& m);  // PathKey of that folder
+// Route argument of an album: "<name>\n<folder key>" for a tagged album. A plain "<name>" (old
+// routes, "nav music album:X") still finds every album of that name.
+std::wstring AlbumRouteArg(const library::MediaItem& m);
+// The library search rebuilds a page once typing pauses (150 ms), not on every key: a page of
+// 20 000 songs takes a few hundred milliseconds to rebuild. Clearing the box applies at once.
+class SearchDebounce {
+public:
+    SearchDebounce() = default;
+    SearchDebounce(const SearchDebounce&) = delete;
+    SearchDebounce& operator=(const SearchDebounce&) = delete;
+    ~SearchDebounce() { Cancel(); }
+    void Run(ui::Widget* owner, const std::wstring& text, std::function<void()> apply);
+    void Cancel();
+
+private:
+    ui::Host* host_ = nullptr;
+    UINT_PTR timer_ = 0;
+};
+
 // Title shown for a file or stream: tags for songs, the file name without its extension for
 // videos and unknown files, the stored title (history, playlist) or the address for streams.
 // Library items: the title tag of songs, "S01E02 · Title" for episodes, else the file name.

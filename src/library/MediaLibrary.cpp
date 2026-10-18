@@ -24,6 +24,7 @@ using Clock = std::chrono::steady_clock;
 
 constexpr double kInlineMetadataMs = 3.0;  // per file; above this the metadata pass runs after a first publish
 constexpr int kProbeFiles = 8;
+constexpr double kInlineMetadataTotalMs = 300;  // estimated rest of the pass; above it, publish first
 constexpr auto kProgressInterval = std::chrono::seconds(2);
 constexpr size_t kMetadataChunk = 192;  // files read in parallel between progress checks
 constexpr int kCacheVersion = 4;        // library-cache.json format, see LoadCache
@@ -284,29 +285,37 @@ void ReadMetadataParallel(Snapshot& snap, const std::vector<size_t>& pending, si
     for (std::thread& t : pool) t.join();
 }
 
+using KeptCache = std::vector<std::pair<std::wstring, CacheEntry>>;  // PathKey -> entry
+
 // `unread` (optional, by item index): files whose metadata is not read yet stay out of the
-// cache, so an interrupted scan resumes with them next time.
-void SaveCache(const Snapshot& s, const std::vector<char>* unread = nullptr) {
+// cache, so an interrupted scan resumes with them next time. `kept`: entries of library roots
+// that were not reachable (a USB disk unplugged), written back unchanged.
+void SaveCache(const Snapshot& s, const std::vector<char>* unread, const KeptCache& kept) {
     json::Value items = json::Value::MakeArray();
-    items.MutArray().reserve(s.items.size());
+    items.MutArray().reserve(s.items.size() + kept.size());
+    auto add = [&](const std::wstring& path, const CacheEntry& c) {
+        json::Value e = json::Value::MakeObject();
+        e.Set("p", json::ToUtf8(path));
+        e.Set("s", c.size);
+        e.Set("m", c.mtime);
+        if (c.duration > 0) e.Set("d", c.duration);
+        if (!c.title.empty()) e.Set("t", json::ToUtf8(c.title));
+        if (!c.artist.empty()) e.Set("a", json::ToUtf8(c.artist));
+        if (!c.album.empty()) e.Set("l", json::ToUtf8(c.album));
+        if (!c.genre.empty()) e.Set("g", json::ToUtf8(c.genre));
+        if (c.track > 0) e.Set("n", c.track);
+        if (c.year > 0) e.Set("y", c.year);
+        if (c.disc > 0) e.Set("k", c.disc);
+        if (c.damaged) e.Set("b", true);
+        items.Push(std::move(e));
+    };
     for (size_t i = 0; i < s.items.size(); ++i) {
         const MediaItem& it = s.items[i];
         if (it.offline || (unread && (*unread)[i])) continue;
-        json::Value e = json::Value::MakeObject();
-        e.Set("p", json::ToUtf8(it.path));
-        e.Set("s", it.size);
-        e.Set("m", it.mtime);
-        if (it.duration > 0) e.Set("d", it.duration);
-        if (!it.title.empty()) e.Set("t", json::ToUtf8(it.title));
-        if (!it.artist.empty()) e.Set("a", json::ToUtf8(it.artist));
-        if (!it.album.empty()) e.Set("l", json::ToUtf8(it.album));
-        if (!it.genre.empty()) e.Set("g", json::ToUtf8(it.genre));
-        if (it.track > 0) e.Set("n", it.track);
-        if (it.year > 0) e.Set("y", it.year);
-        if (it.disc > 0) e.Set("k", it.disc);
-        if (it.damaged) e.Set("b", true);
-        items.Push(std::move(e));
+        add(it.path, {it.size, it.mtime, it.duration, it.title, it.artist, it.album, it.genre, it.track, it.year,
+                      it.disc, it.damaged});
     }
+    for (const auto& [key, c] : kept) add(key, c);
     json::Value doc = json::Value::MakeObject();
     doc.Set("version", kCacheVersion);
     doc.Set("items", std::move(items));
@@ -522,32 +531,42 @@ void MediaLibrary::Publish(std::shared_ptr<const Snapshot> snapshot) {
         std::lock_guard lock(mutex_);
         current_ = std::move(snapshot);
     }
-    if (complete) scanning_ = false;  // before the message, so the UI sees a finished scan
+    // Before the message, so the UI sees a finished scan (unless a newer one has started).
+    if (complete && generation == generation_) scanning_ = false;
     HWND hwnd = notifyWnd_.load();
     if (hwnd) PostMessageW(hwnd, notifyMsg_.load(), complete ? 1 : 0, static_cast<LPARAM>(generation));
 }
 
 void MediaLibrary::Cancel() {
-    cancel_ = true;
+    if (cancel_) *cancel_ = true;
     if (thread_.joinable()) thread_.join();
-    cancel_ = false;
     scanning_ = false;
 }
 
 uint64_t MediaLibrary::Rescan() {
-    Cancel();
-    uint64_t generation = ++generation_;
+    // No join here: a scan of a sleeping NAS or USB disk can take seconds to notice the cancel.
+    // The new thread waits for the old one (so publishes and cache writes stay in order).
+    if (cancel_) *cancel_ = true;
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    cancel_ = cancel;
+    auto previous = std::make_shared<std::thread>(std::move(thread_));
+    const uint64_t generation = ++generation_;
     scanning_ = true;
     try {
-        thread_ = std::thread(&MediaLibrary::ScanThread, this, generation, roots_, options_);
+        thread_ = std::thread([this, generation, roots = roots_, options = options_, cancel, previous]() mutable {
+            if (previous->joinable()) previous->join();
+            ScanThread(generation, std::move(roots), options, *cancel);
+        });
     } catch (...) {
+        if (previous->joinable()) previous->join();
         scanning_ = false;
         return 0;
     }
     return generation;
 }
 
-void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options) {
+void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options,
+                              const std::atomic<bool>& cancel) {
     HRESULT com = options.readMetadata ? CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE) : E_FAIL;
 
     auto snap = std::make_shared<Snapshot>();
@@ -556,15 +575,21 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     // 1. Enumerate.
     auto t0 = Clock::now();
+    std::vector<std::wstring> missingRoots;  // PathKey with a trailing backslash
     for (const std::wstring& root : roots) {
-        if (cancel_) break;
+        if (cancel) break;
         DWORD attr = GetFileAttributesW(root.c_str());
-        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            std::wstring key = PathKey(root);
+            if (key.empty() || key.back() != L'\\') key += L'\\';
+            missingRoots.push_back(std::move(key));
+            continue;
+        }
         TempFolder t;
         t.path = root;
         t.name = FileNameOf(root);
         if (t.name.empty() || (root.size() == 3 && root[1] == L':')) t.name = root;  // "D:\"
-        Enumerate(t, options, cancel_, snap->stats);
+        Enumerate(t, options, cancel, snap->stats);
         ++snap->stats.folders;
         Flatten(t, -1, *snap);
     }
@@ -572,8 +597,15 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     // 2. Metadata: cached values first, then probe the cost of reading the rest.
     std::vector<size_t> pending;
-    if (options.readMetadata && !cancel_) {
+    KeptCache kept;  // a drive that is off keeps its tags for when it comes back
+    if (options.readMetadata && !cancel) {
         auto cache = LoadCache();
+        for (const auto& [key, entry] : cache)
+            for (const std::wstring& r : missingRoots)
+                if (key.compare(0, r.size(), r) == 0) {
+                    kept.emplace_back(key, entry);
+                    break;
+                }
         for (size_t i = 0; i < snap->items.size(); ++i) {
             MediaItem& it = snap->items[i];
             auto c = cache.find(PathKey(it.path));
@@ -597,16 +629,20 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     size_t done = 0;
     auto tm = Clock::now();
-    while (done < pending.size() && done < kProbeFiles && !cancel_) {
+    while (done < pending.size() && done < kProbeFiles && !cancel) {
         ReadMetadata(snap->items[pending[done]]);
         FillSearchKey(snap->items[pending[done]]);
         ++done;
     }
     double probeMs = MsSince(tm);
-    snap->stats.metadataSecondPass = done > 0 && probeMs / static_cast<double>(done) > kInlineMetadataMs &&
-                                     done < pending.size();
+    // Slow files, or fast ones in such numbers (20 000 songs) that the list would stay empty for
+    // seconds: show the files first, then fill in their tags.
+    const double perFile = done > 0 ? probeMs / static_cast<double>(done) : 0;
+    const double restMs = perFile * static_cast<double>(pending.size() - done) / MetadataThreads();
+    snap->stats.metadataSecondPass =
+        done > 0 && done < pending.size() && (perFile > kInlineMetadataMs || restMs > kInlineMetadataTotalMs);
 
-    if (cancel_) {
+    if (cancel) {
         if (SUCCEEDED(com)) CoUninitialize();
         return;
     }
@@ -622,15 +658,15 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     const int threads = MetadataThreads();
     std::vector<char> unread(snap->items.size(), 0);
     for (size_t i = done; i < pending.size(); ++i) unread[pending[i]] = 1;
-    while (done < pending.size() && !cancel_) {
+    while (done < pending.size() && !cancel) {
         const size_t last = std::min(pending.size(), done + kMetadataChunk);
-        ReadMetadataParallel(*snap, pending, done, last, threads, cancel_);
-        if (cancel_) break;
+        ReadMetadataParallel(*snap, pending, done, last, threads, cancel);
+        if (cancel) break;
         for (size_t i = done; i < last; ++i) unread[pending[i]] = 0;
         done = last;
         if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
             snap->stats.metadataFiles = done;
-            if (options.readMetadata) SaveCache(*snap, &unread);
+            if (options.readMetadata) SaveCache(*snap, &unread, kept);
             Publish(std::make_shared<Snapshot>(*snap));
             lastPublish = Clock::now();
         }
@@ -639,13 +675,14 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     snap->stats.metadataFiles = done;
     snap->stats.metadataMsPerFile = done ? snap->stats.metadataMs / static_cast<double>(done) : 0;
 
-    if (!cancel_ && (!snap->complete || done > 0)) {
+    if (!cancel && (!snap->complete || done > 0)) {
         snap->complete = true;
-        if (options.readMetadata && done > 0) SaveCache(*snap);
+        if (options.readMetadata && done > 0) SaveCache(*snap, nullptr, kept);
         Publish(std::make_shared<const Snapshot>(std::move(*snap)));
     }
     if (SUCCEEDED(com)) CoUninitialize();
-    scanning_ = false;  // also covers a scan that ended without a complete publish
+    // Also covers a scan that ended without a complete publish; a newer scan keeps the flag.
+    if (generation == generation_) scanning_ = false;
 }
 
 }  // namespace library

@@ -109,7 +109,8 @@ private:
 };
 
 struct Group {
-    std::wstring name;     // display / route key
+    std::wstring name;     // display name
+    std::wstring key;      // route argument: the name, or AlbumRouteArg for albums
     std::wstring artist;   // albums: common artist, or empty when mixed
     bool mixed = false;
     std::vector<const library::MediaItem*> songs;
@@ -130,7 +131,14 @@ public:
         else if (p == L"albums") mode_ = MusicMode::Albums;
         else if (p == L"artists") mode_ = MusicMode::Artists;
         else if (p == L"genres") mode_ = MusicMode::Genres;
-        else if (starts(L"album:", &arg_)) mode_ = MusicMode::Album;
+        else if (starts(L"album:", &arg_)) {
+            mode_ = MusicMode::Album;
+            const size_t nl = arg_.find(L'\n');  // "<name>\n<folder key>", see AlbumRouteArg
+            if (nl != std::wstring::npos) {
+                albumFolder_ = arg_.substr(nl + 1);
+                arg_.resize(nl);
+            }
+        }
         else if (starts(L"artist:", &arg_)) mode_ = MusicMode::Artist;
         else if (starts(L"genre:", &arg_)) mode_ = MusicMode::Genre;
         key_ = std::string("music.") + ModeKey();
@@ -283,7 +291,8 @@ protected:
             case MusicMode::Genre: {
                 std::vector<const library::MediaItem*> v;
                 for (const library::MediaItem* m : songs) {
-                    const bool in = mode_ == MusicMode::Album    ? SameText(AlbumOf(*m), arg_)
+                    const bool in = mode_ == MusicMode::Album
+                                        ? SameText(AlbumOf(*m), arg_) && (albumFolder_.empty() || AlbumFolderKey(*m) == albumFolder_)
                                     : mode_ == MusicMode::Artist ? SameText(ArtistOf(*m), arg_)
                                                                  : SameText(GenreOf(*m), arg_);
                     if (in) v.push_back(m);
@@ -466,7 +475,7 @@ private:
                     break;
                 }
             entries.push_back(std::move(e));
-            albumRoutes_.push_back(Route{Section::Music, L"album:" + g.name});
+            albumRoutes_.push_back(Route{Section::Music, L"album:" + g.key});
             albumSongs_.push_back(std::move(g.songs));
         }
         const bool any = !entries.empty();
@@ -505,12 +514,15 @@ private:
             std::wstring name = kind == MusicMode::Albums    ? AlbumOf(*m)
                                 : kind == MusicMode::Artists ? ArtistOf(*m)
                                                              : GenreOf(*m);
-            const std::wstring key = Upper(name);
+            // Albums: same name and folder (AlbumFolderKey), so two artists' "Greatest Hits" stay apart.
+            const bool album = kind == MusicMode::Albums && !name.empty();
+            const std::wstring key = album ? Upper(name) + L"\n" + AlbumFolderKey(*m) : Upper(name);
             auto it = index.find(key);
             if (it == index.end()) {
                 it = index.emplace(key, groups.size()).first;
                 Group g;
                 g.name = name;
+                g.key = album ? AlbumRouteArg(*m) : name;
                 g.artist = m->artist;
                 groups.push_back(std::move(g));
             }
@@ -642,13 +654,14 @@ private:
                     e.image = m->path;  // cover art of the first track
                     break;
                 }
-            const int i = AddRoute(std::move(e), Route{Section::Music, prefix + g.name});
+            const int i = AddRoute(std::move(e), Route{Section::Music, prefix + g.key});
             groupSongs_[i] = std::move(g.songs);
         }
     }
 
     MusicMode mode_ = MusicMode::Root;
     std::wstring arg_;
+    std::wstring albumFolder_;  // album page: AlbumFolderKey of the album, empty = any folder
     Label* summary_ = nullptr;
     CoverArt* cover_ = nullptr;  // album / artist header (not in the side panel)
     Label* byline_ = nullptr;

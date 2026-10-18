@@ -69,7 +69,7 @@ struct ScanStats {
     double metadataMs = 0;
     size_t metadataFiles = 0;       // files whose properties were read (not from cache)
     double metadataMsPerFile = 0;   // measured average
-    bool metadataSecondPass = false;  // true when the per-file cost was > 3 ms
+    bool metadataSecondPass = false;  // true when the per-file cost was > 3 ms or the rest > 300 ms
 };
 
 // Track = album order: album (untagged last), disc, track number (numbered first), then title.
@@ -145,7 +145,8 @@ public:
     std::shared_ptr<const Snapshot> Current() const;
 
 private:
-    void ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options);
+    void ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options,
+                    const std::atomic<bool>& cancel);
     void Publish(std::shared_ptr<const Snapshot> snapshot);
 
     std::vector<std::wstring> roots_;
@@ -155,10 +156,10 @@ private:
 
     mutable std::mutex mutex_;  // guards current_
     std::shared_ptr<const Snapshot> current_;
-    std::thread thread_;
-    std::atomic<bool> cancel_{false};
+    std::thread thread_;                          // the latest scan; it joins the one before it
+    std::shared_ptr<std::atomic<bool>> cancel_;   // the latest scan's cancel flag
     std::atomic<bool> scanning_{false};
-    uint64_t generation_ = 0;
+    std::atomic<uint64_t> generation_{0};
 };
 
 }  // namespace library

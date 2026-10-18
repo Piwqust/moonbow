@@ -8,10 +8,13 @@
 #include "library/MediaTypes.h"
 
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
+#include <algorithm>
 #include <cwchar>
+#include <cwctype>
 #include <unordered_set>
 
 namespace app::lib {
@@ -148,6 +151,57 @@ std::wstring ArtistLabel(const std::wstring& artist) {
 
 std::wstring AlbumLabel(const std::wstring& album) {
     return album.empty() ? std::wstring(Tr(L"Unknown album")) : album;
+}
+
+void SearchDebounce::Run(ui::Widget* owner, const std::wstring& text, std::function<void()> apply) {
+    Cancel();
+    ui::Host* host = owner ? owner->GetHost() : nullptr;
+    if (text.empty() || !host) {
+        apply();
+        return;
+    }
+    host_ = host;
+    timer_ = host->StartWorkTimer(150, [this, apply = std::move(apply)] {
+        timer_ = 0;
+        apply();
+    });
+}
+
+void SearchDebounce::Cancel() {
+    if (!timer_ || !host_) return;
+    const auto& hosts = ui::Host::All();
+    if (std::find(hosts.begin(), hosts.end(), host_) != hosts.end()) host_->CancelTimer(timer_);
+    timer_ = 0;
+}
+
+bool MaybeExists(const std::wstring& path) {
+    if (PathIsUNCW(path.c_str())) return true;
+    if (path.size() >= 3 && path[1] == L':') {
+        const wchar_t root[4] = {path[0], L':', L'\\', 0};
+        if (GetDriveTypeW(root) == DRIVE_REMOTE) return true;
+    }
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+std::wstring AlbumFolderKey(const library::MediaItem& m) {
+    std::wstring folder = m.folder;
+    std::wstring name = library::FileNameOf(folder);
+    for (auto& c : name) c = static_cast<wchar_t>(towlower(c));
+    for (const wchar_t* prefix : {L"cd", L"disc", L"disk", L"диск"}) {
+        const size_t n = wcslen(prefix);
+        if (name.compare(0, n, prefix) != 0) continue;
+        size_t i = n;
+        while (i < name.size() && (name[i] == L' ' || name[i] == L'_' || name[i] == L'-' || name[i] == L'.')) ++i;
+        const size_t digits = i;
+        while (i < name.size() && iswdigit(name[i])) ++i;
+        if (i > digits && i == name.size()) folder = library::ParentFolder(folder);
+        break;
+    }
+    return library::PathKey(folder);
+}
+
+std::wstring AlbumRouteArg(const library::MediaItem& m) {
+    return m.album.empty() ? std::wstring() : m.album + L"\n" + AlbumFolderKey(m);
 }
 
 std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item, const std::wstring& storedTitle) {
@@ -476,8 +530,9 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
         while (!text.empty() && iswspace(text.back())) text.pop_back();
         while (!text.empty() && iswspace(text.front())) text.erase(text.begin());
         if (text.empty()) return;
+        auto run = done;  // the dialog (and this lambda) is gone after Close()
         raw->Close();
-        if (done) done(text);
+        if (run) run(text);
     };
     d->Footer()->Add<Button>(okText, ButtonKind::Primary)->onClick = ok;
     box->onSubmit = [ok](const std::wstring&) { ok(); };
@@ -499,8 +554,9 @@ void ShowConfirm(const std::wstring& title, const std::wstring& text, const std:
     d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost)->onClick = [raw] { raw->Close(); };
     auto* okBtn = d->Footer()->Add<Button>(okText, ButtonKind::Primary);
     okBtn->onClick = [raw, done] {
+        auto run = done;  // the dialog (and this lambda) is gone after Close()
         raw->Close();
-        if (done) done();
+        if (run) run();
     };
     ShowDialog(w, std::move(d));
     w->SetFocus(okBtn, true);
@@ -571,7 +627,7 @@ std::wstring PlaylistImage(const library::Playlist& p) {
     const std::string cover = TheApp().UiValue("playlist.cover." + p.id);
     if (!cover.empty()) {
         std::wstring path = Utf8ToWide(cover);
-        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+        if (MaybeExists(path)) return path;
     }
     const auto snap = TheApp().library().Current();
     for (const auto& it : p.items)

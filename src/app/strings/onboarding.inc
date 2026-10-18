@@ -1,4 +1,5 @@
 // Russian translations for the onboarding area: {L"English", L"Русский"},
+{L"Lumen Setup", L"Настройка Lumen"},
 {L"Welcome to Lumen!", L"Добро пожаловать в Lumen!"},
 {L"Lumen is a fast, quiet player for your videos and music. It opens almost any file, "
  L"folder or network stream, remembers where you stopped and keeps your library in "
@@ -38,12 +39,6 @@
 {L"Show thumbnails", L"Показывать миниатюры"},
 {L"Use Windows thumbnails for videos and embedded covers for music.",
  L"Брать миниатюры видео из Windows, а обложки — из музыкальных файлов."},
-{L"Fetch titles and cover art from the internet", L"Загружать названия и обложки из интернета"},
-{L"Look up missing titles and album art online. File names are sent to the metadata service.",
- L"Искать недостающие названия и обложки в интернете. Имена файлов передаются сервису метаданных."},
-{L"Check for updates automatically", L"Проверять обновления автоматически"},
-{L"Look for a new version of Lumen once a day. Nothing else is sent.",
- L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется."},
 // shortcuts
 {L"Learn the basic keyboard shortcuts.", L"Основные сочетания клавиш."},
 {L"Seek Backward / Forward", L"Перемотка назад / вперёд"},
@@ -67,6 +62,4 @@
 {L"Accent", L"Акцент"},
 {L"Language", L"Язык"},
 {L"Playback history", L"История воспроизведения"},
-{L"Internet metadata", L"Метаданные из интернета"},
-{L"Automatic updates", L"Автообновления"},
 {L"Change", L"Изменить"},

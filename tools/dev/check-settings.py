@@ -32,13 +32,18 @@ builders = schema[: starts[0][0]] if starts else ""
 
 unused = []
 for key, chain in items:
-    if re.search(r'\.(Mpv|MpvBool|MpvBuild|MpvChoice)\(', chain) or ".Hidden(" in chain:
+    if re.search(r'\.(Mpv|MpvBool|MpvBuild|MpvChoice|MpvArgs)\(', chain) or ".Hidden(" in chain:
         continue
     if re.search(r'Button\(|Info\(', chain[:40]):
         continue
     needle = '"' + key + '"'
+    # A read is the key passed to a call that is not a Set*: GetBool("key"), Skip("key", 10),
+    # GetString(h ? "a" : "key"), or compared in a change handler (key == "x"). A write or a
+    # mention in a table (the onboarding toggles) once hid three settings nothing used.
     # main.cpp looks for '\"library.singleInstance\"' in the raw settings text.
-    if needle in code or needle in builders or needle.replace('"', '\\"') in code:
+    calls = [m.group(1) for m in re.finditer(r'\b(\w+)\([^()]*' + re.escape(needle), code)]
+    if any(not c.startswith("Set") for c in calls) or re.search(r'==\s*' + re.escape(needle), code) \
+            or needle in builders or needle.replace('"', '\\"') in code:
         continue
     # prefix lookups like GetString("audio.eq" + ...) are rare; report them for a manual look
     unused.append(key)

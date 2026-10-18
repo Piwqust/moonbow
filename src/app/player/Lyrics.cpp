@@ -172,7 +172,7 @@ Lyrics ParseLyrics(std::wstring_view text) {
     return out;
 }
 
-std::wstring DecodeLyricsFile(std::string_view bytes) {
+std::wstring DecodeLyricsFile(std::string_view bytes, unsigned codePage) {
     auto widen = [](std::string_view s, UINT cp, DWORD flags) {
         std::wstring w;
         if (s.empty()) return w;
@@ -198,7 +198,14 @@ std::wstring DecodeLyricsFile(std::string_view bytes) {
     // Strict UTF-8 first; invalid sequences mean a legacy code page.
     std::wstring w = widen(bytes, CP_UTF8, MB_ERR_INVALID_CHARS);
     if (!w.empty() || bytes.empty()) return w;
-    return widen(bytes, CP_ACP, 0);
+    if (!codePage) {
+        // Not CP_ACP: the manifest makes that UTF-8 inside Lumen.exe (json::LegacyCodePage).
+        DWORD cp = 0;
+        GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
+                        reinterpret_cast<LPWSTR>(&cp), sizeof(cp) / sizeof(wchar_t));
+        codePage = cp && cp != CP_UTF8 ? cp : 1252;
+    }
+    return widen(bytes, codePage, 0);
 }
 
 std::wstring LyricsPathFor(const std::wstring& mediaPath) {

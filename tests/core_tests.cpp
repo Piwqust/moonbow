@@ -732,6 +732,45 @@ void TestCorruptBackup() {
     }
     CHECK(TakeCorruptFileNotices().size() == 2);
 
+    // The same shape check for the small stores: [] is kept, not loaded as empty and overwritten.
+    WriteFile(dir + L"\\history.json", "[]");
+    WriteFile(dir + L"\\playlists.json", R"({"playlists":{}})");
+    WriteFile(dir + L"\\bookmarks.json", R"({"files":"x"})");
+    WriteFile(dir + L"\\favorites.json", "[1]");
+    {
+        library::History h;
+        library::Playlists pl;
+        library::Bookmarks bm;
+        library::Favorites fav;
+        CHECK(!h.Load() && !pl.Load() && !bm.Load() && !fav.Load());
+    }
+    CHECK(CountFiles(dir, L"history.corrupt-*.json") == 3 && CountFiles(dir, L"playlists.corrupt-*.json") == 1 &&
+          CountFiles(dir, L"bookmarks.corrupt-*.json") == 1 && CountFiles(dir, L"favorites.corrupt-*.json") == 1);
+    TakeCorruptFileNotices();
+
+    // A file that is locked (by a backup tool) while it loads is never overwritten afterwards.
+    const std::string locked = R"({"version":1,"items":[{"path":"C:\\keep.mkv","lastPlayed":1}]})";
+    WriteFile(dir + L"\\history.json", locked);
+    WriteFile(dir + L"\\playlists.json", R"({"version":1,"playlists":[{"id":"p1","name":"Keep"}]})");
+    {
+        library::History h;
+        library::Playlists pl;
+        HANDLE lockH = CreateFileW((dir + L"\\history.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        HANDLE lockP = CreateFileW((dir + L"\\playlists.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        CHECK(lockH != INVALID_HANDLE_VALUE && lockP != INVALID_HANDLE_VALUE);
+        CHECK(!h.Load() && h.Entries().empty());
+        CHECK(!pl.Load());
+        CloseHandle(lockH);
+        CloseHandle(lockP);
+        h.UpdatePosition(L"C:\\new.mkv", 5, 100);
+        pl.Create(L"New");
+        CHECK(!h.Flush() && !pl.Flush());
+    }  // the destructors flush too
+    std::string after;
+    CHECK(json::ReadFileUtf8(dir + L"\\history.json", &after) && after == locked);
+    CHECK(json::ReadFileUtf8(dir + L"\\playlists.json", &after) && after.find("Keep") != std::string::npos);
+    CHECK(TakeCorruptFileNotices().empty());
+
     // The log path hint follows a moved data folder.
     CHECK(DataDirOverridden());
     const std::wstring shown = DataFileDisplayPath(L"lumen.log");
@@ -1034,6 +1073,12 @@ void TestHistory() {
         CHECK(h.Dirty());
         CHECK(h.Flush());
         CHECK(!h.Dirty());
+
+        // Paused: the 3 s save repeats the same position and must not rewrite the file.
+        CHECK(h.UpdatePosition(L"E:\\Music\\b.mp3", 42, 200) && h.Dirty() && h.Flush());
+        CHECK(h.UpdatePosition(L"e:\\music\\B.mp3", 42.4, 200.2) && !h.Dirty());
+        CHECK(h.UpdatePosition(L"E:\\Music\\b.mp3", 43.5, 200) && h.Dirty() && h.Flush());
+        CHECK(h.Find(L"E:\\Music\\b.mp3")->position == 43.5);
     }
     {
         library::History h;
@@ -1129,11 +1174,11 @@ void TestPlaylists() {
         CHECK(items[2].path == g_temp.substr(0, 2) + L"\\abs\\three.mkv");
         CHECK(items[3].path == L"C:\\x y.mkv");
     }
-    if (GetACP() == 1251) {
-        WriteFile(sub + L"\\ansi.m3u", "\xCF\xF0\xE8\xE2\xE5\xF2.mkv\n");  // "Привет.mkv" in cp1251
-        CHECK(library::ReadM3u(sub + L"\\ansi.m3u", &items) && items.size() == 1 &&
-              items[0].path == sub + L"\\Привет.mkv");
-    }
+    // Lumen.exe's manifest makes CP_ACP UTF-8 (this exe has none), so the code page is explicit.
+    WriteFile(sub + L"\\ansi.m3u", "\xCF\xF0\xE8\xE2\xE5\xF2.mkv\n");  // "Привет.mkv" in cp1251
+    CHECK(library::ReadM3u(sub + L"\\ansi.m3u", &items, 1251) && items.size() == 1 &&
+          items[0].path == sub + L"\\Привет.mkv");
+    if (GetACP() != CP_UTF8) CHECK(json::LegacyCodePage() == GetACP());  // no manifest: the legacy one
     CHECK(!library::ReadM3u(sub + L"\\missing.m3u", &items));
 }
 
@@ -1200,6 +1245,14 @@ void TestMediaTypes() {
     CHECK(library::PathKey(L"c:/Видео/Ёж.mkv") == library::PathKey(L"C:\\ВИДЕО\\ЁЖ.MKV"));
     CHECK(library::SearchFold(L"ЁЛКА Ёж") == L"елка еж");
     CHECK(library::UnixMsNow() > 1700000000000LL);
+
+    // Subtitle matching (Add Subtitles): a prefix whose number goes on is another file.
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Lecture 1.mp4", L"D:\\L\\lecture1.srt") == 100);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Show_E01.mkv", L"D:\\L\\Show_E01_English.srt") == 90);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Movie (2020).mkv", L"D:\\L\\Movie.srt") == 70);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Lecture 1.mp4", L"D:\\L\\Lecture 10.srt") == 0);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Lecture 10.mp4", L"D:\\L\\Lecture 1.srt") == 0);
+    CHECK(library::SubtitleMatchScore(L"D:\\L\\Show.S01E02.mkv", L"D:\\L\\show 1x02.srt") == 60);
 }
 
 void TestEpisodesAndOrder() {
@@ -1461,6 +1514,37 @@ void TestLibraryCacheTags() {
     m = snap ? snap->FindItem(song) : nullptr;
     CHECK(snap && snap->stats.metadataFiles == 1);
     CHECK(m && m->genre.empty() && m->title.empty());  // read from the (untagged) file
+
+    // A root that is unplugged during a scan keeps its cached tags for when it comes back.
+    const std::wstring usb = MakeDir(L"lib-cache-usb");
+    const std::wstring usbSong = usb + L"\\02 Away.mp3";
+    WriteFile(usbSong, std::string(64, 'y'));
+    WIN32_FILE_ATTRIBUTE_DATA ua{};
+    CHECK(GetFileAttributesExW(usbSong.c_str(), GetFileExInfoStandard, &ua));
+    lib.SetRoots({root, usb});
+    {
+        json::Value e = json::Value::MakeObject();
+        e.Set("p", json::ToUtf8(usbSong));
+        e.Set("s", 64);
+        e.Set("m", library::FileTimeToUnixMs((static_cast<uint64_t>(ua.ftLastWriteTime.dwHighDateTime) << 32) |
+                                             ua.ftLastWriteTime.dwLowDateTime));
+        e.Set("t", "Away");
+        json::Value items = json::Value::MakeArray();
+        items.Push(std::move(e));
+        json::Value doc = json::Value::MakeObject();
+        doc.Set("version", 4);
+        doc.Set("items", std::move(items));
+        CHECK(json::WriteFileAtomic(dir + L"\\library-cache.json", json::Serialize(doc)));
+    }
+    const std::wstring unplugged = usb + L"-off";
+    CHECK(MoveFileW(usb.c_str(), unplugged.c_str()));
+    WriteFile(root + L"\\Album\\03 New.mp3", std::string(64, 'z'));  // read now, so the cache is saved
+    snap = ScanAndWait(lib);
+    CHECK(snap && snap->stats.metadataFiles >= 1 && !snap->FindItem(usbSong));
+    CHECK(MoveFileW(unplugged.c_str(), usb.c_str()));
+    snap = ScanAndWait(lib);
+    m = snap ? snap->FindItem(usbSong) : nullptr;
+    CHECK(m && m->title == L"Away");  // from the cache, not the untagged file
 }
 
 // Real media from the Windows install, to measure property-store cost and check durations.
@@ -1645,6 +1729,7 @@ void TestLyricsLrc() {
     CHECK(app::DecodeLyricsFile(std::string("\xFF\xFE" "a\0b\0", 6)) == L"ab");
     CHECK(app::DecodeLyricsFile(std::string("\xFE\xFF\0a\0b", 6)) == L"ab");
     CHECK(!app::DecodeLyricsFile("caf\xE9").empty());
+    CHECK(app::DecodeLyricsFile("\xCF\xF0\xE8", 1251) == L"При");
 
     // Where the .lrc is looked for, which tags carry lyrics.
     CHECK(app::LyricsPathFor(L"C:\\Music\\A.B\\01 Song.mp3") == L"C:\\Music\\A.B\\01 Song.lrc");

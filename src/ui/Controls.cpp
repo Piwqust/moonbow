@@ -716,6 +716,19 @@ void TextBox::Insert(std::wstring_view s) {
 
 bool TextBox::OnChar(wchar_t ch) {
     if (readOnly) return false;
+    // WM_CHAR delivers an emoji as two messages: insert the pair at once, so onChange (search)
+    // never sees half of it.
+    if (IS_HIGH_SURROGATE(ch)) {
+        pendingHigh_ = ch;
+        return true;
+    }
+    if (IS_LOW_SURROGATE(ch) && pendingHigh_) {
+        const wchar_t pair[2] = {pendingHigh_, ch};
+        pendingHigh_ = 0;
+        Insert(std::wstring_view(pair, 2));
+        return true;
+    }
+    pendingHigh_ = 0;
     Insert(std::wstring_view(&ch, 1));
     return true;
 }
@@ -732,28 +745,41 @@ bool TextBox::OnKeyDown(const KeyEvent& e) {
         while (i < text_.size() && IsWordChar(text_[i])) ++i;
         return i;
     };
+    // One character back / forward: an emoji is a surrogate pair, never split it.
+    auto prev = [&](size_t i) {
+        if (i == 0) return i;
+        --i;
+        if (i > 0 && IS_LOW_SURROGATE(text_[i]) && IS_HIGH_SURROGATE(text_[i - 1])) --i;
+        return i;
+    };
+    auto next = [&](size_t i) {
+        if (i >= text_.size()) return text_.size();
+        ++i;
+        if (i < text_.size() && IS_LOW_SURROGATE(text_[i]) && IS_HIGH_SURROGATE(text_[i - 1])) ++i;
+        return i;
+    };
     HWND hwnd = GetHost() ? GetHost()->Hwnd() : nullptr;
     switch (e.key) {
         case VK_LEFT:
             if (!shift && caret_ != anchor_) MoveCaret(std::min(caret_, anchor_), false);
-            else MoveCaret(ctrl ? wordLeft(caret_) : (caret_ > 0 ? caret_ - 1 : 0), shift);
+            else MoveCaret(ctrl ? wordLeft(caret_) : prev(caret_), shift);
             return true;
         case VK_RIGHT:
             if (!shift && caret_ != anchor_) MoveCaret(std::max(caret_, anchor_), false);
-            else MoveCaret(ctrl ? wordRight(caret_) : caret_ + 1, shift);
+            else MoveCaret(ctrl ? wordRight(caret_) : next(caret_), shift);
             return true;
         case VK_HOME: MoveCaret(0, shift); return true;
         case VK_END: MoveCaret(text_.size(), shift); return true;
         case VK_BACK:
             if (readOnly) return true;
-            if (caret_ == anchor_ && caret_ > 0) anchor_ = ctrl ? wordLeft(caret_) : caret_ - 1;
+            if (caret_ == anchor_ && caret_ > 0) anchor_ = ctrl ? wordLeft(caret_) : prev(caret_);
             DeleteSelection();
             MoveCaret(caret_, false);
             Changed();
             return true;
         case VK_DELETE:
             if (readOnly) return true;
-            if (caret_ == anchor_ && caret_ < text_.size()) anchor_ = ctrl ? wordRight(caret_) : caret_ + 1;
+            if (caret_ == anchor_ && caret_ < text_.size()) anchor_ = ctrl ? wordRight(caret_) : next(caret_);
             DeleteSelection();
             MoveCaret(caret_, false);
             Changed();
@@ -826,19 +852,22 @@ bool TextBox::OnDoubleClick(const MouseEvent& e) {
 
 void TextBox::Paint(Painter& p) {
     const Palette& c = P();
+    const bool live = IsEnabled();
     const Color bg = background.a > 0 ? background : raised ? c.bgRaised : c.bgDeep;
-    p.Fill(rect, bg, 4);
-    if (IsFocused())
+    // Disabled: the flat fill of the other disabled controls, no hover or focus outline.
+    p.Fill(rect, live ? bg : DisabledFill(), 4);
+    if (live && IsFocused())
         p.Stroke(rect, c.lineStrong, 4);
-    else if (IsHot())
+    else if (live && IsHot())
         p.Stroke(rect, c.line, 4);
-    if (!leadingIcon.empty()) p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, c.textTertiary);
+    if (!leadingIcon.empty())
+        p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, live ? c.textTertiary : c.textDisabled);
 
     const Rect tr = TextRect();
     p.PushClip(tr);
     const std::wstring shown = Shown();
     if (shown.empty()) {
-        p.Text(placeholder, tr, TextStyle::Body, c.textTertiary);
+        p.Text(placeholder, tr, TextStyle::Body, live ? c.textTertiary : c.textDisabled);
     } else {
         if (IsFocused() && caret_ != anchor_) {
             const float x1 = XOf(std::min(caret_, anchor_)), x2 = XOf(std::max(caret_, anchor_));
@@ -847,7 +876,7 @@ void TextBox::Paint(Painter& p) {
         p.Text(shown, {tr.x - scroll_, tr.y, 100000.0f, tr.h}, TextStyle::Body, IsEnabled() ? c.textPrimary : c.textDisabled,
                HAlign::Leading, VAlign::Center, 0);
     }
-    if (IsFocused() && caretOn_ && !readOnly) p.Fill(CaretRect(), c.textPrimary);
+    if (live && IsFocused() && caretOn_ && !readOnly) p.Fill(CaretRect(), c.textPrimary);
     p.PopClip();
 }
 
@@ -892,6 +921,13 @@ ScrollView::ScrollView() {
     height = Length::Grow();
 }
 
+ScrollView::~ScrollView() {
+    // A page can go away within 900 ms of a scroll: the hide timer must not fire on it.
+    if (!hideTimer_ || !timerHost_) return;
+    const auto& hosts = Host::All();
+    if (std::find(hosts.begin(), hosts.end(), timerHost_) != hosts.end()) timerHost_->CancelTimer(hideTimer_);
+}
+
 Size ScrollView::MeasureContent(float availW, float availH) {
     Widget* c = Content();
     if (!c) return {0, 0};
@@ -918,6 +954,7 @@ void ScrollView::ScrollTo(float y, bool animate) {
     Host* host = GetHost();
     if (host) {
         if (hideTimer_) host->CancelTimer(hideTimer_);
+        timerHost_ = host;
         hideTimer_ = host->StartTimer(900, [this] {
             hideTimer_ = 0;
             if (!dragging_ && !overBar_) barVisible_.To(0, 250);
@@ -1037,6 +1074,13 @@ public:
         Refilter();
     }
 
+    ~MenuPopup() override {
+        // Clicking an item within 180 ms of hovering a submenu row closes the menu first.
+        if (!submenuTimer_ || !timerHost_) return;
+        const auto& hosts = Host::All();
+        if (std::find(hosts.begin(), hosts.end(), timerHost_) != hosts.end()) timerHost_->CancelTimer(submenuTimer_);
+    }
+
     MenuPopup* Root() {
         MenuPopup* m = this;
         while (m->parentMenu_) m = m->parentMenu_;
@@ -1137,6 +1181,18 @@ public:
             }
             p.Text(m.label, {x, row.y, right - x, row.h}, TextStyle::Body, m.checked && m.enabled ? c.textPrimary : fg);
             cy += kMenuItemH;
+        }
+        // A menu taller than a small window scrolls: fade the cut edge so the last row reads as
+        // "more below" (or above), not as the end of the menu.
+        if (MaxScroll() > 0) {
+            const float top = rect.y + kMenuPad + HeaderH(), bottom = rect.Bottom() - kMenuPad;
+            constexpr int kSteps = 6;
+            constexpr float kStep = 4;
+            for (int s = 0; s < kSteps; ++s) {
+                const Color fade = c.bgMenu.Fade(static_cast<float>(kSteps - s) / kSteps);
+                if (scroll_ < MaxScroll() - 0.5f) p.Fill({rect.x + 1, bottom - (s + 1) * kStep, rect.w - 2, kStep}, fade);
+                if (scroll_ > 0.5f) p.Fill({rect.x + 1, top + s * kStep, rect.w - 2, kStep}, fade);
+            }
         }
         p.PopClip();
         if (MaxScroll() > 0) {  // thin position marker, like ScrollView's
@@ -1320,8 +1376,10 @@ private:
             host->ClosePopup(child_);
             child_ = nullptr;
         }
+        if (submenuTimer_ && host) host->CancelTimer(submenuTimer_);
+        submenuTimer_ = 0;
         if (i >= 0 && !At(i).submenu.empty() && At(i).enabled) {
-            if (submenuTimer_ && host) host->CancelTimer(submenuTimer_);
+            timerHost_ = host;
             submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i] {
                 submenuTimer_ = 0;
                 if (highlight_ == i) OpenSubmenu(i, false);
@@ -1347,7 +1405,8 @@ private:
     }
 
     void Activate(int i) {
-        if (i < 0 || i >= static_cast<int>(items_.size())) return;
+        // Typed matches inside submenus come after items_ (see Refilter).
+        if (i < 0 || i >= static_cast<int>(items_.size() + flat_.size())) return;
         const MenuItem& m = At(i);
         if (m.separator || !m.enabled) return;
         if (!m.submenu.empty()) {
@@ -1371,6 +1430,7 @@ private:
     float scroll_ = 0;
     bool hasIcons_ = false, hasChecks_ = false;
     UINT_PTR submenuTimer_ = 0;
+    Host* timerHost_ = nullptr;
 };
 
 }  // namespace
@@ -1466,9 +1526,6 @@ Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog) {
     o.scrim = true;
     o.dismissOnOutside = false;
     o.dismissOnEscape = true;
-    o.onDismiss = [raw] {
-        if (raw->onClose) raw->onClose();
-    };
     host->ShowPopup(std::move(dialog), o);
     return raw;
 }

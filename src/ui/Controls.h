@@ -271,6 +271,7 @@ private:
 
     std::wstring text_;
     size_t caret_ = 0, anchor_ = 0;
+    wchar_t pendingHigh_ = 0;  // first half of a surrogate pair from WM_CHAR
     float scroll_ = 0;
     bool selecting_ = false;
     bool caretOn_ = true;
@@ -300,6 +301,7 @@ private:
 class ScrollView : public Widget {
 public:
     ScrollView();
+    ~ScrollView() override;
     template <class T, class... A>
     T* SetContent(A&&... args) {
         ClearChildren();
@@ -332,6 +334,7 @@ private:
     float dragStartY_ = 0, dragStartOffset_ = 0;
     bool overBar_ = false;
     UINT_PTR hideTimer_ = 0;
+    Host* timerHost_ = nullptr;
 };
 
 // A panel with a background color, optional border and corner radius.
@@ -379,7 +382,6 @@ public:
     Dialog(std::wstring title, int width);
     Widget* Body() const { return body_; }
     Widget* Footer() const { return footer_; }
-    std::function<void()> onClose;  // X button / Escape
     void Close();
     void Paint(Painter& p) override;
     bool OnKeyDown(const KeyEvent& e) override;

@@ -185,7 +185,13 @@ public:
 
         libConn_ = Connect(TheApp().libraryChanged, [this] { Rebuild(); });
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-            if (m & kChangeFile) Rebuild();
+            // Behind the player screen: rebuild when Home shows again (see Page).
+            if (!(m & kChangeFile)) return;
+            if (!compact_ && TheApp().PlayerShown()) stale_ = true;
+            else Rebuild();
+        });
+        screenConn_ = Connect(TheApp().screenChanged, [this] {
+            if (stale_ && !TheApp().PlayerShown()) Rebuild();
         });
         Rebuild();
     }
@@ -193,10 +199,12 @@ public:
     std::vector<Crumb> Breadcrumbs() const override { return {{Tr(L"Home"), Route{Section::Home, {}}}}; }
     long long ItemCount() const override { return count_; }
     void SetFilter(const std::wstring& text) override {
-        if (text == filter_) return;
-        filter_ = text;
-        Rebuild();
-        scroll_->ScrollTo(0, false);
+        searchDebounce_.Run(this, text, [this, text] {
+            if (text == filter_) return;
+            filter_ = text;
+            Rebuild();
+            scroll_->ScrollTo(0, false);
+        });
     }
     std::vector<MenuItem> MoreMenu() override {
         std::vector<MenuItem> m;
@@ -268,6 +276,7 @@ private:
     }
 
     void Rebuild() {
+        stale_ = false;
         App& app = TheApp();
         auto snap = app.library().Current();
         library::History& hist = app.history();
@@ -384,7 +393,7 @@ private:
         for (auto it = favs.rbegin(); it != favs.rend() && favCount < 20; ++it) {
             const std::wstring& path = *it;
             const library::MediaItem* m = IsUrl(path) ? nullptr : snap->FindItem(path);
-            if (!m && !IsUrl(path) && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            if (!m && !IsUrl(path) && !MaybeExists(path)) continue;
             const library::HistoryEntry* h = hist.Find(path);
             Entry e = MediaCard(path, m, h);
             e.favorite = false;  // every card here is one
@@ -523,11 +532,11 @@ private:
     int SearchGroups(const library::Snapshot& snap) {
         const std::wstring q = library::SearchFold(filter_);
         struct Hit {
-            std::wstring name, artist, image;
+            std::wstring name, artist, image, route;
             int songs = 0;
             bool mixed = false;
         };
-        std::map<std::wstring, Hit> artists, albums;  // folded name -> hit
+        std::map<std::wstring, Hit> artists, albums;  // folded name (+ album folder) -> hit
         for (const library::MediaItem& m : snap.items) {
             if (m.kind != library::MediaKind::Audio) continue;
             if (!m.artist.empty()) {
@@ -537,10 +546,12 @@ private:
                 ++a.songs;
             }
             if (!m.album.empty()) {
-                Hit& b = albums[library::SearchFold(m.album)];
+                // One card per album, as on the Albums page: name and folder (AlbumFolderKey).
+                Hit& b = albums[library::SearchFold(m.album) + L"\n" + AlbumFolderKey(m)];
                 if (b.name.empty()) {
                     b.name = m.album;
                     b.artist = m.artist;
+                    b.route = AlbumRouteArg(m);
                 }
                 if (b.artist != m.artist) b.mixed = true;
                 if (b.image.empty() && !m.offline) b.image = m.path;
@@ -560,16 +571,18 @@ private:
             ++n;
         }
         const int artistHits = n;
-        for (const auto& [key, b] : albums) {
+        for (const auto& entry : albums) {
+            const Hit& b = entry.second;
             const std::wstring by = b.mixed ? std::wstring(Tr(L"Various artists")) : ArtistLabel(b.artist);
-            if (!library::FoldedContains(key, q) && !library::FoldedContains(library::SearchFold(by), q)) continue;
+            if (!library::FoldedContains(library::SearchFold(b.name), q) && !library::FoldedContains(library::SearchFold(by), q))
+                continue;
             Entry e;
             e.kind = EntryKind::Album;
             e.title = b.name;
             e.subtitle = by;
             e.icon = "album";
             e.image = b.image;
-            results_[1]->AddEntry(std::move(e), Route{Section::Music, L"album:" + b.name});
+            results_[1]->AddEntry(std::move(e), Route{Section::Music, L"album:" + b.route});
             ++n;
         }
         results_[0]->Title()->text = Fmt(Tr(L"Artists · {0}"), static_cast<long long>(artistHits));
@@ -589,8 +602,10 @@ private:
     HomeSection* results_[4] = {};  // artists, albums, videos, music
     HomeSection *continue_ = nullptr, *listen_ = nullptr, *favorites_ = nullptr, *folders_ = nullptr,
                 *playlists_ = nullptr, *artists_ = nullptr, *added_ = nullptr, *addedMusic_ = nullptr;
-    ScopedConnection libConn_, playerConn_;
+    ScopedConnection libConn_, playerConn_, screenConn_;
     bool focusTaken_ = false;
+    bool stale_ = false;  // a file started or stopped while the player screen hid Home
+    SearchDebounce searchDebounce_;
 
     // The regular sections (not the search results).
     std::vector<HomeSection*> Sections() const {

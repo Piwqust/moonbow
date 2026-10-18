@@ -20,17 +20,21 @@ bool History::Load() {
     loaded_ = true;
     entries_.clear();
     dirty_ = false;
+    readOnly_ = false;
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"history.json"), &text)) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        readOnly_ = true;  // locked by a backup or sync tool: saving now would wipe it
+        return false;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) {
+    // Valid JSON of the wrong shape ([], "items": {}) is as unreadable as broken JSON.
+    const json::Value* items = doc && doc->IsObject() ? doc->Find("items") : nullptr;
+    if (!doc || !doc->IsObject() || (items && !items->IsArray())) {
         BackupCorruptFile(DataFilePath(L"history.json"));  // the next save would overwrite it
         return false;
     }
-    const json::Value* items = doc->Find("items");
     if (!items) return true;
     for (const json::Value& v : items->AsArray()) {
         HistoryEntry e;
@@ -51,6 +55,7 @@ bool History::Load() {
 }
 
 bool History::Save() {
+    if (readOnly_) return false;
     json::Value items = json::Value::MakeArray();
     for (const HistoryEntry& e : entries_) {
         json::Value v = json::Value::MakeObject();
@@ -107,9 +112,16 @@ bool History::RecordPlay(const std::wstring& path, const std::wstring& title, do
 
 bool History::UpdatePosition(const std::wstring& path, double position, double duration) {
     if (path.empty() || IsExcluded(path)) return false;
+    position = std::isfinite(position) ? std::max(0.0, position) : 0;
+    // Paused (or saved again within a second): nothing changed, so don't rewrite history.json.
+    if (!entries_.empty() && PathKey(entries_.front().path) == PathKey(path)) {
+        const HistoryEntry& f = entries_.front();
+        const bool sameDuration = !(duration > 0 && std::isfinite(duration)) || std::abs(f.duration - duration) < 1;
+        if (std::abs(f.position - position) < 1 && sameDuration && !f.title.empty()) return true;
+    }
     HistoryEntry* e = Touch(path);
     if (e->title.empty()) e->title = StemOf(path);
-    e->position = std::isfinite(position) ? std::max(0.0, position) : 0;
+    e->position = position;
     if (duration > 0 && std::isfinite(duration)) e->duration = duration;
     return true;
 }

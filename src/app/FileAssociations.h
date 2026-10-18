@@ -8,8 +8,6 @@ namespace app {
 // let apps take defaults themselves, so OpenDefaultAppsSettings() opens the
 // page where the user confirms.
 bool RegisterFileAssociations();
-void UnregisterFileAssociations();
-bool FileAssociationsRegistered();
 void OpenDefaultAppsSettings();
 
 }  // namespace app
