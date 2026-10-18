@@ -19,6 +19,7 @@ struct Track {
     std::wstring title;
     std::wstring lang;
     std::wstring codec;
+    int channels = 0;   // audio: demux-channel-count, 0 when unknown
     bool selected = false;
     bool external = false;
     std::wstring file;  // external-filename for external tracks
@@ -59,6 +60,8 @@ struct PlayerState {
     std::wstring artist, album;
     std::wstring hwdec;       // hwdec-current
     std::wstring lastError;
+    std::wstring failedPath;   // the file the last kChangeError is about (empty once a file loads)
+    std::wstring skippedPath;  // with kChangeAdvance: the file that failed, so mpv went on to the next
     std::vector<Track> tracks;
     std::vector<Chapter> chapters;
 };
@@ -181,6 +184,7 @@ private:
     // later QueueNext replaced (the queue was edited at the very end of a file).
     std::vector<std::pair<int64_t, std::wstring>> appended_;
     std::wstring advancedPath_;
+    std::wstring startedPath_;  // the file of the latest MPV_EVENT_START_FILE (Open or an appended entry)
     double advancedDuration_ = 0;
     double endedDuration_ = 0;  // duration of the file at its MPV_EVENT_END_FILE
     uint64_t nextObserver_ = 1000;

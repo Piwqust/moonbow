@@ -209,13 +209,6 @@ const char* TrackProp(const wchar_t* type) {
     return "sid";
 }
 
-std::wstring TrackLabel(const Track& t, int ordinal) {
-    if (t.title.empty() && t.lang.empty()) return Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal));
-    std::wstring label = t.title.empty() ? t.lang : t.title;
-    if (!t.title.empty() && !t.lang.empty()) label += L" (" + t.lang + L")";
-    return label;
-}
-
 // Embedded or external tracks of one type.
 std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
     std::vector<ChoiceRow> rows;
@@ -226,10 +219,10 @@ std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
         ++ordinal;
         if (t.external != external) continue;
         ChoiceRow r;
-        r.label = t.TitleFromFileName() ? t.Name()
-                  : external && t.title.empty() ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
-                                                 : TrackLabel(t, ordinal);
-        r.detail = t.codec;
+        r.label = external && t.title.empty() && !t.TitleFromFileName() && t.lang.empty()
+                      ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
+                      : TrackName(t, ordinal);
+        r.detail = TrackDetail(t);
         r.checked = t.selected;
         const int64_t id = t.id;
         r.select = [prop, id] { TheApp().player().SetTrack(prop, id); };

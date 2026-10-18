@@ -42,9 +42,12 @@ MenuItem Item(const wchar_t* label, Action a, const char* icon = "") {
 std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool allowOff) {
     std::vector<MenuItem> items;
     bool any = false;
+    int ordinal = 0;
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
-        MenuItem m{t.Label()};
+        const std::wstring detail = panel::TrackDetail(t);
+        const std::wstring name = panel::TrackName(t, ++ordinal);
+        MenuItem m{detail.empty() ? name : name + L" · " + detail};
         m.radio = true;
         m.checked = t.selected;
         any |= t.selected;
@@ -408,6 +411,10 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
+        // In a queue mpv goes on to the next file by itself: say which one it skipped.
+        if ((m & kChangeAdvance) && !PS().skippedPath.empty())
+            ShowToast(window_, Fmt(Tr(L"Skipped “{0}”: it can't be played"), {FileNameOf(PS().skippedPath)}), "info",
+                      4000);
         if (m & (kChangeTracks | kChangeFile | kChangeState | kChangeError)) InvalidateLayout();
         // The thin progress line repaints only when it grows by a pixel.
         if ((m & kChangeTime) && thinShown_) {
@@ -518,7 +525,9 @@ void PlayerView::OnLayout() {
     pip_->visible = pip;
     if (pip) pip_->Arrange(rect);
 
-    error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && !pip;
+    // Only once mpv has nothing left to try: a failed file in a queue is skipped (a toast says so),
+    // and the card would flash with the next file's name.
+    error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && s.idle && !pip;
     if (error_->visible) {
         const Rect v = video_->Inner(immersive);
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);

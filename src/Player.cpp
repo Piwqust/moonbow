@@ -301,6 +301,10 @@ unsigned Player::ProcessEvents() {
                 const auto it = std::find_if(appended_.begin(), appended_.end(), [start](const auto& e) {
                     return start && e.first == start->playlist_entry_id;
                 });
+                // A file that failed right before: mpv skipped it on its own (the UI says so).
+                state_.skippedPath = it != appended_.end() && !state_.failedPath.empty() ? state_.failedPath
+                                                                                          : std::wstring();
+                if (it != appended_.end()) startedPath_ = it->second;
                 if (it != appended_.end()) {
                     advancedDuration_ = endedDuration_;
                     advancedPath_ = it->second;
@@ -329,6 +333,7 @@ unsigned Player::ProcessEvents() {
                 ++state_.loadSerial;
                 state_.eof = false;
                 state_.lastError.clear();
+                state_.failedPath.clear();
                 changes |= kChangeFile | kChangeState;
                 break;
             case MPV_EVENT_LOG_MESSAGE: {
@@ -357,7 +362,11 @@ unsigned Player::ProcessEvents() {
                 endedDuration_ = state_.duration;
                 if (end->reason == MPV_END_FILE_REASON_ERROR) {
                     state_.lastError = Utf8ToWide(api_.mpv_error_string(end->error));
-                    changes |= kChangeError;
+                    state_.failedPath = startedPath_;
+                    // The previous file's "loaded" must not outlive it: opened after a playing file,
+                    // the path change would otherwise count as a load and clear the error at once.
+                    state_.fileLoaded = false;
+                    changes |= kChangeError | kChangeState;
                 }
                 break;
             }
@@ -454,6 +463,7 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
                     track.title = NodeString(MapGet(t, "title"));
                     track.lang = NodeString(MapGet(t, "lang"));
                     track.codec = NodeString(MapGet(t, "codec"));
+                    track.channels = static_cast<int>(NodeInt(MapGet(t, "demux-channel-count")));
                     track.selected = NodeFlag(MapGet(t, "selected"));
                     track.external = NodeFlag(MapGet(t, "external"));
                     track.file = NodeString(MapGet(t, "external-filename"));
@@ -550,6 +560,7 @@ void Player::Open(const std::wstring& path, double start) {
     queuedEntry_ = 0;
     appended_.clear();
     ++queueGen_;
+    startedPath_ = path;
     const std::string utf8 = WideToUtf8(path);
     if (start > 0) {
         const std::string opts = "start=" + std::to_string(start);
