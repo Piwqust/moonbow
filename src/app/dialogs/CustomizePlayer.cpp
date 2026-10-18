@@ -526,8 +526,8 @@ void PaletteCell::Paint(Painter& p) {
                                                                          : Rect{rect.Cx() - 15, rect.y, 30, 32};
     DashedRect(p, box, hot ? c.textSecondary : c.textTertiary);
     PaintItemIcon(p, id_, box, hot ? c.textPrimary : c.textSecondary);
-    // The label stays inside the cell (+8 of the hover pad on each side), two lines at most.
-    const float w = rect.w + 12;
+    // The label stays inside the cell, two lines at most.
+    const float w = rect.w;
     const std::wstring label = Hyphenate(GlueLastWord(Tr(PaletteLabelOf(id_))), TextStyle::Body, w);
     p.Text(label, {rect.Cx() - w / 2, rect.y + 40, w, 42}, TextStyle::Body, hot ? c.textPrimary : c.textSecondary,
            HAlign::Center, VAlign::Top, gfx::kTextWrap | gfx::kTextEllipsis);

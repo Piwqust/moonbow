@@ -320,9 +320,11 @@ private:
         }
         // Version, libmpv and licences.
         auto* aboutRow = navPanel->Add<Widget>();
-        aboutRow->dir = Dir::Row;
+        aboutRow->dir = Dir::Column;  // under a line: not one of the categories above
         aboutRow->width = Length::Grow();
-        aboutRow->pad = {16, 6, 16, 12};
+        aboutRow->pad = {16, 0, 16, 10};
+        aboutRow->gap = 8;
+        aboutRow->Add<Divider>();
         auto* about = aboutRow->Add<LinkButton>(Tr(L"About Lumen"), TextStyle::Small);
         about->id = "about";
         about->onClick = [this] { ShowAboutDialog(this); };

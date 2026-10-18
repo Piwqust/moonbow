@@ -62,6 +62,17 @@ public:
         const Size t = Children().front()->Measure(std::max(1.0f, availW - pad.H() - c.w - gap), availH);
         return {availW, std::max(t.h, c.h) + pad.V()};
     }
+    // The flex row would measure the block at the full width (one line) and cut its second line.
+    void OnLayout() override {
+        if (Children().size() < 2) return FlexLayout();
+        const Rect in = rect.Inset(pad);
+        Widget* control = Children().back().get();
+        const Size c = control->Measure(in.w, in.h);
+        const float tw = std::max(1.0f, in.w - c.w - gap);
+        const Size t = Children().front()->Measure(tw, in.h);
+        Children().front()->Arrange({in.x, in.y + std::round((in.h - t.h) / 2), tw, t.h});
+        control->Arrange({in.Right() - c.w, in.y + std::round((in.h - c.h) / 2), c.w, c.h});
+    }
 };
 
 // =============================================================================================
@@ -508,7 +519,11 @@ public:
         value_->wrap = true;
         value_->maxLines = 3;
         value_->valign = VAlign::Top;
-        if (gfx::Text::Get().Measure(value, TextStyle::Body).width > 360) tooltip = value;
+        // The full value on hover: it may wrap past the three lines (paths, unbroken names).
+        if (gfx::Text::Get().Measure(value, TextStyle::Body).width > 360) {
+            value_->tooltip = value;
+            value_->interactive = true;
+        }
     }
     Size MeasureContent(float availW, float) override {
         const float lh = gfx::Text::Get().LineHeight(TextStyle::Body);

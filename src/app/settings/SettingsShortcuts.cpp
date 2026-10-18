@@ -13,27 +13,41 @@ using namespace ui;
 
 namespace {
 
-constexpr float kChipW = 200, kMinChipW = 110, kResetW = 28;
+constexpr float kChipW = 200, kMinChipW = 150, kResetW = 28, kMinActionW = 180;
 
 // Action | reset | first key | other keys. The reset slot sits left of the chips, so the chips end
-// where every control of the page ends; the chips narrow before the action name drops below 160.
+// where every control of the page ends. The chips narrow to 150 first; below that the keys move to
+// a second line under the action name (as Windows Settings stacks a narrow row).
 class ShortcutLine : public Widget {
 public:
     ShortcutLine() {
         width = Length::Grow();
         gap = 12;
     }
-    Size MeasureContent(float availW, float) override { return {availW, pad.V() + 32}; }
+    bool Stacked(float innerW) const { return innerW - kResetW - 3 * gap - 2 * kMinChipW < kMinActionW; }
+    Size MeasureContent(float availW, float) override {
+        return {availW, pad.V() + (Stacked(availW - pad.H()) ? 32 + 8 + 32 : 32.0f)};
+    }
     void OnLayout() override {
         if (Children().size() < 4) return;
         const Rect in = rect.Inset(pad);
-        const float chipW = std::clamp(std::floor((in.w - kResetW - 3 * gap - 160) / 2), kMinChipW, kChipW);
-        const float labelW = std::max(0.0f, in.w - 2 * chipW - kResetW - 3 * gap);
         Widget* label = Children()[0].get();
-        label->Arrange({in.x, in.y, labelW, in.h});
-        Children()[1]->Arrange({in.x + labelW + gap, in.Cy() - kResetW / 2, kResetW, kResetW});
-        Children()[2]->Arrange({in.Right() - 2 * chipW - gap, in.y, chipW, in.h});
-        Children()[3]->Arrange({in.Right() - chipW, in.y, chipW, in.h});
+        float labelW = 0;
+        if (Stacked(in.w)) {
+            labelW = std::max(0.0f, in.w - kResetW - gap);
+            label->Arrange({in.x, in.y, labelW, 32});
+            Children()[1]->Arrange({in.Right() - kResetW, in.y + 2, kResetW, kResetW});
+            const float chipW = std::floor((in.w - gap) / 2);
+            Children()[2]->Arrange({in.x, in.y + 40, chipW, 32});
+            Children()[3]->Arrange({in.Right() - chipW, in.y + 40, chipW, 32});
+        } else {
+            const float chipW = std::clamp(std::floor((in.w - kResetW - 3 * gap - kMinActionW) / 2), kMinChipW, kChipW);
+            labelW = std::max(0.0f, in.w - 2 * chipW - kResetW - 3 * gap);
+            label->Arrange({in.x, in.y, labelW, in.h});
+            Children()[1]->Arrange({in.x + labelW + gap, in.Cy() - kResetW / 2, kResetW, kResetW});
+            Children()[2]->Arrange({in.Right() - 2 * chipW - gap, in.y, chipW, in.h});
+            Children()[3]->Arrange({in.Right() - chipW, in.y, chipW, in.h});
+        }
         // A cut action name is readable in full on hover.
         if (auto* l = dynamic_cast<Label*>(label)) {
             const bool cut = l->Measure(kInf, kInf).w > labelW + 0.5f;
