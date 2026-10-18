@@ -270,6 +270,7 @@ private:
 
     std::wstring text_;
     size_t caret_ = 0, anchor_ = 0;
+    wchar_t pendingHigh_ = 0;  // first half of a surrogate pair from WM_CHAR
     float scroll_ = 0;
     bool selecting_ = false;
     bool caretOn_ = true;

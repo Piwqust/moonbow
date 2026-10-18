@@ -693,6 +693,19 @@ void TextBox::Insert(std::wstring_view s) {
 
 bool TextBox::OnChar(wchar_t ch) {
     if (readOnly) return false;
+    // WM_CHAR delivers an emoji as two messages: insert the pair at once, so onChange (search)
+    // never sees half of it.
+    if (IS_HIGH_SURROGATE(ch)) {
+        pendingHigh_ = ch;
+        return true;
+    }
+    if (IS_LOW_SURROGATE(ch) && pendingHigh_) {
+        const wchar_t pair[2] = {pendingHigh_, ch};
+        pendingHigh_ = 0;
+        Insert(std::wstring_view(pair, 2));
+        return true;
+    }
+    pendingHigh_ = 0;
     Insert(std::wstring_view(&ch, 1));
     return true;
 }
@@ -709,28 +722,41 @@ bool TextBox::OnKeyDown(const KeyEvent& e) {
         while (i < text_.size() && IsWordChar(text_[i])) ++i;
         return i;
     };
+    // One character back / forward: an emoji is a surrogate pair, never split it.
+    auto prev = [&](size_t i) {
+        if (i == 0) return i;
+        --i;
+        if (i > 0 && IS_LOW_SURROGATE(text_[i]) && IS_HIGH_SURROGATE(text_[i - 1])) --i;
+        return i;
+    };
+    auto next = [&](size_t i) {
+        if (i >= text_.size()) return text_.size();
+        ++i;
+        if (i < text_.size() && IS_LOW_SURROGATE(text_[i]) && IS_HIGH_SURROGATE(text_[i - 1])) ++i;
+        return i;
+    };
     HWND hwnd = GetHost() ? GetHost()->Hwnd() : nullptr;
     switch (e.key) {
         case VK_LEFT:
             if (!shift && caret_ != anchor_) MoveCaret(std::min(caret_, anchor_), false);
-            else MoveCaret(ctrl ? wordLeft(caret_) : (caret_ > 0 ? caret_ - 1 : 0), shift);
+            else MoveCaret(ctrl ? wordLeft(caret_) : prev(caret_), shift);
             return true;
         case VK_RIGHT:
             if (!shift && caret_ != anchor_) MoveCaret(std::max(caret_, anchor_), false);
-            else MoveCaret(ctrl ? wordRight(caret_) : caret_ + 1, shift);
+            else MoveCaret(ctrl ? wordRight(caret_) : next(caret_), shift);
             return true;
         case VK_HOME: MoveCaret(0, shift); return true;
         case VK_END: MoveCaret(text_.size(), shift); return true;
         case VK_BACK:
             if (readOnly) return true;
-            if (caret_ == anchor_ && caret_ > 0) anchor_ = ctrl ? wordLeft(caret_) : caret_ - 1;
+            if (caret_ == anchor_ && caret_ > 0) anchor_ = ctrl ? wordLeft(caret_) : prev(caret_);
             DeleteSelection();
             MoveCaret(caret_, false);
             Changed();
             return true;
         case VK_DELETE:
             if (readOnly) return true;
-            if (caret_ == anchor_ && caret_ < text_.size()) anchor_ = ctrl ? wordRight(caret_) : caret_ + 1;
+            if (caret_ == anchor_ && caret_ < text_.size()) anchor_ = ctrl ? wordRight(caret_) : next(caret_);
             DeleteSelection();
             MoveCaret(caret_, false);
             Changed();
