@@ -17,10 +17,14 @@ param([string]$Out = (Join-Path $env:TEMP "lumen-qa\worst"), [switch]$Force)
 $ErrorActionPreference = "Stop"
 $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 if (-not $ffmpeg) { throw "ffmpeg is not on PATH (where ffmpeg)" }
-if ($Force -and (Test-Path $Out)) { Remove-Item -Recurse -Force $Out }
+# Bump when the content changes: an older set is rebuilt instead of being topped up.
+$version = "2"
+$stamp = Join-Path $Out ".worstcase-version"
+if ((Test-Path $Out) -and ($Force -or -not (Test-Path $stamp) -or (Get-Content -Raw $stamp).Trim() -ne $version)) { Remove-Item -Recurse -Force $Out }
 New-Item -ItemType Directory -Force $Out | Out-Null
 $tmp = Join-Path (Split-Path -Parent $Out) ((Split-Path -Leaf $Out) + "-base")  # outside the library roots
 New-Item -ItemType Directory -Force $tmp | Out-Null
+[IO.File]::WriteAllText($stamp, $version)
 $script:made = 0
 
 function SubDir([string]$rel) { $p = Join-Path $Out $rel; New-Item -ItemType Directory -Force $p | Out-Null; $p }
@@ -51,8 +55,9 @@ $tone1 = Join-Path $tmp "tone-1s.mp3"
 Make $tone1 { param($o) FF @("-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-ac", "1", "-ar", "22050", "-b:a", "32k", "-map_metadata", "-1", $o) }
 $tone4 = Join-Path $tmp "tone-4s.mp3"
 Make $tone4 { param($o) FF @("-f", "lavfi", "-i", "sine=frequency=330:duration=4", "-ac", "1", "-ar", "22050", "-b:a", "32k", "-map_metadata", "-1", $o) }
-$clip = Join-Path $tmp "clip-320x180.mp4"
-Make $clip { param($o) FF @("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=2", "-f", "lavfi", "-i", "sine=frequency=550:duration=2",
+# 20 s: long enough that a scenario still shows the file it opened (2 s clips had ended and moved on).
+$clip = Join-Path $tmp "clip-320x180-20s.mp4"
+Make $clip { param($o) FF @("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=20", "-f", "lavfi", "-i", "sine=frequency=550:duration=20",
   "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "32k", "-shortest", $o) }
 
 function Song([string]$path, [hashtable]$tags, [string]$cover = "", [string]$src = $tone4) {
@@ -66,7 +71,7 @@ function Song([string]$path, [hashtable]$tags, [string]$cover = "", [string]$src
     FF $a
   }
 }
-function Video([string]$path, [int]$w, [int]$h, [double]$sec = 3, [hashtable]$tags = @{}) {
+function Video([string]$path, [int]$w, [int]$h, [double]$sec = 20, [hashtable]$tags = @{}) {
   Make $path {
     param($o)
     FF (@("-f", "lavfi", "-i", "testsrc2=size=${w}x${h}:rate=24:duration=$sec", "-f", "lavfi", "-i", "sine=frequency=500:duration=$sec",

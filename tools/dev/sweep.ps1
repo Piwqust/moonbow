@@ -456,7 +456,7 @@ function Run-Step($step, [int]$procId) {
   if ($size) { Apply-Size $procId $size; $acted = $true }
   foreach ($k in @(Get-Prop $step "keys" @())) { if ($k) { Send-Key $h $k; Start-Sleep -Milliseconds 120; $acted = $true } }
   $text = Get-Prop $step "type"
-  if ($text) { Send-Text $h $text; $acted = $true }
+  if ($text) { Send-Text $h ([Environment]::ExpandEnvironmentVariables([string]$text)); $acted = $true }
   $mods = 0; foreach ($m in @(Get-Prop $step "mods" @())) { switch ("$m".ToLower()) { "ctrl" { $mods = $mods -bor 1 } "shift" { $mods = $mods -bor 2 } "alt" { $mods = $mods -bor 4 } } }
   foreach ($kind in "move", "click", "double", "right", "wheel") {
     $sel = Get-Prop $step $kind
@@ -520,7 +520,9 @@ function Take-Capture([int]$procId, [string]$label, [bool]$final) {
   $audit = $null
   if ($okTree) {
     $json = Join-Path $dir "$base.audit.json"; $md = Join-Path $dir "$base.audit.md"
-    $a = @($auditPy, $tree, "--allow", $allowFile, "--json", $json, "--md", $md, "--quiet", "--context", $sc["name"], "--state", $state)
+    # Only the captured window: the others (the main window behind Settings) have their own scenarios.
+    $a = @($auditPy, $tree, "--allow", $allowFile, "--json", $json, "--md", $md, "--quiet", "--context", $sc["name"], "--state", $state,
+           "--window", ("^" + [regex]::Escape([LumenSweep]::Title($h)) + "$"))
     if ($hit) { $a += @("--hitmap", $hit, "--hitmap-step", "$($script:hitStep)", "--hitmap-window", ("^" + [regex]::Escape([LumenSweep]::Title($h)) + "$")) }
     & $script:plan.python @a 2>&1 | Out-Null
     if (Test-Path $json) { $audit = "$base.audit.json" }
@@ -675,6 +677,7 @@ if ($Reaudit) {
       $base = [IO.Path]::GetFileNameWithoutExtension($cap.png)
       $a = @($auditPy, (Join-Path $dir $cap.tree), "--allow", $allowFile, "--json", (Join-Path $dir "$base.audit.json"), "--md", (Join-Path $dir "$base.audit.md"),
              "--quiet", "--context", $s["name"], "--state", $cap.state)
+      if ($cap.window) { $a += @("--window", ("^" + [regex]::Escape([string]$cap.window) + "$")) }
       if ($cap.hitmap) {
         $stepPx = if ([int](($cap.client -split 'x')[0]) -gt 1400) { 16 } else { 8 }
         $a += @("--hitmap", (Join-Path $dir $cap.hitmap), "--hitmap-step", "$stepPx", "--hitmap-window", ("^" + [regex]::Escape([string]$cap.window) + "$"))

@@ -331,7 +331,7 @@ def match_rule(rule: dict, f: dict, node: Node, other: Node | None, win: Window,
             return False
         if not rx(rule.get(prefix + "id"), nd.id):
             return False
-        if rule.get(prefix + "text") is not None and not rx(rule.get(prefix + "text"), nd.text or ""):
+        if rule.get(prefix + "text") is not None and not any(rx(rule[prefix + "text"], t) for t in ([x["text"] for x in nd.texts] or [nd.text or ""])):
             return False
         if not rx(rule.get(prefix + "parent"), nd.parent.type if nd.parent else ""):
             return False
@@ -678,6 +678,10 @@ def main(argv=None):
                 if match_rule(rule, f, node, other, _win, args.context) if node else (
                         rule.get("check") in (check, "*") and rx(rule.get("context"), args.context)
                         and rule.get("type") is None and re.search(rule.get("region") or "", region or "") is not None):
+                    if rule.get("severity"):  # a downgrade, not an exemption
+                        f["severity"] = rule["severity"]
+                        f["note"] = rule.get("reason", "")
+                        continue
                     f["allowed"] = rule.get("reason", "allowlisted")
                     break
             findings.append(f)
