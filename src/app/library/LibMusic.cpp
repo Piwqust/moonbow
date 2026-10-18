@@ -404,8 +404,10 @@ protected:
                   {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }}});
             return;
         }
+        // G-09: the same two buttons as the empty Videos page.
         e.Set("songs", Tr(L"No music found"), Tr(L"The library folders don't contain supported audio files yet."),
-              {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }}});
+              {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }},
+               {Tr(L"Rescan"), ButtonKind::Secondary, "refresh", [] { RescanLibrary(); }}});
     }
 
     void ShowMenu(int index, Point at) override {

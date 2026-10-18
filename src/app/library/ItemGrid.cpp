@@ -65,10 +65,6 @@ void PaintDamagedChip(Painter& p, const Rect& b, Color bg) {
 // When Enter opened the page, its grid lands on the first item with a focus ring.
 uint64_t g_keyActivateTick = 0;
 
-}  // namespace
-
-namespace {
-
 // The file or folder an entry stands for, to name its folder: albums carry their name as the
 // path, so their cover track is used.
 const std::wstring& LocationOf(const Entry& e) {

@@ -274,7 +274,9 @@ private:
         e.audio = m ? m->kind == library::MediaKind::Audio
                     : h ? h->kind == library::MediaKind::Audio : library::KindOf(path) != library::MediaKind::Video;
         e.title = MediaTitle(path, m, h ? h->title : std::wstring());
-        if (e.audio) e.subtitle = m ? ArtistLabel(m->artist) : url ? std::wstring(Tr(L"Network stream")) : std::wstring();
+        // Untagged songs leave the card's second line empty (G-08): "Unknown artist" under every
+        // cover said nothing.
+        if (e.audio) e.subtitle = m ? m->artist : url ? std::wstring(Tr(L"Network stream")) : std::wstring();
         if (!url && !(m && m->offline)) e.image = path;
         e.icon = url ? "streaming" : e.audio ? "music" : "video";
         e.duration = m && m->duration > 0 ? m->duration : h ? h->duration : 0;
@@ -326,7 +328,10 @@ private:
                 const std::wstring q = library::SearchFold(filter_);
                 for (const library::MediaItem* m : found) {
                     Entry e = MediaCard(m->path, m, nullptr);
-                    if (k == 1) e.extra = AlbumLabel(m->album);
+                    if (k == 1) {
+                        e.subtitle = ArtistLabel(m->artist);  // a list column: says "Unknown artist"
+                        e.extra = AlbumLabel(m->album);
+                    }
                     // Matched by the file name only: show it, or the row wouldn't say why it is here.
                     if (k == 1 && !library::FoldedContains(library::SearchFold(m->title + L"\n" + m->artist + L"\n" + m->album), q))
                         e.subtitle = library::FileNameOf(m->path);

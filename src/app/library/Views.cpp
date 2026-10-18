@@ -359,7 +359,9 @@ int Page::AddMedia(const library::MediaItem& m) {
     e.audio = m.kind == library::MediaKind::Audio;
     e.title = MediaTitle(m.path, &m);
     if (e.audio) {
-        e.subtitle = ArtistLabel(m.artist);
+        // G-08: a card of an untagged song leaves its second line empty instead of repeating
+        // "Unknown artist" under every cover; list columns still say it.
+        e.subtitle = !m.artist.empty() || list_ || compact_ ? ArtistLabel(m.artist) : std::wstring();
         e.extra = AlbumLabel(m.album);
     }
     if (!m.offline) e.image = m.path;
