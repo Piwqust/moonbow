@@ -227,6 +227,9 @@ private:
         const bool open = h_ != nullptr;
         const double started = NowMs();
         Close();
+        // The instance's decoder buffers, packets and the frame grid were many mid-sized blocks:
+        // give the heap's free pages back, or private memory stays ~25 MB above where it was.
+        if (open) HeapCompact(GetProcessHeap(), 0);
         if (open) PreviewTrace(NowMs() - started, "preview instance closed");
         std::lock_guard lock(mu_);
         closing_ = false;

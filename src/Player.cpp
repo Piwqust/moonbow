@@ -61,6 +61,9 @@ double NodeDouble(const mpv_node* n) {
     return 0;
 }
 
+// reply_userdata of QueueNext's loadfile; the low bits carry Player::queueGen_.
+constexpr uint64_t kAppendReply = 1ull << 40;
+
 bool NodeFlag(const mpv_node* n) {
     return n && n->format == MPV_FORMAT_FLAG && n->u.flag;
 }
@@ -158,6 +161,12 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("input-cursor", "no");
     opt("cursor-autohide", "no");
     opt("load-scripts", "no");
+    // mpv's built-in clients Lumen has its own UI for: each is a Lua VM (or thread) to start and
+    // tear down with every launch and exit. mpv's own media session would also sit next to
+    // Lumen's in the Windows media flyout (app/SystemIntegration).
+    for (const char* name : {"load-stats-overlay", "load-console", "load-select", "load-positioning",
+                             "load-commands", "load-context-menu", "media-controls"})
+        opt(name, "no");
     opt("ytdl", "no");
     opt("terminal", "no");
     opt("volume-max", "150");
@@ -184,7 +193,15 @@ bool Player::InitOnWorker(int64_t wid) {
     std::wstring shots = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
     if (!shots.empty()) opt("screenshot-dir", WideToUtf8(shots));
 
-    for (const auto& [name, value] : startOptions_) opt(name.c_str(), value);
+    std::string hwdec = settings::kAutoHwdec, vf;
+    for (const auto& [name, value] : startOptions_) {
+        opt(name.c_str(), value);
+        if (name == "hwdec") hwdec = value;
+        if (name == "vf") vf = value;
+    }
+    // CPU filters (a Bwdif/Yadif deinterlacer, deblocking) need the frames in RAM: on zero-copy
+    // d3d11 frames mpv drops the filter. app/player/LiveState switches this live.
+    if (!vf.empty() && vf.find("d3d11vpp") == std::string::npos) opt("hwdec", CopyBackHwdec(hwdec));
 
     Trace("mpv initialize");
     int err = api_.mpv_initialize(mpv_);
@@ -193,6 +210,9 @@ bool Player::InitOnWorker(int64_t wid) {
         error_ = L"mpv_initialize: " + Utf8ToWide(api_.mpv_error_string(err));
         return false;
     }
+    // A .lrc next to a song is its lyrics (the music view shows them), not a subtitle track.
+    const char* noLrc[] = {"change-list", "sub-auto-exts", "remove", "lrc", nullptr};
+    api_.mpv_command(mpv_, noLrc);
     return true;
 }
 
@@ -268,10 +288,26 @@ unsigned Player::ProcessEvents() {
                 }
                 break;
             }
-            case MPV_EVENT_START_FILE:
+            case MPV_EVENT_START_FILE: {
                 // Forget the previous file's size, so window fitting waits for this one's.
                 state_.videoW = state_.videoH = 0;
                 changes |= kChangeVideoSize;
+                // mpv went on to the queued file by itself.
+                const auto* start = static_cast<const mpv_event_start_file*>(ev->data);
+                if (queuedEntry_ > 0 && start && start->playlist_entry_id == queuedEntry_) {
+                    advancedDuration_ = endedDuration_;
+                    queuedNext_.clear();
+                    queuedEntry_ = 0;
+                    ++queueGen_;
+                    changes |= kChangeAdvance;
+                }
+                break;
+            }
+            case MPV_EVENT_COMMAND_REPLY:
+                if (ev->reply_userdata == kAppendReply + queueGen_ && ev->error >= 0 && !queuedNext_.empty()) {
+                    const auto* cmd = static_cast<const mpv_event_command*>(ev->data);
+                    queuedEntry_ = cmd ? NodeInt(MapGet(cmd->result, "playlist_entry_id")) : 0;
+                }
                 break;
             case MPV_EVENT_FILE_LOADED:
                 Trace("file loaded");
@@ -302,6 +338,9 @@ unsigned Player::ProcessEvents() {
             }
             case MPV_EVENT_END_FILE: {
                 auto* end = static_cast<mpv_event_end_file*>(ev->data);
+                // Property changes come after queued events, so the duration is still this
+                // file's; by START_FILE of the next one it can already be gone.
+                endedDuration_ = state_.duration;
                 if (end->reason == MPV_END_FILE_REASON_ERROR) {
                     state_.lastError = Utf8ToWide(api_.mpv_error_string(end->error));
                     changes |= kChangeError;
@@ -492,6 +531,10 @@ void Player::Unobserve(uint64_t id) {
 
 void Player::Open(const std::wstring& path, double start) {
     if (state_.fileLoaded) SaveWatchLater();
+    // "replace" clears mpv's playlist, the queued next file included.
+    queuedNext_.clear();
+    queuedEntry_ = 0;
+    ++queueGen_;
     const std::string utf8 = WideToUtf8(path);
     if (start > 0) {
         const std::string opts = "start=" + std::to_string(start);
@@ -503,7 +546,50 @@ void Player::Open(const std::wstring& path, double start) {
 
 void Player::Stop() {
     if (state_.fileLoaded) SaveWatchLater();
+    queuedNext_.clear();
+    queuedEntry_ = 0;
+    ++queueGen_;
     Cmd({"stop"});
+}
+
+void Player::QueueNext(const std::wstring& path) {
+    if (!mpv_ || path == queuedNext_) return;
+    queuedNext_ = path;
+    queuedEntry_ = 0;
+    ++queueGen_;
+    // Everything but the playing entry: the file queued before, or the one that just ended.
+    Cmd({"playlist-clear"});
+    if (path.empty()) return;
+    const std::string utf8 = WideToUtf8(path);
+    const char* argv[] = {"loadfile", utf8.c_str(), "append", nullptr};
+    api_.mpv_command_async(mpv_, kAppendReply + queueGen_, argv);
+}
+
+void Player::ForgetPosition(const std::wstring& path) {
+    if (path.empty()) return;
+    const std::string utf8 = WideToUtf8(path);
+    Cmd({"delete-watch-later-config", utf8.c_str()});
+}
+
+std::string Player::CopyBackHwdec(const std::string& hwdec) {
+    std::string out;
+    size_t start = 0;
+    while (start <= hwdec.size()) {
+        size_t comma = hwdec.find(',', start);
+        if (comma == std::string::npos) comma = hwdec.size();
+        std::string api = hwdec.substr(start, comma - start);
+        start = comma + 1;
+        if (api.empty()) continue;
+        if (api == "no" || api == "yes") {
+            if (api == "yes") api = "auto-copy";
+        } else if (api.rfind("auto", 0) == 0) {
+            api = "auto-copy";
+        } else if (api.size() < 5 || api.compare(api.size() - 5, 5, "-copy") != 0) {
+            api += "-copy";
+        }
+        if (("," + out + ",").find("," + api + ",") == std::string::npos) out += (out.empty() ? "" : ",") + api;
+    }
+    return out.empty() ? hwdec : out;
 }
 
 void Player::TogglePause() {
@@ -614,6 +700,7 @@ void Player::SaveWatchLater() {
 void Player::Shutdown() {
     if (init_.joinable()) init_.join();
     if (mpv_) {
+        Trace("close: player shutdown");
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
         if (state_.fileLoaded) {
             if (NearEnd())
@@ -621,8 +708,10 @@ void Player::Shutdown() {
             else if (rememberPosition)
                 Cmd({"write-watch-later-config"}, false);
         }
+        Trace("close: watch-later written");
         api_.mpv_set_wakeup_callback(mpv_, nullptr, nullptr);
         api_.mpv_terminate_destroy(mpv_);
+        Trace("close: mpv destroyed");
         mpv_ = nullptr;
     }
     state_.ready = false;

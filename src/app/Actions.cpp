@@ -11,6 +11,7 @@
 #include "app/player/PlayerView.h"
 
 #include <cmath>
+#include <cwctype>
 #include <map>
 
 namespace app {
@@ -151,9 +152,20 @@ void ExpectOsd(PendingOsd kind) {
     g_pendingUntil = ui::AnimFloat::Now() + 1500;
 }
 
+// A track for the OSD: its title and language name ("Русский" rather than "rus").
 std::wstring SelectedTrackText(const wchar_t* type) {
-    for (const Track& t : PS().tracks)
-        if (t.selected && t.type == type) return t.Name();
+    for (const Track& t : PS().tracks) {
+        if (!t.selected || t.type != type) continue;
+        if (t.lang.empty()) return t.Name();
+        const std::wstring lang = LanguageName(t.lang);
+        if (t.TitleFromFileName() || t.title.empty()) {
+            if (t.TitleFromFileName()) return FileNameOf(t.file) + L" (" + lang + L")";
+            return lang;
+        }
+        // "Русский 660 Hz" already says it.
+        if (library::SearchFold(t.title).find(library::SearchFold(lang)) != std::wstring::npos) return t.title;
+        return t.title + L" (" + lang + L")";
+    }
     return Tr(L"off");
 }
 
@@ -166,14 +178,53 @@ double Skip(const char* key, double fallback) {
     return v >= 1 ? v : fallback;
 }
 
+}  // namespace
+
 void SeekBy(double seconds) {
     const PlayerState& s = PS();
     if (!s.fileLoaded) return;
     TheApp().player().SeekRelative(seconds);
-    const double target = std::clamp(s.position + seconds, 0.0, s.duration > 0 ? s.duration : s.position + seconds);
+    // Quick repeats (wheel notches, held keys) land before mpv reports the first seek: count on
+    // from the previous target, so the message shows where playback goes.
+    static double lastTarget = 0, lastAt = -1e9;
+    static uint64_t lastSerial = 0;
+    const double now = ui::AnimFloat::Now();
+    const double from = now - lastAt < 400 && lastSerial == s.loadSerial ? lastTarget : s.position;
+    const double target = std::clamp(from + seconds, 0.0, s.duration > 0 ? s.duration : from + seconds);
+    lastTarget = target, lastAt = now, lastSerial = s.loadSerial;
     if (s.duration > 0)
         Toast(Clock(target) + L" / " + Clock(s.duration), seconds >= 0 ? "forward-10-sec" : "backward-10-sec");
 }
+
+std::wstring LanguageName(const std::wstring& code) {
+    // ISO 639-2 (B and T) and 639-1 codes of the languages releases usually carry.
+    static const struct {
+        const wchar_t* codes;  // space-separated
+        const wchar_t* name;   // English, translated with Tr()
+    } kLanguages[] = {
+        {L"eng en", L"English"},      {L"rus ru", L"Russian"},        {L"ukr uk", L"Ukrainian"},
+        {L"bel be", L"Belarusian"},   {L"kaz kk", L"Kazakh"},         {L"jpn ja", L"Japanese"},
+        {L"chi zho zh", L"Chinese"},  {L"kor ko", L"Korean"},         {L"ger deu de", L"German"},
+        {L"fre fra fr", L"French"},   {L"spa es", L"Spanish"},        {L"ita it", L"Italian"},
+        {L"por pt", L"Portuguese"},   {L"pol pl", L"Polish"},         {L"cze ces cs", L"Czech"},
+        {L"dut nld nl", L"Dutch"},    {L"swe sv", L"Swedish"},        {L"fin fi", L"Finnish"},
+        {L"nor nob nno no nb", L"Norwegian"}, {L"dan da", L"Danish"}, {L"hun hu", L"Hungarian"},
+        {L"gre ell el", L"Greek"},    {L"tur tr", L"Turkish"},        {L"ara ar", L"Arabic"},
+        {L"heb he", L"Hebrew"},       {L"hin hi", L"Hindi"},          {L"tha th", L"Thai"},
+        {L"vie vi", L"Vietnamese"},   {L"ind id", L"Indonesian"},     {L"rum ron ro", L"Romanian"},
+        {L"bul bg", L"Bulgarian"},    {L"srp sr", L"Serbian"},        {L"hrv hr", L"Croatian"},
+    };
+    std::wstring key = code.substr(0, code.find_first_of(L"-_"));
+    for (wchar_t& c : key) c = static_cast<wchar_t>(std::towlower(c));
+    if (key.empty()) return code;
+    for (const auto& l : kLanguages) {
+        const std::wstring codes = std::wstring(L" ") + l.codes + L" ";
+        if (codes.find(L" " + key + L" ") != std::wstring::npos) return Tr(l.name);
+    }
+    return code;
+}
+
+namespace {
 
 void ChangeSpeed(double delta, bool reset = false) {
     const double steps[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0};

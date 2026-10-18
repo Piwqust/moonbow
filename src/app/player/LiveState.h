@@ -61,6 +61,9 @@ public:
     // the hardware-decoded frames. Why it is not active right now, or empty when it is (or off).
     std::wstring UpscalerStatus() const;
     bool UpscalerActive() const { return !srFilter_.empty(); }
+    const std::string& UpscalerFilter() const { return srFilter_; }  // "@lsr:d3d11vpp=scale=..."
+    // CPU (lavfi) video filters are on: the config's chain, flip or colour effects.
+    bool CpuFilters() const;
 
     // --- audio / subtitles -------------------------------------------------------------
     std::string stereoMode = "stereo";  // stereo, mono, reverse, left, right
@@ -91,6 +94,7 @@ private:
     void ObserveAll();
     void ApplyVideoFilters();
     void ApplyUpscaler();
+    void ApplyHwdec();
     void LoadCropSetting();
     void ApplyAudioFilters();
     void Notify();
@@ -107,6 +111,9 @@ private:
     std::string srFilter_;         // the @lsr filter in mpv's chain, empty when none
     int64_t outW_ = 0, outH_ = 0;  // after the filters (video-out-params): video-crop's frame
     std::string appliedCrop_;      // last video-crop sent to mpv
+    int64_t areaW_ = 0, areaH_ = 0;  // video area (osd-dimensions), the upscaler's target
+    uintptr_t areaTimer_ = 0;
+    std::string appliedHwdec_;     // hwdec mpv runs with (copy-back while CPU filters are on)
 };
 
 inline LiveState& Live() {

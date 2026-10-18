@@ -6,6 +6,7 @@
 #include "app/Actions.h"
 #include "app/Dialogs.h"
 #include "app/player/ControlBar.h"
+#include "app/player/LiveState.h"
 #include "app/player/SeekPreview.h"
 #include "core/Json.h"
 #include "core/Paths.h"
@@ -306,6 +307,7 @@ void App::OnConfigChanged(const std::string& key) {
         queue_.SetRepeat(r == "one" ? Repeat::One : r == "all" ? Repeat::All : Repeat::Off);
     }
     if (key == "playback.shuffle") queue_.SetShuffle(config_.GetBool("playback.shuffle"));
+    if (key == "playback.stopAfterEach") SyncNextInPlayer();
     if (key == "interface.alwaysOnTop") ApplyWindowOptions();
     if (key == "privacy.rememberPosition") player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     if (key == "privacy.excludePatterns") history_.SetExcludePatterns(config_.GetWString("privacy.excludePatterns"));
@@ -426,6 +428,9 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         queue_.SetRepeat(r == "one" ? Repeat::One : r == "all" ? Repeat::All : Repeat::Off);
         queue_.SetShuffle(config_.GetBool("playback.shuffle"));
     }
+    queue_.changed.Connect([this] {
+        if (!settingCurrent_) SyncNextInPlayer();
+    });
     Trace("config loaded");
 
     main_ = std::make_unique<MainWindow>();
@@ -522,6 +527,8 @@ void App::OnPlayerEvents() {
     unsigned changes = player_.ProcessEvents();
     if (!changes) return;
     const PlayerState& s = player_.State();
+    // First, so history and the overlays below see the new item as the current one.
+    if (changes & kChangeAdvance) OnAdvanced();
 
     // time-pos changes every frame; repaint the UI a few times per second only.
     if (changes == kChangeTime) {
@@ -569,6 +576,8 @@ void App::OnPlayerEvents() {
 void App::OnPlaybackEnded() {
     // "Stop after each item" leaves the last frame up (keep-open pauses there).
     if (config_.GetBool("playback.stopAfterEach") && queue_.RepeatMode() != Repeat::One) return;
+    // mpv goes on to the queued item by itself (OnAdvanced).
+    if (player_.HasQueuedNext()) return;
     if (queue_.NextIndex(false) >= 0) {
         Next(false);
         return;
@@ -740,17 +749,52 @@ void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring n
 }
 
 void App::PlayIndex(int index, bool showPlayer) {
+    settingCurrent_ = true;
     queue_.SetCurrent(index);
+    settingCurrent_ = false;
     const QueueItem* item = queue_.CurrentItem();
     if (!item) return;
     if (!engineReady_) {
         pendingOpen_ = {item->path};
         return;
     }
+    // A jump the user asked for: "replace" (it also drops the queued next file), then queue anew.
     player_.Open(item->path);
+    SyncNextInPlayer(true);
     // "Start playing as soon as a file opens"; the next item of a running queue always plays.
     player_.SetPause(!config_.GetBool("playback.autoPlay") && !player_.State().fileLoaded);
     if (showPlayer || playerShown_) ShowPlayer(true);
+}
+
+void App::SyncNextInPlayer(bool force) {
+    if (!engineReady_) return;
+    // Nothing plays: an entry left in mpv's playlist would wait there for no reason.
+    if (!force && player_.State().idle) return;
+    int i = -1;
+    if (queue_.CurrentItem() && !config_.GetBool("playback.stopAfterEach") && !Live().stopAfter) {
+        i = queue_.NextIndex(false);
+        if (i == queue_.Current()) i = -1;  // Repeat One: OnPlaybackEnded seeks back instead
+    }
+    queuedIndex_ = i;
+    player_.QueueNext(i >= 0 ? queue_.Items()[static_cast<size_t>(i)].path : std::wstring());
+}
+
+void App::OnAdvanced() {
+    // The item that just ended gets what Next() saves for it: a finished position, no resume point.
+    if (const QueueItem* prev = queue_.CurrentItem()) {
+        player_.ForgetPosition(prev->path);
+        const double d = player_.AdvancedFromDuration();
+        if (d > 0 && config_.GetBool("privacy.saveHistory") && config_.GetBool("privacy.rememberPosition"))
+            history_.UpdatePosition(prev->path, d, d);
+    }
+    lastRestart_ = 0;
+    if (queuedIndex_ >= 0 && queuedIndex_ < static_cast<int>(queue_.Items().size())) {
+        settingCurrent_ = true;
+        queue_.SetCurrent(queuedIndex_);
+        settingCurrent_ = false;
+    }
+    queuedIndex_ = -1;
+    SyncNextInPlayer(true);
 }
 
 bool App::Next(bool userAction) {

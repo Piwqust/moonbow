@@ -1,12 +1,14 @@
 #include "app/player/PlayerOverlays.h"
 
 #include "Util.h"
+#include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/Episodes.h"
 #include "app/player/LiveState.h"
+#include "app/player/PanelKit.h"
 #include "gfx/Text.h"
 
 #include <cmath>
@@ -46,7 +48,7 @@ std::wstring Num(double v, int decimals) {
     if (std::isnan(v)) return L"—";
     wchar_t buf[32];
     swprintf_s(buf, L"%.*f", decimals, v);
-    return buf;
+    return panel::LocalDecimal(buf);
 }
 
 std::wstring Rate(double bitsPerSecond) {
@@ -61,13 +63,69 @@ std::wstring W(const std::string& s) {
 
 constexpr float kStatsPad = 12, kStatsLine = 18;
 
+// "@lumen:lavfi=[bwdif=deint=all,deblock=...]" -> "bwdif, deblock".
+std::wstring GraphFilters(const std::string& graph) {
+    std::wstring out;
+    size_t start = 0;
+    while (start < graph.size()) {
+        size_t end = graph.find_first_of(",;", start);
+        if (end == std::string::npos) end = graph.size();
+        std::string f = graph.substr(start, end - start);
+        start = end + 1;
+        while (!f.empty() && (f.front() == '[' || f.front() == ' ')) f.erase(0, 1);
+        if (const size_t eq = f.find('='); eq != std::string::npos) {
+            if (f.compare(0, eq, "hue") == 0 && f.find("s=0") != std::string::npos) f = "grayscale";
+            else f.resize(eq);
+        }
+        while (!f.empty() && (f.back() == ']' || f.back() == ' ')) f.pop_back();
+        if (!f.empty()) out += (out.empty() ? L"" : L", ") + Utf8ToWide(f);
+    }
+    return out;
+}
+
+// mpv's vf list as the user knows it: the CPU filters by name, the d3d11vpp pass by what it does.
+std::wstring FilterList(const mpv_node* list) {
+    std::wstring out;
+    auto add = [&out](const std::wstring& s) {
+        if (!s.empty()) out += (out.empty() ? L"" : L", ") + s;
+    };
+    if (!list || list->format != MPV_FORMAT_NODE_ARRAY) return out;
+    for (int i = 0; i < list->u.list->num; ++i) {
+        const mpv_node* f = &list->u.list->values[i];
+        const mpv_node* enabled = NodeGet(f, "enabled");
+        if (enabled && enabled->format == MPV_FORMAT_FLAG && !enabled->u.flag) continue;
+        const std::string name = NodeStr(NodeGet(f, "name"));
+        const mpv_node* params = NodeGet(f, "params");
+        if (name == "lavfi") {
+            add(GraphFilters(NodeStr(NodeGet(params, "graph"))));
+        } else if (name == "d3d11vpp") {
+            const std::string mode = NodeStr(NodeGet(params, "scaling-mode"));
+            const std::string scale = NodeStr(NodeGet(params, "scale"));
+            if (mode == "nvidia" || mode == "intel")
+                add(std::wstring(mode == "nvidia" ? L"RTX Super Resolution" : L"Intel VSR") +
+                    (scale.empty() ? L"" : L" ×" + panel::LocalDecimal(Utf8ToWide(scale))));
+            const std::string hdr = NodeStr(NodeGet(params, "nvidia-true-hdr"));
+            if (!hdr.empty() && hdr != "no") add(L"RTX Video HDR");
+            const std::string deint = NodeStr(NodeGet(params, "deint"));
+            if (!deint.empty() && deint != "no") add(Tr(L"GPU deinterlacing"));
+        } else if (!name.empty()) {
+            add(Utf8ToWide(name));
+        }
+    }
+    return out;
+}
+
 }  // namespace
 
 // --- StatsOverlay ---------------------------------------------------------------------------
 
 struct StatsOverlay::Values {
     std::string format, hwdec, vo, pixfmt, hwPixfmt, matrix, levels, primaries, gamma, audioCodec;
+    std::string outPixfmt, outHwPixfmt, videoSync, tscale, scale;
+    std::wstring filters;
+    bool interpolation = false, displaySync = false, deinterlacing = false;
     double w = NAN, h = NAN, dw = NAN, dh = NAN, maxLuma = NAN, maxCll = NAN, maxFall = NAN;
+    double outDw = NAN, outDh = NAN, vsyncRatio = NAN, delayed = NAN;
     double containerFps = NAN, estimatedFps = NAN, displayFps = NAN;
     double drops = NAN, decoderDrops = NAN, videoRate = NAN, audioRate = NAN, cache = NAN, avsync = NAN;
     double sampleRate = NAN, channels = NAN;
@@ -119,6 +177,33 @@ void StatsOverlay::Observe() {
     str("hwdec-current", &Values::hwdec);
     str("current-vo", &Values::vo);
     str("audio-codec-name", &Values::audioCodec);
+    str("video-sync", &Values::videoSync);
+    str("tscale", &Values::tscale);
+    str("scale", &Values::scale);
+    auto flag = [this, &p](const char* name, bool Values::*field) {
+        observers_.push_back(p.Observe(name, MPV_FORMAT_FLAG, [this, field](const mpv_event_property& e) {
+            (*v_).*field = e.format == MPV_FORMAT_FLAG && e.data && *static_cast<int*>(e.data) != 0;
+            dirty_ = true;
+        }));
+    };
+    flag("interpolation", &Values::interpolation);
+    flag("display-sync-active", &Values::displaySync);
+    flag("deinterlace-active", &Values::deinterlacing);
+    num("vsync-ratio", &Values::vsyncRatio);
+    num("vo-delayed-frame-count", &Values::delayed);
+    observers_.push_back(p.Observe("vf", MPV_FORMAT_NODE, [this](const mpv_event_property& e) {
+        v_->filters = FilterList(e.format == MPV_FORMAT_NODE ? static_cast<const mpv_node*>(e.data) : nullptr);
+        dirty_ = true;
+    }));
+    // After the filter chain: what the renderer gets (the AI upscaler enlarges it).
+    observers_.push_back(p.Observe("video-out-params", MPV_FORMAT_NODE, [this](const mpv_event_property& e) {
+        const mpv_node* n = e.format == MPV_FORMAT_NODE ? static_cast<const mpv_node*>(e.data) : nullptr;
+        v_->outPixfmt = NodeStr(NodeGet(n, "pixelformat"));
+        v_->outHwPixfmt = NodeStr(NodeGet(n, "hw-pixelformat"));
+        v_->outDw = NodeNum(NodeGet(n, "dw"));
+        v_->outDh = NodeNum(NodeGet(n, "dh"));
+        dirty_ = true;
+    }));
     num("container-fps", &Values::containerFps);
     num("estimated-vf-fps", &Values::estimatedFps);
     num("display-fps", &Values::displayFps);
@@ -184,15 +269,32 @@ void StatsOverlay::Rebuild() {
         dec += L" · " + W(v.hwdec) + L" (" + Tr(L"zero-copy") + L")";
     lines_.push_back({Tr(L"Decoder"), dec});
 
+    // Decoded size, then the size after the filters and the aspect ratio, as the renderer gets it.
     std::wstring out = v.vo.empty() ? L"—" : W(v.vo);
     if (!std::isnan(v.w) && !std::isnan(v.h)) {
         out += L" · " + Num(v.w, 0) + L"×" + Num(v.h, 0);
-        if (!std::isnan(v.dw) && !std::isnan(v.dh) && (v.dw != v.w || v.dh != v.h))
-            out += L" → " + Num(v.dw, 0) + L"×" + Num(v.dh, 0);
+        const double ow = std::isnan(v.outDw) ? v.dw : v.outDw, oh = std::isnan(v.outDh) ? v.dh : v.outDh;
+        if (!std::isnan(ow) && !std::isnan(oh) && (ow != v.w || oh != v.h))
+            out += L" → " + Num(ow, 0) + L"×" + Num(oh, 0);
     }
-    if (!v.pixfmt.empty()) out += L" · " + W(v.pixfmt);
-    if (!v.hwPixfmt.empty()) out += L" (" + W(v.hwPixfmt) + L")";
+    const std::string& pix = v.outPixfmt.empty() ? v.pixfmt : v.outPixfmt;
+    const std::string& hwPix = v.outPixfmt.empty() ? v.hwPixfmt : v.outHwPixfmt;
+    if (!pix.empty()) out += L" · " + W(pix);
+    if (!hwPix.empty()) out += L" (" + W(hwPix) + L")";
     lines_.push_back({Tr(L"Output"), out});
+
+    std::wstring filters = v.filters;
+    if (v.deinterlacing && filters.find(Tr(L"GPU deinterlacing")) == std::wstring::npos &&
+        filters.find(L"bwdif") == std::wstring::npos && filters.find(L"yadif") == std::wstring::npos)
+        filters += (filters.empty() ? L"" : L", ") + std::wstring(Tr(L"GPU deinterlacing"));
+    lines_.push_back({Tr(L"Filters"), filters.empty() ? std::wstring(Tr(L"none")) : filters});
+    if (!v.scale.empty()) lines_.push_back({Tr(L"Scaler"), W(v.scale)});
+    if (!v.videoSync.empty()) {
+        std::wstring sync = W(v.videoSync);
+        if (v.interpolation) sync += L" · " + Fmt(Tr(L"interpolation {0}"), {W(v.tscale)});
+        if (v.displaySync && !std::isnan(v.vsyncRatio)) sync += L" · " + Fmt(Tr(L"vsync ×{0}"), {Num(v.vsyncRatio, 2)});
+        lines_.push_back({Tr(L"Timing"), sync});
+    }
 
     if (!v.matrix.empty() || !v.primaries.empty()) {
         std::wstring c;
@@ -211,7 +313,8 @@ void StatsOverlay::Rebuild() {
     lines_.push_back({Tr(L"Frame rate"), Fmt(Tr(L"{0} file · {1} estimated · {2} display"),
                                              {Num(v.containerFps, 3), Num(v.estimatedFps, 2), Num(v.displayFps, 2)})});
     lines_.push_back({Tr(L"Dropped frames"),
-                      Fmt(Tr(L"{0} output · {1} decoder"), {Num(v.drops, 0), Num(v.decoderDrops, 0)})});
+                      Fmt(Tr(L"{0} output · {1} decoder · {2} late"),
+                          {Num(v.drops, 0), Num(v.decoderDrops, 0), Num(v.delayed, 0)})});
     lines_.push_back({Tr(L"Bitrate"), Fmt(Tr(L"video {0} · audio {1}"), {Rate(v.videoRate), Rate(v.audioRate)})});
     lines_.push_back({Tr(L"Cache"), std::isnan(v.cache) ? L"—" : Fmt(Tr(L"{0} s ahead"), {Num(v.cache, 1)})});
     std::wstring sync = L"—";
@@ -236,16 +339,17 @@ void StatsOverlay::Paint(Painter& p, const Rect& video) {
     const float h = kStatsPad * 2 + kStatsLine * static_cast<float>(lines_.size() + 1) + 4;
     const Rect box{video.x + 12, video.y + 12, std::min(width_, video.w - 24), std::min(h, video.h - 24)};
     p.PushClip(box);
-    p.Fill(box, P().bgMenu.Fade(0.88f), 6);
+    // Nearly opaque: over a bright frame a see-through panel leaves the labels unreadable.
+    p.Fill(box, P().bgPanel.Fade(0.94f), 6);
     p.Stroke(box, P().line, 6);
     float y = box.y + kStatsPad;
     p.Text(Tr(L"Statistics"), {box.x + kStatsPad, y, box.w - 2 * kStatsPad, kStatsLine}, TextStyle::SmallMedium,
            P().textPrimary);
-    p.Text(L"Ctrl+Shift+I", {box.x + kStatsPad, y, box.w - 2 * kStatsPad, kStatsLine}, TextStyle::Small,
-           P().textTertiary, HAlign::Trailing);
+    p.Text(ShortcutText(Action::ToggleStats), {box.x + kStatsPad, y, box.w - 2 * kStatsPad, kStatsLine},
+           TextStyle::Small, P().textSecondary, HAlign::Trailing);
     y += kStatsLine + 4;
     for (const auto& [label, value] : lines_) {
-        p.Text(label, {box.x + kStatsPad, y, labelW_, kStatsLine}, TextStyle::Small, P().textTertiary);
+        p.Text(label, {box.x + kStatsPad, y, labelW_, kStatsLine}, TextStyle::Small, P().textSecondary);
         const float vx = box.x + kStatsPad + labelW_ + 16;
         p.Text(value, {vx, y, box.Right() - kStatsPad - vx, kStatsLine}, TextStyle::MonoSmall, P().textPrimary);
         y += kStatsLine;
@@ -271,7 +375,7 @@ NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
     visible = false;
     title_ = Add<Label>(L"", TextStyle::BodyMedium, Tone::Primary);
     title_->width = Length::Grow();
-    name_ = Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
+    name_ = Add<Label>(L"", TextStyle::Small, Tone::Secondary);
     name_->width = Length::Grow();
     auto* row = Add<Widget>();
     row->dir = Dir::Row;
@@ -379,7 +483,12 @@ void NextEpisodeCard::Update() {
     shownSecs_ = secs;
     const episodes::Episode e = episodes::Parse(nextPath_);
     title_->SetText(Fmt(Tr(L"Next episode: {0} · in {1} s"), {episodes::Label(e), std::to_wstring(secs)}));
-    name_->SetText(FileNameOf(nextPath_));
+    const std::wstring name = episodes::DisplayName(nextPath_);
+    name_->SetText(name);
+    if (name_->visible != !name.empty()) {
+        name_->visible = !name.empty();
+        InvalidateLayout();
+    }
 }
 
 void NextEpisodeCard::PlayNext() {
@@ -466,7 +575,8 @@ void NextEpisodeCard::CarryLanguages() {
 
 // --- SkipChapterButton ----------------------------------------------------------------------
 
-SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", ButtonKind::Secondary, "next"), card_(card) {
+// Primary (white): the one action the viewer wants right now, like Netflix's and Plex's.
+SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", ButtonKind::Primary, "next"), card_(card) {
     visible = false;
     id = "skip-chapter";
     onClick = [this] {

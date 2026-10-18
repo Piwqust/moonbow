@@ -54,6 +54,10 @@ const std::vector<std::pair<UINT, ui::Mods>>& Bindings(Action a);
 
 // Runs an action against the app (player, navigation, windows).
 void Run(Action a);
+// Relative seek with the "0:49 / 10:00" message (keys, the wheel over the seek bar).
+void SeekBy(double seconds);
+// The language of an ISO 639 code ("rus", "ru", "en-US") in the UI language, or the code itself.
+std::wstring LanguageName(const std::wstring& code);
 // Shows the on-screen messages that wait for mpv (new track, new chapter).
 void OnPlayerChangeForOsd(unsigned changes);
 // Mouse on the video, as set in Settings > Controls > Mouse. Each returns true when it

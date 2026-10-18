@@ -1,5 +1,6 @@
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/PanelKit.h"
 #include "app/player/SeekPreview.h"
 
 #include "Util.h"
@@ -297,10 +298,12 @@ private:
 };
 
 // The speed popover button; the wheel steps the speed and a right click goes back to 1×.
-class SpeedButton : public PanelButton {
+// Away from 1× it shows the speed ("1,5×") instead of the icon, so it is never a surprise.
+class SpeedButton : public PanelButton, PlayerBound {
 public:
     SpeedButton() : PanelButton("speed", L"Playback speed", PanelKind::Speed) {
         onContextMenu = [](const MouseEvent&) { Run(Action::SpeedReset); };
+        Bind(this, kChangeState);
     }
     bool OnWheel(const WheelEvent& e) override {
         if (!PS().fileLoaded || e.delta == 0) return false;
@@ -311,7 +314,19 @@ public:
         wchar_t buf[96];
         swprintf_s(buf, L"%s %g× · %s", Tr(L"Speed"), PS().speed, Tr(L"scroll to change, right-click for 1×"));
         tooltip = buf;
-        PanelButton::Paint(p);
+        const double speed = PS().speed;
+        if (!PS().fileLoaded || std::abs(speed - 1.0) < 1e-3) {
+            icon = "speed";
+            PanelButton::Paint(p);
+            return;
+        }
+        icon.clear();
+        PanelButton::Paint(p);  // hover, press and focus states without the icon
+        swprintf_s(buf, L"%g×", std::round(speed * 100) / 100);
+        const std::wstring text = panel::LocalDecimal(buf);
+        const bool on = PlayerPanelOpen(PanelKind::Speed);
+        p.Text(text, rect, text.size() > 4 ? TextStyle::Small : TextStyle::SmallMedium,
+               on ? P().accent : IsHot() ? P().textPrimary : ToneColor(tone), HAlign::Center, VAlign::Center);
     }
 };
 
@@ -547,7 +562,7 @@ bool SeekBar::OnMouseUp(const MouseEvent&) {
 
 bool SeekBar::OnWheel(const WheelEvent& e) {
     if (!TheApp().player().State().fileLoaded) return false;
-    TheApp().player().SeekRelative(5.0 * e.delta);
+    SeekBy(5.0 * e.delta);  // with the position message, like the arrow keys
     return true;
 }
 

@@ -49,6 +49,7 @@ constexpr float kWideLyrics = 980;  // narrower views show only the sung line un
 constexpr float kLineGap = 14;
 // Lines light up this much early: an exact seek to a stamp may land a frame before it.
 constexpr double kLead = 0.1;
+constexpr float kEdgeFade = 72;  // lyrics fade out over this much at the column's top and bottom
 
 class MusicView : public Widget {
 public:
@@ -148,6 +149,7 @@ public:
         const int hit = LineAt(e.x, e.y);
         if (hit < 0) return false;
         TheApp().player().SeekAbsolute(lyrics_.lines[static_cast<size_t>(hit)].time, true);
+        ClearHover();  // the column glides to the line: no second highlight next to the sung one
         return true;
     }
     bool OnWheel(const WheelEvent& e) override {
@@ -240,8 +242,16 @@ private:
         // Far jumps (a seek) move quicker than the next line coming up.
         const int dist = std::abs(line - current_);
         current_ = line;
+        // The lines move under a still pointer; the next mouse move finds the new one.
+        ClearHover();
         scroll_.To(static_cast<float>(line), dist > 3 ? 260.0f : 340.0f, Ease::InOut);
         Invalidate();
+    }
+
+    void ClearHover() {
+        if (hovered_ < 0) return;
+        hovered_ = -1;
+        cursor = IDC_ARROW;
     }
 
     // Line heights for the column width; measured again only when the width or the lyrics change.
@@ -252,7 +262,7 @@ private:
         tops_.assign(n, 0);
         heights_.assign(n, 0);
         lineRects_.assign(n, Rect{});
-        const TextStyle style = lyrics_.synced ? TextStyle::Section : TextStyle::Large;
+        const TextStyle style = TextStyle::Section;
         const float blank = p.Measure(L"A", style).height * 0.6f;
         float y = 0;
         for (size_t i = 0; i < n; ++i) {
@@ -288,6 +298,7 @@ private:
         const float offset = synced ? box.y + box.h * 0.42f - CenterAt(scroll_.Get())
                                     : box.y + (totalH_ <= box.h ? (box.h - totalH_) / 2 : -staticScroll_);
         p.PushClip(box);
+        const bool masked = PushEdgeMask(p, box);
         for (size_t i = 0; i < lyrics_.lines.size(); ++i) {
             const Rect r{box.x, std::round(offset + tops_[i]), box.w, heights_[i]};
             lineRects_[i] = {};
@@ -297,20 +308,48 @@ private:
             if (synced) {
                 const int at = static_cast<int>(i);
                 const float d = static_cast<float>(std::abs(at - current_));
-                a = at == current_ ? 0.96f : std::max(0.18f, 0.46f - 0.05f * d);
+                // Lines to come stay readable ahead (at least 40 %); sung ones step back further.
+                if (at == current_) a = 0.96f;
+                else if (at > current_) a = std::max(0.40f, 0.62f - 0.05f * d);
+                else a = std::max(0.24f, 0.46f - 0.06f * d);
                 if (at == hovered_) a = std::max(a, 0.78f);
-                // Fade toward the top and bottom edges of the column.
-                const float edge = std::min(r.Cy() - box.y, box.Bottom() - r.Cy());
-                if (edge < 72) a *= std::max(0.0f, edge / 72);
                 if (line.time >= 0) lineRects_[i] = r;
             }
             // A pause in synced lyrics shows as dots; a stanza break in plain text stays blank.
             if (line.text.empty() && !synced) continue;
             const std::wstring_view text = line.text.empty() ? std::wstring_view(L"\u00B7 \u00B7 \u00B7") : line.text;
-            p.Text(text, r, synced ? TextStyle::Section : TextStyle::Large, Color::Mix(bg, white, a),
-                   HAlign::Leading, VAlign::Top, gfx::kTextWrap);
+            p.Text(text, r, TextStyle::Section, Color::Mix(bg, white, a), HAlign::Leading, VAlign::Top,
+                   gfx::kTextWrap);
         }
+        if (masked) p.Ctx()->PopLayer();
         p.PopClip();
+    }
+
+    // A vertical opacity mask over the column: lines fade out toward its top and bottom edges
+    // instead of being cut there.
+    bool PushEdgeMask(Painter& p, const Rect& box) {
+        ID2D1DeviceContext5* ctx = p.Ctx();
+        const uint32_t gen = gfx::Gpu::Get().Generation();
+        if (!mask_ || maskH_ != box.h || maskGen_ != gen) {
+            mask_.Reset();
+            maskH_ = box.h;
+            maskGen_ = gen;
+            const float f = std::min(0.4f, kEdgeFade / box.h);
+            const D2D1_GRADIENT_STOP stops[] = {{0.0f, {0, 0, 0, 0}}, {f, {0, 0, 0, 1}}, {1 - f, {0, 0, 0, 1}},
+                                                {1.0f, {0, 0, 0, 0}}};
+            gfx::ComPtr<ID2D1GradientStopCollection> coll;
+            if (FAILED(ctx->CreateGradientStopCollection(stops, 4, &coll)) ||
+                FAILED(ctx->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({0, 0}, {0, 1}), coll.Get(),
+                                                      &mask_)))
+                return false;
+        }
+        mask_->SetStartPoint({box.x, box.y});
+        mask_->SetEndPoint({box.x, box.Bottom()});
+        ctx->PushLayer(D2D1::LayerParameters1(D2D1::RectF(box.x, box.y, box.Right(), box.Bottom()), nullptr,
+                                              D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), 1.0f,
+                                              mask_.Get()),
+                       nullptr);
+        return true;
     }
 
     int LineAt(float x, float y) const {
@@ -453,6 +492,9 @@ private:
     gfx::ComPtr<ID2D1Effect> blur_;
     gfx::ComPtr<ID2D1RadialGradientBrush> glow_, vignette_;
     gfx::ComPtr<ID2D1SolidColorBrush> grooves_;
+    gfx::ComPtr<ID2D1LinearGradientBrush> mask_;  // PushEdgeMask
+    float maskH_ = -1;
+    uint32_t maskGen_ = 0;
     uint32_t brushGen_ = 0;
     D2D1_COLOR_F brushText_{}, brushBg_{};
     ID2D1Bitmap* blurFor_ = nullptr;

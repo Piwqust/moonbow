@@ -1295,6 +1295,11 @@ void TestPlayerEpisodes() {
     CHECK(ep::FindNext(folder[1], folder) == -1);
     CHECK(ep::FindNext(L"D:\\TV\\Movie.mkv", folder) == -1);
     CHECK(ep::Label(ep::Parse(L"D:\\TV\\Show.s1e3.mkv")) == L"S01E03");
+    CHECK(ep::DisplayName(L"D:\\TV\\Series S01E02.mp4") == L"Series");
+    CHECK(ep::DisplayName(L"D:\\TV\\Show.Name.S01E02.The.Title.mkv") == L"Show Name · The Title");
+    CHECK(ep::DisplayName(L"D:\\TV\\Show - 1x02 - Pilot.mkv") == L"Show · Pilot");
+    CHECK(ep::DisplayName(L"D:\\TV\\S01E02.mkv").empty());
+    CHECK(ep::DisplayName(L"D:\\TV\\Movie.mkv") == L"Movie");
 
     CHECK(ep::KindOf(L"Opening") == ep::ChapterKind::Intro);
     CHECK(ep::KindOf(L"OP1") == ep::ChapterKind::Intro);
