@@ -34,18 +34,31 @@ static_assert(std::size(kStyles) == static_cast<size_t>(TextStyle::Count));
 // Resource ids of the bundled fonts, see res/app.rc.
 constexpr int kFontResources[] = {201, 202, 203, 204};
 
-struct LayoutKey {
-    std::wstring text;
+template <class S>
+struct BasicLayoutKey {
+    S text;
     uint32_t params;
     int32_t w, h;
-    bool operator==(const LayoutKey& o) const { return params == o.params && w == o.w && h == o.h && text == o.text; }
 };
+using LayoutKey = BasicLayoutKey<std::wstring>;
+// Looked up by a view of the text: a cached string costs no allocation on every paint.
+using LayoutKeyView = BasicLayoutKey<std::wstring_view>;
 
 struct LayoutKeyHash {
-    size_t operator()(const LayoutKey& k) const {
-        size_t h = std::hash<std::wstring>()(k.text);
+    using is_transparent = void;
+    template <class S>
+    size_t operator()(const BasicLayoutKey<S>& k) const {
+        size_t h = std::hash<std::wstring_view>()(k.text);
         h ^= (static_cast<size_t>(k.params) << 1) ^ (static_cast<size_t>(k.w) << 20) ^ (static_cast<size_t>(k.h) << 40);
         return h;
+    }
+};
+
+struct LayoutKeyEq {
+    using is_transparent = void;
+    template <class A, class B>
+    bool operator()(const BasicLayoutKey<A>& a, const BasicLayoutKey<B>& b) const {
+        return a.params == b.params && a.w == b.w && a.h == b.h && std::wstring_view(a.text) == std::wstring_view(b.text);
     }
 };
 
@@ -61,7 +74,7 @@ int32_t Quantize(float v) {
 }  // namespace
 
 struct Text::Impl {
-    std::unordered_map<LayoutKey, LayoutEntry, LayoutKeyHash> layouts;
+    std::unordered_map<LayoutKey, LayoutEntry, LayoutKeyHash, LayoutKeyEq> layouts;
     uint32_t frame = 1;
 };
 
@@ -127,12 +140,8 @@ bool Text::LoadFonts(HINSTANCE instance) {
     return true;
 }
 
-float Text::Size(TextStyle s) const {
-    return kStyles[static_cast<int>(s)].size;
-}
-
 float Text::LineHeight(TextStyle s) const {
-    return std::round(Size(s) * 1.43f);
+    return std::round(kStyles[static_cast<int>(s)].size * 1.43f);
 }
 
 IDWriteTextFormat* Text::Format(TextStyle style) {
@@ -144,7 +153,7 @@ IDWriteTextLayout* Text::Layout(std::wstring_view text, TextStyle style, float m
     WaitReady();
     const uint32_t params = static_cast<uint32_t>(style) | (static_cast<uint32_t>(h) << 8) |
                             (static_cast<uint32_t>(v) << 12) | (static_cast<uint32_t>(flags) << 16);
-    LayoutKey key{std::wstring(text), params, Quantize(maxWidth), Quantize(maxHeight)};
+    const LayoutKeyView key{text, params, Quantize(maxWidth), Quantize(maxHeight)};
     auto it = impl_->layouts.find(key);
     if (it != impl_->layouts.end()) {
         it->second.lastFrame = impl_->frame;
@@ -170,7 +179,7 @@ IDWriteTextLayout* Text::Layout(std::wstring_view text, TextStyle style, float m
         layout->SetTypography(tabular_.Get(), {0, static_cast<UINT32>(text.size())});
 
     IDWriteTextLayout* raw = layout.Get();
-    impl_->layouts.emplace(std::move(key), LayoutEntry{std::move(layout), impl_->frame});
+    impl_->layouts.emplace(LayoutKey{std::wstring(text), params, key.w, key.h}, LayoutEntry{std::move(layout), impl_->frame});
     return raw;
 }
 

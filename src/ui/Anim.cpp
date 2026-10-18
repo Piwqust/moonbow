@@ -80,7 +80,7 @@ void AnimFloat::Step(double nowMs) {
 
 bool AnimFloat::TickAll(double nowMs) {
     auto& list = ActiveList();
-    for (AnimFloat* a : std::vector<AnimFloat*>(list)) a->Step(nowMs);
+    for (AnimFloat* a : list) a->Step(nowMs);  // Step never adds or removes: no copy each frame
     list.erase(std::remove_if(list.begin(), list.end(), [](AnimFloat* a) { return !a->active_; }), list.end());
     return !list.empty();
 }
