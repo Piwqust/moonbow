@@ -103,9 +103,10 @@ public:
         float top = 0;
         for (float b : frame_.bands) top = std::max(top, b);
         char text[160];
-        snprintf(text, sizeof text, " viz=%d frames=%llu captured=%llu level=%.2f top=%.2f%s%s", static_cast<int>(style_),
-                 static_cast<unsigned long long>(frame_.serial),
-                 static_cast<unsigned long long>(capture_ ? capture_->Captured() : 0), frame_.level, top,
+        snprintf(text, sizeof text, " viz=%d frames=%llu captured=%llu cpu=%.0fms level=%.2f top=%.2f%s%s",
+                 static_cast<int>(style_), static_cast<unsigned long long>(frame_.serial),
+                 static_cast<unsigned long long>(capture_ ? capture_->Captured() : 0),
+                 capture_ ? capture_->CpuSeconds() * 1000 : 0.0, frame_.level, top,
                  capture_ && capture_->Failed() ? " failed" : "", capture_ && capture_->Stalled() ? " parked" : "");
         out += text;
     }

@@ -109,6 +109,13 @@ void LoopbackCapture::SetGain(double gain) {
     gain_ = gain;
 }
 
+double LoopbackCapture::CpuSeconds() {
+    FILETIME created, exited, kernel, user;
+    if (!thread_.joinable() || !GetThreadTimes(thread_.native_handle(), &created, &exited, &kernel, &user)) return 0;
+    auto ticks = [](FILETIME f) { return (static_cast<ULONGLONG>(f.dwHighDateTime) << 32) | f.dwLowDateTime; };
+    return static_cast<double>(ticks(kernel) + ticks(user)) / 1e7;
+}
+
 bool LoopbackCapture::Take(VisualFrame& out) {
     std::lock_guard lock(mu_);
     posted_ = false;

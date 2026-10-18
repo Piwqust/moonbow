@@ -46,6 +46,7 @@ public:
     bool Failed() const { return failed_.load(); }  // process loopback unavailable: show nothing
     bool Stalled() const { return stalled_.load(); }
     uint64_t Captured() const { return captured_.load(); }  // sample frames read so far (tree dumps)
+    double CpuSeconds();  // the capture thread's CPU time so far (tree dumps, perf runs)
 
 private:
     void Run();
