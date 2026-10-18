@@ -48,13 +48,15 @@ $rc = New-Object LumenHit+RECT; [LumenHit]::GetClientRect($h, [ref]$rc) | Out-Nu
 [LumenHit]::PostMessage($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
 Start-Sleep -Milliseconds 300
 $nodes = @(); $hiddenDepth = -1; $popup = $false
-foreach ($line in Get-Content (Join-Path $env:TEMP "lumen-tree-$ProcessId.txt")) {
+foreach ($line in Get-Content (Join-Path $env:TEMP "lumen-tree-$ProcessId.txt") -Encoding UTF8) {
+  # v2 header: the DIP scale, including the --scale test override.
+  if ($line -match '^=== window .* scale=([\d.]+)') { $scale = [double]$matches[1]; continue }
   if ($line -eq "--- popup") { $popup = $true; $hiddenDepth = -1; continue }
   if ($line -notmatch '^( *)(\S+)(?: #(\S+))? \[(-?[\d.]+),(-?[\d.]+) ([\d.]+)x([\d.]+)\](.*)$') { continue }
   $depth = $matches[1].Length / 2
   if ($hiddenDepth -ge 0 -and $depth -gt $hiddenDepth) { continue }
   $hiddenDepth = -1
-  if ($matches[8] -match 'hidden') { $hiddenDepth = $depth; continue }
+  if (($matches[8] -split ' text=| tip=')[0] -match ' hidden\b') { $hiddenDepth = $depth; continue }
   $name = $matches[2]; if ($matches[3]) { $name += "#" + $matches[3] }
   $nodes += [pscustomobject]@{ Name = $name; Depth = $depth; Popup = $popup
     X = [double]$matches[4]; Y = [double]$matches[5]; W = [double]$matches[6]; H = [double]$matches[7] }

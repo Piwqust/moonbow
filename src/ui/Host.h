@@ -91,8 +91,9 @@ public:
     void RequestRender();
     void RequestLayout();
     void RenderNow();
-    float Scale() const { return static_cast<float>(dpi_) / 96.0f; }
-    UINT Dpi() const { return dpi_; }
+    // DIP-to-pixel factor: the monitor's DPI / 96, times the --scale test override.
+    float Scale() const { return static_cast<float>(dpi_) / 96.0f * ScaleOverride(); }
+    UINT Dpi() const { return dpi_; }  // the monitor's real DPI (window frame metrics)
     Size ClientSize() const;
     // Called when the shared GPU device becomes available.
     void OnDeviceReady();
@@ -155,6 +156,10 @@ public:
     // have no taskbar button and stay at the bottom of the z-order.
     static void SetAutomation(bool on);
     static bool Automation();
+    // --automation --scale <factor>: lays out and draws every window as if the monitor were at
+    // factor x its real scale (1.5 on a 100 % screen looks like 150 %). Set before any window.
+    static void SetScaleOverride(float factor);
+    static float ScaleOverride();
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
     // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
@@ -189,6 +194,7 @@ private:
         bool above = false;  // flipped above the anchor (slide direction)
     };
     void ApplyDwmAttributes();
+    float RenderDpi() const { return Scale() * 96.0f; }  // DPI of the Direct2D surface
     void SetDragOver(bool over);
     void PaintDropOverlay(Painter& p);
     friend class DropTarget;

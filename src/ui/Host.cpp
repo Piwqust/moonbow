@@ -81,10 +81,19 @@ void ForEachInTree(Widget* w, const std::function<void(Widget*)>& fn) {
 
 namespace {
 unsigned g_automationMods = 0;
+float g_scaleOverride = 1.0f;
 }  // namespace
 
 void Host::SetAutomation(bool on) {
     g_automation = on;
+}
+
+void Host::SetScaleOverride(float factor) {
+    g_scaleOverride = std::clamp(factor, 0.5f, 4.0f);
+}
+
+float Host::ScaleOverride() {
+    return g_scaleOverride;
 }
 
 bool Host::Automation() {
@@ -289,7 +298,9 @@ bool Host::Create(const HostOptions& options) {
         DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     }
     const UINT actual = GetDpiForWindow(hwnd_);
-    if (actual != dpi_) {
+    // With --scale the window may be bigger than the monitor; CreateWindowEx clamped it to the
+    // default max track size (WM_GETMINMAXINFO comes before this host is attached).
+    if (actual != dpi_ || g_scaleOverride != 1.0f) {
         dpi_ = actual;
         SetWindowPos(hwnd_, nullptr, 0, 0, static_cast<int>(std::lround(options.width * Scale())),
                      static_cast<int>(std::lround(options.height * Scale())), SWP_NOMOVE | SWP_NOZORDER);
@@ -303,7 +314,7 @@ bool Host::Create(const HostOptions& options) {
         dropTarget_ = new DropTarget(this);
         if (FAILED(RegisterDragDrop(hwnd_, dropTarget_))) DragAcceptFiles(hwnd_, TRUE);  // OLE not initialized
     });
-    if (gfx::Gpu::Get().Ready()) surface_.Attach(hwnd_, static_cast<float>(dpi_));
+    if (gfx::Gpu::Get().Ready()) surface_.Attach(hwnd_, RenderDpi());
     return true;
 }
 
@@ -329,7 +340,7 @@ void Host::OnThemeChanged() {
 
 void Host::OnDeviceReady() {
     if (!hwnd_) return;
-    surface_.Attach(hwnd_, static_cast<float>(dpi_));
+    surface_.Attach(hwnd_, RenderDpi());
     RequestLayout();
     RenderNow();
 }
@@ -1350,7 +1361,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_DPICHANGED: {
             dpi_ = HIWORD(wp);
-            surface_.SetDpi(static_cast<float>(dpi_));
+            surface_.SetDpi(RenderDpi());
             const RECT* r = reinterpret_cast<RECT*>(lp);
             SetWindowPos(hwnd_, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
@@ -1375,6 +1386,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 mmi->ptMaxTrackSize = {std::max(mmi->ptMaxTrackSize.x, mmi->ptMaxSize.x),
                                        std::max(mmi->ptMaxTrackSize.y, mmi->ptMaxSize.y)};
             }
+            // --scale: a window may outgrow the real monitor, as on a bigger high-DPI one
+            // (1280x780 DIP at 200 % is 2560x1560 px). Maximized and fullscreen stay the monitor.
+            if (g_scaleOverride != 1.0f) mmi->ptMaxTrackSize = {8192, 8192};
             return 0;
         }
 
