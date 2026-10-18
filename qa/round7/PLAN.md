@@ -37,3 +37,19 @@ Not done, with reasons:
    Before that, delete the fallback cron job (CronDelete).
 
 If the work stops (limits), the hourly fallback job resumes it from this file.
+
+## State (updated as work goes)
+
+- **Round 7:** the full sweep (378 scenarios) shows 0 medium/high findings; first frame 69–85 ms. ⏳ r7-verify (fresh eyes on round 7; report qa/round7/verify.md).
+- **Round 8 audit:** five read-only reviewers. The raw findings are in qa/round8/raw/: storage, player, library-settings, ui; playback is still running.
+- **Round 8 fixers:**
+  - ⏳ running: r8-fix-storage, r8-fix-ui, r8-fix-player, r8-fix-pages;
+  - ☐ next: the playback fixer, after the playback reviewer reports; it also takes the V7 findings that land in its files.
+- **Then:**
+  - merge everything;
+  - build, tests, checks, the full sweep, perf;
+  - qa/round8/REPORT.md, in Russian, in ponytail format, with every finding and what happened to it;
+  - STATUS.md;
+  - memory;
+  - delete the cron job;
+  - sleep.
