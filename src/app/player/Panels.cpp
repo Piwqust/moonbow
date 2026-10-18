@@ -25,9 +25,6 @@ struct PanelState {
     Group group = Group::None;
     int tab = 0;
     int settingsTab = 0;  // reopened on the last used settings tab
-    double closedAt = -1e9;
-    Group closedGroup = Group::None;
-    int closedTab = 0;
 };
 
 PanelState& S() {
@@ -187,9 +184,6 @@ void Open(Group g, int tab) {
     o.onDismiss = [raw] {
         PanelState& s = S();
         if (s.pop != raw) return;
-        s.closedAt = AnimFloat::Now();
-        s.closedGroup = s.group;
-        s.closedTab = s.tab;
         s.pop = nullptr;
         s.group = Group::None;
         if (MainWindow* mw = TheApp().main()) mw->RequestRender();
@@ -203,14 +197,6 @@ void Open(Group g, int tab) {
 }
 
 }  // namespace
-
-namespace panel {
-
-bool PanelJustClosed() {
-    return AnimFloat::Now() - S().closedAt < 350;
-}
-
-}  // namespace panel
 
 bool PlayerPanelOpen(PanelKind kind) {
     MainWindow* w = TheApp().main();
@@ -233,11 +219,6 @@ void TogglePlayerPanel(PanelKind kind, const Rect&) {
     PanelState& s = S();
     if (PlayerPanelOpen(kind)) {
         ClosePlayerPanels();
-        return;
-    }
-    // The mouse-down of this very click already closed the panel the button belongs to.
-    if (AnimFloat::Now() - s.closedAt < 400 && Matches(kind, s.closedGroup, s.closedTab)) {
-        s.closedAt = -1e9;
         return;
     }
     const Group g = GroupFor(kind);

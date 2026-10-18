@@ -25,8 +25,4 @@ std::unique_ptr<ui::Widget> BuildSettingsFooter(Popover* owner);
 // Rows the mini player queue needs (header + list) to size its popover.
 float CompactQueueHeight();
 
-// True for a moment after a popover closed because of a click outside it, so the click
-// that closed it does not also pause the video.
-bool PanelJustClosed();
-
 }  // namespace app::panel

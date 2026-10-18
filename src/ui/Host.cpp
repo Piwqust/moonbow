@@ -768,16 +768,29 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
 
     if (down) {
         HideTooltip();
-        // Clicking outside popups closes them (topmost first). A modal popup
-        // swallows the click that closes it.
+        // Clicking outside popups closes them (topmost first). Like a Windows menu, the click
+        // that closes one is used up: it doesn't also pause the video or press the button under
+        // it. A click inside a popup left open (the parent of a closed submenu) still acts there.
+        static HWND swallowedFor = nullptr;  // the second click of a double click on a dismissal
+        const bool afterDismiss = swallowedFor == hwnd_;
+        swallowedFor = nullptr;
+        if (dbl && afterDismiss) dbl = false;  // a fresh single click, not a double click
+        bool dismissed = false, inside = false;
         while (!popups_.empty()) {
             Popup& top = popups_.back();
             if (top.options.passthrough) break;
-            if (top.content->rect.Contains(x, y)) break;
+            if (top.content->rect.Contains(x, y)) {
+                inside = true;
+                break;
+            }
             if (!top.options.dismissOnOutside) break;
-            const bool wasModal = top.options.modal;
             ClosePopupAt(popups_.size() - 1);
-            if (wasModal) return;
+            dismissed = true;
+        }
+        if (dismissed && !inside) {
+            if (e.button == MouseButton::Left) swallowedFor = hwnd_;
+            RequestRender();
+            return;
         }
         bool blocked = false;
         Widget* hit = HitTestAll(x, y, &blocked);

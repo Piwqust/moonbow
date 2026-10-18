@@ -220,8 +220,6 @@ public:
     }
     bool Holding() const { return holding_; }
     bool OnMouseDown(const MouseEvent& e) override {
-        // The click that closed a player popover doesn't also pause.
-        if (e.button == MouseButton::Left && panel::PanelJustClosed()) return true;
         if (e.button == MouseButton::Left) {
             // The click acts on release, so that a long press can mean 2× instead.
             down_ = true;
