@@ -36,11 +36,15 @@ public:
     ~NavSidebar() override;
     void SetCollapsed(bool collapsed);
     bool Collapsed() const { return collapsed_; }
+    // The rail of the player's side panel: it navigates the panel and keeps the player on screen.
+    void SetInPlayer(bool inPlayer) { inPlayer_ = inPlayer; }
+    bool InPlayer() const { return inPlayer_; }
     void Paint(ui::Painter& p) override;
     void Refresh();
 
 private:
     bool collapsed_ = false;
+    bool inPlayer_ = false;
     ScopedConnection routeConn_;
 };
 

@@ -388,13 +388,14 @@ std::unique_ptr<Widget> PlaybackTab() {
     AddSegments(
         page, s, Tr(L"Repeat"), {{Tr(L"Off"), "off", ""}, {Tr(L"All"), "all", ""}, {Tr(L"One"), "one", ""}},
         [] { return static_cast<int>(TheApp().queue().RepeatMode()); },
+        // Through the settings, like the L and Shuffle keys: they persist, drive mpv's loop-file
+        // and the queue, and the keys then toggle from the value shown here.
         [](int i) {
             const Repeat r = static_cast<Repeat>(i);
-            TheApp().queue().SetRepeat(r);
-            TheApp().player().SetProperty("loop-file", std::string(r == Repeat::One ? "inf" : "no"));
+            Cfg().SetString("playback.repeat", r == Repeat::One ? "one" : r == Repeat::All ? "all" : "off");
         });
     AddToggle(page, s, Tr(L"Shuffle"), [] { return TheApp().queue().Shuffle(); },
-              [](bool v) { TheApp().queue().SetShuffle(v); });
+              [](bool v) { Cfg().SetBool("playback.shuffle", v); });
     AddToggle(page, s, Tr(L"Stop after this item"), [] { return Live().stopAfter; },
               [](bool v) { Live().SetStopAfter(v); });
     std::vector<ui::Choice> sleep{{Tr(L"Off"), "0", ""}};
@@ -505,6 +506,13 @@ std::unique_ptr<Widget> VideoTab() {
               [] { return Live().crop; }, [](const std::string& v) { Live().SetCrop(v); });
     AddChoice(page, s, Tr(L"Deinterlace"), {{Tr(L"Auto"), "auto", ""}, {Tr(L"On"), "yes", ""}, {Tr(L"Off"), "no", ""}},
               [] { return Live().deinterlace; }, [](const std::string& v) { Live().SetDeinterlace(v); });
+    {
+        // The rule for the next file (Player.cpp reset-on-next-file, LiveState's file change).
+        auto* note = s->Add<Label>(Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only."),
+                                   TextStyle::Small, Tone::Tertiary);
+        note->pad = {4, 4, 0, 0};
+        note->wrap = true;
+    }
     auto* bottom = s->Add<Widget>();
     bottom->height = Length::Px(8);
 

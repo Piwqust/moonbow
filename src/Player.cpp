@@ -176,8 +176,12 @@ bool Player::InitOnWorker(int64_t wid) {
     // Per file only the position and the chosen tracks; delays, mute and the
     // A-B loop are for the current file, not the next one.
     opt("watch-later-options", "start,aid,sid,secondary-sid");
+    // The picture transforms (zoom with its 1:1 mode, pan, rotation, aspect; LiveState drops
+    // the flip filter) are per file too. A recording stops with its file: mpv would reopen the
+    // same name for the next one and truncate what was recorded.
     opt("reset-on-next-file",
-        "audio-delay,sub-delay,ab-loop-a,ab-loop-b,video-aspect-override,video-zoom,video-pan-x,video-pan-y,video-rotate");
+        "audio-delay,sub-delay,ab-loop-a,ab-loop-b,video-aspect-override,video-zoom,video-unscaled,video-pan-x,"
+        "video-pan-y,video-rotate,stream-record");
     opt("audio-display", "no");  // cover art is shown by our music view
     opt("background-color", "#000000");
 

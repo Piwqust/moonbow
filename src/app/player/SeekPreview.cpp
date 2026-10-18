@@ -472,7 +472,17 @@ bool HeavyVideo(const PlayerState& s) {
 
 }  // namespace
 
-float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double seconds) {
+float ClampedLeft(float x, float w, const ui::Rect& track, const ui::Rect& bounds) {
+    // Over the bar while it is wider than the box; else within the window, 8 DIP from its edges.
+    float lo = track.x, hi = track.Right() - w;
+    if (hi < lo) {
+        lo = bounds.x + 8;
+        hi = bounds.Right() - 8 - w;
+    }
+    return hi < lo ? lo : std::clamp(x - w / 2, lo, hi);  // std::clamp needs lo <= hi
+}
+
+float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double seconds, const ui::Rect& bounds) {
     App& app = TheApp();
     const PlayerState& s = app.player().State();
     const QueueItem* item = app.queue().CurrentItem();
@@ -490,7 +500,7 @@ float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double se
     auto frame = Instance().Get(r);
 
     const float w = kW, h = kH;
-    const ui::Rect box{std::clamp(x - w / 2, track.x, track.Right() - w), track.y - 34 - h - 6, w, h};
+    const ui::Rect box{ClampedLeft(x, w, track, bounds), track.y - 34 - h - 6, w, h};
     p.Shadow(box, 6, 10, 4, 0.35f);
     p.Fill(box, ui::P().bgDeep, 6);
     if (frame) {

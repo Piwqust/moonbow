@@ -25,9 +25,6 @@ struct PanelState {
     Group group = Group::None;
     int tab = 0;
     int settingsTab = 0;  // reopened on the last used settings tab
-    double closedAt = -1e9;
-    Group closedGroup = Group::None;
-    int closedTab = 0;
 };
 
 PanelState& S() {
@@ -119,6 +116,22 @@ Rect PlaceAboveMini(float prefH) {
     return {m.x, std::round(bottom - h), m.w, h};
 }
 
+Widget* FindId(Widget* w, const char* id) {
+    if (w->id == id) return w;
+    for (auto& c : w->Children())
+        if (Widget* hit = FindId(c.get(), id)) return hit;
+    return nullptr;
+}
+
+// The queue list takes the keyboard (arrows move the selection, Del, Enter; Space still plays
+// and pauses); the other tabs leave it on the player (Space, arrows), and Tab walks into them.
+// While the queue shows, files dropped on the window are added to it (MainWindow::onDropFiles).
+void FocusQueue(MainWindow* w, Popover* pop) {
+    Widget* list = pop ? FindId(pop, "queue-list") : nullptr;
+    w->SetFocus(list);
+    w->dropHint = list ? Tr(L"Drop to add to the queue") : Tr(L"Drop to play");
+}
+
 std::unique_ptr<Popover> MakePopover(Group g, int tab) {
     auto pop = std::make_unique<Popover>();
     Popover* raw = pop.get();
@@ -163,14 +176,18 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
             break;
         case Group::None: break;
     }
-    pop->onTab = [g](int t) {
-        S().tab = t;
-        if (g == Group::Settings) S().settingsTab = t;
-        if (MainWindow* w = TheApp().main()) w->RequestRender();
+    pop->onTab = [g, raw](int t) {
+        PanelState& s = S();
+        s.tab = t;
+        if (g == Group::Settings) s.settingsTab = t;
+        MainWindow* w = TheApp().main();
+        if (!w) return;
+        // Not while the popover is being built (Open focuses it once it is shown).
+        if (s.pop == raw) FocusQueue(w, raw);
+        w->RequestRender();
     };
     return pop;
 }
-
 void Open(Group g, int tab) {
     MainWindow* w = TheApp().main();
     if (!w) return;
@@ -187,30 +204,21 @@ void Open(Group g, int tab) {
     o.onDismiss = [raw] {
         PanelState& s = S();
         if (s.pop != raw) return;
-        s.closedAt = AnimFloat::Now();
-        s.closedGroup = s.group;
-        s.closedTab = s.tab;
         s.pop = nullptr;
         s.group = Group::None;
-        if (MainWindow* mw = TheApp().main()) mw->RequestRender();
+        if (MainWindow* mw = TheApp().main()) {
+            mw->dropHint = Tr(L"Drop to play");
+            mw->RequestRender();
+        }
     };
     PanelState& s = S();
     s.group = g;
     s.tab = tab;
     s.pop = static_cast<Popover*>(w->ShowPopup(std::move(pop), o));
-    // Keep the keyboard on the player (Space, arrows); Tab walks into the panel.
-    w->SetFocus(nullptr);
+    FocusQueue(w, raw);
 }
 
 }  // namespace
-
-namespace panel {
-
-bool PanelJustClosed() {
-    return AnimFloat::Now() - S().closedAt < 350;
-}
-
-}  // namespace panel
 
 bool PlayerPanelOpen(PanelKind kind) {
     MainWindow* w = TheApp().main();
@@ -233,11 +241,6 @@ void TogglePlayerPanel(PanelKind kind, const Rect&) {
     PanelState& s = S();
     if (PlayerPanelOpen(kind)) {
         ClosePlayerPanels();
-        return;
-    }
-    // The mouse-down of this very click already closed the panel the button belongs to.
-    if (AnimFloat::Now() - s.closedAt < 400 && Matches(kind, s.closedGroup, s.closedTab)) {
-        s.closedAt = -1e9;
         return;
     }
     const Group g = GroupFor(kind);

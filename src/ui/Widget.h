@@ -38,6 +38,7 @@ struct MouseEvent {
     float x = 0, y = 0;
     MouseButton button = MouseButton::Left;
     Mods mods;
+    bool cancelled = false;  // OnMouseUp after a lost capture (Alt+Tab, a dialog): undo, don't commit
 };
 struct WheelEvent {
     float x = 0, y = 0;

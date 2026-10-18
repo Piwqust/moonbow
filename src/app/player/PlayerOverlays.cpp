@@ -437,6 +437,9 @@ void NextEpisodeCard::Resolve() {
     if (curPath_.empty() || lib::IsUrl(curPath_) || !episodes::Parse(curPath_).Valid()) return;
     const PlayQueue& q = TheApp().queue();
     const int ni = q.NextIndex(false);
+    // With a next item in the queue (or repeating this one) the folder search is moot: a result
+    // it already found must not come back through Update() and replace the queue the user built.
+    if (ni >= 0) job_.reset();
     if (ni >= 0 && ni != q.Current()) {
         const std::wstring& next = q.Items()[static_cast<size_t>(ni)].path;
         if (episodes::IsNext(curPath_, next)) {

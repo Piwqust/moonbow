@@ -50,8 +50,10 @@ bool ForwardToRunningInstance(const std::vector<std::wstring>& args) {
     COPYDATASTRUCT cds{app::kCopyDataOpen, static_cast<DWORD>((payload.size() + 1) * sizeof(wchar_t)),
                        const_cast<wchar_t*>(payload.c_str())};
     DWORD_PTR result = 0;
+    // A window that is closing answers FALSE: this process then opens the files itself.
     return SendMessageTimeoutW(other, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000,
-                               &result) != 0;
+                               &result) != 0 &&
+           result != 0;
 }
 
 // "Only allow one Lumen window" (library.singleInstance). Read straight from the
