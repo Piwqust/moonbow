@@ -523,11 +523,11 @@ private:
     int SearchGroups(const library::Snapshot& snap) {
         const std::wstring q = library::SearchFold(filter_);
         struct Hit {
-            std::wstring name, artist, image;
+            std::wstring name, artist, image, route;
             int songs = 0;
             bool mixed = false;
         };
-        std::map<std::wstring, Hit> artists, albums;  // folded name -> hit
+        std::map<std::wstring, Hit> artists, albums;  // folded name (+ album folder) -> hit
         for (const library::MediaItem& m : snap.items) {
             if (m.kind != library::MediaKind::Audio) continue;
             if (!m.artist.empty()) {
@@ -537,10 +537,12 @@ private:
                 ++a.songs;
             }
             if (!m.album.empty()) {
-                Hit& b = albums[library::SearchFold(m.album)];
+                // One card per album, as on the Albums page: name and folder (AlbumFolderKey).
+                Hit& b = albums[library::SearchFold(m.album) + L"\n" + AlbumFolderKey(m)];
                 if (b.name.empty()) {
                     b.name = m.album;
                     b.artist = m.artist;
+                    b.route = AlbumRouteArg(m);
                 }
                 if (b.artist != m.artist) b.mixed = true;
                 if (b.image.empty() && !m.offline) b.image = m.path;
@@ -560,16 +562,18 @@ private:
             ++n;
         }
         const int artistHits = n;
-        for (const auto& [key, b] : albums) {
+        for (const auto& entry : albums) {
+            const Hit& b = entry.second;
             const std::wstring by = b.mixed ? std::wstring(Tr(L"Various artists")) : ArtistLabel(b.artist);
-            if (!library::FoldedContains(key, q) && !library::FoldedContains(library::SearchFold(by), q)) continue;
+            if (!library::FoldedContains(library::SearchFold(b.name), q) && !library::FoldedContains(library::SearchFold(by), q))
+                continue;
             Entry e;
             e.kind = EntryKind::Album;
             e.title = b.name;
             e.subtitle = by;
             e.icon = "album";
             e.image = b.image;
-            results_[1]->AddEntry(std::move(e), Route{Section::Music, L"album:" + b.name});
+            results_[1]->AddEntry(std::move(e), Route{Section::Music, L"album:" + b.route});
             ++n;
         }
         results_[0]->Title()->text = Fmt(Tr(L"Artists · {0}"), static_cast<long long>(artistHits));

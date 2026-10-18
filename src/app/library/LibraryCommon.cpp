@@ -12,6 +12,7 @@
 #include <shobjidl.h>
 
 #include <cwchar>
+#include <cwctype>
 #include <unordered_set>
 
 namespace app::lib {
@@ -148,6 +149,27 @@ std::wstring ArtistLabel(const std::wstring& artist) {
 
 std::wstring AlbumLabel(const std::wstring& album) {
     return album.empty() ? std::wstring(Tr(L"Unknown album")) : album;
+}
+
+std::wstring AlbumFolderKey(const library::MediaItem& m) {
+    std::wstring folder = m.folder;
+    std::wstring name = library::FileNameOf(folder);
+    for (auto& c : name) c = static_cast<wchar_t>(towlower(c));
+    for (const wchar_t* prefix : {L"cd", L"disc", L"disk", L"диск"}) {
+        const size_t n = wcslen(prefix);
+        if (name.compare(0, n, prefix) != 0) continue;
+        size_t i = n;
+        while (i < name.size() && (name[i] == L' ' || name[i] == L'_' || name[i] == L'-' || name[i] == L'.')) ++i;
+        const size_t digits = i;
+        while (i < name.size() && iswdigit(name[i])) ++i;
+        if (i > digits && i == name.size()) folder = library::ParentFolder(folder);
+        break;
+    }
+    return library::PathKey(folder);
+}
+
+std::wstring AlbumRouteArg(const library::MediaItem& m) {
+    return m.album.empty() ? std::wstring() : m.album + L"\n" + AlbumFolderKey(m);
 }
 
 std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item, const std::wstring& storedTitle) {
