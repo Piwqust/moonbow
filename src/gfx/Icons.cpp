@@ -109,7 +109,9 @@ void Icons::Draw(ID2D1DeviceContext5* ctx, std::string_view name, const ui::Rect
     // Alpha is applied with a layer only when needed; most icons are opaque.
     const bool translucent = primary.a < 0.999f;
     if (translucent) {
-        D2D1_LAYER_PARAMETERS1 params = D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr,
+        // Bounded to the icon (in its 24-unit space, with room for edge strokes): an unbounded
+        // layer makes D2D allocate a target-sized surface, and fades draw many icons per frame.
+        D2D1_LAYER_PARAMETERS1 params = D2D1::LayerParameters1(D2D1::RectF(-1, -1, 25, 25), nullptr,
                                                                D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                                                                D2D1::IdentityMatrix(), primary.a);
         ctx->PushLayer(params, nullptr);

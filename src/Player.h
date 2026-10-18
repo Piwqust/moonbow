@@ -104,7 +104,7 @@ public:
 
     // `start` > 0 begins playback at that position (seconds); otherwise mpv's
     // watch-later resume applies.
-    void Open(const std::wstring& path, double start = -1);
+    void Open(const std::wstring& path);
     void Stop();
     // The file to play when the current one ends, kept in mpv's playlist so mpv prefetches it
     // and plays it gaplessly (gapless-audio, prefetch-playlist). Empty = stop at the end.
@@ -154,7 +154,6 @@ public:
     uint64_t Observe(const char* name, mpv_format format, PropertyCallback cb);
     void Unobserve(uint64_t id);
 
-    mpv_handle* Handle() const { return mpv_; }
     const MpvApi& Api() const { return api_; }
 
 private:

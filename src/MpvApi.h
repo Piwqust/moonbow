@@ -8,7 +8,6 @@
 // libmpv is loaded at runtime with LoadLibrary, so the window can appear
 // before the (large) DLL is mapped, and no MinGW import library is needed.
 #define LUMEN_MPV_FUNCS(X)      \
-    X(mpv_client_api_version)   \
     X(mpv_error_string)         \
     X(mpv_free)                 \
     X(mpv_create)               \
@@ -23,8 +22,7 @@
     X(mpv_unobserve_property)   \
     X(mpv_observe_property)     \
     X(mpv_wait_event)           \
-    X(mpv_set_wakeup_callback)  \
-    X(mpv_free_node_contents)
+    X(mpv_set_wakeup_callback)
 
 struct MpvApi {
 #define LUMEN_MPV_PTR(name) decltype(&::name) name = nullptr;

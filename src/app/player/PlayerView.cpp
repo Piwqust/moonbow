@@ -698,7 +698,7 @@ public:
 
 }  // namespace
 
-MiniPlayer::MiniPlayer(MainWindow* window) : window_(window) {
+MiniPlayer::MiniPlayer(MainWindow*) {
     interactive = true;
     width = Length::Auto();
     height = Length::Auto();
@@ -891,7 +891,5 @@ void MiniPlayer::Paint(Painter& p) {
         }
     }
 }
-
-void MiniPlayer::PaintOver(Painter&) {}
 
 }  // namespace app

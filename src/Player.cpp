@@ -553,7 +553,7 @@ void Player::Unobserve(uint64_t id) {
     observers_.erase(id);
 }
 
-void Player::Open(const std::wstring& path, double start) {
+void Player::Open(const std::wstring& path) {
     if (state_.fileLoaded) SaveWatchLater();
     // "replace" clears mpv's playlist, the queued next file included.
     queuedNext_.clear();
@@ -562,12 +562,7 @@ void Player::Open(const std::wstring& path, double start) {
     ++queueGen_;
     startedPath_ = path;
     const std::string utf8 = WideToUtf8(path);
-    if (start > 0) {
-        const std::string opts = "start=" + std::to_string(start);
-        Cmd({"loadfile", utf8.c_str(), "replace", "-1", opts.c_str()});
-    } else {
-        Cmd({"loadfile", utf8.c_str(), "replace"});
-    }
+    Cmd({"loadfile", utf8.c_str(), "replace"});
 }
 
 void Player::Stop() {

@@ -61,7 +61,6 @@ public:
     // the hardware-decoded frames. Why it is not active right now, or empty when it is (or off).
     std::wstring UpscalerStatus() const;
     bool UpscalerActive() const { return !srFilter_.empty(); }
-    const std::string& UpscalerFilter() const { return srFilter_; }  // "@lsr:d3d11vpp=scale=..."
     // CPU (lavfi) video filters are on: the config's chain, flip or colour effects.
     bool CpuFilters() const;
 

@@ -27,7 +27,6 @@
 #include <cstring>
 #include <numeric>
 #include <random>
-#include <sstream>
 #include <typeinfo>
 
 namespace app {
@@ -64,7 +63,6 @@ const char* SectionIcon(Section s) {
 
 namespace {
 
-constexpr UINT WM_APP_SHUTDOWN_DONE = WM_APP + 70;
 
 bool IsUrl(const std::wstring& s) {
     return s.find(L"://") != std::wstring::npos;
