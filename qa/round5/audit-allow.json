@@ -1,8 +1,11 @@
 {
-  "_doc": "Allowlist and type tables for tools/dev/ui-audit.py. inferInteractive/inferText/inferScroll are used only for v1 dumps (no flags); v2 dumps carry the flags. Every rule needs a reason.",
+  "_doc": "Allowlist and type tables for tools/dev/ui-audit.py. inferInteractive/inferText/inferScroll are used only for v1 dumps (no flags); v2 dumps carry the flags. Every rule needs a reason. Rule fields (all optional, regex full-match unless noted): check, type, id, text, parent, ancestor, path (search), window (search), context (scenario name), other* (the second widget of a pair check), region (hitmap-odd: search in the region line).",
   "minTarget": 24,
   "resizeBorderDip": 8,
   "titleBarDip": 40,
+  "titleBarByWindow": [
+    { "window": "Настройки|Settings", "dip": 50, "reason": "the Settings window header (search, title, close) is 50 DIP and drags the window" }
+  ],
   "maxButtonType": "CaptionButton",
   "inferInteractive": [
     "AccentPicker", "AccentSwatch", "AccentSwatches", "AddItem", "AdvancedExpander", "BarSlot", "BookmarkList",
@@ -19,9 +22,13 @@
   "inferScroll": ["ScrollView"],
   "_overlayTypes": "Widgets that float over the layout by design. Overlap between something inside one and something outside it is not reported, and targets on different sides do not count as neighbours for the target-size spacing rule. Overlap inside one overlay is still checked.",
   "overlayTypes": ["MiniPlayer", "PipOverlay", "ToastBubble", "TooltipBubble", "ScanBadge"],
-  "notCarrier": [],
+  "_notCarrier": "Never counted as text or input for the overlap checks: VideoArea is the video surface every player overlay sits on (chips, cards, the floating bar); PreviewWindow is the decorative mock player painted behind the onboarding theme page (its time strings are fake).",
+  "notCarrier": ["VideoArea", "PreviewWindow"],
   "notTarget": [],
   "rules": [
-    { "check": "clip-parent", "type": "BarEditor", "parent": "Editor", "reason": "Customize player edits the real control bar in place: the bar editor sits at the bar's own position, over the player, outside the dialog body on purpose (design Player-customize_*)." }
+    { "check": "clip-parent", "type": "BarEditor", "parent": "Editor", "reason": "Customize player edits the real control bar in place: the bar editor sits at the bar's own position, over the player, outside the dialog body on purpose (design Player-customize_*)." },
+    { "check": "text-trunc", "type": "TextBox|SearchField|SettingField|EditBox|ValueBox|ColorBox|SliderValue|EqValue|AddonSearch|TextArea|KeyField", "reason": "An editable field scrolls its text; the full value is reachable by moving the caret." },
+    { "check": "zero-size", "type": "ItemGrid", "reason": "An empty grid keeps its place in the layout at zero height; it has no items to click." },
+    { "check": "hitmap-odd", "context": "pip.*", "region": "^HTCAPTION", "reason": "In picture-in-picture the whole video is the drag handle (HTCAPTION) except the overlay buttons, which answer HTCLIENT." }
   ]
 }

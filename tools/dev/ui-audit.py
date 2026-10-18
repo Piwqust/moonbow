@@ -6,13 +6,14 @@
 
 The tree comes from tools/dev/dump-tree.ps1. Both formats are read:
 - v1: `<indent><Type>[ #id] [x,y wxh][ hidden][ disabled]`, one window, popups after `--- popup`;
-- v2: the same lines plus ` interactive`, ` focus`, ` hot`, ` pressed`, ` scroll`, ` text="..."`, ` trunc`,
-  ` clip`, and a `=== window title=... client=WxH scale=S theme=... fullscreen=0|1 maximized=0|1` line per
-  window.
+- v2: a `=== window title=... client=WxH scale=S theme=... fullscreen=0|1 maximized=0|1 hwnd=N main=0|1 dpi=D`
+  line per window, and the same widget lines plus ` interactive`, ` focus`, ` hot`, ` pressed`, state tokens
+  (` scroll offset=Y/MAX`, ` on`, ` selected=N`, ...), one ` text="..."` per painted string followed by that
+  string's ` trunc` / ` clip` / ` overflow` / ` faded` / ` box=[x,y wxh]`, and ` tip="..."`.
 A v1 dump has no interactive/text/scroll flags, so they are inferred from the widget type (lists in the
 allowlist file). Rects are window DIPs. Hidden propagates to the whole subtree.
 
-Checks: overlap, overlap-cross, clip-parent, clip-window, offscreen, text-trunc, text-clip, target-size,
+Checks: overlap, overlap-cross, clip-parent, clip-window, offscreen, text-trunc, text-clip, text-overflow, target-size,
 zero-size, hitmap, hitmap-odd. Prints a markdown report; --json writes every finding, allowed ones
 included with the allowlist reason. Exit code 0 (findings are data, not failures).
 """
@@ -39,7 +40,7 @@ class Node:
     w: float
     h: float
     flags: set
-    text: str | None
+    text: str | None  # the first visible painted string
     depth: int
     line: int
     layer: int  # 0 = window root, 1.. = popups in dump order
@@ -50,6 +51,8 @@ class Node:
     has_text: bool = False
     scroll: bool = False
     vis_rect: tuple | None = None  # rect clipped by scrolling ancestors, None when scrolled out
+    texts: list = field(default_factory=list)  # v2: [{"text", "flags": set, "box": rect|None}] in paint order
+    tip: str | None = None
 
     @property
     def rect(self):
@@ -100,7 +103,7 @@ def unescape(s: str) -> str:
         c = s[i]
         if c == "\\" and i + 1 < len(s):
             n = s[i + 1]
-            out.append({"n": "\n", "t": "\t", '"': '"', "\\": "\\"}.get(n, n))
+            out.append({"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}.get(n, n))
             i += 2
         else:
             out.append(c)
@@ -116,6 +119,47 @@ def short_type(raw: str) -> str:
     if "'::" in t:  # local classes: "`public: __cdecl X::X(...)'::`2'::QueueButton"
         t = t.rsplit("'::", 1)[1]
     return t.rsplit("::", 1)[-1]
+
+
+def parse_rest(rest: str):
+    """Widget flags, painted strings (each with its own trunc/clip/overflow/faded/box) and the tooltip."""
+    flags, texts, tip = set(), [], None
+    i, n = 0, len(rest)
+    while i < n:
+        if rest[i] == " ":
+            i += 1
+            continue
+        m = re.match(r'(\w+)="', rest[i:])
+        if m:  # key="escaped value"
+            j = i + m.end()
+            while j < n and rest[j] != '"':
+                j += 2 if rest[j] == "\\" else 1
+            val = unescape(rest[i + m.end():j])
+            i = j + 1
+            if m.group(1) == "text":
+                texts.append({"text": val, "flags": set(), "box": None})
+            elif m.group(1) == "tip":
+                tip = val
+            else:
+                flags.add(m.group(1) + "=" + val)
+            continue
+        m = re.match(r"box=\[(-?[\d.]+),(-?[\d.]+) (-?[\d.]+)x(-?[\d.]+)\]", rest[i:])
+        if m:
+            if texts:
+                texts[-1]["box"] = tuple(float(v) for v in m.groups())
+            i += m.end()
+            continue
+        j = rest.find(" ", i)
+        j = n if j < 0 else j
+        tok = rest[i:j]
+        i = j
+        if texts and tok in ("trunc", "clip", "overflow", "faded"):
+            texts[-1]["flags"].add(tok)
+        elif tok in ("trunc", "clip"):  # early v2 drafts: one text, flags after it or alone
+            flags.add(tok)
+        else:
+            flags.add(tok)
+    return flags, texts, tip
 
 
 def parse_tree(text: str) -> list[Window]:
@@ -171,18 +215,12 @@ def parse_tree(text: str) -> list[Window]:
         if im:
             nid = im.group(1)
             body = body[: im.start()]
-        flags, txt = set(), None
-        for fm in FLAG_RE.finditer(m.group("rest")):
-            if fm.group("k"):
-                if fm.group("k") == "text":
-                    txt = unescape(fm.group("v"))
-                else:
-                    flags.add(fm.group("k") + "=" + fm.group("v"))
-            else:
-                flags.add(fm.group("f"))
+        flags, texts, tip = parse_rest(m.group("rest"))
+        visible_texts = [t["text"] for t in texts if "faded" not in t["flags"] and t["text"].strip()]
         depth = len(m.group("indent")) // 2
         node = Node(body, short_type(body), nid, float(m.group("x")), float(m.group("y")), float(m.group("w")),
-                    float(m.group("h")), flags, txt, depth, lineno, layer)
+                    float(m.group("h")), flags, visible_texts[0] if visible_texts else None, depth, lineno, layer)
+        node.texts, node.tip = texts, tip
         while stack and stack[-1].depth >= depth:
             stack.pop()
         if stack:
@@ -421,12 +459,29 @@ def check_tree(win: Window, allow: dict, emit):
             emit("clip-window", "high" if (n.interactive or n.has_text) else "medium", n, None,
                  f"{n.label()} {fmt_rect(r)} outside the client {cw:g}x{ch:g} by {', '.join(over)}")
 
-    # Text flags (v2 only).
+    # Text flags (v2): one finding per widget and flag, faded (auto-hidden) strings skipped.
+    def quote(ts):
+        shown = ", ".join('"' + t.replace("\n", " ")[:50] + '"' for t in ts[:3])
+        return shown + (f" and {len(ts) - 3} more" if len(ts) > 3 else "")
+
     for n in visible:
-        if "clip" in n.flags:
-            emit("text-clip", "high", n, None, f"{n.label()} is cut without an ellipsis")
-        elif "trunc" in n.flags:
-            emit("text-trunc", "low", n, None, f"{n.label()} is ellipsized; check that the full value is reachable (tooltip, info)")
+        if not has_area(n) or n.vis_rect is None:
+            continue
+        live = [t for t in n.texts if "faded" not in t["flags"] and t["text"].strip()]
+        clip = [t["text"] for t in live if "clip" in t["flags"]] or ([n.text or ""] if "clip" in n.flags else [])
+        trunc = [t["text"] for t in live if "trunc" in t["flags"] and "clip" not in t["flags"]] or (
+            [n.text or ""] if "trunc" in n.flags and "clip" not in n.flags else [])
+        over = [t["text"] for t in live if "overflow" in t["flags"]]
+        where = f"{n.type}{'#' + n.id if n.id else ''} {fmt_rect(n.rect)}"
+        if clip:
+            emit("text-clip", "high", n, None, f"{where}: {len(clip)} string(s) taller than their box: {quote(clip)}")
+        if over:
+            emit("text-overflow", "high", n, None, f"{where}: {len(over)} string(s) drawn past the widget: {quote(over)}")
+        if trunc:
+            if n.tip:
+                emit("text-trunc", "low", n, None, f"{where}: {len(trunc)} string(s) ellipsized, tooltip \"{n.tip[:60]}\": {quote(trunc)}")
+            else:
+                emit("text-trunc", "medium", n, None, f"{where}: {len(trunc)} string(s) ellipsized, no tooltip: {quote(trunc)}")
 
     # Target size, with the WCAG 2.5.8 spacing exception.
     targets = [n for n in visible if n.interactive and n.vis_rect and has_area(n) and n.type not in set(allow.get("notTarget", []))]
@@ -491,10 +546,11 @@ def check_hitmap(win: Window, text: str, step: int, state: str, allow: dict, emi
     ch = client_px[1] / scale if client_px else (win.client or (0, 0))[1]
     edge = float(allow.get("resizeBorderDip", 8)) + step / scale
     title_h = float(allow.get("titleBarDip", 40))
+    for rule in allow.get("titleBarByWindow", []):
+        if re.search(rule.get("window", "$^"), win.title or ""):
+            title_h = float(rule.get("dip", title_h))
+            break
     inter = [n for n in win.nodes if n.visible and n.interactive and has_area(n) and n.vis_rect]
-    names = {}
-    for n in inter:
-        names.setdefault(n.type, n)
     framed = state == "normal"
     for r in regions:
         code = r["code"]
@@ -505,15 +561,16 @@ def check_hitmap(win: Window, text: str, step: int, state: str, allow: dict, emi
         dense = r["n"] >= grid
         over_names = [short_type(s) for s in r["over"].split(" < ") if s.strip()]
         # Which interactive widgets does it sit on?
-        hits = []
-        for n in inter:
-            ir = inter_rect(n.vis_rect, bbox)
-            if not ir:
-                continue
-            if dense or (over_names and over_names[0] == n.type):
-                hits.append(n)
-        if over_names and over_names[0] in set(allow.get("inferInteractive", [])) and not hits:
-            hits = [n for n in inter if n.type == over_names[0] and inter_rect(n.vis_rect, bbox)]
+        # A widget is hit when one of the region's sample points falls inside it, and the region is
+        # dense (every sample in its box answered this code) or hitmap.ps1 named the widget.
+        sx = [(r["x1"] + k * step) / scale for k in range((r["x2"] - r["x1"]) // step + 1)]
+        sy = [(r["y1"] + k * step) / scale for k in range((r["y2"] - r["y1"]) // step + 1)]
+
+        def sampled(nd):
+            vx, vy, vw, vh = nd.vis_rect
+            return any(vx <= x < vx + vw for x in sx) and any(vy <= y < vy + vh for y in sy)
+
+        hits = [n for n in inter if sampled(n) and (dense or (over_names and over_names[0] == n.type))]
         at_edge = (x1 <= edge or y1 <= edge or x2 >= cw - edge or y2 >= ch - edge) and (
             min(x2 - x1, y2 - y1) <= edge or code in ("HTTOPLEFT", "HTTOPRIGHT", "HTBOTTOMLEFT", "HTBOTTOMRIGHT"))
         expected = False
@@ -550,7 +607,7 @@ def check_hitmap(win: Window, text: str, step: int, state: str, allow: dict, emi
 
 # --- report ---------------------------------------------------------------------------------------
 
-CHECK_ORDER = ["hitmap", "overlap", "clip-window", "text-clip", "target-size", "zero-size", "offscreen", "clip-parent",
+CHECK_ORDER = ["hitmap", "overlap", "clip-window", "text-clip", "text-overflow", "target-size", "zero-size", "offscreen", "clip-parent",
                "overlap-cross", "text-trunc", "hitmap-odd"]
 CHECK_TITLE = {
     "overlap": "Overlapping sibling leaves (text or input)",
@@ -559,7 +616,8 @@ CHECK_TITLE = {
     "clip-window": "Widget outside the client rect",
     "offscreen": "Visible widget entirely off-screen",
     "text-trunc": "Ellipsized text",
-    "text-clip": "Text cut without an ellipsis",
+    "text-clip": "Text taller than its box (cut)",
+    "text-overflow": "Text drawn past its widget",
     "target-size": "Interactive target under 24x24 DIP",
     "zero-size": "Zero-size visible interactive widget",
     "hitmap": "Non-client hit-test answer over an interactive widget",
@@ -619,7 +677,7 @@ def main(argv=None):
             for rule in allow.get("rules", []):
                 if match_rule(rule, f, node, other, _win, args.context) if node else (
                         rule.get("check") in (check, "*") and rx(rule.get("context"), args.context)
-                        and rule.get("type") is None and rx(rule.get("region"), region or "")):
+                        and rule.get("type") is None and re.search(rule.get("region") or "", region or "") is not None):
                     f["allowed"] = rule.get("reason", "allowlisted")
                     break
             findings.append(f)

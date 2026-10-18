@@ -248,7 +248,7 @@ $script:hasCommand = Test-Path $commandPs1
 
 function Dump-Tree([int]$procId, [IntPtr]$h, [string]$path) {
   if ($script:dumpV2) {
-    & $dumpTreePs1 -ProcessId $procId -All -Out $path | Out-Null
+    try { & $dumpTreePs1 -ProcessId $procId -All -Out $path -Quiet | Out-Null } catch { }
     if (Test-Path $path) { return $true }
   }
   $tmp = Join-Path $env:TEMP "lumen-tree-$procId.txt"
@@ -293,7 +293,11 @@ function Parse-Tree([string]$path) {
     $depth = $matches[1].Length / 2; $body = $matches[2]; $rest = $matches[7]
     $x = [double]$matches[3]; $y = [double]$matches[4]; $w = [double]$matches[5]; $hh = [double]$matches[6]
     $id = ""; if ($body -match ' #(\S+)$') { $id = $matches[1]; $body = $body.Substring(0, $body.Length - $id.Length - 2) }
-    $text = $null; if ($rest -match ' text="((?:[^"\\]|\\.)*)"') { $text = $matches[1] -replace '\\n', "`n" -replace '\\(.)', '$1'; $rest = $rest.Replace($matches[0], "") }
+    # v2: every painted string is a text="..." entry; flags are tested with the strings blanked out.
+    $text = $null
+    $tm = [regex]::Matches($rest, ' (?:text|tip)="((?:[^"\\]|\\.)*)"')
+    if ($tm.Count) { $text = (@($tm | ForEach-Object { $_.Groups[1].Value -replace '\\n', "`n" -replace '\\(.)', '$1' }) -join "`n") }
+    $rest = [regex]::Replace($rest, '="(?:[^"\\]|\\.)*"', '=""')
     while ($stack.Count -gt 0 -and $stack[$stack.Count - 1].Depth -ge $depth) { $stack.RemoveAt($stack.Count - 1) }
     $parent = if ($stack.Count) { $stack[$stack.Count - 1] } else { $null }
     $hidden = $rest -match '\bhidden\b'
@@ -428,9 +432,15 @@ function Run-Step($step, [int]$procId) {
   $after = [int](Get-Prop $step "after" 250)
   $cmd = Get-Prop $step "cmd"
   if ($cmd -and $script:hasCommand) {
-    & $commandPs1 -ProcessId $procId -Command $cmd | Out-Null
-    Start-Sleep -Milliseconds $after
-    return
+    # A failed command (unknown name, older command.ps1) falls back to the step's keys/click.
+    $failed = $null
+    try { $global:LASTEXITCODE = 0; & $commandPs1 -ProcessId $procId -Command $cmd | Out-Null; if ($LASTEXITCODE) { $failed = "exit $LASTEXITCODE" } }
+    catch { $failed = $_.Exception.Message }
+    if (-not $failed) {
+      if (-not (Get-Prop $step "noIdle")) { try { & $commandPs1 -ProcessId $procId -Command "wait-idle" -TimeoutMs 4000 -Quiet | Out-Null } catch {} }
+      Start-Sleep -Milliseconds $after; return
+    }
+    $script:notes += "cmd '$cmd' failed ($failed), used the fallback"
   }
   $acted = $false
   $win = Get-Prop $step "window"
@@ -489,7 +499,7 @@ function Take-Capture([int]$procId, [string]$label, [bool]$final) {
   $dir = $script:workDir
   $base = Safe-Name $label
   $png = Join-Path $dir "$base.png"; $jpg = Join-Path $dir "$base.thumb.jpg"; $tree = Join-Path $dir "$base.tree.txt"
-  if ($script:hasCommand -and $final) { try { & $commandPs1 -ProcessId $procId -Command "wait-idle" | Out-Null } catch {} }
+  if ($script:hasCommand -and $final) { try { & $commandPs1 -ProcessId $procId -Command "wait-idle" -TimeoutMs 3000 -Quiet | Out-Null } catch {} }
   $px = Capture-Png $h $png $jpg
   $okTree = Dump-Tree $procId $h $tree
   $cs = Client-Size $h
@@ -731,7 +741,7 @@ foreach ($s in $ordered) {
   if (Test-Path $rf) { $results += (Get-Content -Raw -Encoding UTF8 $rf | ConvertFrom-Json) }
   else { $results += [pscustomobject]@{ name = $s["name"]; base = $s["base"]; variant = $s["variant"]; priority = $s["priority"]; screen = $s["screen"]; description = $s["description"]; status = "not run"; notes = @("timeout or worker failure"); captures = @(); seconds = 0 } }
 }
-$checkNames = @("hitmap", "overlap", "clip-window", "text-clip", "target-size", "zero-size", "offscreen", "clip-parent", "overlap-cross", "text-trunc", "hitmap-odd")
+$checkNames = @("hitmap", "overlap", "clip-window", "text-clip", "text-overflow", "target-size", "zero-size", "offscreen", "clip-parent", "overlap-cross", "text-trunc", "hitmap-odd")
 $totals = @{}; foreach ($c in $checkNames) { $totals[$c] = 0 }
 $allFindings = New-Object System.Collections.ArrayList
 foreach ($r in $results) {
