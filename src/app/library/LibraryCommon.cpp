@@ -387,7 +387,7 @@ std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
         out.push_back(std::move(m));
     }
     if (!out.empty()) out.push_back(MenuItem::Separator());
-    out.push_back(Item(L"New playlist…", "add", [items, toPlaylist] {
+    out.push_back(Item(L"New Playlist…", "add", [items, toPlaylist] {
         ShowNewPlaylistDialog([items, toPlaylist](const std::string& id) {
             if (id.empty()) return;
             if (TheApp().playlists().Add(id, toPlaylist(items))) {
@@ -406,7 +406,7 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem>
     QueueItem self = index >= 0 && index < static_cast<int>(queue.size()) ? queue[static_cast<size_t>(index)]
                                                                           : MakeQueueItem(path);
     m.push_back(Item(L"Play", "playback", [queue, index, queueName] { PlayQueue(queue, index, queueName); }));
-    m.push_back(Item(L"Play next", "next_twotone", [self] { PlayNext({self}); }));
+    m.push_back(Item(L"Play Next", "next_twotone", [self] { PlayNext({self}); }));
     m.push_back(Item(L"Add to Queue", "queue", [self] { AddToQueue({self}); }));
     MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
     pl.submenu = AddToPlaylistMenu({self});

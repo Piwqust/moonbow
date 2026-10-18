@@ -59,11 +59,11 @@
 {L"Nothing here yet", L"Здесь пока пусто"},
 
 // Item menus
-{L"Play next", L"Воспроизвести следующим"},
+{L"Play Next", L"Воспроизвести следующим"},
 {L"Play All", L"Воспроизвести все"},
 {L"Add to Queue", L"Добавить в очередь"},
 {L"Add to Playlist", L"Добавить в плейлист"},
-{L"New playlist…", L"Новый плейлист…"},
+{L"New Playlist…", L"Новый плейлист…"},
 {L"Mark as Watched", L"Отметить как просмотренное"},
 {L"Mark as Unwatched", L"Отметить как непросмотренное"},
 {L"Remove from Favorites", L"Убрать из избранного"},
@@ -209,3 +209,21 @@
 {L"Already in “{0}”", L"Уже в плейлисте «{0}»"},
 {L"Added to “{0}”, {1} already there", L"Добавлено в «{0}», уже были в плейлисте: {1}"},
 {L"Track Number", L"По номеру трека"},
+
+// Column titles of list views
+{L"#", L"№"},
+{L"Length", L"Длина"},
+{L"Modified", L"Изменён"},
+
+// Search results
+{L"Artists · {0}", L"Исполнители · {0}"},
+{L"Albums · {0}", L"Альбомы · {0}"},
+
+// Series folders
+{L"Season {0}", L"Сезон {0}"},
+{L"Continue {0}", L"Продолжить {0}"},
+{L"Play {0}", L"Смотреть {0}"},
+{L"Other videos", L"Другие видео"},
+
+// Files the scanner can't play
+{L"Damaged", L"Повреждён"},

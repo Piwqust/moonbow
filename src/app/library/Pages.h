@@ -90,6 +90,13 @@ protected:
     int AddRoute(Entry e, Route target);
     int AddAction(Entry e, std::function<void()> action);
     void AddHeader(const std::wstring& title, const std::wstring& right = {});
+    // Column titles above list rows (list mode only). `sort` is the page's current sort value.
+    struct Column {
+        ColumnHead head;
+        const wchar_t* label;  // untranslated
+        std::string sort;      // empty = not sortable
+    };
+    void AddColumns(const std::string& sort, std::initializer_list<Column> columns);
     // Media entry + queue item (title per MediaTitle, artist/album labels for songs).
     int AddMedia(const library::MediaItem& m);
     Entry FolderEntry(const library::FolderNode& f, library::MediaKind kind) const;
@@ -146,6 +153,8 @@ private:
     std::vector<std::function<void()>> nextActions_;
     std::unordered_map<std::wstring, HistoryInfo> history_;
     std::unordered_set<std::wstring> favorites_;  // PathKey
+    ColumnTitle heads_[kHeadCount];
+    std::string headSort_;
     ScopedConnection libConn_, playerConn_, langConn_;
     bool focusTaken_ = false;
 };
