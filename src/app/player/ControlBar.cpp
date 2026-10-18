@@ -523,7 +523,7 @@ SeekBar::SeekBar() {
 SeekBar::~SeekBar() = default;
 
 Rect SeekBar::Track() const {
-    const float h = compact ? 6.0f : 26.0f;
+    const float h = compact ? 6.0f : slim ? (hoverX_ >= 0 || dragging_ ? 8.0f : 4.0f) : 26.0f;
     return {rect.x + pad.l, rect.Cy() - h / 2, rect.w - pad.H(), h};
 }
 
@@ -618,7 +618,9 @@ void SeekBar::Paint(Painter& p) {
         p.Fill({std::round(cx), t.y + (compact ? 0.0f : 6.0f), 1, compact ? t.h : t.h - 12}, P().lineStrong);
     }
     const float x = std::clamp(t.x + t.w * k, t.x + 2, t.Right() - 2);
-    if (compact)
+    if (slim)
+        p.FillCircle({x, t.Cy()}, hoverX_ >= 0 || dragging_ ? 7.0f : 5.0f, P().accent);
+    else if (compact)
         p.Fill({x - 2, t.y - 2, 4, t.h + 4}, P().accent, 2);
     else
         p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);
@@ -656,13 +658,39 @@ ControlBar::ControlBar() {
     gap = 6;
     interactive = true;  // swallow clicks between items (don't pause the video)
     layoutConn_ = Connect(ControlLayoutChanged(), [this] { Rebuild(); });
+    configToken_ = TheApp().config().Subscribe("interface.barStyle", [this](const std::string&) {
+        Rebuild();
+        if (Parent()) Parent()->InvalidateLayout();  // the bar height and the video area change
+    });
     Rebuild();
 }
 
-ControlBar::~ControlBar() = default;
+ControlBar::~ControlBar() {
+    TheApp().config().Unsubscribe(configToken_);
+}
+
+void ControlBar::ReadStyle() {
+    const std::string style = TheApp().config().GetString("interface.barStyle");
+    minimal_ = style == "minimal";
+    classic_ = style == "classic";
+    height = Length::Px(BarHeight());
+    pad = minimal_ ? Insets{14, 0, 14, 0} : Insets{20, 0, 20, 0};
+}
 
 void ControlBar::Rebuild() {
     ClearChildren();
+    ReadStyle();
+    if (minimal_) {
+        // Play, the time and a slim seek bar; volume and the queue stay one click away.
+        AddChild(CreateControl(ControlId::PlayPause));
+        AddChild(CreateControl(ControlId::Time));
+        auto* seek = Add<SeekBar>();
+        seek->slim = true;
+        seek->pad = {10, 0, 10, 0};
+        for (ControlId cid : {ControlId::Duration, ControlId::Volume, ControlId::Playlist}) AddChild(CreateControl(cid));
+        InvalidateLayout();
+        return;
+    }
     const ControlLayout& l = CurrentControlLayout();
     for (ControlId cid : l.left) AddChild(CreateControl(cid));
     auto* seek = Add<SeekBar>();
@@ -673,11 +701,19 @@ void ControlBar::Rebuild() {
 
 void ControlBar::OnLayout() {
     for (auto& c : Children())
-        if (auto* v = dynamic_cast<VolumeControl*>(c.get())) v->SetCollapsed(rect.w < 900);
+        if (auto* v = dynamic_cast<VolumeControl*>(c.get())) v->SetCollapsed(minimal_ || rect.w < 900);
     Widget::OnLayout();
 }
 
 void ControlBar::Paint(Painter& p) {
+    if (floating) {
+        // Over the picture: a rounded, nearly opaque panel with a soft shadow, inset from the edges.
+        const float r = minimal_ ? 20.0f : 14.0f;
+        p.Shadow(rect, r, 18, 6, 0.40f * opacity);
+        p.Fill(rect, P().bgChrome.Fade(0.96f * opacity), r);
+        p.Stroke(rect, P().line.Fade(opacity), r);
+        return;
+    }
     p.Fill(rect, P().bgChrome.Fade(opacity));
 }
 

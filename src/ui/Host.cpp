@@ -957,6 +957,11 @@ void Host::DumpTree(const std::wstring& path) const {
     fclose(f);
 }
 
+void Host::PaintBackground(Painter& p) {
+    const Size client = ClientSize();
+    p.Fill({0, 0, client.w, client.h}, P().bgBase);
+}
+
 void Host::PaintSkeleton(HDC dc) {
     RECT rc;
     GetClientRect(hwnd_, &rc);

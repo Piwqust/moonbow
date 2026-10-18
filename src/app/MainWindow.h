@@ -37,6 +37,9 @@ public:
     // and in a window when Auto-hide the controls = Always and a video is shown.
     bool BarOverlays() const;
     void PokeChrome();  // mouse moved: show controls, restart the hide timer
+    // Pointer moved to (x, y): like PokeChrome, but while the controls are hidden a move of a few
+    // pixels (a nudged desk, a jittery sensor) doesn't bring them back.
+    void PointerMoved(float x, float y);
 
     // Picture in Picture: compact always-on-top video; off restores the previous placement.
     void SetPictureInPicture(bool on);
@@ -54,6 +57,7 @@ protected:
     void OnLayoutDone() override;
     void OnFramePainted() override;
     void PaintSkeleton(HDC dc) override;
+    void PaintBackground(ui::Painter& p) override;
 
 private:
     void BuildUi();
@@ -61,6 +65,7 @@ private:
 
     HWND video_ = nullptr;
     ui::Rect videoRect_{};
+    ui::Point lastPointer_{-1000, -1000};
     bool videoWanted_ = false;
     RECT appliedVideo_{-1, -1, -1, -1};
     bool uiHidden_ = false;

@@ -68,8 +68,8 @@ public:
                          (TheApp().config().GetBool("interface.decorations") || !TheApp().PlayerShown());
         Widget::OnLayout();
     }
-    bool OnMouseMove(const MouseEvent&) override {
-        window_->PokeChrome();
+    bool OnMouseMove(const MouseEvent& e) override {
+        window_->PointerMoved(e.x, e.y);
         return false;
     }
 
@@ -279,6 +279,14 @@ void MainWindow::SetUiHidden(bool hidden) {
     RequestLayout();
 }
 
+void MainWindow::PointerMoved(float x, float y) {
+    const float dx = x - lastPointer_.x, dy = y - lastPointer_.y;
+    const bool hidden = BarOverlays() && chrome_.Target() < 0.5f;
+    if (hidden && dx * dx + dy * dy < 6 * 6) return;  // keep the anchor until a real move
+    lastPointer_ = {x, y};
+    PokeChrome();
+}
+
 void MainWindow::PokeChrome() {
     SetCursorHidden(false);
     if (!BarOverlays()) {
@@ -306,7 +314,7 @@ void MainWindow::PokeChrome() {
             PokeChrome();
             return;
         }
-        chrome_.To(0, 260);
+        chrome_.To(0, 320, ui::Ease::InOut);
         SetCursorHidden(MouseInside());
         RequestLayout();
     });
@@ -340,6 +348,23 @@ void MainWindow::OnLayoutDone() {
     } else {
         ShowWindow(video_, SW_HIDE);
     }
+}
+
+// Opaque everywhere except the hole where mpv's video window shows through.
+void MainWindow::PaintBackground(Painter& p) {
+    const Size client = ClientSize();
+    const Color bg = P().bgBase;
+    const float s = Scale();
+    if (appliedVideo_.right <= appliedVideo_.left || appliedVideo_.bottom <= appliedVideo_.top) {
+        p.Fill({0, 0, client.w, client.h}, bg);
+        return;
+    }
+    const float l = appliedVideo_.left / s, t = appliedVideo_.top / s, r = appliedVideo_.right / s,
+                b = appliedVideo_.bottom / s;
+    p.Fill({0, 0, client.w, t}, bg);
+    p.Fill({0, b, client.w, client.h - b}, bg);
+    p.Fill({0, t, l, b - t}, bg);
+    p.Fill({r, t, client.w - r, b - t}, bg);
 }
 
 void MainWindow::PaintSkeleton(HDC dc) {

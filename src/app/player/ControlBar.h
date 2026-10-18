@@ -1,5 +1,6 @@
 #pragma once
 #include "app/Signal.h"
+#include "core/Config.h"
 #include "ui/Controls.h"
 
 #include <memory>
@@ -57,6 +58,7 @@ public:
     SeekBar();
     ~SeekBar() override;
     bool compact = false;  // thin variant (mini player)
+    bool slim = false;     // minimal control bar: a thin track that thickens under the pointer
     void Paint(ui::Painter& p) override;
     bool OnMouseDown(const ui::MouseEvent& e) override;
     bool OnMouseMove(const ui::MouseEvent& e) override;
@@ -74,7 +76,9 @@ private:
     ScopedConnection conn_, liveConn_;
 };
 
-// The bar itself (56 DIP): left items, seek bar, right items.
+// The bar itself: left items, seek bar, right items. Settings > Interface > "Control bar style":
+// floating (rounded, inset over the video when it overlays), full width, or minimal (play, time,
+// slim seek bar; 40 DIP).
 class ControlBar : public ui::Widget {
 public:
     ControlBar();
@@ -82,10 +86,17 @@ public:
     void Rebuild();
     void OnLayout() override;
     void Paint(ui::Painter& p) override;
-    float opacity = 1;  // fades in fullscreen
+    float opacity = 1;      // fades in fullscreen
+    bool floating = false;  // set by the player view: drawn as a rounded panel over the video
+    float BarHeight() const { return minimal_ ? 40.0f : 56.0f; }
+    bool Minimal() const { return minimal_; }
+    bool Classic() const { return classic_; }
 
 private:
+    void ReadStyle();
     ScopedConnection layoutConn_;
+    Config::Token configToken_ = 0;
+    bool minimal_ = false, classic_ = false;
 };
 
 }  // namespace app

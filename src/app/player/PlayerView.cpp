@@ -22,6 +22,7 @@ namespace {
 
 constexpr float kSideRail = 56;
 constexpr float kSidePanel = 360;
+constexpr float kFloatMargin = 16;  // the floating control bar's distance from the window edges
 constexpr float kVideoPad = 10;
 
 const PlayerState& PS() {
@@ -243,7 +244,7 @@ public:
         return true;
     }
     bool OnMouseMove(const MouseEvent& e) override {
-        window_->PokeChrome();
+        window_->PointerMoved(e.x, e.y);
         // Near the bottom edge the floating bar stays up while the pointer rests there.
         const bool nearBottom = window_->BarOverlays() && e.y >= rect.Bottom() - kRevealZone;
         if (nearBottom && !revealTimer_) {
@@ -350,7 +351,10 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     width = Length::Grow();
     height = Length::Grow();
 
-    side_ = Add<Widget>();
+    // Opaque: the rail draws its panel 8 DIP inside, and over the picture that gutter showed video.
+    auto* side = Add<Panel>();
+    side->fill = [] { return P().bgBase; };
+    side_ = side;
     side_->dir = Dir::Row;
     side_->visible = false;
     auto* rail = side_->Add<NavSidebar>();
@@ -407,13 +411,17 @@ void PlayerView::OnLayout() {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
     const PlayerState& s = PS();
     const bool audioOnly = s.fileLoaded && !s.hasVideo;
-    const float barH = 56;
+    const float barH = bar_->BarHeight();
     const bool pip = window_->PictureInPicture();
 
     float x = rect.x;
     if (side_->visible && !immersive) {
         side_->Arrange({rect.x, rect.y, kSideRail + kSidePanel, rect.h - barH});
         x += kSideRail + kSidePanel;
+    } else if (side_->visible) {
+        // Fullscreen: an opaque sheet along the whole left edge over the picture (it kept its
+        // windowed rect before, with the video showing around it). The bar draws on top of it.
+        side_->Arrange({rect.x, rect.y, std::min(kSideRail + kSidePanel, rect.w), rect.h});
     }
     // A floating bar (fullscreen, or windowed auto-hide) leaves the whole height to the video.
     const bool overlay = window_->BarOverlays() && !audioOnly;
@@ -422,9 +430,21 @@ void PlayerView::OnLayout() {
     music_->visible = audioOnly;
     if (audioOnly) music_->Arrange(immersive ? area : video_->Inner(false));
 
-    bar_->opacity = immersive || overlay ? window_->ChromeOpacity() : 1.0f;
-    bar_->visible = !pip && (!(immersive || overlay) || window_->ChromeOpacity() > 0.01f);
-    bar_->Arrange({rect.x, rect.Bottom() - barH, rect.w, barH});
+    const float chrome = window_->ChromeOpacity();
+    bar_->opacity = immersive || overlay ? chrome : 1.0f;
+    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f);
+    // Over the video the bar floats (unless "full width" is chosen) and slides a few DIP while it
+    // fades, so showing and hiding read as one motion rather than a blink.
+    const bool floats = (immersive || overlay) && !bar_->Classic() && rect.w >= 480;
+    bar_->floating = floats;
+    const float slide = immersive || overlay ? (1 - chrome) * 10 : 0.0f;
+    if (floats) {
+        const float w = std::min(rect.w - 32, bar_->Minimal() ? 760.0f : 1180.0f);
+        bar_->Arrange({rect.x + (rect.w - w) / 2, rect.Bottom() - kFloatMargin - barH + slide, w, barH});
+    } else {
+        bar_->Arrange({rect.x, rect.Bottom() - barH + slide, rect.w, barH});
+    }
+    const float barSpace = barH + (floats ? kFloatMargin : 0.0f);
     pip_->visible = pip;
     if (pip) pip_->Arrange(rect);
 
@@ -437,7 +457,7 @@ void PlayerView::OnLayout() {
 
     // Bottom-right of the picture, above a floating bar.
     const Rect v = video_->Inner(immersive);
-    const float bottom = v.Bottom() - 20 - ((immersive || overlay) && bar_->visible ? barH : 0.0f);
+    const float bottom = v.Bottom() - 20 - ((immersive || overlay) && bar_->visible ? barSpace : 0.0f);
     nextEpisode_->visible = nextEpisode_->Wanted() && s.fileLoaded && !pip && v.w > 400;
     if (nextEpisode_->visible) {
         const Size sz = nextEpisode_->Measure(std::min(340.0f, v.w - 48), v.h);

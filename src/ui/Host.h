@@ -156,7 +156,9 @@ protected:
     // Subclass hooks.
     virtual void OnLayoutDone() {}
     virtual void OnFramePainted() {}  // after the tree and popups are drawn, before Present
-    virtual void PaintBackground(Painter&) {}
+    // Opaque window background under the widget tree. Everything the frame leaves transparent
+    // shows the GDI surface beneath the composition layer (stale or see-through after a resize).
+    virtual void PaintBackground(Painter& p);
     virtual bool HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result);
     virtual void OnResize() {}
     // GDI fill used before the GPU device exists and behind DComp content.

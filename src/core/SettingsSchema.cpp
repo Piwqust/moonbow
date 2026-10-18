@@ -806,7 +806,7 @@ void BuildApp(Builder& b) {
            {{"never", L"Never", L"Никогда"},
             {"first", L"Only for the first video", L"Только для первого видео"},
             {"always", L"Always", L"Всегда"}},
-           "always")
+           "never")  // a window that jumps on every file change annoys more than it helps
         .Desc(L"Change the window size to match the video when a file opens (up to 80% of the screen).",
               L"Менять размер окна под видео при открытии файла (не больше 80% экрана).");
     b.Toggle("interface.rememberWindow", L"Remember window size and position", L"Запоминать размер и положение окна", true);
@@ -837,6 +837,14 @@ void BuildApp(Builder& b) {
            "fullscreen")
         .Desc(L"Hide the control bar and the mouse pointer when the mouse stops moving during playback.",
               L"Скрывать панель и указатель мыши, когда мышь не двигается во время воспроизведения.");
+    b.Pick("interface.barStyle", L"Control bar style", L"Вид панели управления",
+           {{"floating", L"Floating", L"Плавающая"},
+            {"classic", L"Full width", L"Во всю ширину"},
+            {"minimal", L"Minimal", L"Минимальная"}},
+           "floating")
+        .Desc(L"Floating: a rounded bar over the video in fullscreen. Minimal: play, time and a slim seek bar.",
+              L"Плавающая — скруглённая панель над видео в полноэкранном режиме. Минимальная — пауза, время и тонкая "
+              L"полоса перемотки.");
     b.Slider("interface.hideDelay", L"Hide after", L"Скрывать через", 0, 10, 0.5, 2)
         .Unit(L"s", L"с")
         .When("interface.autoHide", "never", true);
