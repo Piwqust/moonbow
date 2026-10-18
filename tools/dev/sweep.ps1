@@ -398,7 +398,8 @@ function Prepare-DataDir([string]$dir, $sc, [string]$warm) {
   if ($sc["ui"]) { foreach ($k in $sc["ui"].Keys) { $ui[$k] = [string]$sc["ui"][$k] } }
   Write-Utf8 (Join-Path $dir "ui.json") (ConvertTo-Json $ui -Depth 6)
   $values = [ordered]@{ "audio.startupVolumeMode" = "fixed"; "audio.startupVolume" = 0 }
-  if ($sc["settings"]) { foreach ($k in $sc["settings"].Keys) { $values[$k] = $sc["settings"][$k] } }
+  # String values expand %TEMP% (output folders of snapshot and recording scenarios).
+  if ($sc["settings"]) { foreach ($k in $sc["settings"].Keys) { $v = $sc["settings"][$k]; $values[$k] = if ($v -is [string]) { [Environment]::ExpandEnvironmentVariables($v) } else { $v } } }
   $values["audio.startupVolumeMode"] = "fixed"; $values["audio.startupVolume"] = 0   # never louder than 0
   Write-Utf8 (Join-Path $dir "settings.json") (ConvertTo-Json ([ordered]@{ version = 1; values = $values }) -Depth 8)
   $roots = @($sc["libraryResolved"])

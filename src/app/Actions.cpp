@@ -174,8 +174,12 @@ bool PrepareOutputFolder(const std::wstring& dir) {
     return true;
 }
 
-void CantSaveToast(const std::wstring& dir) {
-    if (Win()) ShowToast(Win(), Fmt(Tr(L"Can't save to {0}"), {dir}), "info", 4000);
+// `category`: the Settings page with the folder setting, one click away.
+void CantSaveToast(const std::wstring& dir, const char* category) {
+    if (!Win()) return;
+    const std::string page = category;
+    ShowToast(Win(), Fmt(Tr(L"Can't save to {0}"), {dir}), "info", 5000, Tr(L"Settings"),
+              [page] { TheApp().OpenSettings(page); });
 }
 
 // Messages about things mpv reports back a moment later.
@@ -580,7 +584,7 @@ void Run(Action a) {
             std::wstring dir = Utf8ToWide(app.config().GetString("video.screenshotDir"));
             if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
             if (!PrepareOutputFolder(dir)) {
-                CantSaveToast(dir);
+                CantSaveToast(dir, "video");
                 break;
             }
             p.Screenshot({}, app.config().GetBool("video.screenshotSubtitles"));
@@ -596,7 +600,7 @@ void Run(Action a) {
                 dir = Utf8ToWide(app.config().GetString("recording.folder"));
                 if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
                 if (!PrepareOutputFolder(dir)) {
-                    CantSaveToast(dir);
+                    CantSaveToast(dir, "recording");
                     break;
                 }
                 SYSTEMTIME t;

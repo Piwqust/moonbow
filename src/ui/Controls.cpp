@@ -1606,8 +1606,12 @@ public:
         : text_(std::move(text)), icon_(std::move(icon)) {
         dir = Dir::None;
         if (action) {
+            // The message is often a path cut with an ellipsis; this toast takes the mouse, so
+            // hovering it shows the whole text.
+            interactive = true;
+            tooltip = text_;
             action_ = Add<Button>(std::move(actionLabel), ButtonKind::Ghost);
-            action_->tooltip = text_;  // the message is often a path cut with an ellipsis
+            action_->tooltip = text_;
             action_->onClick = std::move(action);
         }
     }
