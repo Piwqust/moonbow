@@ -47,6 +47,7 @@ public:
     std::function<Color()> color;
     Size MeasureContent(float, float) override { return {size, size}; }
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
 };
 
 class Divider : public Widget {
@@ -74,6 +75,7 @@ public:
     TextStyle style = TextStyle::BodyStrong;
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
 
 private:
     std::wstring text_;
@@ -90,6 +92,7 @@ public:
     bool round = false;
     Tone tone = Tone::Secondary;
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
 };
 
 // Single-line text link / text-only button.
@@ -115,6 +118,7 @@ public:
     Size MeasureContent(float, float) override { return {66, 30}; }
     void Paint(Painter& p) override;
     void OnClick() override;
+    void DebugInfo(std::string& out) const override;
 
 private:
     bool on_;
@@ -135,6 +139,7 @@ public:
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
     void OnClick() override;
+    void DebugInfo(std::string& out) const override;
 
 private:
     std::wstring text_;
@@ -157,6 +162,7 @@ public:
     float segmentWidth = 104;
     Size MeasureContent(float, float) override;
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
     bool OnMouseDown(const MouseEvent& e) override;
     bool OnKeyDown(const KeyEvent& e) override;
     void OnMouseLeave() override { hoverIndex_ = -1; Invalidate(); }
@@ -181,6 +187,7 @@ public:
     std::wstring placeholder;
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
     void OnClick() override;
     bool OnKeyDown(const KeyEvent& e) override;
 
@@ -204,6 +211,7 @@ public:
     std::function<std::wstring(float)> format; // tooltip value text
     Size MeasureContent(float availW, float) override { return {std::min(availW, 200.0f), 24}; }
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
     bool OnMouseDown(const MouseEvent& e) override;
     bool OnMouseMove(const MouseEvent& e) override;
     bool OnMouseUp(const MouseEvent& e) override;
@@ -238,6 +246,7 @@ public:
 
     Size MeasureContent(float availW, float) override { return {std::min(availW, 240.0f), 34}; }
     void Paint(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
     bool OnMouseDown(const MouseEvent& e) override;
     bool OnMouseMove(const MouseEvent& e) override;
     bool OnMouseUp(const MouseEvent& e) override;
@@ -305,6 +314,7 @@ public:
     Size MeasureContent(float availW, float availH) override;
     void OnLayout() override;
     void PaintOver(Painter& p) override;
+    void DebugInfo(std::string& out) const override;
     Widget* HitTest(float x, float y) override;
     bool OnWheel(const WheelEvent& e) override;
     bool OnMouseDown(const MouseEvent& e) override;

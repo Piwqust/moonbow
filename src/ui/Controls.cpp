@@ -3,6 +3,7 @@
 #include "gfx/Text.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cwctype>
 #include <map>
 
@@ -13,6 +14,16 @@ namespace {
 constexpr float kMenuItemH = 40;
 constexpr float kMenuSepH = 9;
 constexpr float kMenuPad = 6;
+
+// DebugInfo helpers (tree dumps only).
+void AppendNumber(std::string& out, const char* key, double v) {
+    char buf[64];
+    snprintf(buf, sizeof buf, " %s=%g", key, v);
+    out += buf;
+}
+void AppendIcon(std::string& out, const std::string& icon) {
+    if (!icon.empty()) out += " icon=" + icon;
+}
 
 std::wstring ClipboardText(HWND owner) {
     std::wstring out;
@@ -1505,6 +1516,59 @@ void DismissToast(Host* host) {
     ToastSlot& current = CurrentToast(host);
     if (current.widget && host->IsPopupOpen(current.widget)) host->ClosePopup(current.widget);
     current = {};
+}
+
+}  // namespace ui
+
+namespace ui {
+
+// --- tree dump state (Host::DumpTree) ----------------------------------------------------
+
+void IconView::DebugInfo(std::string& out) const {
+    AppendIcon(out, icon);
+}
+
+void Button::DebugInfo(std::string& out) const {
+    AppendIcon(out, icon);
+}
+
+void IconButton::DebugInfo(std::string& out) const {
+    AppendIcon(out, icon);
+    if (active) out += " active";
+}
+
+void Toggle::DebugInfo(std::string& out) const {
+    out += on_ ? " on" : " off";
+}
+
+void Checkbox::DebugInfo(std::string& out) const {
+    if (checked_) out += " checked";
+}
+
+void Segmented::DebugInfo(std::string& out) const {
+    AppendNumber(out, "selected", selected_);
+}
+
+void Dropdown::DebugInfo(std::string& out) const {
+    AppendNumber(out, "selected", selected_);
+}
+
+void Slider::DebugInfo(std::string& out) const {
+    AppendNumber(out, "value", value_);
+}
+
+void TextBox::DebugInfo(std::string& out) const {
+    out += " input";
+    if (text_.empty()) out += " empty";  // the text shown is the placeholder
+    if (password) out += " password";
+    if (readOnly) out += " readonly";
+}
+
+void ScrollView::DebugInfo(std::string& out) const {
+    out += " scroll";
+    char buf[64];
+    snprintf(buf, sizeof buf, " offset=%.0f/%.0f", offset_.Get(), MaxOffset());
+    out += buf;
 }
 
 }  // namespace ui

@@ -23,6 +23,9 @@ struct HostOptions {
     HWND owner = nullptr;  // owned windows stay above their owner, no taskbar button
     bool center = true;
     bool showInTaskbar = true;
+    // The app's main window: --automation commands go to it and its tree dump is also written
+    // to the old %TEMP%\lumen-tree-<pid>.txt.
+    bool mainWindow = false;
 };
 
 // Where a popup appears relative to its anchor rect.
@@ -66,6 +69,8 @@ public:
     void ClosePopup(Widget* content);
     void CloseAllPopups();
     bool HasPopup() const { return !popups_.empty(); }
+    size_t PopupCount() const { return popups_.size(); }
+    Widget* PopupAt(size_t i) const { return i < popups_.size() ? popups_[i].content.get() : nullptr; }
     bool IsPopupOpen(const Widget* content) const;
     // Re-measures and re-places a popup after its content changed size.
     void RepositionPopup(Widget* content);
@@ -86,23 +91,32 @@ public:
     void RequestRender();
     void RequestLayout();
     void RenderNow();
-    float Scale() const { return static_cast<float>(dpi_) / 96.0f; }
-    UINT Dpi() const { return dpi_; }
+    // DIP-to-pixel factor: the monitor's DPI / 96, times the --scale test override.
+    float Scale() const { return static_cast<float>(dpi_) / 96.0f * ScaleOverride(); }
+    UINT Dpi() const { return dpi_; }  // the monitor's real DPI (window frame metrics)
     Size ClientSize() const;
     // Called when the shared GPU device becomes available.
     void OnDeviceReady();
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the
     // device and attaches every window's surface.
     static constexpr UINT kDeviceReadyMessage = WM_APP + 42;
-    // Debug aid: posting this writes the widget tree (type, rect, flags) to
-    // %TEMP%\lumen-tree-<pid>.txt. See tools/dev/dump-tree.ps1.
+    // Debug aid: sending or posting this to any host window writes its widget tree (type, rect,
+    // state, the text it shows) to %TEMP%\lumen-tree-<pid>-<hwnd>.txt, and for the main window
+    // also to %TEMP%\lumen-tree-<pid>.txt. Handled synchronously: SendMessage returns once the
+    // file is written. See tools/dev/dump-tree.ps1 for the format.
     static constexpr UINT kDumpTreeMessage = WM_APP + 43;
     // Any thread may post this to ask the window for a repaint.
     static constexpr UINT kRepaintMessage = WM_APP + 44;
     // --automation only: wParam = held modifiers (1 Ctrl, 2 Shift, 4 Alt) for the
     // keys and clicks that follow, since posted input doesn't change GetKeyState.
     static constexpr UINT kAutomationModsMessage = WM_APP + 45;
-    void DumpTree(const std::wstring& path) const;
+    // Draws one frame that records every text it paints, then writes the tree to `path`.
+    void DumpTree(const std::wstring& path);
+    // Writes the dump file(s) named above; returns the per-window path.
+    std::wstring WriteTreeDump();
+    bool IsMainWindow() const { return options_.mainWindow; }
+    // Nothing waits to be laid out, drawn or run, and no animation is running.
+    bool Idle() const;
     // Re-applies DWM attributes (dark title/border) and repaints after a theme change.
     void OnThemeChanged();
 
@@ -135,13 +149,17 @@ public:
 
     // Every live host, e.g. to repaint all windows after a theme change.
     static const std::vector<Host*>& All();
-    // Test runs drive windows with posted messages while the real cursor is
-    // elsewhere: keep hover state instead of dropping it on WM_MOUSELEAVE.
+    // Test runs drive windows with posted messages while the real cursor is elsewhere: they
+    // skip TrackMouseEvent, so hover stays until a test posts WM_MOUSELEAVE itself.
     // --automation: test instances run in the background. Their windows are cloaked
     // (invisible but still composed, so PrintWindow captures them), never activate,
     // have no taskbar button and stay at the bottom of the z-order.
     static void SetAutomation(bool on);
     static bool Automation();
+    // --automation --scale <factor>: lays out and draws every window as if the monitor were at
+    // factor x its real scale (1.5 on a 100 % screen looks like 150 %). Set before any window.
+    static void SetScaleOverride(float factor);
+    static float ScaleOverride();
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
     // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
@@ -176,6 +194,7 @@ private:
         bool above = false;  // flipped above the anchor (slide direction)
     };
     void ApplyDwmAttributes();
+    float RenderDpi() const { return Scale() * 96.0f; }  // DPI of the Direct2D surface
     void SetDragOver(bool over);
     void PaintDropOverlay(Painter& p);
     friend class DropTarget;
@@ -218,6 +237,7 @@ private:
     bool cursorHidden_ = false;
     bool active_ = true;
 
+    std::vector<TextRecord>* textSink_ = nullptr;  // set while DumpTree draws its frame
     bool renderPending_ = false;
     bool gpuPainted_ = false;  // a GPU frame is on screen: WM_PAINT skips the GDI skeleton
     bool layoutDirty_ = true;

@@ -22,7 +22,8 @@ std::vector<std::wstring> Arguments() {
     std::vector<std::wstring> args;
     for (int i = 1; argv && i < argc; ++i) {
         std::wstring a = argv[i];
-        if (!a.empty() && a[0] != L'-' && a.find(L"://") == std::wstring::npos) {
+        const bool value = i > 1 && wcscmp(argv[i - 1], L"--scale") == 0;  // a number, not a file
+        if (!a.empty() && a[0] != L'-' && a.find(L"://") == std::wstring::npos && !value) {
             wchar_t full[MAX_PATH * 4];
             const DWORD n = GetFullPathNameW(a.c_str(), static_cast<DWORD>(std::size(full)), full, nullptr);
             if (n > 0 && n < std::size(full)) a.assign(full, n);
@@ -86,9 +87,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (args[i] == L"--automation") ui::Host::SetAutomation(true);
         if (args[i] == L"--data-dir" && i + 1 < args.size()) SetDataDirForTests(args[i + 1]);
     }
+    // --scale <factor> (--automation only): lay out as if at factor x the monitor's scale;
+    // 1.5 or 150 both mean 150 % on a 100 % screen.
+    for (size_t i = 0; i + 1 < args.size(); ++i)
+        if (args[i] == L"--scale" && ui::Host::Automation()) {
+            float f = wcstof(args[i + 1].c_str(), nullptr);
+            if (f > 4.0f) f /= 100.0f;
+            if (f > 0) ui::Host::SetScaleOverride(f);
+        }
     std::vector<std::wstring> files;
     for (size_t i = 0; i < args.size(); ++i) {
-        if (args[i] == L"--data-dir") { ++i; continue; }
+        if (args[i] == L"--data-dir" || args[i] == L"--scale") { ++i; continue; }
         if (!args[i].empty() && args[i][0] != L'-') files.push_back(args[i]);
     }
 

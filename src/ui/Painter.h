@@ -4,14 +4,30 @@
 #include "ui/Theme.h"
 #include "ui/Types.h"
 
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace ui {
 
+class Widget;
+
 using gfx::HAlign;
 using gfx::TextStyle;
 using gfx::VAlign;
+
+// One Painter::Text call seen during a tree dump (Host::DumpTree): what a widget shows and
+// the box it gave the text. Never collected during normal frames.
+struct TextRecord {
+    const Widget* owner = nullptr;  // the widget whose Paint/PaintOver drew it
+    std::wstring text;
+    Rect box;
+    Rect clip;  // Painter::Clip() at the time
+    TextStyle style = TextStyle::Body;
+    HAlign halign = HAlign::Leading;
+    uint8_t flags = 0;
+    bool faded = false;  // drawn (nearly) fully transparent
+};
 
 // Thin drawing API over the shared D2D device context. All coordinates are
 // window DIPs. A painter lives for one frame of one window.
@@ -49,6 +65,11 @@ public:
     void PopClip();
     const Rect& Clip() const { return clips_.back().rect; }
 
+    // Tree dumps only: every Text call is appended to `sink`, tagged with the widget being painted.
+    void RecordText(std::vector<TextRecord>* sink) { textSink_ = sink; }
+    bool RecordingText() const { return textSink_ != nullptr; }
+    void SetTextOwner(const Widget* w) { textOwner_ = w; }
+
     // Multiplies the alpha of everything painted until PopOpacity.
     void PushOpacity(float k);
     void PopOpacity();
@@ -66,6 +87,8 @@ private:
     std::vector<ClipEntry> clips_;
     std::vector<float> opacities_;
     float opacity_ = 1.0f;
+    std::vector<TextRecord>* textSink_ = nullptr;
+    const Widget* textOwner_ = nullptr;
 };
 
 }  // namespace ui
