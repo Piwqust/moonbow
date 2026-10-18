@@ -171,6 +171,7 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 - **Evidence.** `c4-menu-strip.png`, frames 1–2 (the ✓ and "Shift+O" column left of the menu).
 - **Cause.** `Controls.cpp:1167-1170`: Esc clears `filter_` without closing child popups.
 - **Fix.** Close submenus when the filter changes.
+- **Fix (r5-fix-flows): fixed.** `MenuPopup::Refilter` (`src/ui/Controls.cpp`, one local hunk; the file belongs to r5-fix-audit for its own items) closes the open submenu, cancels a pending submenu timer and clears the highlight before it rebuilds the rows, on every filter change (typing, Backspace, Esc). Evidence: right-click the video, type "суб" (the Субтитры submenu opens beside the filtered menu), Esc: base keeps the submenu at its old spot beside the full menu, fixed shows the full menu alone (`%TEMP%\lumen-qa\r5ff\fl11-strip.png`, base pair then fixed pair).
 
 ### FL-12 (Fragile, confirmed): the "×" re-arms under the pointer
 - **Steps.** In the queue, click "×" on row 2.
