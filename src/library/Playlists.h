@@ -69,8 +69,9 @@ private:
 };
 
 // Extended M3U. Relative entries are resolved against the playlist's folder; URLs are kept.
-// .m3u files without a BOM that are not valid UTF-8 are read in the ANSI code page.
-bool ReadM3u(const std::wstring& path, std::vector<PlaylistItem>* items);
+// .m3u files without a BOM that are not valid UTF-8 are read in `codePage` (0: the system's
+// legacy ANSI code page, json::LegacyCodePage).
+bool ReadM3u(const std::wstring& path, std::vector<PlaylistItem>* items, unsigned codePage = 0);
 // "#EXTM3U" + "#EXTINF:<seconds>,<title>" lines, UTF-8 without BOM, CRLF.
 std::string FormatM3u(const std::vector<PlaylistItem>& items);
 

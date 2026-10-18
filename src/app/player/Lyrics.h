@@ -27,8 +27,8 @@ struct Lyrics {
 Lyrics ParseLyrics(std::wstring_view text);
 
 // The bytes of a .lrc file as text: UTF-8 (with or without BOM), UTF-16 with a BOM, otherwise
-// the ANSI code page (older Windows tools wrote CP-1251 files).
-std::wstring DecodeLyricsFile(std::string_view bytes);
+// `codePage` (0: the system's legacy ANSI code page; older Windows tools wrote CP-1251 files).
+std::wstring DecodeLyricsFile(std::string_view bytes, unsigned codePage = 0);
 
 // "<folder>\<name>.lrc" for a local media file, empty for URLs and paths without a name.
 std::wstring LyricsPathFor(const std::wstring& mediaPath);

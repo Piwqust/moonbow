@@ -1129,11 +1129,11 @@ void TestPlaylists() {
         CHECK(items[2].path == g_temp.substr(0, 2) + L"\\abs\\three.mkv");
         CHECK(items[3].path == L"C:\\x y.mkv");
     }
-    if (GetACP() == 1251) {
-        WriteFile(sub + L"\\ansi.m3u", "\xCF\xF0\xE8\xE2\xE5\xF2.mkv\n");  // "Привет.mkv" in cp1251
-        CHECK(library::ReadM3u(sub + L"\\ansi.m3u", &items) && items.size() == 1 &&
-              items[0].path == sub + L"\\Привет.mkv");
-    }
+    // Lumen.exe's manifest makes CP_ACP UTF-8 (this exe has none), so the code page is explicit.
+    WriteFile(sub + L"\\ansi.m3u", "\xCF\xF0\xE8\xE2\xE5\xF2.mkv\n");  // "Привет.mkv" in cp1251
+    CHECK(library::ReadM3u(sub + L"\\ansi.m3u", &items, 1251) && items.size() == 1 &&
+          items[0].path == sub + L"\\Привет.mkv");
+    if (GetACP() != CP_UTF8) CHECK(json::LegacyCodePage() == GetACP());  // no manifest: the legacy one
     CHECK(!library::ReadM3u(sub + L"\\missing.m3u", &items));
 }
 
@@ -1645,6 +1645,7 @@ void TestLyricsLrc() {
     CHECK(app::DecodeLyricsFile(std::string("\xFF\xFE" "a\0b\0", 6)) == L"ab");
     CHECK(app::DecodeLyricsFile(std::string("\xFE\xFF\0a\0b", 6)) == L"ab");
     CHECK(!app::DecodeLyricsFile("caf\xE9").empty());
+    CHECK(app::DecodeLyricsFile("\xCF\xF0\xE8", 1251) == L"При");
 
     // Where the .lrc is looked for, which tags carry lyrics.
     CHECK(app::LyricsPathFor(L"C:\\Music\\A.B\\01 Song.mp3") == L"C:\\Music\\A.B\\01 Song.lrc");

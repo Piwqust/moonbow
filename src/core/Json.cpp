@@ -558,6 +558,15 @@ std::wstring ToWide(std::string_view s) {
     return out;
 }
 
+unsigned LegacyCodePage() {
+    DWORD cp = 0;
+    if (!GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
+                         reinterpret_cast<LPWSTR>(&cp), sizeof(cp) / sizeof(wchar_t)) ||
+        cp == 0 || cp == CP_UTF8)
+        cp = 1252;  // Unicode-only locales have no ANSI code page
+    return cp;
+}
+
 std::string ToUtf8(std::wstring_view s) {
     if (s.empty()) return {};
     int n = WideCharToMultiByte(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0, nullptr, nullptr);

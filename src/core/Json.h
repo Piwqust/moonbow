@@ -125,6 +125,10 @@ std::string FormatNumber(double d);
 std::wstring ToWide(std::string_view utf8);
 std::string ToUtf8(std::wstring_view wide);
 
+// The system's legacy ANSI code page (1251 on Russian Windows). Not GetACP(): Lumen's manifest
+// sets activeCodePage to UTF-8, so CP_ACP is 65001 inside the app.
+unsigned LegacyCodePage();
+
 // Whole-file read; strips a UTF-8 BOM. False when the file cannot be opened or read.
 bool ReadFileUtf8(const std::wstring& path, std::string* out);
 
