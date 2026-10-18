@@ -4,12 +4,17 @@
 // With lyrics (a .lrc next to the track or an embedded tag) a wide view puts the cover on the
 // left and the lyrics on the right: synced lines follow playback with the sung line highlighted
 // and a click on a line seeks to it; unsynced text stays put and scrolls with the wheel.
+// With Settings > Audio > Visualization on, a playing song shows the visualizer where the cover
+// is (spectrum bars, a radial spectrometer, an oscilloscope or a scrolling waveform), fed by
+// audio/LoopbackCapture from Lumen's own sound; a pause brings the cover back.
 #include "Util.h"
 #include "app/App.h"
 #include "app/player/ControlBar.h"
 #include "app/player/PanelKit.h"
 #include "app/player/Lyrics.h"
 #include "app/player/PlayerView.h"
+#include "audio/LoopbackCapture.h"
+#include "audio/LoopbackSupport.h"
 #include "gfx/Gpu.h"
 #include "gfx/Text.h"
 #include "ui/Anim.h"
@@ -18,6 +23,8 @@
 #include <d2d1effects.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -51,6 +58,16 @@ constexpr float kLineGap = 14;
 constexpr double kLead = 0.1;
 constexpr float kEdgeFade = 72;  // lyrics fade out over this much at the column's top and bottom
 
+enum class VizStyle { Off, Spectrometer, Scope, Spectrum, Waveform };
+
+VizStyle VizStyleOf(const std::string& v) {
+    if (v == "spectrometer") return VizStyle::Spectrometer;
+    if (v == "scope") return VizStyle::Scope;
+    if (v == "spectrum") return VizStyle::Spectrum;
+    if (v == "waveform") return VizStyle::Waveform;
+    return VizStyle::Off;
+}
+
 class MusicView : public Widget {
 public:
     MusicView() {
@@ -58,14 +75,41 @@ public:
             if (m & (kChangeFile | kChangeMeta)) RefreshLyrics();
             if (m & kChangeTime) FollowTime();
             if (m & (kChangeMeta | kChangeFile | kChangeState)) Invalidate();
+            // The capture parked itself after a long frame (a busy UI thread): a paint wakes it.
+            // Only while the view is still drawn; hidden or minimized it stays parked.
+            if ((m & kChangeTime) && capture_ && capture_->Stalled() && AnimFloat::Now() - lastPaint_ < 1000)
+                Invalidate();
         });
+        vizToken_ = TheApp().config().Subscribe("audio.visualizer", [this](const std::string&) {
+            ReadVisualizerSetting();
+            Invalidate();
+        });
+        ReadVisualizerSetting();
         imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
         // Hover target for the full title when it is cut (placed by Paint, where the text goes).
         titleTip_ = Add<Widget>();
         titleTip_->interactive = true;
         titleTip_->visible = false;
     }
+    ~MusicView() override {
+        TheApp().config().Unsubscribe(vizToken_);
+        TheApp().player().SetSignalTap(false);
+    }
     void OnLayout() override {}  // titleTip_ is placed by Paint
+
+    void DebugInfo(std::string& out) const override {
+        Widget::DebugInfo(out);
+        if (style_ == VizStyle::Off) return;
+        float top = 0;
+        for (float b : frame_.bands) top = std::max(top, b);
+        char text[160];
+        snprintf(text, sizeof text, " viz=%d frames=%llu captured=%llu cpu=%.0fms level=%.2f top=%.2f%s%s",
+                 static_cast<int>(style_), static_cast<unsigned long long>(frame_.serial),
+                 static_cast<unsigned long long>(capture_ ? capture_->Captured() : 0),
+                 capture_ ? capture_->CpuSeconds() * 1000 : 0.0, frame_.level, top,
+                 capture_ && capture_->Failed() ? " failed" : "", capture_ && capture_->Stalled() ? " parked" : "");
+        out += text;
+    }
 
     void Paint(Painter& p) override {
         TakeLoadedLyrics();
@@ -105,9 +149,20 @@ public:
         else PaintGlow(p, cover);
         p.PopClip();
 
-        p.Shadow(cover, 16, 40, 12, 0.55f);
-        if (bmp) p.Image(bmp, cover, 16, true);
-        else PaintGeneratedArt(p, cover, Hash(path));
+        lastPaint_ = AnimFloat::Now();
+        const float viz = UpdateVisualizer(s);
+        if (viz < 1) {
+            p.PushOpacity(1 - viz);
+            p.Shadow(cover, 16, 40, 12, 0.55f * (1 - viz));
+            if (bmp) p.Image(bmp, cover, 16, true);
+            else PaintGeneratedArt(p, cover, Hash(path));
+            p.PopOpacity();
+        }
+        if (viz > 0) {
+            p.PushOpacity(viz);
+            PaintVisualizer(p, left, cover, bmp);
+            p.PopOpacity();
+        }
 
         // Two lines, as in the design: the title, then the artist and the album. A long title is
         // cut on its own line and never hides the artist; the full text is in a tooltip.
@@ -178,6 +233,156 @@ public:
     }
 
 private:
+    // --- visualizer -----------------------------------------------------------------------
+    void ReadVisualizerSetting() {
+        style_ = audio::ProcessLoopbackSupported() ? VizStyleOf(TheApp().config().GetString("audio.visualizer"))
+                                                   : VizStyle::Off;
+        // While it is on, volume 0 still carries a (silent) signal to listen to (Player::SetSignalTap).
+        TheApp().player().SetSignalTap(style_ != VizStyle::Off);
+        if (style_ == VizStyle::Off) {
+            capture_.reset();
+            vizShow_.Set(0);
+        }
+    }
+
+    // Runs the capture while the song plays and this view is drawn; returns how far the cover
+    // has given way to the visualizer (0..1).
+    float UpdateVisualizer(const PlayerState& s) {
+        if (style_ == VizStyle::Off) return 0;
+        const bool playing = s.fileLoaded && !s.paused && !s.eof && !s.idle;
+        if (playing && !capture_ && GetHost())
+            capture_ = std::make_unique<audio::LoopbackCapture>(GetHost()->Hwnd(), ui::Host::kRepaintMessage);
+        bool show = false;
+        if (capture_) {
+            capture_->SetGain(TheApp().player().OutputGain());
+            capture_->SetRunning(playing);
+            capture_->Take(frame_);
+            show = playing && !capture_->Failed();
+        }
+        const float target = show ? 1.0f : 0.0f;
+        if (vizShow_.Target() != target) vizShow_.To(target, 220, Ease::InOut);
+        return vizShow_.Get();
+    }
+
+    ID2D1StrokeStyle* RoundStroke(ID2D1DeviceContext5* ctx) {
+        const uint32_t gen = gfx::Gpu::Get().Generation();
+        if (roundStroke_ && strokeGen_ == gen) return roundStroke_.Get();
+        roundStroke_.Reset();
+        strokeGen_ = gen;
+        gfx::ComPtr<ID2D1Factory> factory;
+        ctx->GetFactory(&factory);
+        const auto props = D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+                                                       D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
+        if (factory) factory->CreateStrokeStyle(props, nullptr, 0, &roundStroke_);
+        return roundStroke_.Get();
+    }
+
+    // Lines go straight to the context (Painter has no line call); one brush, made once per device.
+    ID2D1SolidColorBrush* LineBrush(ID2D1DeviceContext5* ctx, Color c, float opacity) {
+        const uint32_t gen = gfx::Gpu::Get().Generation();
+        if (!lineBrush_ || lineGen_ != gen) {
+            lineBrush_.Reset();
+            lineGen_ = gen;
+            if (FAILED(ctx->CreateSolidColorBrush(c.D2D(), &lineBrush_))) return nullptr;
+        }
+        lineBrush_->SetColor(c.Fade(opacity).D2D());
+        return lineBrush_.Get();
+    }
+
+    // Monochrome on the video background, like the title (the view is dark in both themes).
+    void PaintVisualizer(Painter& p, const Rect& left, const Rect& cover, ID2D1Bitmap* bmp) {
+        const Color bg = P().videoBg, white = Color::Hex(0xFFFFFF);
+        const Color fg = Color::Mix(bg, white, 0.86f), dim = Color::Mix(bg, white, 0.4f);
+        // The bar styles take a wider band than the square cover, at the same height, so the
+        // title below stays where it was.
+        const float w = std::floor(std::min(left.w - 96, cover.w * 1.5f));
+        const Rect band{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
+        switch (style_) {
+            case VizStyle::Spectrum: PaintSpectrum(p, band, fg, dim); break;
+            case VizStyle::Waveform: PaintWaveform(p, band, bg, white); break;
+            case VizStyle::Scope: PaintScope(p, band, fg, dim); break;
+            case VizStyle::Spectrometer: PaintSpectrometer(p, cover, bmp, fg, dim); break;
+            case VizStyle::Off: break;
+        }
+    }
+
+    // Bars rising from the cover's bottom edge, with falling peak marks.
+    void PaintSpectrum(Painter& p, const Rect& r, Color fg, Color dim) {
+        constexpr int n = audio::kBands;
+        const float step = r.w / n;
+        const float bw = std::max(2.0f, step * 0.7f);
+        const float top = r.h * 0.9f;
+        for (int i = 0; i < n; ++i) {
+            const float x0 = std::round(r.x + i * step), x1 = std::round(r.x + i * step + bw);
+            const float h = std::max(3.0f, std::round(frame_.bands[i] * top));
+            p.Fill({x0, r.Bottom() - h, x1 - x0, h}, fg, std::min(2.0f, (x1 - x0) / 2));
+            const float peak = frame_.peaks[i] * top;
+            if (peak > h + 6) p.Fill({x0, std::round(r.Bottom() - peak - 2), x1 - x0, 2}, dim, 1);
+        }
+    }
+
+    // The recent loudness scrolling to the left, mirrored around the middle; older columns fade.
+    void PaintWaveform(Painter& p, const Rect& r, Color bg, Color white) {
+        constexpr int n = audio::kWaveColumns;
+        const float step = r.w / n;
+        const float bw = std::max(2.0f, std::round(step * 0.5f));
+        const float cy = r.Cy();
+        for (int i = 0; i < n; ++i) {
+            const float x = std::round(r.x + i * step + (step - bw) / 2);
+            const float h = std::max(2.0f, std::round(frame_.wave[i] * r.h * 0.9f / 2) * 2);
+            const float k = static_cast<float>(i) / (n - 1);
+            p.Fill({x, std::round(cy - h / 2), bw, h}, Color::Mix(bg, white, 0.22f + 0.64f * k * k), bw / 2);
+        }
+    }
+
+    // An oscilloscope trace across the band, over a faint centre line.
+    void PaintScope(Painter& p, const Rect& r, Color fg, Color dim) {
+        ID2D1DeviceContext5* ctx = p.Ctx();
+        const float cy = r.Cy(), amp = r.h * 0.42f;
+        p.Fill({r.x, std::round(cy), r.w, 1}, dim.Fade(0.5f));
+        ID2D1StrokeStyle* stroke = RoundStroke(ctx);
+        ID2D1SolidColorBrush* brush = LineBrush(ctx, fg, p.Opacity());
+        if (!brush) return;
+        constexpr int n = audio::kScopePoints;
+        D2D1_POINT_2F prev{r.x, cy - frame_.scope[0] * amp};
+        for (int i = 1; i < n; ++i) {
+            const D2D1_POINT_2F pt{r.x + r.w * static_cast<float>(i) / (n - 1), cy - frame_.scope[i] * amp};
+            ctx->DrawLine(prev, pt, brush, 2.0f, stroke);
+            prev = pt;
+        }
+    }
+
+    // Spokes around a round copy of the cover: the bands go down one side and back up the other.
+    void PaintSpectrometer(Painter& p, const Rect& cover, ID2D1Bitmap* bmp, Color fg, Color dim) {
+        ID2D1DeviceContext5* ctx = p.Ctx();
+        const Point c{cover.Cx(), cover.Cy()};
+        const float outer = cover.w / 2;
+        const float inner = outer * 0.46f * (1 + 0.03f * frame_.level);
+        const float maxLen = outer * 0.5f;
+        constexpr int n = audio::kBands;
+        const float thick = std::clamp(2 * 3.14159265f * inner / (2 * n) * 0.45f, 2.0f, 6.0f);
+        ID2D1StrokeStyle* stroke = RoundStroke(ctx);
+        ID2D1SolidColorBrush* brush = LineBrush(ctx, fg, p.Opacity());
+        for (int k = 0; brush && k < 2 * n; ++k) {
+            const int band = k < n ? k : 2 * n - 1 - k;
+            const float a = -1.5707963f + 3.14159265f * (static_cast<float>(k) + 0.5f) / n;
+            const float dx = std::cos(a), dy = std::sin(a);
+            const float r0 = inner + 6 + thick / 2, len = std::max(1.0f, frame_.bands[band] * maxLen);
+            ctx->DrawLine({c.x + dx * r0, c.y + dy * r0}, {c.x + dx * (r0 + len), c.y + dy * (r0 + len)}, brush, thick,
+                          stroke);
+        }
+        const Rect disc{c.x - inner, c.y - inner, inner * 2, inner * 2};
+        if (bmp) {
+            p.Image(bmp, disc, inner, true);
+        } else {
+            p.FillCircle(c, inner, P().bgCard);
+            const float icon = inner * 0.5f;
+            p.Icon("music", {c.x - icon / 2, c.y - icon / 2, icon, icon}, P().textTertiary);
+        }
+        if (brush) ctx->DrawEllipse(D2D1::Ellipse({c.x, c.y}, inner + 0.5f, inner + 0.5f), LineBrush(ctx, dim, p.Opacity()), 1.0f);
+    }
+
+
     // --- lyrics ---------------------------------------------------------------------------
     // A new file: forget the old lyrics and look for a .lrc on a worker. The embedded tag is
     // read whenever the metadata changes until the track has lyrics (tags may arrive after
@@ -509,6 +714,15 @@ private:
     Rect box_;
 
     ScopedConnection conn_, imagesConn_;
+    Config::Token vizToken_ = 0;
+    VizStyle style_ = VizStyle::Off;
+    std::unique_ptr<audio::LoopbackCapture> capture_;
+    audio::VisualFrame frame_;
+    AnimFloat vizShow_{0};  // 0 = the cover, 1 = the visualizer
+    double lastPaint_ = 0;
+    gfx::ComPtr<ID2D1StrokeStyle> roundStroke_;
+    gfx::ComPtr<ID2D1SolidColorBrush> lineBrush_;
+    uint32_t strokeGen_ = 0, lineGen_ = 0;
     gfx::ComPtr<ID2D1Effect> blur_;
     gfx::ComPtr<ID2D1RadialGradientBrush> glow_, vignette_;
     gfx::ComPtr<ID2D1SolidColorBrush> grooves_;

@@ -17,6 +17,9 @@
 #include "../src/library/Thumbnails.h"
 #include "../src/app/player/Episodes.h"
 #include "../src/app/PlayQueue.h"
+#include "../src/audio/CrossfadeMath.h"
+#include "../src/audio/LoopbackSupport.h"
+#include "../src/audio/Spectrum.h"
 
 #include <windows.h>
 #include <objbase.h>
@@ -2091,6 +2094,120 @@ void TestShellText() {
     CHECK(FitShellText(L"abc", L"x", 0).empty());
 }
 
+void TestCrossfadeMath() {
+    using namespace audio;
+    // The fade: off below a second, capped at 12 s and at half a song minus a second.
+    CHECK(EffectiveFade(0, 200) == 0);
+    CHECK(EffectiveFade(0.5, 200) == 0);
+    CHECK(EffectiveFade(5, 200) == 5);
+    CHECK(EffectiveFade(30, 200) == kMaxFade);
+    CHECK(EffectiveFade(12, 10) == 4);  // 10 s song: 5 - 1
+    CHECK(EffectiveFade(5, 3) == 0);    // too short for any fade
+    CHECK(EffectiveFade(5, 0) == 0);    // unknown length (a stream)
+    // Arming: wait until a few seconds before the helper starts, then arm; a seek into the last
+    // seconds is too late and plays gaplessly.
+    const double d = 180, f = 6, s = HelperStart(f, d);
+    CHECK(std::fabs(s - (d - f - kHandoff - kPreroll)) < 1e-9);
+    CHECK(DecideArm(10, d, f) == ArmDecision::Wait);
+    CHECK(DecideArm(s - kArmLead - 0.01, d, f) == ArmDecision::Wait);
+    CHECK(DecideArm(s - kArmLead + 0.01, d, f) == ArmDecision::Arm);
+    CHECK(DecideArm(s - 0.5, d, f) == ArmDecision::Arm);
+    CHECK(DecideArm(s - 0.3, d, f) == ArmDecision::TooLate);
+    CHECK(DecideArm(d - 1, d, f) == ArmDecision::TooLate);
+    CHECK(DecideArm(10, d, 0) == ArmDecision::TooLate);
+    // Albums: tags win (case and spaces ignored); without them the folder is the album.
+    CHECK(SameAlbum(L"Kind of Blue", L"kind of  blue", L"D:\\a\\1.mp3", L"E:\\b\\2.mp3"));
+    CHECK(!SameAlbum(L"Kind of Blue", L"Blue Train", L"D:\\a\\1.mp3", L"D:\\a\\2.mp3"));
+    CHECK(SameAlbum(L"", L"", L"D:\\Music\\X\\1.mp3", L"d:\\music\\x\\2.flac"));
+    CHECK(SameAlbum(L"Kind of Blue", L"", L"D:\\Music\\X\\1.mp3", L"D:\\Music\\X\\2.flac"));
+    CHECK(!SameAlbum(L"", L"", L"D:\\Music\\X\\1.mp3", L"D:\\Music\\Y\\2.mp3"));
+    CHECK(!SameAlbum(L"", L"", L"1.mp3", L"2.mp3"));  // no folder to compare
+    // Equal power: the two songs' powers add up to 1 all through the fade.
+    for (int i = 0; i <= 20; ++i) {
+        const double u = i / 20.0;
+        const double a = FadeInGain(u), b = FadeOutGain(u);
+        CHECK_MSG(std::fabs(a * a + b * b - 1) < 1e-9, "u=%.2f in=%.4f out=%.4f", u, a, b);
+    }
+    CHECK(FadeInGain(0) == 0 && FadeInGain(1) == 1 && FadeOutGain(0) == 1);
+    CHECK(FadeInGain(-1) == 0 && FadeInGain(2) == 1);
+    CHECK(GainToDb(1) == 0 && GainToDb(0) == kMinDb && GainToDb(-1) == kMinDb);
+    CHECK(std::fabs(GainToDb(0.5) + 6.0206) < 1e-3);
+    CHECK(GainToDb(1e-12) == kMinDb);
+}
+
+void TestSpectrum() {
+    using namespace audio;
+    // Bit reversal and butterflies: an impulse has a flat spectrum, a constant only DC.
+    std::vector<float> re(16, 0), im(16, 0);
+    re[0] = 1;
+    Fft(re.data(), im.data(), 16);
+    for (int i = 0; i < 16; ++i) CHECK(std::fabs(re[i] - 1) < 1e-5 && std::fabs(im[i]) < 1e-5);
+    std::fill(re.begin(), re.end(), 1.0f);
+    std::fill(im.begin(), im.end(), 0.0f);
+    Fft(re.data(), im.data(), 16);
+    CHECK(std::fabs(re[0] - 16) < 1e-4);
+    for (int i = 1; i < 16; ++i) CHECK(std::fabs(re[i]) < 1e-4 && std::fabs(im[i]) < 1e-4);
+
+    // A 1 kHz sine at half scale reads about -6 dBFS in its band and far less elsewhere.
+    SpectrumAnalyzer a;
+    a.Configure(48000);
+    std::vector<float> sine(kFftSize);
+    for (int i = 0; i < kFftSize; ++i) sine[i] = 0.5f * static_cast<float>(std::sin(2 * 3.14159265358979 * 1000 * i / 48000));
+    float db[kBands];
+    a.Analyze(sine.data(), db);
+    int loudest = 0;
+    for (int b = 1; b < kBands; ++b)
+        if (db[b] > db[loudest]) loudest = b;
+    const double binHz = 48000.0 / kFftSize;
+    CHECK_MSG(a.BandLow(loudest) * binHz <= 1000 + binHz && a.BandHigh(loudest) * binHz >= 1000 - binHz,
+              "band %d covers %.0f-%.0f Hz", loudest, a.BandLow(loudest) * binHz, a.BandHigh(loudest) * binHz);
+    CHECK_MSG(db[loudest] > -7.5f && db[loudest] < -5.0f, "peak %.2f dB", db[loudest]);
+    CHECK_MSG(db[0] < -60 && db[kBands - 1] < -60, "low %.1f high %.1f", db[0], db[kBands - 1]);
+    // Bands rise in frequency and never run past Nyquist.
+    for (int b = 1; b < kBands; ++b) CHECK(a.BandLow(b) >= a.BandLow(b - 1) && a.BandHigh(b) <= kFftSize / 2 - 1);
+    // Silence is the floor, not NaN.
+    std::vector<float> zero(kFftSize, 0.0f);
+    a.Analyze(zero.data(), db);
+    CHECK(db[10] < kFloorDb && BarLevel(db[10]) == 0);
+    CHECK(BarLevel(kTopDb) == 1 && BarLevel(0) == 1 && BarLevel((kFloorDb + kTopDb) / 2) == 0.5f);
+    // Smoothing: up fast, down slow, never overshooting.
+    const float up = Smooth(0, 1, 0.016f, 0.025f, 0.22f), down = Smooth(1, 0, 0.016f, 0.025f, 0.22f);
+    CHECK(up > 0.4f && up < 1 && down > 0.9f && down < 1);
+    // The scope starts at the steepest rising zero crossing.
+    float wave[64];
+    for (int i = 0; i < 64; ++i) wave[i] = static_cast<float>(std::sin(2 * 3.14159265358979 * (i - 5) / 16.0));
+    const int trig = ScopeTrigger(wave, 64);
+    CHECK_MSG(trig == 5 || trig == 21 || trig == 37 || trig == 53, "trigger %d", trig);
+    CHECK(wave[trig] >= 0 && wave[trig - 1] < 0);
+    float flat[8] = {};
+    CHECK(ScopeTrigger(flat, 8) == 0);
+}
+
+void TestMusicSettings() {
+    FreshDataDir(L"music-settings");
+    Config c;
+    // Crossfade reaches Player as one pseudo option: seconds, 0 = off; the album rule is on.
+    auto opts = MpvOptions(c);
+    CHECK(FindOption(opts, "user-data/lumen/crossfade") == "0");
+    CHECK(FindOption(opts, "user-data/lumen/crossfade-albums") == "yes");
+    c.SetBool("audio.crossfade", true);
+    auto live = MpvOptionFor(c, "audio.crossfade");
+    CHECK(live.size() == 1 && live[0].first == "user-data/lumen/crossfade" && live[0].second == "5");
+    c.SetDouble("audio.crossfadeSeconds", 40);  // clamped to the slider's 12
+    CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeSeconds"), "user-data/lumen/crossfade") == "12");
+    c.SetBool("audio.crossfade", false);
+    CHECK(FindOption(MpvOptionFor(c, "audio.crossfade"), "user-data/lumen/crossfade") == "0");
+    CHECK(c.IsEnabled("audio.crossfadeSeconds") == false);
+    c.SetBool("audio.crossfadeAlbums", false);
+    CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeAlbums"), "user-data/lumen/crossfade-albums") == "no");
+    // The visualizer is a visible setting now, with the four styles of the design.
+    const settings::Item* viz = settings::FindItem("audio.visualizer");
+    CHECK(viz && viz->choices.size() == 5);
+    if (viz) CHECK(viz->hidden == !audio::ProcessLoopbackSupported());
+    CHECK((settings::FindItem("audio.visualizerUnsupported") != nullptr) == !audio::ProcessLoopbackSupported());
+    CHECK(c.GetString("audio.visualizer") == "disabled");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -2125,6 +2242,9 @@ const TestCase kTests[] = {
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
     {"shell_text", TestShellText},
+    {"crossfade_math", TestCrossfadeMath},
+    {"spectrum", TestSpectrum},
+    {"music_settings", TestMusicSettings},
 };
 
 }  // namespace

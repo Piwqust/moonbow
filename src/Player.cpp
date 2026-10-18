@@ -2,11 +2,16 @@
 
 #include "Trace.h"
 #include "Util.h"
+#include "audio/CrossfadeMath.h"
+#include "audio/Crossfader.h"
 #include "core/Json.h"
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
+#include "library/MediaTypes.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -120,6 +125,8 @@ std::wstring Track::Name() const {
     return label;
 }
 
+Player::Player() = default;
+
 Player::~Player() {
     Shutdown();
 }
@@ -173,6 +180,7 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("ytdl", "no");
     opt("terminal", "no");
     opt("volume-max", "150");
+    opt("volume-gain-min", "-150");  // the crossfade's silent end (audio/CrossfadeMath.h kMinDb)
     // Lumen writes watch-later itself (SaveWatchLater / Shutdown): mpv's own save also fired
     // when a finished file was replaced by the next one, so finished files resumed at the end.
     opt("save-position-on-quit", "no");
@@ -202,6 +210,7 @@ bool Player::InitOnWorker(int64_t wid) {
 
     std::string hwdec = settings::kAutoHwdec, vf;
     for (const auto& [name, value] : startOptions_) {
+        if (CrossfadeOption(name, value)) continue;
         opt(name.c_str(), value);
         if (name == "hwdec") hwdec = value;
         if (name == "vf") vf = value;
@@ -297,6 +306,8 @@ unsigned Player::ProcessEvents() {
             }
             case MPV_EVENT_START_FILE: {
                 settledSerial_ = 0;
+                // Another file before the fade began (mpv went on by itself): the plan is void.
+                if (crossfader_ && !crossfader_->Switched()) CancelCrossfade();
                 // Forget the previous file's size, so window fitting waits for this one's.
                 state_.videoW = state_.videoH = 0;
                 changes |= kChangeVideoSize;
@@ -391,6 +402,7 @@ unsigned Player::ProcessEvents() {
                 break;
         }
     }
+    if (changes & (kChangeTime | kChangeState)) CheckCrossfade();
     return changes;
 }
 
@@ -407,9 +419,15 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
     switch (id) {
         case kPropTimePos: state_.position = dbl(); return kChangeTime;
         case kPropDuration: state_.duration = dbl(); return kChangeTime;
-        case kPropPause: state_.paused = flag(); return kChangeState;
-        case kPropVolume: state_.volume = has ? dbl() : 100.0; return kChangeVolume;
-        case kPropMute: state_.mute = flag(); return kChangeVolume;
+        case kPropPause: state_.paused = flag(); SyncCrossfade(); return kChangeState;
+        case kPropVolume:
+            state_.volume = has ? dbl() : 100.0;
+            // Volume 0 from anywhere (the startup volume, a setting) becomes the tap's stand-in.
+            if (has && state_.volume <= 0 && signalTap_) SetDouble("volume", kTapVolume);
+            if (state_.volume < kTapVolume * 10) state_.volume = 0;  // SetSignalTap's stand-in for 0
+            SyncCrossfade();
+            return kChangeVolume;
+        case kPropMute: state_.mute = flag(); SyncCrossfade(); return kChangeVolume;
         case kPropTitle: state_.title = str(); return kChangeMeta;
         case kPropPath: state_.path = str(); return kChangeFile;
         case kPropIdle:
@@ -422,7 +440,7 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
             return kChangeState;
         case kPropWidth: state_.videoW = i64(); return kChangeVideoSize;
         case kPropHeight: state_.videoH = i64(); return kChangeVideoSize;
-        case kPropSpeed: state_.speed = has ? dbl() : 1.0; return kChangeState;
+        case kPropSpeed: state_.speed = has ? dbl() : 1.0; SyncCrossfade(); return kChangeState;
         case kPropEof: {
             const bool was = state_.eof;
             state_.eof = flag();
@@ -539,6 +557,7 @@ void Player::SetProperty(const char* name, bool value) {
 
 void Player::SetProperty(const char* name, const std::string& value) {
     CountTrackChoice(name);
+    if (CrossfadeOption(name, value)) return;
     SetString(name, value);
 }
 
@@ -572,6 +591,7 @@ void Player::Unobserve(uint64_t id) {
 }
 
 void Player::Open(const std::wstring& path) {
+    CancelCrossfade();
     if (beforeLeave) beforeLeave();
     settledSerial_ = 0;
     if (state_.fileLoaded) SaveWatchLater();
@@ -594,6 +614,7 @@ std::string Player::LoadfileOptions(const std::wstring& path) const {
 }
 
 void Player::Stop() {
+    CancelCrossfade();
     if (beforeLeave) beforeLeave();
     settledSerial_ = 0;
     if (state_.fileLoaded) SaveWatchLater();
@@ -606,6 +627,8 @@ void Player::Stop() {
 
 void Player::QueueNext(const std::wstring& path) {
     if (!mpv_ || path == queuedNext_) return;
+    // The fade about to start was planned for the file queued before.
+    if (crossfader_ && !crossfader_->Switched()) CancelCrossfade();
     queuedNext_ = path;
     queuedEntry_ = 0;
     ++queueGen_;
@@ -657,24 +680,28 @@ void Player::SetPause(bool paused) {
 
 void Player::SeekAbsolute(double seconds, bool exact) {
     if (!state_.fileLoaded) return;
+    CancelCrossfade();
     std::string pos = std::to_string(seconds < 0 ? 0 : seconds);
     Cmd({"seek", pos.c_str(), exact ? "absolute+exact" : "absolute+keyframes"});
 }
 
 void Player::SeekRelative(double seconds) {
     if (!state_.fileLoaded) return;
+    CancelCrossfade();
     std::string delta = std::to_string(seconds);
     Cmd({"seek", delta.c_str(), "relative+exact"});
 }
 
 void Player::SeekChapter(int delta) {
     if (!state_.fileLoaded || state_.chapters.empty()) return;
+    CancelCrossfade();
     std::string d = std::to_string(delta);
     Cmd({"add", "chapter", d.c_str()});
 }
 
 void Player::FrameStep(bool back) {
     if (!state_.fileLoaded) return;
+    CancelCrossfade();
     Cmd({back ? "frame-back-step" : "frame-step"});
 }
 
@@ -682,7 +709,7 @@ void Player::SetVolume(double volume) {
     if (volume < 0) volume = 0;
     if (volume > volumeMax_) volume = volumeMax_;  // audio.maxVolume
     state_.volume = volume;  // optimistic, so repeated wheel steps accumulate
-    SetDouble("volume", volume);
+    SetDouble("volume", MpvVolume(volume));
 }
 
 void Player::SetMute(bool mute) {
@@ -763,6 +790,7 @@ void Player::SaveWatchLater() {
 
 void Player::Shutdown() {
     if (init_.joinable()) init_.join();
+    crossfader_.reset();  // its helper instance goes first; it also uses mpv_
     if (mpv_) {
         Trace("close: player shutdown");
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
@@ -779,4 +807,83 @@ void Player::Shutdown() {
         mpv_ = nullptr;
     }
     state_.ready = false;
+}
+
+// --- crossfade ---------------------------------------------------------------------------------
+
+bool Player::CrossfadeOption(const std::string& name, const std::string& value) {
+    if (name == "audio-exclusive") exclusive_ = value == "yes";  // passed on to mpv as well
+    if (name == "user-data/lumen/crossfade") {
+        xfSeconds_ = std::atof(value.c_str());
+        if (xfSeconds_ <= 0) CancelCrossfade();
+        return true;
+    }
+    if (name == "user-data/lumen/crossfade-albums") {
+        xfAlbums_ = value == "yes";
+        return true;
+    }
+    return false;
+}
+
+// On time updates: starts the crossfade worker a few seconds before the fade of a song whose
+// next song mpv already has queued (QueueNext).
+void Player::CheckCrossfade() {
+    if (crossfader_ && crossfader_->Finished()) {
+        const bool again = crossfader_->Result() == audio::Crossfader::Outcome::Cancelled;
+        crossfader_.reset();      // the worker has ended: no wait
+        if (again) xfEntry_ = 0;  // a seek or a pause: try again if there is still time
+    }
+    if (crossfader_ || xfSeconds_ <= 0 || !mpv_ || !state_.fileLoaded || state_.paused || state_.eof) return;
+    if (queuedEntry_ <= 0 || queuedNext_.empty()) return;  // the last song, Repeat One, Stop after each
+    if (xfSerial_ == state_.loadSerial && xfEntry_ == queuedEntry_) return;
+    const double fade = audio::EffectiveFade(xfSeconds_, state_.duration);
+    const audio::ArmDecision decision = audio::DecideArm(state_.position, state_.duration, fade);
+    if (decision == audio::ArmDecision::Wait) return;
+    xfSerial_ = state_.loadSerial;
+    xfEntry_ = queuedEntry_;
+    if (decision == audio::ArmDecision::TooLate) return;
+    // Songs only: a video never fades into anything. Streams have no reliable end.
+    auto isSong = [](const std::wstring& p) {
+        return p.find(L"://") == std::wstring::npos && library::KindOf(p) == library::MediaKind::Audio;
+    };
+    if (state_.hasVideo || !isSong(state_.path) || !isSong(queuedNext_)) return;
+    // Exclusive mode and passthrough give the device to one stream.
+    if (exclusive_ || spdifLog_) return;
+    audio::CrossfadePlan plan;
+    plan.outgoing = state_.path;
+    plan.incoming = queuedNext_;
+    plan.outgoingAlbum = state_.album;
+    plan.duration = state_.duration;
+    plan.fade = fade;
+    plan.differentAlbumsOnly = xfAlbums_;
+    plan.volume = MpvVolume(state_.volume);
+    plan.mute = state_.mute;
+    plan.speed = state_.speed;
+    plan.paused = state_.paused;
+    crossfader_ = std::make_unique<audio::Crossfader>(api_, mpv_, std::move(plan));
+}
+
+void Player::CancelCrossfade() {
+    if (crossfader_) crossfader_->Cancel();
+}
+
+void Player::SyncCrossfade() {
+    if (!crossfader_) return;
+    crossfader_->SetPaused(state_.paused);
+    crossfader_->SetVolume(MpvVolume(state_.volume), state_.mute);
+    crossfader_->SetSpeed(state_.speed);
+}
+
+// --- visualizer tap ----------------------------------------------------------------------------
+
+void Player::SetSignalTap(bool on) {
+    if (on == signalTap_) return;
+    signalTap_ = on;
+    if (state_.ready && state_.volume <= 0) SetDouble("volume", MpvVolume(0));
+}
+
+double Player::OutputGain() const {
+    if (state_.mute) return 0;
+    const double v = MpvVolume(state_.volume) / 100.0;
+    return v * v * v;
 }

@@ -6,9 +6,14 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
+
+namespace audio {
+class Crossfader;
+}
 
 inline constexpr UINT WM_APP_MPV_READY  = WM_APP + 1;  // wParam: 1 = ok, 0 = failed
 inline constexpr UINT WM_APP_MPV_WAKEUP = WM_APP + 2;
@@ -82,6 +87,7 @@ enum PlayerChange : unsigned {
 
 class Player {
 public:
+    Player();
     ~Player();
 
     // Loads libmpv and initializes it on a worker thread, then posts
@@ -174,7 +180,22 @@ public:
 
     const MpvApi& Api() const { return api_; }
 
+    // The music view's visualizer listens to Lumen's own output, which carries mpv's volume. While
+    // a tap is on, volume 0 is sent to mpv as kTapVolume (-300 dB: digital silence at the device,
+    // yet the float samples keep the waveform), and the visualizer scales by OutputGain().
+    void SetSignalTap(bool on);
+    double OutputGain() const;  // mpv's software gain, (volume / 100)^3; 0 when muted
+    static constexpr double kTapVolume = 0.001;
+
 private:
+    // Crossfade between songs (audio/Crossfader.h). Settings arrive as the pseudo options
+    // "user-data/lumen/crossfade" (seconds, 0 = off) and "user-data/lumen/crossfade-albums".
+    bool CrossfadeOption(const std::string& name, const std::string& value);
+    void CheckCrossfade();
+    void CancelCrossfade();
+    void SyncCrossfade();
+    double MpvVolume(double volume) const { return signalTap_ && volume <= 0 ? kTapVolume : volume; }
+
     bool InitOnWorker(int64_t wid);
     void Cmd(std::initializer_list<const char*> args, bool async = true);
     void SetDouble(const char* name, double value);
@@ -213,4 +234,12 @@ private:
     uint64_t settledSerial_ = 0;
     uint64_t tracksSerial_ = 0;
     uint32_t trackChoices_[3] = {};
+
+    std::unique_ptr<audio::Crossfader> crossfader_;
+    double xfSeconds_ = 0;
+    bool xfAlbums_ = true;
+    bool exclusive_ = false;  // audio-exclusive: one stream owns the device
+    uint64_t xfSerial_ = 0;   // the transition already tried (loadSerial, entry)
+    int64_t xfEntry_ = 0;
+    bool signalTap_ = false;
 };
