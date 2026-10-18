@@ -1147,8 +1147,11 @@ void BuildMedia(Builder& b) {
         .MpvBuild("tscale", BuildTscale, "oversample");
     // Enabled user shaders ("a.glsl|b.hook" in <data>\shaders); toggled in the player's quick settings.
     b.Text("video.shaders", L"Custom shaders", L"Свои шейдеры")
-        .MpvBuild("glsl-shaders", BuildGlslShaders, "")
-        .Hidden();
+        .Desc(L"Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Lumen, separated by |. Easier to "
+              L"turn on one by one in the player: Settings > Video > Shaders.",
+              L"Файлы шейдеров (.glsl, .hook) из папки shaders в %APPDATA%\\Lumen через |. Проще включать по одному "
+              L"в плеере: «Настройки > Видео > Шейдеры».")
+        .MpvBuild("glsl-shaders", BuildGlslShaders, "");
     b.inferred = false;
 
     b.Sec("picture", L"Picture", L"Изображение");
