@@ -50,7 +50,7 @@
 {L"These files will be added to the playlist.", L"Эти файлы будут добавлены в плейлист."},
 {L"Drag files into the box or click here to select files.", L"Перетащите файлы сюда или нажмите, чтобы выбрать."},
 {L"{0} selected · click to add more", L"Выбрано: {0} · нажмите, чтобы добавить ещё"},
-{L"Also add the current queue ({0})", L"Добавить и текущую очередь ({0})"},
+{L"Also add the current queue ({0})", L"Добавить текущую очередь ({0})"},
 {L"Playlist created", L"Плейлист создан"},
 // --- media information
 {L"Media Information", L"Сведения о файле"},
