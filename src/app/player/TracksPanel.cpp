@@ -315,13 +315,21 @@ std::unique_ptr<Widget> BuildTracksTab(int tab) {
     return sv;
 }
 
+// The same footer button as quick settings (a hairline, then "Open Advanced Settings" with the
+// gear), so the two popovers that both have Audio and Subtitles tabs end the same way.
+class TracksFooter : public Widget {
+public:
+    void Paint(Painter& p) override { p.Fill({rect.x, rect.y, rect.w, 1}, SectionLine()); }
+};
+
 std::unique_ptr<Widget> BuildTracksFooter(Popover* owner) {
-    auto footer = std::make_unique<Widget>();
+    auto footer = std::make_unique<TracksFooter>();
     footer->dir = Dir::Column;
     footer->width = Length::Grow();
     footer->height = Length::Px(72);
     footer->pad = {20, 20, 20, 20};
-    auto* b = footer->Add<FlatButton>(Tr(L"Show Preferences"));
+    auto* b = footer->Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
+    b->width = Length::Grow();
     b->onClick = [owner] {
         const int t = owner->CurrentTab();
         const std::string cat = t == 0 ? "video" : t == 1 ? "audio" : "subtitles";
