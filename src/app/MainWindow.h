@@ -33,6 +33,9 @@ public:
     bool UiHidden() const { return uiHidden_ || pip_; }
     // True while the controls overlay is visible in fullscreen/hide-UI mode.
     float ChromeOpacity() const { return chrome_.Get(); }
+    // The control bar floats over the video and auto-hides: fullscreen / hide-UI / PiP,
+    // and in a window when Auto-hide the controls = Always and a video is shown.
+    bool BarOverlays() const;
     void PokeChrome();  // mouse moved: show controls, restart the hide timer
 
     // Picture in Picture: compact always-on-top video; off restores the previous placement.

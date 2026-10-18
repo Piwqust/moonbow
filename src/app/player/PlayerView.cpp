@@ -175,9 +175,10 @@ public:
     bool OnMouseDown(const MouseEvent& e) override {
         // The click that closed a player popover doesn't also pause.
         if (e.button == MouseButton::Left && panel::PanelJustClosed()) return true;
-        if (e.button == MouseButton::Left && PS().fileLoaded) {
-            Run(Action::PlayPause);  // like MPC-HC; a double click undoes it
-            pausedByClick_ = true;
+        if (e.button == MouseButton::Left) {
+            // Settings > Controls > Mouse; play/pause by default, like MPC-HC (a double click undoes it).
+            pausedByClick_ = PS().fileLoaded && TheApp().config().GetString("controls.singleClick") == "playPause";
+            VideoSingleClick();
         } else if (e.button == MouseButton::Middle) {
             Run(Action::Fullscreen);
         } else if (e.button == MouseButton::X1) {
@@ -189,9 +190,10 @@ public:
     }
     bool OnDoubleClick(const MouseEvent&) override {
         if (window_->PictureInPicture()) return true;
-        if (pausedByClick_) Run(Action::PlayPause);
+        const bool undo = pausedByClick_ && TheApp().config().GetString("controls.doubleClick") != "none";
         pausedByClick_ = false;
-        Run(Action::Fullscreen);
+        if (undo) Run(Action::PlayPause);
+        VideoDoubleClick();
         return true;
     }
     bool OnMouseMove(const MouseEvent&) override {
@@ -199,13 +201,7 @@ public:
         return false;
     }
     bool OnWheel(const WheelEvent& e) override {
-        if (e.horizontal) {
-            TheApp().player().SeekRelative(5.0 * e.delta);
-        } else {
-            TheApp().player().SetVolume(std::round(PS().volume + 5 * e.delta));
-            ShowToast(GetHost(), Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))),
-                      VolumeIcon(PS().volume, PS().mute), 900);
-        }
+        VideoWheel(e.delta, e.horizontal);
         return true;
     }
     Rect Inner(bool immersive) const { return immersive ? rect : Rect{rect.x + kVideoPad, rect.y, rect.w - 2 * kVideoPad, rect.h}; }
@@ -322,13 +318,15 @@ void PlayerView::OnLayout() {
         side_->Arrange({rect.x, rect.y, kSideRail + kSidePanel, rect.h - barH});
         x += kSideRail + kSidePanel;
     }
-    const Rect area = immersive ? rect : Rect{x, rect.y, rect.Right() - x, rect.h - barH};
+    // A floating bar (fullscreen, or windowed auto-hide) leaves the whole height to the video.
+    const bool overlay = window_->BarOverlays() && !audioOnly;
+    const Rect area = immersive ? rect : Rect{x, rect.y, rect.Right() - x, rect.h - (overlay ? 0.0f : barH)};
     video_->Arrange(area);
     music_->visible = audioOnly;
     if (audioOnly) music_->Arrange(immersive ? area : video_->Inner(false));
 
-    bar_->opacity = immersive ? window_->ChromeOpacity() : 1.0f;
-    bar_->visible = !pip && (!immersive || window_->ChromeOpacity() > 0.01f);
+    bar_->opacity = immersive || overlay ? window_->ChromeOpacity() : 1.0f;
+    bar_->visible = !pip && (!(immersive || overlay) || window_->ChromeOpacity() > 0.01f);
     bar_->Arrange({rect.x, rect.Bottom() - barH, rect.w, barH});
     pip_->visible = pip;
     if (pip) pip_->Arrange(rect);

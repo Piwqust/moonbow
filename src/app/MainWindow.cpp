@@ -174,6 +174,13 @@ bool MainWindow::Immersive() const {
     return IsFullscreen() || uiHidden_ || pip_;
 }
 
+bool MainWindow::BarOverlays() const {
+    if (Immersive()) return true;
+    App& app = TheApp();
+    return app.PlayerShown() && app.player().State().fileLoaded && app.player().State().hasVideo &&
+           app.config().GetString("interface.autoHide") == "always";
+}
+
 void MainWindow::SetPictureInPicture(bool on) {
     if (on == pip_) return;
     HWND hwnd = Hwnd();
@@ -257,7 +264,7 @@ void MainWindow::SetUiHidden(bool hidden) {
 
 void MainWindow::PokeChrome() {
     SetCursorHidden(false);
-    if (!Immersive()) {
+    if (!BarOverlays()) {
         if (chrome_.Target() != 1) chrome_.Set(1);
         return;
     }
@@ -269,7 +276,7 @@ void MainWindow::PokeChrome() {
     if (!ChromeAutoHides()) return;
     chromeTimer_ = StartTimer(ChromeHideDelay(), [this] {
         chromeTimer_ = 0;
-        if (!Immersive()) return;
+        if (!BarOverlays()) return;
         // Keep the controls while the pointer is on them or a popup is open.
         Widget* hot = Hot();
         const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
