@@ -23,6 +23,7 @@ inline constexpr float kSmallButtonW = 100;
 settings::Lang Lang();
 Config& Cfg();
 ui::Color HeadingColor();  // section headings (between primary and secondary text)
+ui::Color DisabledTextColor();  // labels of disabled rows: text.disabled raised to at least 3:1
 
 // Implemented by widgets that display a setting.
 class Syncable {
@@ -50,7 +51,7 @@ struct PageHost {
     std::function<void(const std::string& action, const settings::Item&)> runAction;  // own buttons
 };
 
-// "1.5 s", "-11.0 dB", "4.0 : 1", "250 %"; decimals follow the item's step.
+// "1.5 s", "-11.0 dB", "4.0 : 1", "250 %"; decimals follow the item's step, Russian uses a comma.
 std::wstring FormatValue(const settings::Item& item, double v, bool withUnit = true);
 int Decimals(const settings::Item& item);
 
@@ -92,10 +93,11 @@ std::unique_ptr<ui::Widget> MakeItemRow(const settings::Item& item, PageHost& pa
 std::unique_ptr<ui::Widget> MakeGroupRow(const std::string& group, const std::vector<const settings::Item*>& items,
                                          PageHost& page);
 
-// Horizontal slider from the design: 16-high track, 8×24 thumb, optional ticks and scale labels.
+// Horizontal slider from the design: 16-high track, 8×24 thumb. Rows pair it with an editable
+// value box (MakeItemRow), effect cards with a value label above it.
 class TickSlider : public ui::Widget, public Syncable {
 public:
-    TickSlider(const settings::Item& item, bool showScale);
+    explicit TickSlider(const settings::Item& item);
     ~TickSlider() override;
     void Sync() override;
     ui::Size MeasureContent(float availW, float availH) override;
@@ -118,14 +120,14 @@ private:
     void Change(double v, bool commitNow);
     void Commit();
     double value_ = 0;
-    bool showScale_;
     bool dragging_ = false;
     bool pending_ = false;
     UINT_PTR timer_ = 0;
 };
 
 // Single-line field bound to a Text / Path / Number / Color setting. Commits on Enter, on blur and
-// shortly after typing stops. Number fields show the unit after the value and step with ↑/↓.
+// shortly after typing stops. Number fields show the unit after the value and step with ↑/↓; a
+// number with a placeholder ("Auto") shows it for the minimum, and an empty field stores the minimum.
 class SettingField : public ui::TextBox, public Syncable {
 public:
     explicit SettingField(const settings::Item& item);
@@ -169,6 +171,10 @@ private:
 
 std::unique_ptr<ui::Widget> MakeEqualizer(const std::vector<const settings::Item*>& items, PageHost& page);
 std::unique_ptr<ui::Widget> MakeAddonsList(const settings::Item& item, PageHost& page);
+// Sample line drawn with the current subtitle style (SettingsSubtitlePreview.cpp).
+std::unique_ptr<ui::Widget> MakeSubtitlePreview(const settings::Item& item);
+// Shader files in <data>\shaders with a toggle each (video.shaders), and "Open folder".
+std::unique_ptr<ui::Widget> MakeShaderList(const settings::Item& item, PageHost& page);
 std::unique_ptr<ui::Widget> MakeAddonsToolbar(const std::vector<const settings::Item*>& items, PageHost& page);
 void RescanAddons();
 // Settings > Controls: grouped list of every action with its key bindings.
