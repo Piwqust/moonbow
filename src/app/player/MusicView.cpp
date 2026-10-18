@@ -12,6 +12,7 @@
 #include "app/player/ControlBar.h"
 #include "app/player/PanelKit.h"
 #include "app/player/Lyrics.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PlayerView.h"
 #include "audio/LoopbackCapture.h"
 #include "audio/LoopbackSupport.h"
@@ -201,9 +202,10 @@ public:
 
         // Two lines, as in the design: the title, then the artist and the album. A long title is
         // cut on its own line and never hides the artist; the full text is in a tooltip.
-        const std::wstring title = s.title.empty() ? (item ? FileNameOf(item->path) : L"") : s.title;
-        std::wstring second = s.artist;
-        if (!s.album.empty()) second += (second.empty() ? L"" : L" · ") + s.album;
+        const PlayingTags& tags = CurrentTags();  // the library's tags when it knows the file
+        const std::wstring title = tags.title.empty() ? (item ? FileNameOf(item->path) : L"") : tags.title;
+        std::wstring second = tags.artist;
+        if (!tags.album.empty()) second += (second.empty() ? L"" : L" · ") + tags.album;
         // The view is always on the (dark) video background, also in the light theme, so the
         // text is light rather than the palette's text colors.
         const Color white = Color::Hex(0xFFFFFF);
@@ -486,9 +488,10 @@ private:
         net::online::TrackInfo t;
         t.path = item ? item->path : s.path;
         if (library::KindOf(t.path) != library::MediaKind::Audio) return;
-        t.artist = s.artist;
-        t.title = s.title;
-        t.album = s.album;
+        const PlayingTags& tags = CurrentTags();
+        t.artist = tags.artist;
+        t.title = tags.title;
+        t.album = tags.album;
         t.duration = s.duration;
         const uint64_t serial = serial_;
         auto alive = alive_;

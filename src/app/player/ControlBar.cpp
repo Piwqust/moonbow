@@ -1,5 +1,6 @@
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/SeekPreview.h"
@@ -515,11 +516,10 @@ public:
         maxW = 240;
     }
     std::wstring Text() const {
-        const PlayerState& s = PS();
         const QueueItem* item = TheApp().queue().CurrentItem();
         switch (id_) {
             case ControlId::FileName: return item ? FileNameOf(item->path) : L"";
-            case ControlId::ArtistName: return s.artist;
+            case ControlId::ArtistName: return CurrentTags().artist;
             case ControlId::FolderName: {
                 if (!item) return L"";
                 const size_t slash = item->path.find_last_of(L"\\/");

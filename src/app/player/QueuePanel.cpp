@@ -5,6 +5,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "gfx/Text.h"
@@ -324,7 +325,7 @@ public:
 
     // Artist of an audio item when its tags (or the playing file) know it.
     std::wstring ArtistOf(int i) const {
-        if (Playing(i) && !PS().hasVideo) return PS().artist;
+        if (Playing(i) && !PS().hasVideo) return CurrentTags().artist;
         if (const library::MediaItem* m = LibraryItem(i); m && m->kind == library::MediaKind::Audio) return m->artist;
         return {};
     }
@@ -363,7 +364,7 @@ public:
         const float avail = std::max(0.0f, right - textX - dw - 10);
         const RowInfo& info = Info(i);
         const std::wstring& title = info.title;
-        const std::wstring& artist = Playing(i) && !PS().hasVideo ? PS().artist : info.artist;
+        const std::wstring& artist = Playing(i) && !PS().hasVideo ? CurrentTags().artist : info.artist;
         const float natural = gfx::Text::Get().Measure(title, ts).width + 2;
         const float tw = std::min(avail, natural);
         p.Text(title, {textX, r.y, artist.empty() ? avail : tw, r.h}, ts, fg);

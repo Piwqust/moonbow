@@ -9,6 +9,7 @@
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerOverlays.h"
@@ -649,7 +650,8 @@ float PlayerView::PaintTopInfo(Painter& p) {
     if (!window_->IsFullscreen() || window_->PictureInPicture() || !s.fileLoaded || !bar_->visible || k <= 0.01f)
         return none();
     const QueueItem* item = TheApp().queue().CurrentItem();
-    std::wstring title = !s.title.empty() ? s.title : item ? FileNameOf(item->path) : std::wstring();
+    const std::wstring& tagTitle = CurrentTags().title;
+    std::wstring title = !tagTitle.empty() ? tagTitle : item ? FileNameOf(item->path) : std::wstring();
     // Untagged, mpv's media-title is the file name: shown without its extension, as the title
     // bar and the queue show it (VF-06).
     if (item && item->path.find(L"://") == std::wstring::npos && _wcsicmp(title.c_str(), FileNameOf(item->path).c_str()) == 0) {
@@ -904,7 +906,8 @@ void MiniPlayer::Paint(Painter& p) {
         }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
-    const std::wstring name = item ? (PS().title.empty() ? FileNameOf(item->path) : PS().title) : L"";
+    const PlayingTags& tags = CurrentTags();
+    const std::wstring name = item ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : L"";
     // A cut title stays readable in the card's tooltip.
     const float titleW = compact_ ? std::max(0.0f, rect.Right() - 60 - v.Right() - 12) : rect.w - 24;
     tooltip = gfx::Text::Get().Measure(name, TextStyle::Body).width > titleW ? name : std::wstring();
@@ -912,7 +915,7 @@ void MiniPlayer::Paint(Painter& p) {
         // Title and folder/artist between the thumbnail and the play button; seek bar below.
         const float x = v.Right() + 12, w = std::max(0.0f, rect.Right() - 60 - x);
         p.Text(name, {x, rect.y + 10, w, 20}, TextStyle::Body, P().textPrimary);
-        std::wstring sub = PS().artist;
+        std::wstring sub = tags.artist;
         if (sub.empty() && item) {
             const size_t slash = item->path.find_last_of(L"\\/");
             if (slash != std::wstring::npos && item->path.find(L"://") == std::wstring::npos)
@@ -928,8 +931,8 @@ void MiniPlayer::Paint(Painter& p) {
         if (slash != std::wstring::npos && item->path.find(L"://") == std::wstring::npos)
             folder = FileNameOf(item->path.substr(0, slash));
     }
-    if (!PS().artist.empty()) folder = PS().artist;
-    p.Icon(PS().artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
+    if (!tags.artist.empty()) folder = tags.artist;
+    p.Icon(tags.artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
     p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
     // overlay buttons are children, so they paint on top of it. They get solid backings of
