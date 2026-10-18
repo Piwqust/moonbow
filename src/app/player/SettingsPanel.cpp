@@ -503,12 +503,13 @@ std::unique_ptr<Widget> PlaybackTab() {
     auto* gap = sp->Add<Widget>();
     gap->height = Length::Px(8);
     RangeSpec speed;
+    // Up to 4x, where Faster stops (the menu goes to 3x): a faster speed must not pin the thumb at 2x.
     speed.min = 0.25f;
-    speed.max = 2.0f;
+    speed.max = 4.0f;
     speed.step = 0.05f;
     speed.origin = 0.25f;
-    for (float t = 0.5f; t < 2.0f; t += 0.25f) speed.ticks.push_back(t);
-    for (float t = 0.25f; t <= 2.001f; t += 0.25f) speed.labels.push_back({t, FormatNumber(t)});
+    for (float t = 0.5f; t < 4.0f; t += 0.25f) speed.ticks.push_back(t);
+    for (float t : {0.25f, 1.0f, 2.0f, 3.0f, 4.0f}) speed.labels.push_back({t, FormatNumber(t)});
     AddBoxRange(page, sp, Tr(L"Speed"), speed, [] { return PS().speed; },
                 [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); },
                 [](double v) { return FormatNumber(v) + L"x"; });
@@ -947,7 +948,11 @@ public:
         width = Length::Grow();
         height = Length::Px(42);
         onClick = [this] { Open(); };
-        conn_ = Connect(Live().changed, [this] { Invalidate(); });
+        conn_ = Connect(Live().changed, [this] {
+            ReadName();
+            Invalidate();
+        });
+        ReadName();
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
@@ -955,12 +960,8 @@ public:
         p.Fill(rect, c.bgDeep, 6);
         if (IsHot() || open) p.Fill(rect.Inset(2), c.hover, 4);
         PaintFocusRing(p, rect, 6);
-        const auto presets = Live().Presets();
-        const int a = Live().activePreset;
-        const std::wstring name =
-            a >= 0 && a < static_cast<int>(presets.size()) ? presets[static_cast<size_t>(a)].name : Tr(L"Default Preset");
         const Color fg = IsHot() ? c.textPrimary : c.textSecondary;
-        p.Text(name, {rect.x + 16, rect.y, rect.w - 60, rect.h}, TextStyle::Body, fg);
+        p.Text(name_, {rect.x + 16, rect.y, rect.w - 60, rect.h}, TextStyle::Body, fg);
         p.Icon(open ? "chevron_down" : "chevron_up", {rect.Right() - 40, rect.Cy() - 12, 24, 24}, fg);
     }
     bool OnKeyDown(const KeyEvent& e) override {
@@ -972,6 +973,12 @@ public:
     }
 
 private:
+    // On a change, not on every paint: Presets() copies the list.
+    void ReadName() {
+        const auto presets = Live().Presets();
+        const int a = Live().activePreset;
+        name_ = a >= 0 && a < static_cast<int>(presets.size()) ? presets[static_cast<size_t>(a)].name : Tr(L"Default Preset");
+    }
     void Open() {
         Host* h = GetHost();
         if (!h) return;
@@ -1003,6 +1010,7 @@ private:
         menu_ = ShowMenu(h, rect, std::move(items), Place::Above, rect.w);
     }
     Widget* menu_ = nullptr;
+    std::wstring name_;
     ScopedConnection conn_;
 };
 

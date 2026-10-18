@@ -482,7 +482,7 @@ inline std::wstring Phrase(const std::vector<std::wstring>& parts) {
 // Whether the first strong character is right-to-left (Hebrew, Arabic, Syriac, Thaana, N'Ko).
 inline bool IsRtl(std::wstring_view s) {
     for (wchar_t c : s) {
-        if ((c >= 0x0590 && c <= 0x08FF) || (c >= 0xFB1D && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFF)) return true;
+        if ((c >= 0x0590 && c <= 0x08FF) || (c >= 0xFB1D && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFC)) return true;
         WORD t = 0;
         if (GetStringTypeW(CT_CTYPE1, &c, 1, &t) && (t & C1_ALPHA)) return false;
     }

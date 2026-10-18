@@ -55,7 +55,10 @@ public:
             if (m & (kChangeState | kChangeFile)) {
                 play_->icon = TheApp().player().State().paused ? "play" : "pause";
                 play_->tooltip = TheApp().player().State().paused ? Tr(L"Play") : Tr(L"Pause");
-                Invalidate();
+                // Paused, the controls show without the poll; resumed, OnLayout starts it again.
+                if (!visible) return;
+                if (TheApp().player().State().paused && shown_.Target() < 1) shown_.To(1.0f, 120.0f);
+                window_->RequestLayout();
             }
         });
     }
@@ -65,8 +68,9 @@ public:
 
     bool ControlsShown() const { return shown_.Target() > 0.5f; }
     void OnLayout() override {
-        if (visible && !timer_) {
-            // The pointer is over a caption area (no WM_MOUSEMOVE), so poll it while in PiP.
+        if (visible && !timer_ && !TheApp().player().State().paused) {
+            // The pointer is over a caption area (no WM_MOUSEMOVE), so poll it while in PiP and
+            // playing (paused, the controls stay up: no poll, no wakeups).
             timer_ = window_->StartTimer(120, [this] { Poll(); }, true);
         }
         const Rect r = rect;
@@ -110,7 +114,11 @@ private:
         Widget* hot = window_->Hot();
         if (hot && IsAncestorOf(hot)) over = true;
         if (window_->MouseInside() && rect.Contains(window_->MousePos().x, window_->MousePos().y)) over = true;
-        if (TheApp().player().State().paused) over = true;
+        if (TheApp().player().State().paused) {
+            over = true;
+            window_->CancelTimer(timer_);
+            timer_ = 0;
+        }
         const float target = over ? 1.0f : 0.0f;
         if (shown_.Target() != target) {
             shown_.To(target, over ? 120.0f : 220.0f);
