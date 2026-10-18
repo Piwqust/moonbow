@@ -4,7 +4,7 @@
   "_comment": "True black for OLED screens: the dark theme with every background at or near #000.",
   "mode": "dark",
   "dark": {
-    "bg.deep": "#000000",
+    "bg.deep": "#121212",
     "bg.base": "#000000",
     "bg.raised": "#0A0A0A",
     "bg.panel": "#0E0E0E",

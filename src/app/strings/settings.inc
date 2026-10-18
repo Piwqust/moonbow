@@ -62,7 +62,7 @@
 {L"No shaders", L"Нет шейдеров"},
 // --- skins (Interface)
 {L"Monochrome, the default", L"Монохром, по умолчанию"},
-{L"Pure black, dark theme only", L"Чистый чёрный, только тёмная тема"},
+{L"Black page, dark theme only", L"Чёрный фон, только тёмная тема"},
 {L"Brighter text and lines", L"Ярче текст и линии"},
 {L"Warm tones, softer corners", L"Тёплые тона, мягкие углы"},
 {L"Custom file…", L"Свой файл…"},

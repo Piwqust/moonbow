@@ -31,7 +31,7 @@ std::wstring FileName(const std::wstring& path) {
 
 const wchar_t* Caption(const std::string& id) {
     if (id == "lumen") return Tr(L"Monochrome, the default");
-    if (id == "oled") return Tr(L"Pure black, dark theme only");
+    if (id == "oled") return Tr(L"Black page, dark theme only");
     if (id == "contrast") return Tr(L"Brighter text and lines");
     if (id == "sepia") return Tr(L"Warm tones, softer corners");
     return L"";
@@ -81,6 +81,7 @@ class SkinOption : public Widget {
 public:
     SkinOption(SkinPicker* owner, int index);
     void Refresh();
+    void OnLayout() override;
     void Paint(Painter& p) override;
     void OnClick() override;
     bool OnKeyDown(const KeyEvent& e) override;
@@ -93,6 +94,7 @@ private:
     Label* name_ = nullptr;
     Label* caption_ = nullptr;
     IconView* check_ = nullptr;
+    std::wstring path_;  // custom row: the whole path, its tooltip
 };
 
 class SkinPicker : public Widget, public Syncable {
@@ -268,7 +270,9 @@ SkinOption::SkinOption(SkinPicker* owner, int i) : index(i), owner_(owner) {
         pick->focusable = true;
         pick->onClick = [this] { owner_->ChooseFile(); };
     }
+    // Always laid out, so selecting a row does not narrow its text.
     check_ = Add<IconView>("check_selected", 20, Tone::Primary);
+    check_->color = [this] { return owner_->Selected() == index ? P().textPrimary : Color::Clear(); };
     Refresh();
 }
 
@@ -278,18 +282,30 @@ void SkinOption::Refresh() {
         const std::wstring file = c.GetWString("interface.skinFile");
         name_->SetText(Tr(L"Custom file…"));
         caption_->SetText(file.empty() ? std::wstring(Tr(L"No file chosen")) : FileName(file));
-        tooltip = file;  // the caption shows only the name and may be cut
+        path_ = file;
         const bool active = owner_->Selected() == kCustom && !Skins::Get().Failed();
         preview_->Set(active ? Theme::Get().Skin() : nullptr, active);
     } else {
         const BuiltinSkin& b = Skins::Get().Builtins()[static_cast<size_t>(index)];
         name_->SetText(Russian() && !b.nameRu.empty() ? b.nameRu : b.name);
         caption_->SetText(Caption(b.id));
-        tooltip.clear();
         preview_->Set(b.skin.get(), true);
     }
-    check_->visible = owner_->Selected() == index;
-    Invalidate();
+    InvalidateLayout();
+}
+
+void SkinOption::OnLayout() {
+    Widget::OnLayout();
+    // A cut name or caption (narrow window, large scale) shows in full in the tooltip.
+    auto cut = [](const Label* l) {
+        return gfx::Text::Get().Measure(l->Text(), l->style).width > l->rect.w + 0.5f;
+    };
+    if (!path_.empty())
+        tooltip = path_;
+    else if (cut(name_) || cut(caption_))
+        tooltip = name_->Text() + L"\n" + caption_->Text();
+    else
+        tooltip.clear();
 }
 
 void SkinOption::Paint(Painter& p) {

@@ -789,7 +789,7 @@ void BuildApp(Builder& b) {
 
     b.Sec("skin", L"Skin", L"Скин");
     // One widget (app/settings/SettingsSkins.cpp): the built-in skins with swatches, then "Custom file".
-    b.Pick("interface.skin", L"Skin", L"Скин",
+    b.Pick("interface.skin", L"Look", L"Оформление",
            {{"lumen", L"Lumen", L"Lumen"},
             {"oled", L"OLED black", L"Чёрный OLED"},
             {"contrast", L"High contrast", L"Высокий контраст"},

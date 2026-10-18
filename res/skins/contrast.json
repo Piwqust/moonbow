@@ -3,7 +3,7 @@
   "name": {"en": "High contrast", "ru": "Высокий контраст"},
   "_comment": "Brighter text, stronger lines and a coloured accent; both themes.",
   "dark": {
-    "bg.deep": "#000000",
+    "bg.deep": "#1F1F1F",
     "bg.base": "#000000",
     "bg.raised": "#0A0A0A",
     "bg.panel": "#0A0A0A",
