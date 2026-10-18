@@ -1,0 +1,41 @@
+{
+  "_doc": "Allowlist and type tables for tools/dev/ui-audit.py. inferInteractive/inferText/inferScroll are used only for v1 dumps (no flags); v2 dumps carry the flags. Every rule needs a reason. Rule fields (all optional, regex full-match unless noted): check, type, id, text, parent, ancestor, path (search), window (search), context (scenario name), other* (the second widget of a pair check), region (hitmap-odd: search in the region line).",
+  "minTarget": 24,
+  "resizeBorderDip": 8,
+  "titleBarDip": 40,
+  "titleBarByWindow": [
+    { "window": "Настройки|Settings", "dip": 50, "reason": "the Settings window header (search, title, close) is 50 DIP and drags the window" }
+  ],
+  "maxButtonType": "CaptionButton",
+  "inferInteractive": [
+    "AccentPicker", "AccentSwatch", "AccentSwatches", "AddItem", "AdvancedExpander", "BarSlot", "BookmarkList",
+    "Button", "CardHeader", "ChapterList", "Checkbox", "Chip", "ChoiceCard", "ChoiceList", "ColorPalette", "CoverTile",
+    "DButton", "Dropdown", "ChoiceDropdown", "FieldDropdown", "EqBand", "Expander", "FileDropZone", "FlatButton", "Header",
+    "IconButton", "InfoIcon", "ItemGrid", "KeyChip", "KeyField", "LinkButton", "CrumbButton", "NavItem", "Option",
+    "PairRow", "PaletteCell", "PathField", "PlayButton", "PresetField", "QueueList", "Range", "SectionTitle", "SeekBar",
+    "Segmented", "ChoiceSegmented", "Slider", "SubRow", "TabBar", "TextArea", "TextBox", "SearchField", "SettingField",
+    "EditBox", "ValueBox", "ColorBox", "SliderValue", "EqValue", "AddonSearch", "TickSlider", "TimeLabel", "Toggle",
+    "BoolToggle", "ShaderToggle", "VolumeControl", "AddonsList", "ShortcutRow", "KeyCombo"
+  ],
+  "notInteractive": [],
+  "inferText": ["Label", "PadLabel", "ValueLabel", "NavGroupLabel", "RowLabel", "InfoLabel", "Title", "InfoLine"],
+  "inferScroll": ["ScrollView"],
+  "_overlayTypes": "Widgets that float over the layout by design. Overlap between something inside one and something outside it is not reported, and targets on different sides do not count as neighbours for the target-size spacing rule. Overlap inside one overlay is still checked.",
+  "overlayTypes": ["MiniPlayer", "PipOverlay", "ToastBubble", "TooltipBubble", "ScanBadge"],
+  "_notCarrier": "Never counted as text or input for the overlap checks: VideoArea is the video surface every player overlay sits on (chips, cards, the floating bar); PreviewWindow is the decorative mock player painted behind the onboarding theme page (its time strings are fake).",
+  "notCarrier": ["VideoArea", "PreviewWindow"],
+  "notTarget": [],
+  "rules": [
+    { "check": "clip-parent", "type": "BarEditor", "parent": "Editor", "reason": "Customize player edits the real control bar in place: the bar editor sits at the bar's own position, over the player, outside the dialog body on purpose (design Player-customize_*)." },
+    { "check": "text-trunc", "type": "TextBox|SearchField|SettingField|EditBox|ValueBox|ColorBox|SliderValue|EqValue|AddonSearch|TextArea|KeyField", "reason": "An editable field scrolls its text; the full value is reachable by moving the caret." },
+    { "check": "text-clip", "type": "NavGroupLabel", "reason": "Verified by a 3x crop (settings-general.dark): the group titles are intact; the 17-DIP box is one line and the dump's natural height includes the line gap." },
+    { "check": "text-clip|text-trunc|text-overflow", "type": "Label", "ancestor": "SlidingPage", "context": "onboarding-1.*", "reason": "Verified by crops (onboarding-1.dark): the welcome title, the wrapped paragraph and the folder hint are shown in full; the flags come from the wrapped-text measurement." },
+    { "check": "text-clip", "type": "ChoiceCard", "context": "onboarding-.*", "reason": "Verified by crop (onboarding-2): the theme and language card captions are whole; their 19-DIP boxes are one line and the flag counts the line gap." },
+    { "check": "text-clip", "type": "Label", "ancestor": "SlidingPage", "text": "Всё готово\\.|Done\\.|All set\\.", "reason": "Verified by crop (onboarding-6): the 32-DIP Light title is whole in its 39-DIP box." },
+    { "check": "text-clip", "type": "MusicView", "text": "· · ·", "reason": "Verified by crop (player-lyrics.1280x780.dark): the dots that stand for an empty lyric line are drawn whole." },
+    { "check": "text-trunc", "type": "ItemGrid|QueueList|ChapterList|BookmarkList|MenuPopup|ChoiceList|AddonsList", "severity": "low", "reason": "A list or grid paints many items; per-item tooltips are not in the dump, so an ellipsized item title is only a candidate (check the hover tooltip)." },
+    { "check": "zero-size", "type": "ItemGrid", "reason": "An empty grid keeps its place in the layout at zero height; it has no items to click." },
+    { "check": "hitmap-odd", "context": "onboarding.*", "region": "^HTCAPTION", "reason": "The frameless first-run window drags by its whole background; its controls answer HTCLIENT (no hitmap finding over them)." },
+    { "check": "hitmap-odd", "context": "pip.*", "region": "^HTCAPTION", "reason": "In picture-in-picture the whole video is the drag handle (HTCAPTION) except the overlay buttons, which answer HTCLIENT." }
+  ]
+}
