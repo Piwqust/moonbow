@@ -341,9 +341,11 @@ void Config::ResetAll() {
 
 bool Config::ApplyEqPreset(std::string_view presetId) {
     const settings::EqPreset* preset = settings::FindEqPreset(presetId);
-    if (!preset) return false;
-    Set(settings::kEqPreampKey, json::Value(preset->preamp));
-    for (int i = 0; i < settings::kEqBands; ++i) Set(settings::kEqBandKeys[i], json::Value(preset->bands[i]));
+    if (!preset && presetId != "none") return false;
+    // "none" is the flat curve: every band back to 0 dB.
+    Set(settings::kEqPreampKey, json::Value(preset ? preset->preamp : 0.0));
+    for (int i = 0; i < settings::kEqBands; ++i)
+        Set(settings::kEqBandKeys[i], json::Value(preset ? preset->bands[i] : 0.0));
     return Set("audio.eqPreset", json::Value(presetId));
 }
 

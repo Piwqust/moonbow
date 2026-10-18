@@ -213,15 +213,10 @@ public:
         onChange = [this](int i) {
             if (i < 0 || i >= static_cast<int>(Choices().size())) return;
             const std::string value = Choices()[static_cast<size_t>(i)].value;
-            if (eqPreset_ && settings::FindEqPreset(value)) {
+            if (eqPreset_)
                 Cfg().ApplyEqPreset(value);
-            } else if (eqPreset_) {
-                Cfg().SetDouble(settings::kEqPreampKey, 0);
-                for (const char* key : settings::kEqBandKeys) Cfg().SetDouble(key, 0);
+            else
                 Cfg().SetString(item.key, value);
-            } else {
-                Cfg().SetString(item.key, value);
-            }
         };
     }
     void OnClick() override {
@@ -987,10 +982,11 @@ void SettingField::Commit() {
                 ok = true;
             }
             // Both ends clamp ("0" in a 1–3600 field stores 1), and the toast says so.
+            const bool outside = ok && !InRange(item, v);
             if (ok && item.max > item.min) v = std::clamp(v, item.min, item.max);
             if (ok) Cfg().SetDouble(item.key, v);
             // Say why the value changed or reverted instead of clamping silently.
-            if ((!ok || !InRange(item, v)) && item.max > item.min)
+            if ((!ok || outside) && item.max > item.min)
                 if (Host* h = GetHost())
                     ShowToast(h, Fmt(Tr(L"Enter a value from {0} to {1}"),
                                      {FormatValue(item, item.min), FormatValue(item, item.max)}),
