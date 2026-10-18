@@ -187,6 +187,7 @@ private:
     std::atomic<uint64_t> generation_{0};
     int64_t newSince_ = 0;  // Unix ms
     int64_t seenSaved_ = 0;  // "seen" in library.json
+    bool readOnly_ = false;  // library.json exists but could not be read: never overwrite it
 
     // Progress of the latest scan.
     std::atomic<int64_t> scanStartMs_{0};  // steady clock

@@ -92,12 +92,15 @@ bool Config::Load() {
 
 bool Config::LoadFrom(const std::wstring& path) {
     path_ = path;
+    readOnly_ = false;
     if (path.empty()) return false;
     std::string text;
     if (!json::ReadFileUtf8(path, &text)) {
         DWORD err = GetLastError();
         // No file yet: first start, keep defaults.
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        readOnly_ = true;  // locked by a backup or sync tool: saving now would write defaults over it
+        return false;
     }
     std::optional<json::Value> doc = json::Parse(text);
     if (!doc || !doc->IsObject()) {
@@ -119,6 +122,7 @@ bool Config::ApplyDocument(const json::Value& doc) {
     for (const Item* item : settings::AllItems())
         if (item->HasValue()) next.emplace(item->key, item->def);
     unknown_ = json::Value::MakeObject();
+    std::unordered_map<std::string, std::string> sealed;
     // Keys that were renamed: an old file keeps its value under the new name (unless the file
     // already has the new key).
     static const std::pair<const char*, const char*> kRenamed[] = {
@@ -147,7 +151,12 @@ bool Config::ApplyDocument(const json::Value& doc) {
         // account or PC) reads as empty rather than as the blob.
         if (item->secret && value.IsString()) {
             std::string plain;
-            value = net::UnprotectSecret(value.AsString(), &plain) ? json::Value(plain) : json::Value("");
+            if (net::UnprotectSecret(value.AsString(), &plain)) {
+                value = json::Value(plain);
+            } else {
+                sealed.emplace(m.key, value.AsString());
+                value = json::Value("");
+            }
         }
         if (std::optional<json::Value> v = Validate(*item, value)) next[m.key] = std::move(*v);
     }
@@ -156,6 +165,7 @@ bool Config::ApplyDocument(const json::Value& doc) {
         auto it = next.find(item->key);
         if (it != next.end()) Store(item->key, std::move(it->second));
     }
+    sealedKept_ = std::move(sealed);
     return true;
 }
 
@@ -164,6 +174,11 @@ json::Value Config::ToJson() const {
     for (const Item* item : settings::AllItems()) {
         if (!item->HasValue()) continue;
         const json::Value& v = Get(item->key);
+        if (item->secret && v.IsString() && v.AsString().empty())
+            if (auto kept = sealedKept_.find(item->key); kept != sealedKept_.end()) {
+                values.Set(item->key, kept->second);
+                continue;
+            }
         if (v == item->def) continue;
         // API keys and passwords never reach the file in plain text.
         if (item->secret && v.IsString() && !v.AsString().empty()) {
@@ -181,6 +196,7 @@ json::Value Config::ToJson() const {
 }
 
 bool Config::Save() {
+    if (readOnly_) return false;
     if (path_.empty()) path_ = DataFilePath(L"settings.json");
     return SaveTo(path_);
 }
@@ -320,6 +336,7 @@ bool Config::Store(const std::string& key, json::Value value) {
     if (it == values_.end() || it->second == value) return false;
     it->second = std::move(value);
     dirty_ = true;
+    sealedKept_.erase(key);
     Notify(key);
     return true;
 }
