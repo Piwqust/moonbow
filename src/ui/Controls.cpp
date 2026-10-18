@@ -235,6 +235,15 @@ void Toggle::OnClick() {
     if (onChange) onChange(on_);
 }
 
+namespace {
+std::wstring g_toggleOn = L"ON", g_toggleOff = L"OFF";
+}  // namespace
+
+void SetToggleCaptions(std::wstring on, std::wstring off) {
+    g_toggleOn = std::move(on);
+    g_toggleOff = std::move(off);
+}
+
 void Toggle::Paint(Painter& p) {
     const Palette& c = P();
     const float k = knob_.Get();
@@ -250,8 +259,8 @@ void Toggle::Paint(Painter& p) {
     p.Fill({x, box.y + 4, knobW, knobH}, Color::Mix(c.lineStrong, c.accent, k), 3);
     const Rect textOff{box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
     const Rect textOn{box.x + 4, box.y, box.w - 8 - knobW, box.h};
-    if (k < 0.99f) p.Text(L"OFF", textOff, TextStyle::Micro, c.textTertiary.Fade(1 - k), HAlign::Center);
-    if (k > 0.01f) p.Text(L"ON", textOn, TextStyle::Micro, c.accent.Fade(k), HAlign::Center);
+    if (k < 0.99f) p.Text(g_toggleOff, textOff, TextStyle::Micro, c.textTertiary.Fade(1 - k), HAlign::Center);
+    if (k > 0.01f) p.Text(g_toggleOn, textOn, TextStyle::Micro, c.accent.Fade(k), HAlign::Center);
 }
 
 // --- Checkbox -------------------------------------------------------------------------------
@@ -353,8 +362,14 @@ void Segmented::Paint(Painter& p) {
         const Rect seg{rect.x + 2 + static_cast<float>(i) * (segW + 2), rect.y + 2, segW, rect.h - 4};
         const bool sel = static_cast<int>(i) == selected_;
         const bool hot = IsHot() && static_cast<int>(i) == hoverIndex_;
-        p.Fill(seg, sel ? c.accentDim : (hot ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel), 4);
-        const Color fg = sel ? c.accent : hot ? c.textPrimary : c.textSecondary;
+        const bool dark = Theme::Get().Mode() == ThemeMode::Dark;
+        if (sel) {
+            p.Fill(seg, dark ? Color::Mix(c.bgPanel, c.accent, 0.14f) : c.bgPanel, 4);
+            if (!dark) p.Stroke(seg, c.line, 4);
+        } else if (hot) {
+            p.Fill(seg, c.hover, 4);
+        }
+        const Color fg = sel ? c.textPrimary : hot ? c.textPrimary : c.textSecondary;
         float tx = seg.x;
         if (!choices_[i].icon.empty()) {
             const float tw = gfx::Text::Get().Measure(choices_[i].label, TextStyle::Body).width;
@@ -1009,7 +1024,7 @@ public:
         for (size_t i = 0; i < items_.size(); ++i) {
             const MenuItem& m = items_[i];
             if (m.separator) {
-                p.Fill({rect.x + 12, cy + kMenuSepH / 2, rect.w - 24, 1}, c.line);
+                p.Fill({rect.x + 12, cy + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
                 cy += kMenuSepH;
                 continue;
             }

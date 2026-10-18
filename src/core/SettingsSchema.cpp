@@ -719,8 +719,7 @@ void BuildApp(Builder& b) {
               L"Вести список открытых файлов для разделов «Недавние», «Продолжить просмотр» и «Послушать снова».");
     b.Toggle("privacy.rememberPosition", L"Remember the playback position", L"Запоминать место остановки", true)
         .Desc(L"Save where you stopped and continue from there next time.",
-              L"Сохранять, где вы остановились, и продолжать с этого места в следующий раз.")
-        .MpvBool("save-position-on-quit");
+              L"Сохранять, где вы остановились, и продолжать с этого места в следующий раз.");  // Player::rememberPosition
     b.Text("privacy.excludePatterns", L"Never remember items matching", L"Не запоминать файлы по маске")
         .Desc(L"Files matching these patterns stay out of the history. Separate patterns with ';', "
               L"for example *\\Private\\*;*.tmp.mkv",

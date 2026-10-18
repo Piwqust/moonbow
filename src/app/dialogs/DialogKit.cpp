@@ -78,11 +78,7 @@ void DButton::Paint(Painter& p) {
             bg = down ? c.bgSelected : hot ? Color::Mix(c.bgChrome, c.bgSelected, 0.6f) : c.bgChrome;
             fg = hot ? c.textPrimary : c.textSecondary;
             break;
-        case BtnStyle::Accent:
-            bg = down ? Color::Mix(c.accentDim, c.accentMid, 0.25f) : hot ? Color::Mix(c.accentDim, c.accentMid, 0.12f)
-                                                                       : c.accentDim;
-            fg = c.accent;
-            break;
+        case BtnStyle::Accent:  // the primary action: same filled look as ui::Button Primary
         case BtnStyle::Solid:
             bg = down ? Color::Mix(c.accent, c.bgBase, 0.22f) : hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent;
             fg = c.onAccent;
@@ -664,7 +660,7 @@ float FitWidth(Host* host, float designWidth) {
 
 float FitHeight(Host* host, float designHeight) {
     if (!host) return designHeight;
-    return std::min(designHeight, std::floor(host->ClientSize().h - 48));
+    return std::min(designHeight, std::floor(host->ClientSize().h - 136));  // title bar 40 + control bar 56 + margins
 }
 
 }  // namespace app::dlg

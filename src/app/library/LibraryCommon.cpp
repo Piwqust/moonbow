@@ -82,7 +82,9 @@ std::wstring FormatDate(int64_t unixMs) {
     if (unixMs <= 0) return {};
     const SYSTEMTIME st = LocalTimeOf(unixMs);
     wchar_t buf[64];
-    if (!GetDateFormatEx(LocaleName(), DATE_SHORTDATE, &st, nullptr, buf, 64, nullptr)) return {};
+    // Fixed patterns: the user's own short-date override ("17-Oct-26") shouldn't leak into one language only.
+    const wchar_t* pattern = CurrentLanguage() == Language::Russian ? L"dd.MM.yyyy" : L"MMM d, yyyy";
+    if (!GetDateFormatEx(LocaleName(), 0, &st, pattern, buf, 64, nullptr)) return {};
     return buf;
 }
 

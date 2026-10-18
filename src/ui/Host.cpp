@@ -848,8 +848,12 @@ void Host::UpdateTooltip() {
         const Rect& r = tooltipFor_->rect;
         // Prefer centering under small controls (icon buttons), like native tooltips.
         if (r.w < 80) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
-        if (tooltipFor_->tooltipBeside) o.anchor = {r.Right() + 8, r.Cy() - 14, 0, 0};
         o.place = Place::At;
+        if (tooltipFor_->tooltipBeside) {
+            o.anchor = {r.x, r.Cy() - 14, r.w, 28};
+            o.place = Place::Right;
+            o.offset = 8;
+        }
         o.passthrough = true;
         o.focusContent = false;
         o.dismissOnOutside = false;

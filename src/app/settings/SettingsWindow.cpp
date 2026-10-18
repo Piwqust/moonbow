@@ -27,9 +27,11 @@ constexpr float kWindowW = 1048, kWindowH = 865;  // the frame without its drop 
 constexpr float kHeaderH = 50;
 // The design's nav column is 216; it grows when labels are longer (Russian "Конфиденциальность").
 float NavColumnWidth() {
+    // Measured over both languages, so the page doesn't shift when the language changes.
     float w = 0;
     for (const Category& c : settings::Categories())
-        w = std::max(w, gfx::Text::Get().Measure(c.Label(Lang()), TextStyle::Body).width);
+        for (settings::Lang l : {settings::Lang::Ru, settings::Lang::En})
+            w = std::max(w, gfx::Text::Get().Measure(c.Label(l), TextStyle::Body).width);
     // panel margin 8 + list padding 6 + icon column 44 + text + 8, mirrored on the right.
     return std::max(216.0f, std::ceil(8 + 6 + 44 + w + 8 + 6 + 8));
 }

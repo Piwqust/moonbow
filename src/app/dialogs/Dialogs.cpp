@@ -3,6 +3,7 @@
 // new_playlist). Customize Player, Add Subtitles and the onboarding window
 // live in their own files next to this one.
 #include "app/Dialogs.h"
+#include "ui/Host.h"
 
 #include "Util.h"
 #include "app/Actions.h"
@@ -579,6 +580,25 @@ void ShowKeyboardShortcutsDialog() {
     ShowFrame(w, std::move(frame), search);
 }
 
+namespace {
+
+// A link worth offering from the clipboard: a stream protocol, a media/playlist file, or a
+// known video site. Plain web pages are left alone.
+bool LooksLikeMediaUrl(const std::wstring& url) {
+    std::wstring u = url;
+    for (auto& ch : u) ch = static_cast<wchar_t>(towlower(ch));
+    for (const wchar_t* p : {L"rtsp://", L"rtmp://", L"mms://", L"udp://", L"srt://", L"rtp://"})
+        if (u.rfind(p, 0) == 0) return true;
+    for (const wchar_t* e : {L".m3u8", L".m3u", L".mp4", L".mkv", L".webm", L".mp3", L".aac", L".flac", L".ogg",
+                             L".opus", L".ts", L".mpd", L".pls", L".mov", L".avi"})
+        if (u.find(e) != std::wstring::npos) return true;
+    for (const wchar_t* h : {L"youtube.com/watch", L"youtu.be/", L"twitch.tv/", L"vimeo.com/", L"soundcloud.com/"})
+        if (u.find(h) != std::wstring::npos) return true;
+    return false;
+}
+
+}  // namespace
+
 void ShowNetworkStreamDialog() {
     MainWindow* w = TheApp().main();
     if (!w) return;
@@ -688,8 +708,12 @@ void ShowNetworkStreamDialog() {
     name->onSubmit = [submit](const std::wstring&) { submit(); };
     f->onSubmit = submit;
     // Prefill a link from the clipboard.
-    const std::wstring clip = Trim(ClipboardText(w->Hwnd()));
-    if (LooksLikeUrl(clip) && clip.size() < 2048) urls->SetText(clip);
+    if (!ui::Host::Automation()) {
+        const std::wstring clip = Trim(ClipboardText(w->Hwnd()));
+        if (LooksLikeUrl(clip) && clip.size() < 2048 && LooksLikeMediaUrl(clip)) {
+            urls->SetText(clip);
+        }
+    }
     ShowFrame(w, std::move(frame), urls);
     validate();
 }

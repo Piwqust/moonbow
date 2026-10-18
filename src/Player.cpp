@@ -121,7 +121,9 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("ytdl", "no");
     opt("terminal", "no");
     opt("volume-max", "150");
-    opt("save-position-on-quit", "yes");
+    // Lumen writes watch-later itself (SaveWatchLater / Shutdown): mpv's own save also fired
+    // when a finished file was replaced by the next one, so finished files resumed at the end.
+    opt("save-position-on-quit", "no");
     // Per file only the position and the chosen tracks; delays, mute and the
     // A-B loop are for the current file, not the next one.
     opt("watch-later-options", "start,aid,sid,secondary-sid");
@@ -538,10 +540,11 @@ void Player::Shutdown() {
     if (init_.joinable()) init_.join();
     if (mpv_) {
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
-        // mpv writes the position itself on quit (save-position-on-quit): not for a finished file.
-        if (state_.fileLoaded && NearEnd()) {
-            api_.mpv_set_option_string(mpv_, "save-position-on-quit", "no");
-            Cmd({"delete-watch-later-config"}, false);
+        if (state_.fileLoaded) {
+            if (NearEnd())
+                Cmd({"delete-watch-later-config"}, false);
+            else if (rememberPosition)
+                Cmd({"write-watch-later-config"}, false);
         }
         api_.mpv_set_wakeup_callback(mpv_, nullptr, nullptr);
         api_.mpv_terminate_destroy(mpv_);

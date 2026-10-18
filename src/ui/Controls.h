@@ -121,6 +121,9 @@ private:
     AnimFloat knob_;
 };
 
+// The captions inside every Toggle track ("ON"/"OFF"); the app sets translated ones.
+void SetToggleCaptions(std::wstring on, std::wstring off);
+
 class Checkbox : public Widget {
 public:
     Checkbox(std::wstring text, bool checked = false);

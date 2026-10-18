@@ -1,4 +1,5 @@
 #include "app/I18n.h"
+#include "ui/Controls.h"
 
 #include <cwchar>
 #include <string>
@@ -39,6 +40,7 @@ const std::unordered_map<std::wstring_view, const wchar_t*>& RussianMap() {
 
 void SetLanguage(Language lang) {
     g_language = lang;
+    ui::SetToggleCaptions(Tr(L"ON"), Tr(L"OFF"));
 }
 
 Language CurrentLanguage() {

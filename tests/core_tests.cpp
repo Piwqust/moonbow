@@ -654,7 +654,7 @@ void TestConfigMpv() {
     CHECK(FindOption(opts, "hwdec") == "auto-safe");
     CHECK(FindOption(opts, "sub-color") == "#FFFFFFFF");
     CHECK(FindOption(opts, "deinterlace") == "auto");
-    CHECK(FindOption(opts, "save-position-on-quit") == "yes");
+    CHECK(FindOption(opts, "save-position-on-quit").empty());  // Lumen saves positions itself
     CHECK(FindOption(opts, "pause") == "no");
     CHECK(FindOption(opts, "cache-secs") == "60");
     CHECK(FindOption(opts, "demuxer-max-bytes") == "150MiB");

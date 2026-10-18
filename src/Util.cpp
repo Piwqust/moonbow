@@ -30,7 +30,7 @@ std::wstring FormatTime(double seconds, bool withHours) {
     if (withHours)
         swprintf_s(buf, L"%02lld:%02lld:%02lld", h, m, s);
     else
-        swprintf_s(buf, L"%02lld:%02lld", m + h * 60, s);
+        swprintf_s(buf, L"%lld:%02lld", m + h * 60, s);
     return buf;
 }
 

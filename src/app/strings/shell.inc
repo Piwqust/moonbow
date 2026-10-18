@@ -53,3 +53,5 @@
 {L"Now playing", L"Сейчас играет"},
 {L"File not found: {0}", L"Файл не найден: {0}"},
 {L"Couldn't read the playlist {0}", L"Не удалось прочитать плейлист {0}"},
+{L"ON", L"ВКЛ"},
+{L"OFF", L"ВЫКЛ"},
