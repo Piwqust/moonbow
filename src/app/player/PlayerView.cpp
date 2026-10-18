@@ -118,10 +118,12 @@ void ShowVideoContextMenu(Host* host, Point at) {
     video.submenu.push_back(MenuItem::Separator());
     MenuItem aspect{Tr(L"Aspect ratio")};
     for (const auto& [label, value] : std::vector<std::pair<const wchar_t*, const char*>>{
-             {L"Default", "no"}, {L"16:9", "16:9"}, {L"4:3", "4:3"}, {L"21:9", "2.33"}, {L"1:1", "1"}}) {
+             {L"Default", "auto"}, {L"16:9", "16:9"}, {L"4:3", "4:3"}, {L"21:9", "21:9"}, {L"1:1", "1:1"}}) {
         MenuItem m{Tr(label)};
         const std::string v = value;
-        m.action = [v] { TheApp().player().SetProperty("video-aspect-override", v); };
+        m.radio = true;
+        m.checked = Live().aspect == v;
+        m.action = [v] { Live().SetAspect(v); };  // through LiveState, so the Video tab agrees
         aspect.submenu.push_back(std::move(m));
     }
     video.submenu.push_back(aspect);

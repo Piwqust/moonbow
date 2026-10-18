@@ -505,6 +505,13 @@ std::unique_ptr<Widget> VideoTab() {
               [] { return Live().crop; }, [](const std::string& v) { Live().SetCrop(v); });
     AddChoice(page, s, Tr(L"Deinterlace"), {{Tr(L"Auto"), "auto", ""}, {Tr(L"On"), "yes", ""}, {Tr(L"Off"), "no", ""}},
               [] { return Live().deinterlace; }, [](const std::string& v) { Live().SetDeinterlace(v); });
+    {
+        // The rule for the next file (Player.cpp reset-on-next-file, LiveState's file change).
+        auto* note = s->Add<Label>(Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only."),
+                                   TextStyle::Small, Tone::Tertiary);
+        note->pad = {4, 4, 0, 0};
+        note->wrap = true;
+    }
     auto* bottom = s->Add<Widget>();
     bottom->height = Length::Px(8);
 

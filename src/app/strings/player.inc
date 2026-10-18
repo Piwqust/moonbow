@@ -361,6 +361,7 @@
 {L"Smooth Motion", L"Плавное движение"},
 {L"AI Upscaling", L"ИИ-апскейл"},
 {L"Upscaling on the graphics card", L"Увеличение на видеокарте"},
+{L"Flip, rotation, zoom and aspect ratio apply to the current file only.", L"Отражение, поворот, масштаб и соотношение сторон действуют только для текущего файла."},
 {L"Not supported by this graphics card", L"Эта видеокарта не поддерживает"},
 {L"Needs Direct3D 11 hardware decoding", L"Нужно аппаратное декодирование Direct3D 11"},
 {L"Off while CPU filters are on", L"Выключено, пока работают фильтры на процессоре"},
