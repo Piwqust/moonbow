@@ -733,10 +733,11 @@ public:
                 list_->Remove(sel);
                 return;
             }
-            // Nothing selected: clear everything except what is playing.
+            // Nothing selected: clear everything except what is playing, in one change (one
+            // Remove per row was O(n²) and froze a 5000-item queue for seconds).
             PlayQueue& q = TheApp().queue();
-            for (int i = static_cast<int>(q.Items().size()) - 1; i >= 0; --i)
-                if (i != q.Current()) q.Remove(i);
+            if (const QueueItem* cur = q.CurrentItem()) q.Set({*cur}, 0, q.Name());
+            else q.Clear();
         });
         HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
         auto* sv = Add<ScrollView>();
