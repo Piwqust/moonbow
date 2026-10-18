@@ -223,7 +223,10 @@ public:
     std::string leadingIcon;
     bool password = false;
     bool readOnly = false;
-    Color background;  // defaults to bgDeep when alpha is 0
+    // Fill: an explicit colour, else the palette's bgRaised (raised = true) or bgDeep,
+    // read at paint time so theme switches apply.
+    Color background = Color::Clear();
+    bool raised = false;
     std::function<void(const std::wstring&)> onChange;
     std::function<void(const std::wstring&)> onSubmit;
     std::function<void()> onEscape;

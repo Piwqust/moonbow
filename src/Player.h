@@ -32,6 +32,7 @@ struct Chapter {
 };
 
 struct PlayerState {
+    uint64_t loadSerial = 0;  // +1 on every MPV_EVENT_FILE_LOADED
     bool ready = false;
     bool idle = true;
     bool fileLoaded = false;
@@ -113,7 +114,8 @@ public:
     void CycleTrack(const char* prop);
     void AddSubtitle(const std::wstring& path);
     void AddAudio(const std::wstring& path);
-    void Screenshot(const std::wstring& file = {});
+    // withSubtitles: burn the visible subtitles into the image.
+    void Screenshot(const std::wstring& file = {}, bool withSubtitles = true);
     // Starts writing the stream to `file` (empty stops). mpv "stream-record".
     void SetRecording(const std::wstring& file);
     void SaveWatchLater();

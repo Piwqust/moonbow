@@ -50,7 +50,7 @@ bool RunSettingsAction(const std::string& action) {
     if (action == "file-associations") {
         if (RegisterFileAssociations()) {
             OpenDefaultAppsSettings();
-            toast(L"Lumen is registered. Pick it in Default apps.", "check");
+            toast(L"Lumen is registered. Pick it in Default apps.", "check_selected");
         } else {
             toast(L"Couldn't register file types", "info");
         }

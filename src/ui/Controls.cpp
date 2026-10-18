@@ -277,7 +277,7 @@ void Checkbox::Paint(Painter& p) {
     const Rect box{rect.x + 1, rect.Cy() - 9, 18, 18};
     if (checked_) {
         p.Fill(box, c.accent, 3);
-        p.Icon("check", box.Inset(1), c.onAccent);
+        p.Icon("check_selected", box.Inset(1), c.onAccent);
     } else {
         p.Fill(box, c.bgDeep, 3);
         p.Stroke(box, IsHot() ? c.textTertiary : c.lineStrong, 3);
@@ -760,7 +760,7 @@ bool TextBox::OnDoubleClick(const MouseEvent& e) {
 
 void TextBox::Paint(Painter& p) {
     const Palette& c = P();
-    const Color bg = background.a > 0 ? background : c.bgDeep;
+    const Color bg = background.a > 0 ? background : raised ? c.bgRaised : c.bgDeep;
     p.Fill(rect, bg, 4);
     if (IsFocused())
         p.Stroke(rect, c.lineStrong, 4);
@@ -1027,10 +1027,8 @@ public:
                 p.Icon("chevron_right", {right - 20, row.Cy() - 10, 20, 20}, fg);
                 right -= 28;
             } else if (m.checked) {
-                if (m.radio)
-                    p.FillCircle({right - 10, row.Cy()}, 3.5f, c.accent);
-                else
-                    p.Icon("check", {right - 20, row.Cy() - 10, 20, 20}, c.accent);
+                // Radio and check items both show a tick (a lone dot reads as decoration).
+                p.Icon("check_selected", {right - 20, row.Cy() - 10, 20, 20}, c.accent);
                 right -= 28;
             } else if (hasChecks_) {
                 right -= 28;

@@ -47,3 +47,4 @@
 {L"Remove add-on?", L"Удалить дополнение?"},
 {L"“{0}” will be moved to the Recycle Bin.", L"«{0}» будет перемещено в корзину."},
 {L"Add-ons load at the next start of Lumen", L"Дополнения загрузятся при следующем запуске Lumen"},
+{L"Available when “{0}” is set", L"Доступно, когда задано «{0}»"},

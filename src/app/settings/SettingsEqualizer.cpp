@@ -181,7 +181,7 @@ public:
         }
     }
     void Paint(Painter& p) override {
-        if (!enabled) p.PushOpacity(0.38f);
+        if (!enabled) p.PushOpacity(0.6f);
     }
     void PaintOver(Painter& p) override {
         if (!enabled) p.PopOpacity();

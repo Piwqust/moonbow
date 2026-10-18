@@ -228,6 +228,7 @@ unsigned Player::ProcessEvents() {
             case MPV_EVENT_FILE_LOADED:
                 Trace("file loaded");
                 state_.fileLoaded = true;
+                ++state_.loadSerial;
                 state_.eof = false;
                 state_.lastError.clear();
                 changes |= kChangeFile | kChangeState;
@@ -502,13 +503,14 @@ void Player::AddAudio(const std::wstring& path) {
     Cmd({"audio-add", p.c_str(), "select"});
 }
 
-void Player::Screenshot(const std::wstring& file) {
+void Player::Screenshot(const std::wstring& file, bool withSubtitles) {
     if (!state_.fileLoaded) return;
+    const char* mode = withSubtitles ? "subtitles" : "video";
     if (file.empty()) {
-        Cmd({"screenshot", "video"});
+        Cmd({"screenshot", mode});
     } else {
         const std::string f = WideToUtf8(file);
-        Cmd({"screenshot-to-file", f.c_str(), "video"});
+        Cmd({"screenshot-to-file", f.c_str(), mode});
     }
 }
 

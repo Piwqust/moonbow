@@ -542,8 +542,7 @@ void ShowSettingsWindow(const std::string& category) {
     if (g_window && g_window->Hwnd()) {
         if (!category.empty()) g_window->ShowCategory(category);
         HWND h = g_window->Hwnd();
-        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
-        SetForegroundWindow(h);
+        ui::Host::Activate(h);
         return;
     }
     auto* w = new SettingsWindow();

@@ -136,6 +136,11 @@ std::wstring Clock(double t) {
     return FormatTime(t, PS().duration >= 3600);
 }
 
+double Skip(const char* key, double fallback) {
+    const double v = TheApp().config().GetDouble(key);
+    return v >= 1 ? v : fallback;
+}
+
 void SeekBy(double seconds) {
     const PlayerState& s = PS();
     if (!s.fileLoaded) return;
@@ -311,17 +316,23 @@ void Run(Action a) {
         case Action::Next:
             if (!app.Next(true)) Toast(Tr(L"End of the list"), "next");
             break;
-        case Action::SeekForward: SeekBy(10); break;
-        case Action::SeekBackward: SeekBy(-10); break;
-        case Action::SeekForwardLong: SeekBy(60); break;
-        case Action::SeekBackwardLong: SeekBy(-60); break;
-        case Action::SeekForwardShort: SeekBy(3); break;
-        case Action::SeekBackwardShort: SeekBy(-3); break;
+        case Action::SeekForward: SeekBy(Skip("controls.skipShort", 10)); break;
+        case Action::SeekBackward: SeekBy(-Skip("controls.skipShort", 10)); break;
+        case Action::SeekForwardLong: SeekBy(Skip("controls.skipMedium", 60)); break;
+        case Action::SeekBackwardLong: SeekBy(-Skip("controls.skipMedium", 60)); break;
+        case Action::SeekForwardShort: SeekBy(Skip("controls.skipVeryShort", 3)); break;
+        case Action::SeekBackwardShort: SeekBy(-Skip("controls.skipVeryShort", 3)); break;
         case Action::FrameStep: p.FrameStep(false); break;
         case Action::FrameBackStep: p.FrameStep(true); break;
         case Action::SpeedUp: ChangeSpeed(+1); break;
         case Action::SpeedDown: ChangeSpeed(-1); break;
-        case Action::SpeedReset: ChangeSpeed(0, true); break;
+        case Action::SpeedReset:
+            if (!app.PlayerShown()) {
+                app.GoBack();
+                break;
+            }
+            ChangeSpeed(0, true);
+            break;
         case Action::NextChapter:
         case Action::PreviousChapter:
             if (s.chapters.empty()) {
@@ -424,7 +435,7 @@ void Run(Action a) {
             break;
         case Action::Snapshot: {
             if (!s.fileLoaded) break;
-            p.Screenshot();
+            p.Screenshot({}, app.config().GetBool("video.screenshotSubtitles"));
             std::wstring dir = Utf8ToWide(app.config().GetString("video.screenshotDir"));
             if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
             Toast(Fmt(Tr(L"Snapshot saved to {0}"), {dir}), "snapshot");
@@ -513,6 +524,44 @@ void Run(Action a) {
         case Action::CustomizePlayer: ShowCustomizePlayerDialog(); break;
         case Action::Quit: app.Quit(); break;
     }
+}
+
+bool VideoSingleClick() {
+    const std::string mode = TheApp().config().GetString("controls.singleClick");
+    if (mode == "none") return false;
+    if (mode == "showControls") {
+        if (MainWindow* w = Win()) w->PokeChrome();
+        return true;
+    }
+    if (!PS().fileLoaded) return false;
+    Run(Action::PlayPause);
+    return true;
+}
+
+bool VideoDoubleClick() {
+    const std::string mode = TheApp().config().GetString("controls.doubleClick");
+    if (mode == "none") return false;
+    Run(mode == "playPause" ? Action::PlayPause : Action::Fullscreen);
+    return true;
+}
+
+bool VideoWheel(float delta, bool horizontal) {
+    const Config& c = TheApp().config();
+    if (c.GetBool("controls.reverseScroll")) delta = -delta;
+    const std::string mode = c.GetString(horizontal ? "controls.hwheel" : "controls.wheel");
+    if (mode == "seek") {
+        SeekBy(delta * Skip("controls.skipVeryShort", 3));  // up / right = forward
+        return true;
+    }
+    if (mode == "volume") {
+        const double step = std::clamp(c.GetDouble("audio.volumeStep"), 1.0, 25.0);
+        Player& p = TheApp().player();
+        if (PS().mute) p.SetMute(false);
+        p.SetVolume(std::round(PS().volume + step * delta));
+        Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), VolumeIcon(PS().volume, false));
+        return true;
+    }
+    return false;
 }
 
 const char* VolumeIcon(double volume, bool mute) {
