@@ -82,6 +82,9 @@ ui::Widget* GuardedHit(ItemGrid* grid, ui::Widget* hit);
 // The first page shown after start gets the keyboard when nothing has it (arrow keys move in
 // the grid instead of changing the volume). Not in the player's side panel.
 void TakeFreeFocus(LibraryView& view, bool compact, bool& done);
+// What a page shows as "New" is not new next session once the user has seen it: on Home or a
+// Videos/Music page in the main window, not in the side panel or behind the player screen.
+void MarkSeenIfShown(Section section, bool compact);
 // The selection of a grid as a ViewState (by path and title: the content may change meanwhile),
 // and the entry such a state names (-1 = none).
 void SaveSelection(const ItemGrid& grid, ViewState& st);
@@ -93,6 +96,7 @@ bool ApplyViewState(ItemGrid& grid, ui::ScrollView& scroll, const ViewState& st)
 struct HistoryInfo {
     double progress = -1;  // shown progress, < 0 none
     bool watched = false;
+    bool played = false;  // in the history at all
 };
 
 // A page whose content is one ItemGrid inside a ScrollView, with an optional toolbar,
@@ -153,7 +157,9 @@ protected:
     const Route* RouteAt(int index) const;
     std::vector<QueueItem> FolderQueue(const std::wstring& folder, library::MediaKind kind) const;
     std::vector<ui::MenuItem> FolderMenu(const std::wstring& folder, library::MediaKind kind, Section section) const;
-    void SortMenuItems(std::vector<ui::MenuItem>& out, const std::vector<std::pair<const wchar_t*, std::string>>& options);
+    // Radio items for the sort menu; the current value defaults to `fallback`, else the first option.
+    void SortMenuItems(std::vector<ui::MenuItem>& out, const std::vector<std::pair<const wchar_t*, std::string>>& options,
+                       const std::string& fallback = {});
     std::string SortValue(const std::string& fallback) const;
     void SetSort(const std::string& value);
     // Sorts media by the page's sort setting ("name", "name:desc", "date:desc", "size", "duration", "unwatched"...).

@@ -322,13 +322,6 @@ bool ItemGrid::JustOpened() const {
     return GetTickCount64() - created_ < static_cast<uint64_t>(GetDoubleClickTime());
 }
 
-int ItemGrid::VisibleCount() const {
-    int n = 0;
-    for (size_t i = 0; i < slots_.size() && i < entries_.size(); ++i)
-        if (slots_[i].w > 0 && !IsLabel(entries_[i].kind)) ++n;
-    return n;
-}
-
 Rect ItemGrid::ItemRect(int index) const {
     if (index < 0 || static_cast<size_t>(index) >= slots_.size()) return {};
     return slots_[static_cast<size_t>(index)].Offset(rect.x, rect.y);
@@ -377,7 +370,8 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
         // A video's own thumbnail gives way to its TMDB still or backdrop once downloaded
         // (Settings › Privacy; a frame where playback stopped stays).
         std::wstring image = e.image;
-        if (e.kind == EntryKind::Media && !e.audio && e.image == e.path)
+        // A damaged file is not the film its name says: no lookup, no artwork (V7-02).
+        if (e.kind == EntryKind::Media && !e.audio && !e.damaged && e.image == e.path)
             if (std::wstring online = net::online::CardImage(e.path); !online.empty()) image = std::move(online);
         bmp = TheApp().images().Get(image, static_cast<int>(std::ceil(std::max(t.w, t.h) * scale)));
     }
@@ -448,7 +442,7 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
 
     // Year and rating from TMDB, top right (the card's text lines keep their layout).
-    if (e.kind == EntryKind::Media && !e.audio && style_ == GridStyle::VideoCards)
+    if (e.kind == EntryKind::Media && !e.audio && !e.damaged && style_ == GridStyle::VideoCards)
         if (const net::online::MediaMeta* m = net::online::Meta(e.path)) {
             const std::wstring info = net::online::MetaSummary(*m);
             if (!info.empty() && t.w > 160) {
