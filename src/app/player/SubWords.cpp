@@ -166,27 +166,19 @@ void SubtitleWords::StartObserving() {
     const Track* sub = SelectedSub();
     observedSid_ = sub ? sub->id : 0;
     ReadAssHeader();
-    // Whole event lines for a native .ass track (their style and margins), else the text only.
-    textLevel_ = std::min(maxLevel_, assMode_ ? 2 : 1);
-    static const char* const kTextProps[] = {"sub-text", "sub-text/ass", "sub-text/ass-full"};
     // The callbacks only record values: unobserving from inside one would destroy the function
     // that is running, so whatever follows from a value runs after the event batch.
     auto text = [this, &p](const char* name, std::wstring* field, bool primary) {
         observers_.push_back(p.Observe(name, MPV_FORMAT_STRING, [this, field, primary](const mpv_event_property& e) {
-            if (primary && e.format == MPV_FORMAT_NONE && textLevel_ > 0 && !textKnown_) {
-                // An older mpv without this form: the next simpler one (the plain text has no tags).
-                maxLevel_ = textLevel_ - 1;
-                restart_ = true;
-                Schedule();
-                return;
-            }
             const char* s = e.format == MPV_FORMAT_STRING && e.data ? *static_cast<char**>(e.data) : nullptr;
             *field = s ? Utf8ToWide(s) : std::wstring();
             if (primary) textKnown_ = true;
             Schedule();
         }));
     };
-    text(kTextProps[textLevel_], &assText_, true);
+    // Whole event lines for a native .ass track (their style and margins), else the text with
+    // tags. mpv answers "none" while it has no playback time (paused during a seek): no line yet.
+    text(assMode_ ? "sub-text/ass-full" : "sub-text/ass", &assText_, true);
     text("secondary-sub-text", &secondaryText_, false);
     observers_.push_back(p.Observe("sub-visibility", MPV_FORMAT_FLAG, [this](const mpv_event_property& e) {
         const bool v = e.format == MPV_FORMAT_FLAG && e.data && *static_cast<int*>(e.data) != 0;
@@ -235,10 +227,6 @@ void SubtitleWords::Schedule() {
     scheduled_ = true;
     window_->Post([this] {
         scheduled_ = false;
-        if (restart_) {
-            restart_ = false;
-            StopObserving();
-        }
         if (styleDirty_ && !observers_.empty()) {
             styleDirty_ = false;
             ReadStyle();
@@ -426,7 +414,7 @@ void SubtitleWords::Rebuild() {
     wchar_t num[160];
     swprintf_s(num, L"|%g,%g,%g,%g|%g|%g|%g|%lld|%lld|%g|%lld,%lld|%d", video_.x, video_.y, video_.w, video_.h, subPos_,
                subScale_, secondaryPos_, static_cast<long long>(marginY_), static_cast<long long>(secondarySid_), scale,
-               static_cast<long long>(PS().videoW), static_cast<long long>(PS().videoH), textLevel_);
+               static_cast<long long>(PS().videoW), static_cast<long long>(PS().videoH), assMode_ ? 1 : 0);
     std::wstring text = assText_ + L'\x1f' + secondaryText_;
     std::wstring key = text + num;
     if (key == key_) return;
@@ -498,7 +486,7 @@ void SubtitleWords::Rebuild() {
             }
         groups.push_back(std::move(g));
     };
-    if (assMode_ && textLevel_ == 2) {
+    if (assMode_) {
         // libass scales the script's PlayRes to the picture.
         const float sy = pic.h / static_cast<float>(header_.playResY), sx = pic.w / static_cast<float>(header_.playResX);
         for (subtext::Event& ev : subtext::ParseFullEvents(assText_)) {

@@ -138,11 +138,9 @@ private:
 
     // Observed while paused.
     std::vector<uint64_t> observers_;
-    // What sub-text is read as: 2 whole .ass events, 1 events with tags, 0 plain text.
-    int textLevel_ = 1, maxLevel_ = 2;
     std::wstring assText_, secondaryText_;
     bool textKnown_ = false, visibilityKnown_ = false;
-    bool scheduled_ = false, restart_ = false, styleDirty_ = false;
+    bool scheduled_ = false, styleDirty_ = false;
     std::wstring textKey_;  // the lines the selection belongs to
     bool mpvVisible_ = true;  // sub-visibility as mpv reports it
     double subPos_ = 100, subScale_ = 1, secondaryPos_ = 0;
