@@ -307,6 +307,13 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     ApplyTheme();
     LoadUiState();
     SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
+    // The library opens on the section it was left in (only the section: a folder may be gone).
+    {
+        const std::string section = UiValue("library.section");
+        if (section.size() == 1 && section[0] >= '0' && section[0] <= static_cast<char>('0' + static_cast<int>(Section::Recent)))
+            nav_[0].section = static_cast<Section>(section[0] - '0');
+        routeChanged.Connect([this] { SetUiValue("library.section", std::to_string(static_cast<int>(route().section))); });
+    }
     config_.Subscribe("", [this](const std::string& key) { OnConfigChanged(key); });
     {
         const std::string r = config_.GetString("playback.repeat");

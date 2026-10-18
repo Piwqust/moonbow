@@ -191,6 +191,7 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 - **Evidence.** `c6-02-after-restart.png`, `c6-03-reopen-resume.png`.
 - **Note.** The "Продолжить просмотр" tile shows a frame from about 2:20, not the resume point at 5:01.
 - **Fix.** Save `player.sidePanel` and the last route in `ui.json`.
+- **Fix (r5-fix-flows): fixed.** `ui.json` is the natural place (it already holds the window placement, the bar layout and the remaining-time toggle). `player.sidePanel` ("1"/"0") is written by `PlayerView::SetSidePanel` and read when the player view is built; `library.section` (the section index) is written on every route change and read in `App::Run` before the window is built. Only the section is restored, not the folder or sub-page inside it, since a folder may be gone by the next start. The side panel has no tabs of its own: its content is the library section, so restoring the section covers "the panel's tab". Not addressed: the "Продолжить просмотр" tile's frame (a library thumbnail, outside this scope). Evidence: fresh data dir, Ctrl+B, rail Музыка, `WM_CLOSE`, relaunch with the same file: base opens the player without the panel and the library on Главная, fixed opens the player with the panel on Музыка and Esc shows the library on Музыка (`%TEMP%\lumen-qa\r5ff\fl14-restart.png`; `ui.json` has `"library.section": "2"`, `"player.sidePanel": "1"`).
 
 ## Checked and working
 

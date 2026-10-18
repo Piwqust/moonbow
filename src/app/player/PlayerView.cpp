@@ -389,7 +389,8 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     side->fill = [] { return P().bgBase; };
     side_ = side;
     side_->dir = Dir::Row;
-    side_->visible = false;
+    sideWanted_ = TheApp().UiValue("player.sidePanel") == "1";  // as it was left (ui.json)
+    side_->visible = sideWanted_;
     auto* rail = side_->Add<NavSidebar>();
     rail->SetCollapsed(true);
     rail->SetInPlayer(true);
@@ -432,6 +433,7 @@ void PlayerView::UpdateStats() {
 
 void PlayerView::SetSidePanel(bool shown) {
     sideWanted_ = shown;
+    TheApp().SetUiValue("player.sidePanel", shown ? "1" : "0");
     side_->visible = shown && !window_->PictureInPicture();
     InvalidateLayout();
 }
