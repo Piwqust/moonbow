@@ -1,5 +1,6 @@
 #include "app/dialogs/DialogKit.h"
 
+#include "app/library/LibraryCommon.h"
 #include "gfx/Text.h"
 
 #include <shobjidl.h>
@@ -238,7 +239,8 @@ void TextArea::Paint(Painter& p) {
     p.PushClip(rect.Inset(2));
     const float lh = LineH();
     if (text_.empty()) {
-        p.Text(placeholder, {tr.x, tr.y, tr.w, lh}, TextStyle::Body, c.textDisabled);
+        // A few DIPs in, so the caret at the start doesn't sit on the first letter.
+        p.Text(placeholder, {tr.x + 4, tr.y, tr.w - 4, lh}, TextStyle::Body, c.textDisabled);
     } else {
         const auto lines = Lines();
         const size_t a = std::min(caret_, anchor_), b = std::max(caret_, anchor_);
@@ -651,15 +653,8 @@ std::wstring Breadcrumb(const std::wstring& path, size_t maxParts) {
 }
 
 std::wstring FormatBytes(double bytes) {
-    const wchar_t* units[] = {L"B", L"KB", L"MB", L"GB", L"TB"};
-    int u = 0;
-    while (bytes >= 1024 && u < 4) {
-        bytes /= 1024;
-        ++u;
-    }
-    wchar_t buf[32];
-    swprintf(buf, 32, u == 0 || bytes >= 100 ? L"%.0f %s" : L"%.1f %s", bytes, units[u]);
-    return buf;
+    // Same units and decimal comma as the library lists ("105 МБ", "1,2 ГБ").
+    return lib::FormatSize(static_cast<uint64_t>(std::max(0.0, bytes)));
 }
 
 float FitWidth(Host* host, float designWidth) {

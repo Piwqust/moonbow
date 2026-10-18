@@ -48,6 +48,7 @@ public:
 
 private:
     ui::Rect TabRect(int i) const;
+    float ContentWidth(const Tab& t) const;
     int IndexAt(float x) const;
     void Select(int i);
     std::vector<Tab> tabs_;
@@ -56,6 +57,7 @@ private:
     int hover_ = -1;
     ui::AnimFloat lineX_, lineW_;
     bool placed_ = false;
+    bool showIcons_ = true;
 };
 
 // --- popover frame ---------------------------------------------------------------------
@@ -74,7 +76,7 @@ public:
     std::function<std::unique_ptr<ui::Widget>(int tab)> build;
     // Called after the tab changed (by click or code).
     std::function<void(int tab)> onTab;
-    // Fill of the frame (defaults to bgBase at 96%).
+    // Fill of the frame (defaults to opaque bgBase).
     std::function<ui::Color()> fill;
     float radius = kRadius;
 
@@ -188,13 +190,16 @@ private:
     std::wstring shown_;  // what Refresh/Commit last displayed; unchanged text isn't committed
 };
 
-// "Expand Settings ›" box that unfolds into "Collapse Settings ⌄" + content.
+// "Expand Settings ›" box that unfolds into "Collapse Settings ⌄" + content. With a
+// `title` the header names what it unfolds instead ("Equalizer bands ›").
 class Expander : public ui::Widget {
 public:
     explicit Expander(std::string key);  // key remembers the state while the app runs
     ui::Widget* Body() const { return body_; }
     bool Expanded() const { return expanded_; }
     void SetExpanded(bool on);
+    std::wstring title;
+    void OnLayout() override;
     void Paint(ui::Painter& p) override;
 
 private:
@@ -203,6 +208,7 @@ private:
     Header* header_ = nullptr;
     ui::Widget* body_ = nullptr;
     bool expanded_ = false;
+    bool reveal_ = false;  // scroll the body into view on the next layout
 };
 
 // Full-width button with an optional icon ("Show Preferences", "Open Advanced Settings").
@@ -215,6 +221,8 @@ public:
     void Paint(ui::Painter& p) override;
 };
 
+// Decimal comma in Russian ("0,5"), point in English.
+std::wstring LocalDecimal(std::wstring s);
 // Formats "1.250 s", "-4.000 s".
 std::wstring FormatSeconds(double s, int decimals = 3);
 // Formats numbers without trailing zeros: 1, 1.25, 0.5.

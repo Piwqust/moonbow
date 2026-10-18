@@ -32,12 +32,14 @@ MenuItem Item(const wchar_t* label, Action a, const char* icon = "") {
     return m;
 }
 
+// One track of a type is active: radio items (a dot marks the current one).
 std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool allowOff) {
     std::vector<MenuItem> items;
     bool any = false;
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
         MenuItem m{t.Label()};
+        m.radio = true;
         m.checked = t.selected;
         any |= t.selected;
         const int64_t id = t.id;
@@ -46,6 +48,7 @@ std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool all
     }
     if (allowOff) {
         MenuItem off{Tr(L"Disable")};
+        off.radio = true;
         off.checked = !any;
         off.action = [prop] { TheApp().player().SetTrack(prop, 0); };
         items.insert(items.begin(), std::move(off));
@@ -82,12 +85,13 @@ void ShowVideoContextMenu(Host* host, Point at) {
         playback.submenu.push_back(std::move(m));
     }
     playback.submenu.push_back(MenuItem::Separator());
-    playback.submenu.push_back(Item(L"Next chapter", Action::NextChapter, "chapters"));
+    // Text-only groups: a menu group has icons on all of its items or on none.
+    playback.submenu.push_back(Item(L"Next chapter", Action::NextChapter));
     playback.submenu.push_back(Item(L"Previous chapter", Action::PreviousChapter));
-    MenuItem repeat = Item(L"Repeat", Action::ToggleRepeat, "repeat_right");
+    MenuItem repeat = Item(L"Repeat", Action::ToggleRepeat);
     repeat.checked = app.queue().RepeatMode() != Repeat::Off;
     playback.submenu.push_back(repeat);
-    MenuItem shuffle = Item(L"Shuffle", Action::ToggleShuffle, "shuffle_right");
+    MenuItem shuffle = Item(L"Shuffle", Action::ToggleShuffle);
     shuffle.checked = app.queue().Shuffle();
     playback.submenu.push_back(shuffle);
     playback.submenu.push_back(Item(L"A-B loop", Action::ABLoop));
@@ -105,10 +109,10 @@ void ShowVideoContextMenu(Host* host, Point at) {
         aspect.submenu.push_back(std::move(m));
     }
     video.submenu.push_back(aspect);
-    video.submenu.push_back(Item(L"Zoom in", Action::ZoomIn, "zoom"));
+    video.submenu.push_back(Item(L"Zoom in", Action::ZoomIn));
     video.submenu.push_back(Item(L"Zoom out", Action::ZoomOut));
     video.submenu.push_back(Item(L"Reset zoom", Action::ZoomReset));
-    video.submenu.push_back(Item(L"Rotate", Action::Rotate, "refresh"));
+    video.submenu.push_back(Item(L"Rotate", Action::Rotate));
     video.submenu.push_back(Item(L"Deinterlace", Action::Deinterlace));
     video.submenu.push_back(MenuItem::Separator());
     video.submenu.push_back(Item(L"Fullscreen", Action::Fullscreen, "fullscreen"));
@@ -421,6 +425,7 @@ MiniPlayer::MiniPlayer(MainWindow* window) : window_(window) {
             Invalidate();
         }
     });
+    imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
 }
 
 MiniPlayer::~MiniPlayer() = default;
@@ -462,13 +467,36 @@ void MiniPlayer::OnMouseLeave() {
 }
 
 void MiniPlayer::Paint(Painter& p) {
+    const PlayerState& s = PS();
+    const Rect v{rect.x + 8, rect.y + 8, rect.w - 16, kMiniVideoH};
+    const float k = hover_.Get();
     p.Shadow(rect, 8, 18, 8);
     p.Fill(rect, P().bgPanel, 8);
     p.Stroke(rect, P().line, 8);
-    const Rect v{rect.x + 8, rect.y + 8, rect.w - 16, kMiniVideoH};
-    if (!PS().hasVideo) {
+    if (s.hasVideo) {
+        p.Fill(v, P().videoBg, 4);
+        // mpv's window sits under the whole UI layer at VideoRect(), and the library page
+        // below us paints there too: clear the area to transparent so the video shows through.
+        if (s.fileLoaded) {
+            p.Ctx()->PushAxisAlignedClip(v.D2D(), D2D1_ANTIALIAS_MODE_ALIASED);
+            p.Ctx()->Clear(D2D1::ColorF(0, 0, 0, 0));
+            p.Ctx()->PopAxisAlignedClip();
+        }
+    } else {
+        const QueueItem* cur = TheApp().queue().CurrentItem();
+        const std::wstring path = cur ? cur->path : s.path;
+        ID2D1Bitmap* bmp = nullptr;
+        if (!path.empty() && GetHost())
+            bmp = TheApp().images().Get(path, static_cast<int>(std::ceil(v.w * GetHost()->Scale())));
         p.Fill(v, P().bgCard, 4);
-        p.Icon("music", v.Center(40, 40), P().textTertiary);
+        if (bmp) {
+            // Square cover centered over a dimmed, cropped copy of itself.
+            p.Image(bmp, v, 4, true, 0.35f);
+            p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true);
+        } else {
+            // The hover controls take the center: fade the note out under them.
+            p.Icon("music", v.Center(40, 40), P().textTertiary.Fade(1 - k));
+        }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
     const std::wstring name = item ? (PS().title.empty() ? FileNameOf(item->path) : PS().title) : L"";
@@ -484,8 +512,7 @@ void MiniPlayer::Paint(Painter& p) {
     p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
     // overlay buttons are children, so they paint on top of it.
-    const float k = hover_.Get();
-    if (k > 0.01f) p.Fill(v, Color::Hex(0x000000, 0.45f * k), 4);
+    if (k > 0.01f) p.Fill(v, Color::Hex(0x000000, 0.55f * k), 4);
 }
 
 void MiniPlayer::PaintOver(Painter&) {}

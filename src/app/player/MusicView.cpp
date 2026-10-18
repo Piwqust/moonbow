@@ -64,11 +64,14 @@ public:
 
         std::wstring title = s.title.empty() ? (item ? FileNameOf(item->path) : L"") : s.title;
         if (!s.artist.empty()) title += L" - " + s.artist;
-        p.Text(title, {rect.x + 48, cover.Bottom() + 70, rect.w - 96, 36}, TextStyle::Title, c.textPrimary.Fade(0.85f),
-               HAlign::Center);
+        // The view is always on the (dark) video background, also in the light theme, so the
+        // text is light rather than the palette's text colors.
+        const Color white = Color::Hex(0xFFFFFF);
+        p.Text(title, {rect.x + 48, cover.Bottom() + 70, rect.w - 96, 36}, TextStyle::Title,
+               Color::Mix(c.videoBg, white, 0.8f), HAlign::Center);
         if (!s.album.empty())
-            p.Text(s.album, {rect.x + 48, cover.Bottom() + 106, rect.w - 96, 22}, TextStyle::Body, c.textTertiary,
-                   HAlign::Center);
+            p.Text(s.album, {rect.x + 48, cover.Bottom() + 106, rect.w - 96, 22}, TextStyle::Body,
+                   Color::Mix(c.videoBg, white, 0.5f), HAlign::Center);
     }
 
 private:

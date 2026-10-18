@@ -52,7 +52,7 @@ int IndexOf(const std::vector<ui::Choice>& choices, const std::string& value) {
 // Dropdown bound to string state: `get` returns the current value, `set` applies a new one.
 Dropdown* AddChoice(SyncPage* page, Widget* section, const std::wstring& label, std::vector<ui::Choice> choices,
                     std::function<std::string()> get, std::function<void(const std::string&)> set, bool fullWidth = false) {
-    auto d = MakeDropdown(choices, fullWidth ? 360.0f : 220.0f);
+    auto d = MakeDropdown(choices, fullWidth ? 360.0f : 188.0f);
     Dropdown* raw = d.get();
     if (fullWidth) {
         if (!label.empty()) AddCaption(section, label);
@@ -64,6 +64,8 @@ Dropdown* AddChoice(SyncPage* page, Widget* section, const std::wstring& label, 
     raw->onChange = [raw, set](int i) {
         if (i >= 0 && i < static_cast<int>(raw->Choices().size())) set(raw->Choices()[static_cast<size_t>(i)].value);
     };
+    // Syncers only run on changes: start from the current value, not the first choice.
+    raw->SetSelected(IndexOf(raw->Choices(), get()));
     page->OnSync([raw, get] {
         const int i = IndexOf(raw->Choices(), get());
         if (i != raw->Selected()) raw->SetSelected(i);
@@ -154,10 +156,10 @@ Range* AddConfigRange(SyncPage* page, Widget* section, const char* key, std::wst
     const int decimals = item->step > 0 && item->step < 1 ? (item->step < 0.1 ? 2 : 1) : 0;
     auto fmt = [unit, decimals](double v) {
         wchar_t buf[48];
-        swprintf_s(buf, L"%.*f", decimals, v);
-        std::wstring s = buf;
+        swprintf_s(buf, L"%.*f", decimals, std::abs(v) < 0.0005 ? 0.0 : v);
+        std::wstring s = LocalDecimal(buf);
         if (unit.empty()) return s;
-        return s + (unit[0] == L':' ? L" " : L" ") + unit;
+        return s + L" " + unit;
     };
     return AddRange(page, section, label.empty() ? item->Label(Lang()) : label, spec, [k] { return Cfg().GetDouble(k); },
                     [k](double v) { Cfg().SetDouble(k, v); }, fmt);
@@ -203,7 +205,7 @@ ValueBox* AddBox(SyncPage* page, Widget* section, const std::wstring& label, std
 std::wstring Signed(double v, int decimals, const wchar_t* unit) {
     wchar_t buf[48];
     swprintf_s(buf, L"%.*f %s", decimals, std::abs(v) < 0.0005 ? 0.0 : v, unit);
-    return buf;
+    return LocalDecimal(buf);
 }
 
 // Tracks of one type as dropdown choices ("0" = none).
@@ -227,21 +229,34 @@ std::string SelectedTrack(const wchar_t* type) {
     return "0";
 }
 
+// Dropdown over the tracks of one type. The list follows the file: tracks arrive after the
+// panel opens, external subtitles get added.
+Dropdown* AddTracks(SyncPage* page, Widget* section, const std::wstring& label, const wchar_t* type,
+                    std::function<std::string()> get, std::function<void(const std::string&)> set) {
+    auto d = MakeDropdown(TrackChoices(type), 188.0f);
+    Dropdown* raw = d.get();
+    AddRow(section, label, std::move(d), 68);
+    raw->onChange = [raw, set](int i) {
+        if (i >= 0 && i < static_cast<int>(raw->Choices().size())) set(raw->Choices()[static_cast<size_t>(i)].value);
+    };
+    auto sync = [raw, type, get] {
+        auto choices = TrackChoices(type);
+        bool same = choices.size() == raw->Choices().size();
+        for (size_t i = 0; same && i < choices.size(); ++i)
+            same = choices[i].value == raw->Choices()[i].value && choices[i].label == raw->Choices()[i].label;
+        const int i = IndexOf(choices, get());
+        if (!same) raw->SetChoices(std::move(choices), i);
+        else if (i != raw->Selected()) raw->SetSelected(i);
+    };
+    sync();
+    page->OnSync(sync);
+    return raw;
+}
+
 Dropdown* AddTrackChoice(SyncPage* page, Widget* section, const std::wstring& label, const wchar_t* type,
                          const char* prop) {
-    Dropdown* d = AddChoice(
-        page, section, label, TrackChoices(type), [type] { return SelectedTrack(type); },
-        [prop](const std::string& v) { TheApp().player().SetTrack(prop, std::atoll(v.c_str())); });
-    // Track lists change per file: refresh the choices first (syncers run in order).
-    page->OnSync([d, type] {
-        auto choices = TrackChoices(type);
-        bool same = choices.size() == d->Choices().size();
-        for (size_t i = 0; same && i < choices.size(); ++i) same = choices[i].value == d->Choices()[i].value;
-        if (!same) d->SetChoices(std::move(choices), IndexOf(d->Choices(), SelectedTrack(type)));
-        const int i = IndexOf(d->Choices(), SelectedTrack(type));
-        if (i != d->Selected()) d->SetSelected(i);
-    });
-    return d;
+    return AddTracks(page, section, label, type, [type] { return SelectedTrack(type); },
+                     [prop](const std::string& v) { TheApp().player().SetTrack(prop, std::atoll(v.c_str())); });
 }
 
 // Swatch + "#RRGGBB" field bound to a color setting.
@@ -289,9 +304,11 @@ Segmented* AddSegments(SyncPage* page, Widget* section, const std::wstring& capt
     return s;
 }
 
-Expander* AddExpander(Widget* section, const std::string& key, const std::wstring& caption) {
+Expander* AddExpander(Widget* section, const std::string& key, const std::wstring& caption,
+                      const std::wstring& title = {}) {
     if (!caption.empty()) AddCaption(section, caption);
     auto* e = section->Add<Expander>(key);
+    e->title = title;
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(14);
     return e;
@@ -399,7 +416,7 @@ std::unique_ptr<Widget> VideoTab() {
         page, s, Tr(L"Flip"), {{Tr(L"None"), "0", ""}, {Tr(L"Horizontal"), "1", ""}, {Tr(L"Vertical"), "2", ""}},
         [] { return Live().flip; }, [](int i) { Live().SetFlip(i); });
     AddBox(
-        page, s, Tr(L"Rotate"), [] { return FormatNumber(Live().V().rotate) + L" " + Tr(L"deg"); },
+        page, s, Tr(L"Rotate"), [] { return FormatNumber(Live().V().rotate) + L"°"; },
         [](double v) {
             const int r = ((static_cast<int>(std::lround(v)) % 360) + 360) % 360;
             TheApp().player().SetProperty("video-rotate", static_cast<double>(r));
@@ -547,7 +564,7 @@ std::unique_ptr<Widget> AudioTab() {
                {Tr(L"Reverse stereo"), "reverse", ""},
                {Tr(L"Left channel"), "left", ""},
                {Tr(L"Right channel"), "right", ""}},
-              [] { return Live().stereoMode; }, [](const std::string& v) { Live().SetStereoMode(v); }, true);
+              [] { return Live().stereoMode; }, [](const std::string& v) { Live().SetStereoMode(v); });
     auto* sgap = s->Add<Widget>();
     sgap->height = Length::Px(20);
 
@@ -577,23 +594,25 @@ std::unique_ptr<Widget> AudioTab() {
                     true);
     auto* eqgap = eq->Add<Widget>();
     eqgap->height = Length::Px(10);
-    Expander* bands = AddExpander(eq, "audio.eq", L"");
+    Expander* bands = AddExpander(eq, "audio.eq", L"", Tr(L"Equalizer bands"));
     AddConfigRange(page, bands->Body(), settings::kEqPreampKey);
     for (const char* key : settings::kEqBandKeys) AddConfigRange(page, bands->Body(), key);
     AddConfigToggle(page, eq, Tr(L"2 Pass"), "audio.eqTwoPass", 48);
 
     struct Effect {
         const wchar_t* label;
+        const wchar_t* settings;
         const char* toggle;
         const char* group;
     };
-    for (const Effect& fx : {Effect{L"Compressor", "audio.nightMode", "compressor"},
-                             Effect{L"Spatializer", "audio.spatial", "spatializer"},
-                             Effect{L"Stereo Widener", "audio.stereoWiden", "stereoWidener"}}) {
+    for (const Effect& fx : {Effect{L"Compressor", L"Compressor settings", "audio.nightMode", "compressor"},
+                             Effect{L"Spatializer", L"Spatializer settings", "audio.spatial", "spatializer"},
+                             Effect{L"Stereo Widener", L"Stereo widener settings", "audio.stereoWiden",
+                                    "stereoWidener"}}) {
         AddSectionLine(page);
         Widget* sec = AddSection(page);
         AddConfigToggle(page, sec, Tr(fx.label), fx.toggle, 58);
-        Expander* e = AddExpander(sec, std::string("audio.") + fx.group, L"");
+        Expander* e = AddExpander(sec, std::string("audio.") + fx.group, L"", Tr(fx.settings));
         if (std::string(fx.group) == "spatializer") AddConfigChoice(page, e->Body(), L"", "audio.spatialMode", nullptr, true);
         for (const settings::Item* item : settings::AllItems())
             if (item->group == fx.group && item->type == settings::ItemType::Slider) AddConfigRange(page, e->Body(), item->key.c_str());
@@ -610,9 +629,8 @@ std::unique_ptr<Widget> SubtitlesTab() {
     AddSectionTitle(page, Tr(L"Defaults"));
     Widget* s = AddSection(page);
     AddTrackChoice(page, s, Tr(L"Subtitle Track"), L"sub", "sid");
-    AddChoice(
-        page, s, Tr(L"Secondary Subtitles"), TrackChoices(L"sub"),
-        [] { return std::to_string(Live().V().secondarySid); },
+    AddTracks(
+        page, s, Tr(L"Secondary Subtitles"), L"sub", [] { return std::to_string(Live().V().secondarySid); },
         [](const std::string& v) {
             TheApp().player().SetProperty("secondary-sid", std::string(v == "0" ? "no" : v));
         });

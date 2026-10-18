@@ -30,18 +30,15 @@ std::wstring CurrentPath() {
     return PS().path;
 }
 
-// "2h 3m", "25m", "40s".
-std::wstring ShortDuration(double s) {
-    const long long t = static_cast<long long>(std::llround(s));
-    const long long h = t / 3600, m = (t % 3600) / 60;
-    if (h > 0) return Fmt(Tr(L"{0}h {1}m"), {std::to_wstring(h), std::to_wstring(m)});
-    if (m > 0) return Fmt(Tr(L"{0}m"), m);
-    return Fmt(Tr(L"{0}s"), t);
-}
-
-// "23:06" (or "1:02:03") as in the queue list.
+// "4:20" (or "1:02:03"), the same m:ss as the library lists.
 std::wstring ClockTime(double s) {
-    return FormatTime(s, s >= 3600);
+    const long long t = static_cast<long long>(std::max(0.0, s));
+    wchar_t buf[32];
+    if (t >= 3600)
+        swprintf_s(buf, L"%lld:%02lld:%02lld", t / 3600, (t / 60) % 60, t % 60);
+    else
+        swprintf_s(buf, L"%lld:%02lld", t / 60, t % 60);
+    return buf;
 }
 
 // "00:00:42:023" as in the bookmarks list.
@@ -162,10 +159,24 @@ public:
         return 0;
     }
 
+    const library::MediaItem* LibraryItem(int i) const {
+        return TheApp().library().Current()->FindItem(TheApp().queue().Items()[static_cast<size_t>(i)].path);
+    }
+
     std::wstring TitleOf(int i) const {
         const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
-        if (!item.title.empty()) return item.title;
+        // Folder queues store the file name as the title: tags are better when known.
+        if (!item.title.empty() && item.title != FileNameOf(item.path)) return item.title;
+        if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().title.empty()) return PS().title;
+        if (const library::MediaItem* m = LibraryItem(i); m && !m->title.empty()) return m->title;
         return FileNameOf(item.path);
+    }
+
+    // Artist of an audio item when its tags (or the playing file) know it.
+    std::wstring ArtistOf(int i) const {
+        if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().hasVideo) return PS().artist;
+        if (const library::MediaItem* m = LibraryItem(i); m && m->kind == library::MediaKind::Audio) return m->artist;
+        return {};
     }
 
     void PaintRow(Painter& p, int i, const Rect& r, bool floating) {
@@ -192,7 +203,13 @@ public:
         const bool showRemove = hot && !compact_;
         const float right = r.Right() - (showRemove ? 28.0f : 0.0f);
         const Color fg = current ? c.accent : hot ? c.textPrimary : RowText();
-        p.Text(TitleOf(i), {textX, r.y, std::max(0.0f, right - textX - dw - 10), r.h}, ts, fg);
+        const float avail = std::max(0.0f, right - textX - dw - 10);
+        const std::wstring title = TitleOf(i);
+        const std::wstring artist = ArtistOf(i);
+        const float tw = std::min(avail, gfx::Text::Get().Measure(title, ts).width + 2);
+        p.Text(title, {textX, r.y, artist.empty() ? avail : tw, r.h}, ts, fg);
+        if (!artist.empty() && avail - tw > 40)
+            p.Text(L" \u00b7 " + artist, {textX + tw, r.y, avail - tw, r.h}, ts, current ? c.textSecondary : c.textTertiary);
         if (showRemove) {
             const Rect x{r.Right() - 26, r.Cy() - 12, 24, 24};
             if (hoverRemove_) p.Fill(x, c.hover, 4);
@@ -393,7 +410,7 @@ std::wstring QueueSummary() {
         total += d;
     }
     std::wstring s = CountItems(static_cast<long long>(items.size()));
-    if (complete && total > 0) s += L" - " + ShortDuration(total);
+    if (complete && total > 0) s += L" \u00b7 " + ClockTime(total);
     return s;
 }
 

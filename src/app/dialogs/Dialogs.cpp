@@ -49,7 +49,10 @@ Widget* Row(Widget* parent, float gap = 10) {
 // Keyboard Shortcuts
 // =============================================================================================
 
-// Read-only key field from the design: dark pill, centered key text, pencil at the right.
+// Left inset of the key text; the column headers use it too, so the table lines up.
+constexpr float kKeyInset = 16;
+
+// Read-only key field from the design: dark pill, key text, pencil at the right.
 class KeyField : public Widget {
 public:
     KeyField(std::wstring text, std::function<void()> edit) : text_(std::move(text)) {
@@ -62,7 +65,7 @@ public:
     void Paint(Painter& p) override {
         const Palette& c = P();
         p.Fill(rect, IsHot() ? Color::Mix(c.bgDeep, c.bgSelected, 0.35f) : c.bgDeep, 6);
-        p.Text(text_, {rect.x + 20, rect.y, rect.w - 64, rect.h}, TextStyle::Mono, SoftText(), HAlign::Center);
+        p.Text(text_, {rect.x + kKeyInset, rect.y, rect.w - kKeyInset - 44, rect.h}, TextStyle::Mono, SoftText());
         p.Icon("edit", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, IsHot() ? c.textPrimary : c.textTertiary);
     }
 
@@ -107,11 +110,15 @@ public:
                 if (!section) {
                     if (shown > 0) {
                         auto* gapW = Add<Widget>();
-                        gapW->height = Length::Px(20);
+                        gapW->height = Length::Px(24);
                         AddSeparator(this);
                     }
-                    auto* h = Add<Label>(Tr(g.c_str()), TextStyle::Large, Tone::Secondary);
-                    h->pad = {0, 20, 0, 20};
+                    // Group title: clearly above its rows, with more air before than after
+                    // (spacers: a Label centers its text inside its padding).
+                    Add<Widget>()->height = Length::Px(shown > 0 ? 28.0f : 18.0f);
+                    auto* h = Add<Label>(Tr(g.c_str()), TextStyle::Heading);
+                    h->color = SoftText;
+                    Add<Widget>()->height = Length::Px(12);
                     section = Add<Widget>();
                     section->dir = Dir::Column;
                     section->width = Length::Grow();
@@ -380,8 +387,46 @@ struct InfoSection {
     std::vector<InfoRow> rows;
 };
 
+// "Key   value" row: the value wraps (up to 3 lines) and the row grows with it; the key
+// stays on the first line.
+class InfoLine : public Widget {
+public:
+    static constexpr float kKeyW = 210, kGap = 16;
+    InfoLine(const std::wstring& key, const std::wstring& value) {
+        width = Length::Grow();
+        dir = Dir::None;
+        key_ = Add<Label>(key, TextStyle::Body, Tone::Tertiary);
+        key_->valign = VAlign::Top;
+        value_ = Add<Label>(value, TextStyle::Body);
+        value_->color = SoftText;
+        value_->wrap = true;
+        value_->maxLines = 3;
+        value_->valign = VAlign::Top;
+        if (gfx::Text::Get().Measure(value, TextStyle::Body).width > 360) tooltip = value;
+    }
+    Size MeasureContent(float availW, float) override {
+        const float lh = gfx::Text::Get().LineHeight(TextStyle::Body);
+        return {availW, std::max(lh, value_->Measure(std::max(1.0f, availW - kKeyW - kGap), 1e6f).h)};
+    }
+    void OnLayout() override {
+        const float lh = gfx::Text::Get().LineHeight(TextStyle::Body);
+        key_->Arrange({rect.x, rect.y, kKeyW, lh});
+        value_->Arrange({rect.x + kKeyW + kGap, rect.y, std::max(1.0f, rect.w - kKeyW - kGap), rect.h});
+    }
+
+private:
+    Label* key_ = nullptr;
+    Label* value_ = nullptr;
+};
+
 std::wstring Prop(const char* name) {
     return Utf8ToWide(TheApp().player().GetPropertyString(name));
+}
+
+// Decimal comma in Russian, as in the library sizes.
+std::wstring Decimal(std::wstring s) {
+    if (CurrentLanguage() == Language::Russian) std::replace(s.begin(), s.end(), L'.', L',');
+    return s;
 }
 
 std::wstring Kbps(const std::wstring& bitsPerSecond) {
@@ -393,7 +438,7 @@ std::wstring Kbps(const std::wstring& bitsPerSecond) {
         swprintf(buf, 32, L"%.1f %s", v / 1e6, Tr(L"Mbit/s"));
     else
         swprintf(buf, 32, L"%.0f %s", v / 1e3, Tr(L"kbit/s"));
-    return buf;
+    return Decimal(buf);
 }
 
 std::vector<InfoSection> CollectMediaInfo() {
@@ -428,7 +473,7 @@ std::vector<InfoSection> CollectMediaInfo() {
         if (!fps.empty()) {
             wchar_t buf[32];
             swprintf(buf, 32, L"%.3g", _wtof(fps.c_str()));
-            add(video, L"Frame rate", std::wstring(buf) + L" " + Tr(L"fps"));
+            add(video, L"Frame rate", Decimal(buf) + L" " + Tr(L"fps"));
         }
         add(video, L"Bitrate", Kbps(Prop("video-bitrate")));
         add(video, L"Pixel format", Prop("video-params/pixelformat"));
@@ -499,11 +544,11 @@ void ShowKeyboardShortcutsDialog() {
     head->Add<Label>(Tr(L"Action"), TextStyle::Body, Tone::Tertiary)->width = Length::Grow();
     auto* h1 = head->Add<Label>(Tr(L"Hotkey"), TextStyle::Body, Tone::Tertiary);
     h1->width = Length::Px(270);
-    h1->halign = HAlign::Center;
+    h1->pad = {kKeyInset, 0, 0, 0};
     head->Add<Widget>()->width = Length::Px(89);
     auto* h2 = head->Add<Label>(Tr(L"Alternative"), TextStyle::Body, Tone::Tertiary);
     h2->width = Length::Px(270);
-    h2->halign = HAlign::Center;
+    h2->pad = {kKeyInset, 0, 0, 0};
     auto* gapW = body->Add<Widget>();
     gapW->height = Length::Px(20);
     AddSeparator(body);
@@ -545,9 +590,16 @@ void ShowNetworkStreamDialog() {
     auto* urls = body->Add<TextArea>(Tr(L"e.g., https://www.example.com/stream.avi"));
     urls->width = Length::Grow();
     urls->height = Length::Px(std::clamp(w->ClientSize().h - 600, 96.0f, 194.0f));
-    auto* hint = body->Add<Label>(Tr(L"Enter opens the stream, Shift+Enter starts a new line."), TextStyle::Small,
-                                  Tone::Tertiary);
-    hint->pad = {0, 0, 0, 0};
+    // Neutral hint, or the validation error (info icon in the danger color, primary text).
+    auto* hintRow = Row(body, 6);
+    auto* hintIcon = hintRow->Add<IconView>("info", 16);
+    hintIcon->color = [] { return P().danger; };
+    hintIcon->width = Length::Px(16);
+    hintIcon->height = Length::Px(16);
+    hintIcon->visible = false;
+    auto* hint = hintRow->Add<Label>(Tr(L"Enter opens the stream, Shift+Enter starts a new line."), TextStyle::Small,
+                                     Tone::Tertiary);
+    hint->width = Length::Grow();
 
     // Recent links from the history.
     std::vector<std::wstring> recent;
@@ -572,15 +624,14 @@ void ShowNetworkStreamDialog() {
     name->width = Length::Grow();
     name->height = Length::Px(37);
 
-    // Buffering (Settings > Network) right here: streams are where it matters.
+    // Buffering (Settings > Network) right here: streams are where it matters. Same
+    // heading + description scale as the two fields above.
+    AddSeparator(body);
     auto* buf = Row(body, 12);
-    auto* bl = buf->Add<Widget>();
-    bl->dir = Dir::Column;
+    Widget* bl = AddFieldHeader(
+        buf, Tr(L"Buffering"),
+        Tr(L"More buffering survives a slow connection but starts later. Applies to all streams."));
     bl->width = Length::Grow();
-    bl->gap = 2;
-    bl->Add<Label>(Tr(L"Buffering"), TextStyle::Body)->color = SoftText;
-    bl->Add<Label>(Tr(L"More buffering survives a slow connection but starts later. Applies to all streams."),
-                   TextStyle::Small, Tone::Tertiary);
     std::vector<Choice> modes = {{Tr(L"Low"), "low"}, {Tr(L"Normal"), "normal"}, {Tr(L"High"), "high"}};
     const std::string current = TheApp().config().GetString("network.buffering");
     if (current == "custom") modes.push_back({Tr(L"Custom"), "custom"});
@@ -599,10 +650,13 @@ void ShowNetworkStreamDialog() {
     auto* open = f->Footer()->Add<DButton>(Tr(L"Open"), BtnStyle::Accent);
     open->enabled = false;
 
-    auto validate = [urls, hint, open] {
+    auto validate = [urls, hint, hintIcon, open] {
         int bad = 0;
         const auto links = ParseLinks(urls->Text(), &bad);
         open->enabled = bad == 0 && !links.empty();
+        hintIcon->visible = bad != 0;
+        hint->tone = bad ? Tone::Primary : Tone::Tertiary;
+        hint->InvalidateLayout();
         if (bad)
             hint->SetText(Fmt(Tr(L"Line {0} is not a link. Links look like https://, rtsp:// or udp://"),
                               {std::to_wstring(bad)}));
@@ -670,7 +724,7 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done) {
     const size_t queued = TheApp().queue().Items().size();
     if (queued > 0)
         addQueue = body->Add<Checkbox>(
-            Fmt(Tr(L"Also add the current queue ({0})"), {CountItems(static_cast<long long>(queued))}));
+            Fmt(Tr(L"Also add the current queue ({0})"), {std::to_wstring(queued)}));
 
     f->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
@@ -729,6 +783,8 @@ void ShowMediaInfoDialog() {
         content->dir = Dir::Column;
         content->width = Length::Grow();
         content->gap = 6;
+        // Frame width minus the body padding (20 + 20).
+        const float valueW = FitWidth(w, 720) - 40 - InfoLine::kKeyW - InfoLine::kGap;
         float est = 0;
         for (size_t i = 0; i < sections.size(); ++i) {
             if (i > 0) {
@@ -742,16 +798,8 @@ void ShowMediaInfoDialog() {
             h->pad = {0, 6, 0, 4};
             est += 36;
             for (const auto& r : sections[i].rows) {
-                auto* row = Row(content, 16);
-                row->align = Align::Start;
-                auto* k = row->Add<Label>(r.key, TextStyle::Body, Tone::Tertiary);
-                k->width = Length::Px(210);
-                auto* v = row->Add<Label>(r.value, TextStyle::Body);
-                v->color = SoftText;
-                v->width = Length::Grow();
-                v->wrap = true;
-                v->maxLines = 3;
-                est += 26 + (r.value.size() > 60 ? 20.0f : 0.0f);
+                auto* row = content->Add<InfoLine>(r.key, r.value);
+                est += row->Measure(valueW + InfoLine::kKeyW + InfoLine::kGap, 1e6f).h + 6;
             }
         }
         scroll->height = Length::Px(std::min(est + 8, std::max(160.0f, w->ClientSize().h - 220)));

@@ -49,7 +49,7 @@ const std::vector<ControlInfo> kControls = {
     {ControlId::Quit, "quit", L"Quit Lumen", "quit", true},
     {ControlId::Preferences, "prefs", L"Lumen Settings", "settings", true},
     {ControlId::GoHome, "home", L"Go Home", "home", true},
-    {ControlId::Thumbnail, "thumbnail", L"Thumbnail", "thumbnail", true},
+    {ControlId::Thumbnail, "thumbnail", L"Thumbnail", "tv", true},
     {ControlId::FileName, "filename", L"File Name", "info", true},
     {ControlId::ArtistName, "artist", L"Artist Name", "info", true},
     {ControlId::FolderName, "folder", L"Folder Name", "info", true},
@@ -189,9 +189,11 @@ public:
             sink->Close();
             p.FillGeometry(g.Get(), c);
         };
-        wedge(1.0f, P().bgDeep);
+        // The empty track needs ~3:1 against the bar in both themes (bgDeep vanishes in light).
+        const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
+        wedge(1.0f, empty);
         const float t = static_cast<float>(std::clamp(s.volume / 100.0, 0.0, 1.0));
-        if (t > 0) wedge(t, s.mute ? P().textTertiary : P().accentMid);
+        if (t > 0) wedge(t, s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid);
         PaintFocusRing(p, w, 2);
         if (hotWedge_ || dragging_) {
             const std::wstring label = std::to_wstring(static_cast<int>(std::lround(s.volume))) + L"%";
@@ -446,7 +448,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
         case ControlId::Quit: return button("quit", L"Quit", Action::Quit);
         case ControlId::Preferences: return button("settings", L"Settings", Action::Settings);
         case ControlId::GoHome: return button("home", L"Go home", Action::GoHome);
-        case ControlId::Thumbnail: return button("thumbnail", L"Thumbnail", Action::ShowInfo);
+        case ControlId::Thumbnail: return button("tv", L"Thumbnail", Action::ShowInfo);
         case ControlId::FileName:
         case ControlId::ArtistName:
         case ControlId::FolderName:

@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cwchar>
 
 namespace app {
 
@@ -368,18 +369,19 @@ private:
     void Build() {
         auto frame = std::make_unique<Frame>(Tr(L"Customize Player"), 1048.0f);
         frame_ = frame.get();
-        auto* desc = frame_->Toolbar()->Add<Label>(
+
+        Widget* body = frame_->Body();
+        body->pad = Insets::All(34);
+        body->gap = 24;
+        // In the body, not the one-line toolbar: the Russian hint needs two lines.
+        auto* desc = body->Add<Label>(
             overlay_ ? Tr(L"Drag items into the control bar below to add them, along it to reorder them, and back "
                           L"here to remove them from the player.")
                      : Tr(L"Drag items into the preview below to add them, along it to reorder them, and back here "
                           L"to remove them from the player."),
             TextStyle::Body, Tone::Tertiary);
-        desc->pad = {10, 0, 0, 0};
         desc->width = Length::Grow();
-
-        Widget* body = frame_->Body();
-        body->pad = Insets::All(34);
-        body->gap = 24;
+        desc->wrap = true;
         scroll_ = body->Add<ScrollView>();
         scroll_->width = Length::Grow();
         grid_ = scroll_->SetContent<PaletteGrid>();
@@ -443,7 +445,7 @@ private:
         // Four rows visible, the rest scrolls.
         const Host* h = GetHost() ? GetHost() : window_;
         const float avail = h ? h->ClientSize().h : 780;
-        const float reserved = (overlay_ ? kBarH : kBarH + 40) + 94 + 72 + 68 + 40;
+        const float reserved = (overlay_ ? kBarH : kBarH + 40) + 50 + 64 + 72 + 68 + 40;
         const float rows = std::clamp(std::floor((avail - reserved + 38) / kRowPitch), 1.0f, 4.0f);
         scroll_->height = Length::Px(rows * kRowPitch - 38 + 4);
         scroll_->InvalidateLayout();
@@ -472,6 +474,36 @@ std::wstring GlueLastWord(std::wstring s) {
     return s;
 }
 
+bool IsVowel(wchar_t ch) {
+    return std::wcschr(L"аеёиоуыэюяАЕЁИОУЫЭЮЯaeiouyAEIOUY", ch) != nullptr;
+}
+
+// Breaks words wider than `w` with a hyphen after a vowel ("воспроизве-дения"), so every
+// label keeps the same text size instead of shrinking to fit.
+std::wstring Hyphenate(const std::wstring& label, TextStyle style, float w) {
+    std::wstring out;
+    size_t a = 0;
+    while (a < label.size()) {
+        size_t b = a;
+        while (b < label.size() && label[b] != L' ' && label[b] != L'/') ++b;
+        std::wstring word = label.substr(a, b - a);
+        while (word.size() > 5 && gfx::Text::Get().Measure(word, style).width > w) {
+            size_t cut = 0;
+            for (size_t k = 2; k + 2 <= word.size(); ++k)
+                if (IsVowel(word[k - 1]) && !std::wcschr(L"ьъйЬЪЙ", word[k]) &&
+                    gfx::Text::Get().Measure(word.substr(0, k) + L"-", style).width <= w)
+                    cut = k;
+            if (!cut) break;
+            out += word.substr(0, cut) + L"-\n";
+            word = word.substr(cut);
+        }
+        out += word;
+        if (b < label.size()) out += label[b];
+        a = b + 1;
+    }
+    return out;
+}
+
 void PaletteCell::Paint(Painter& p) {
     const Palette& c = P();
     const bool dragging = editor_->Dragging(id_, false, -1);
@@ -484,19 +516,10 @@ void PaletteCell::Paint(Painter& p) {
                                                                          : Rect{rect.Cx() - 15, rect.y, 30, 32};
     DashedRect(p, box, hot ? c.textSecondary : c.textTertiary);
     PaintItemIcon(p, id_, box, hot ? c.textPrimary : c.textSecondary);
-    // Long words (Russian) get the small style rather than a break inside the word.
-    const std::wstring label = GlueLastWord(Tr(LabelOf(id_)));
     const float w = rect.w + 20;
-    TextStyle style = TextStyle::Body;
-    if (gfx::Text::Get().Measure(label, style, w, gfx::kTextWrap).lines > 2) style = TextStyle::Small;
-    for (size_t a = 0; a < label.size() && style == TextStyle::Body;) {
-        size_t b = label.find(L' ', a);
-        if (b == std::wstring::npos) b = label.size();
-        if (gfx::Text::Get().Measure(std::wstring_view(label).substr(a, b - a), style).width > w) style = TextStyle::Small;
-        a = b + 1;
-    }
-    p.Text(label, {rect.Cx() - w / 2, rect.y + 48, w, 40}, style, hot ? c.textPrimary : c.textSecondary, HAlign::Center,
-           VAlign::Top, gfx::kTextWrap);
+    const std::wstring label = Hyphenate(GlueLastWord(Tr(LabelOf(id_))), TextStyle::Body, w);
+    p.Text(label, {rect.Cx() - w / 2, rect.y + 48, w, 60}, TextStyle::Body, hot ? c.textPrimary : c.textSecondary,
+           HAlign::Center, VAlign::Top, gfx::kTextWrap);
     if (dragging) p.PopOpacity();
 }
 

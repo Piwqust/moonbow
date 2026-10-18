@@ -20,10 +20,17 @@ Color SectionLine() {
     return Color::Mix(P().lineSubtle, P().line, 0.6f);
 }
 
+std::wstring LocalDecimal(std::wstring s) {
+    if (CurrentLanguage() == Language::Russian)
+        for (wchar_t& ch : s)
+            if (ch == L'.') ch = L',';
+    return s;
+}
+
 std::wstring FormatSeconds(double s, int decimals) {
     wchar_t buf[48];
     swprintf_s(buf, L"%.*f %s", decimals, std::abs(s) < 0.0005 ? 0.0 : s, Tr(L"s"));
-    return buf;
+    return LocalDecimal(buf);
 }
 
 std::wstring FormatNumber(double v, int maxDecimals) {
@@ -35,7 +42,7 @@ std::wstring FormatNumber(double v, int maxDecimals) {
         if (!s.empty() && s.back() == L'.') s.pop_back();
     }
     if (s == L"-0") s = L"0";
-    return s;
+    return LocalDecimal(std::move(s));
 }
 
 // --- TabBar ------------------------------------------------------------------------------
@@ -47,18 +54,30 @@ TabBar::TabBar(std::vector<Tab> tabs, int selected) : tabs_(std::move(tabs)), se
     height = Length::Px(kHeaderH);
 }
 
+float TabBar::ContentWidth(const Tab& t) const {
+    return (showIcons_ ? 28.0f : 0.0f) + gfx::Text::Get().Measure(Tr(t.label.c_str()), TextStyle::Small).width;
+}
+
 void TabBar::OnLayout() {
-    // Tabs share the width (6 DIP inset on both sides) in proportion to their content.
+    // Tabs share the width (6 DIP inset on both sides) in proportion to their content. When
+    // icon + label leave too little air (four Russian tabs), the tabs show labels only.
     const float avail = rect.w - 12;
+    const float n = tabs_.empty() ? 1.0f : static_cast<float>(tabs_.size());
     std::vector<float> content;
     float total = 0;
-    for (const Tab& t : tabs_) {
-        const float w = 20 + 8 + gfx::Text::Get().Measure(Tr(t.label.c_str()), TextStyle::Small).width;
-        content.push_back(w);
-        total += w;
+    for (int pass = 0; pass < 2; ++pass) {
+        showIcons_ = pass == 0;
+        content.clear();
+        total = 0;
+        for (const Tab& t : tabs_) {
+            const float w = ContentWidth(t);
+            content.push_back(w);
+            total += w;
+        }
+        if ((avail - total) / n >= 28) break;
     }
     widths_.clear();
-    const float extra = tabs_.empty() ? 0 : (avail - total) / static_cast<float>(tabs_.size());
+    const float extra = tabs_.empty() ? 0 : (avail - total) / n;
     for (float w : content) widths_.push_back(std::max(40.0f, w + extra));
     const Rect r = TabRect(selected_);
     const float lw = std::max(24.0f, r.w - (tabs_.size() > 3 ? 14.0f : 16.0f));
@@ -117,13 +136,14 @@ void TabBar::Paint(Painter& p) {
         const bool hot = i == hover_ && IsHot();
         const std::wstring label = Tr(t.label.c_str());
         const float tw = gfx::Text::Get().Measure(label, TextStyle::Small).width;
-        const float cw = 20 + 8 + tw;
-        const float x = std::round(r.Cx() - cw / 2);
-        const Color fg = sel ? c.textSecondary : hot ? c.textSecondary : c.textTertiary;
+        const float x = std::round(r.Cx() - ContentWidth(t) / 2);
+        // Without the two-tone icon the selected label itself carries the state.
+        const Color fg = sel ? (showIcons_ ? c.textSecondary : c.textPrimary) : hot ? c.textSecondary : c.textTertiary;
         const std::string& icon = sel && !t.iconActive.empty() ? t.iconActive : t.icon;
         if (hot && !sel) p.Fill({r.x + 4, r.y + 8, r.w - 8, r.h - 16}, c.hover, 4);
-        p.Icon(icon, {x, r.y + 14, 20, 20}, sel ? c.textSecondary : fg, c.accent);
-        p.Text(label, {x + 28, r.y + 14, tw + 2, 20}, TextStyle::Small, fg, HAlign::Leading, VAlign::Center, 0);
+        if (showIcons_) p.Icon(icon, {x, r.y + 14, 20, 20}, sel ? c.textSecondary : fg, c.accent);
+        p.Text(label, {showIcons_ ? x + 28 : x, r.y + 14, tw + 2, 20}, TextStyle::Small, fg, HAlign::Leading,
+               VAlign::Center, 0);
     }
     if (!tabs_.empty()) p.Fill({std::round(lineX_.Get()), rect.Bottom() - 2, std::round(lineW_.Get()), 2}, c.accent, 1);
     if (ShowFocusRing()) {
@@ -230,7 +250,8 @@ void Popover::OnLayout() {
 void Popover::Paint(Painter& p) {
     const Palette& c = P();
     p.Shadow(rect, radius, 15, 8);
-    p.Fill(rect, fill ? fill() : c.bgBase.WithAlpha(0.97f), radius);
+    // Opaque: a translucent frame picks up the colors of the video under it.
+    p.Fill(rect, fill ? fill() : c.bgBase, radius);
     if (tabs_ || !title_.empty()) {
         p.PushRoundClip(rect, radius);
         const Rect h{rect.x, rect.y, rect.w, kHeaderH};
@@ -317,7 +338,8 @@ void AddSectionTitle(Widget* page, const std::wstring& text) {
             height = Length::Px(39);
         }
         void Paint(Painter& p) override {
-            p.Text(text_, {rect.x + 24, rect.y + 18, rect.w - 48, 22}, TextStyle::Heading, RowText());
+            // Same x as the row labels and controls of the sections (20 DIP).
+            p.Text(text_, {rect.x + 20, rect.y + 18, rect.w - 40, 22}, TextStyle::Heading, RowText());
         }
 
     private:
@@ -339,9 +361,15 @@ Widget* AddRow(Widget* section, const std::wstring& label, std::unique_ptr<Widge
     row->align = Align::Center;
     row->width = Length::Grow();
     row->height = Length::Px(h);
+    row->gap = 8;  // labels paint to their right edge (pad only affects measuring)
     auto* l = row->Add<Label>(label, TextStyle::Body, Tone::Tertiary);
     l->width = Length::Grow();
     l->pad = {4, 0, 8, 0};
+    // Long (Russian) labels take a second line instead of being cut off. The label spans the
+    // row height: it is measured at the full row width, so its own height would be one line.
+    l->wrap = true;
+    l->maxLines = 2;
+    l->height = Length::Grow();
     if (control) row->AddChild(std::move(control));
     return row;
 }
@@ -574,8 +602,9 @@ public:
         if (IsHot()) p.Fill(rect, c.hover, open ? 0.0f : 6.0f);
         PaintFocusRing(p, rect, 6);
         const Color fg = IsHot() ? c.textSecondary : c.textTertiary;
-        p.Text(open ? Tr(L"Collapse Settings") : Tr(L"Expand Settings"), {rect.x + 16, rect.y, rect.w - 60, rect.h},
-               TextStyle::Body, fg);
+        const std::wstring text =
+            !owner_->title.empty() ? owner_->title : open ? Tr(L"Collapse Settings") : Tr(L"Expand Settings");
+        p.Text(text, {rect.x + 16, rect.y, rect.w - 60, rect.h}, TextStyle::Body, fg);
         p.Icon(open ? "chevron_down" : "chevron_right", {rect.Right() - 34, rect.Cy() - 12, 24, 24}, fg);
     }
 
@@ -599,7 +628,20 @@ void Expander::SetExpanded(bool on) {
     expanded_ = on;
     ExpandedState()[key_] = on;
     body_->visible = on;
+    reveal_ = on;
     InvalidateLayout();
+}
+
+void Expander::OnLayout() {
+    Widget::OnLayout();
+    if (!reveal_) return;
+    reveal_ = false;
+    // Scroll the unfolded content into view, keeping the header on screen.
+    ScrollView* sv = nullptr;
+    for (Widget* w = Parent(); w && !sv; w = w->Parent()) sv = dynamic_cast<ScrollView*>(w);
+    if (!sv) return;
+    const float d = std::min(rect.Bottom() + 8 - sv->rect.Bottom(), rect.y - 8 - sv->rect.y);
+    if (d > 0) sv->ScrollTo(sv->Offset() + d);
 }
 
 void Expander::Paint(Painter& p) {
