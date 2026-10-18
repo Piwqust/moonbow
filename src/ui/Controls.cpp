@@ -944,12 +944,17 @@ void ScrollView::OnLayout() {
     c->Arrange({rect.x, rect.y - std::round(offset_.Get()), rect.w, std::max(contentH_, rect.h)});
 }
 
-void ScrollView::ScrollTo(float y, bool animate) {
+void ScrollView::ScrollTo(float y, bool animate, bool showBar) {
     y = std::clamp(y, 0.0f, MaxOffset());
     if (animate)
         offset_.To(y, 180, Ease::Out);
     else
         offset_.Set(y);
+    if (!showBar) {
+        if (onScroll) onScroll(y);
+        InvalidateLayout();
+        return;
+    }
     barVisible_.To(1, 80);
     Host* host = GetHost();
     if (host) {
@@ -957,12 +962,24 @@ void ScrollView::ScrollTo(float y, bool animate) {
         timerHost_ = host;
         hideTimer_ = host->StartTimer(900, [this] {
             hideTimer_ = 0;
-            if (!dragging_ && !overBar_) barVisible_.To(0, 250);
-            Invalidate();
+            if (!dragging_ && !overBar_) FadeBarStep();
         });
     }
     if (onScroll) onScroll(y);
     InvalidateLayout();
+}
+
+// The thumb fades out in four 50-ms steps: four frames instead of a 250-ms animation that
+// rendered every vsync (36 frames at 144 Hz) for a 4-DIP bar after each wheel notch.
+void ScrollView::FadeBarStep() {
+    const float v = std::max(0.0f, barVisible_.Get() - 0.25f);
+    barVisible_.Set(v);
+    Invalidate();
+    if (v <= 0 || !timerHost_) return;
+    hideTimer_ = timerHost_->StartTimer(50, [this] {
+        hideTimer_ = 0;
+        if (!dragging_ && !overBar_) FadeBarStep();
+    });
 }
 
 void ScrollView::ScrollIntoView(const Rect& r) {
@@ -1142,7 +1159,8 @@ public:
         }
         p.PushClip({rect.x, rect.y + kMenuPad + HeaderH(), rect.w, rect.h - kMenuPad * 2 - HeaderH()});
         float cy = Top();
-        for (int i : visible_) {
+        for (size_t k = 0; k < visible_.size(); ++k) {
+            const int i = visible_[k];
             const MenuItem& m = At(i);
             if (m.separator) {
                 p.Fill({rect.x + 12, cy + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
@@ -1180,6 +1198,12 @@ public:
                 right -= sw + 16;
             }
             p.Text(m.label, {x, row.y, right - x, row.h}, TextStyle::Body, m.checked && m.enabled ? c.textPrimary : fg);
+            // The typed text, underlined in the label in the accent color (visible on the hover
+            // fill too); positions are measured once per keystroke, in Refilter.
+            if (k < marks_.size() && marks_[k].second > 0 && marks_[k].first < right - x) {
+                const float mx = x + marks_[k].first;
+                p.Fill({mx, row.Cy() + 9, std::min(marks_[k].second, right - mx), 2}, m.enabled ? c.accent : fg, 1);
+            }
             cy += kMenuItemH;
         }
         // A menu taller than a small window scrolls: fade the cut edge so the last row reads as
@@ -1316,12 +1340,14 @@ private:
     }
     float MaxScroll() const { return std::max(0.0f, ContentH() - (rect.h - kMenuPad * 2 - HeaderH())); }
 
-    static bool Matches(const std::wstring& label, const std::wstring& query) {
+    // Where `query` starts in `label` (-1 = not there); `found` gets the matched length.
+    static int Find(const std::wstring& label, const std::wstring& query, int* found = nullptr) {
         return FindNLSStringEx(LOCALE_NAME_USER_DEFAULT,
                                FIND_FROMSTART | LINGUISTIC_IGNORECASE | LINGUISTIC_IGNOREDIACRITIC, label.c_str(),
                                static_cast<int>(label.size()), query.c_str(), static_cast<int>(query.size()),
-                               nullptr, nullptr, nullptr, 0) >= 0;
+                               found, nullptr, nullptr, 0);
     }
+    static bool Matches(const std::wstring& label, const std::wstring& query) { return Find(label, query) >= 0; }
 
     void Refilter() {
         // The rows move: a submenu opened from one of them would stay behind, detached from it.
@@ -1341,6 +1367,19 @@ private:
         if (!filter_.empty())
             for (size_t i = 0; i < flat_.size(); ++i)
                 if (Matches(flat_[i].label, filter_)) visible_.push_back(static_cast<int>(items_.size() + i));
+        // Offset and width of the match in each label, for the mark painted behind it.
+        marks_.assign(visible_.size(), {0.0f, 0.0f});
+        if (!filter_.empty())
+            for (size_t k = 0; k < visible_.size(); ++k) {
+                const std::wstring& label = At(visible_[k]).label;
+                int len = 0;
+                const int start = Find(label, filter_, &len);
+                if (start < 0 || len <= 0) continue;
+                auto& t = gfx::Text::Get();
+                marks_[k] = {std::round(t.Measure(std::wstring_view(label).substr(0, static_cast<size_t>(start)), TextStyle::Body).width),
+                             std::ceil(t.Measure(std::wstring_view(label).substr(static_cast<size_t>(start), static_cast<size_t>(len)),
+                                                 TextStyle::Body).width)};
+            }
         scroll_ = 0;
         InvalidateLayout();  // the height follows the matches
         if (!filter_.empty()) {
@@ -1422,6 +1461,7 @@ private:
     std::vector<MenuItem> items_;
     std::vector<MenuItem> flat_;  // submenu commands with their path (see Flatten)
     std::vector<int> visible_;    // matching indices: items_, then flat_ (items_.size() + j)
+    std::vector<std::pair<float, float>> marks_;  // per visible_ row: x and width of the typed match
     std::wstring filter_;
     float minWidth_;
     MenuPopup* parentMenu_;

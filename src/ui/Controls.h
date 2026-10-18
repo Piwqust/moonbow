@@ -310,7 +310,8 @@ public:
     Widget* Content() const { return Children().empty() ? nullptr : Children().front().get(); }
     float Offset() const { return offset_.Get(); }
     float MaxOffset() const { return std::max(0.0f, contentH_ - rect.h); }
-    void ScrollTo(float y, bool animate = true);
+    // showBar = false moves silently (restoring a saved position), without flashing the scrollbar.
+    void ScrollTo(float y, bool animate = true, bool showBar = true);
     void ScrollIntoView(const Rect& r);
     std::function<void(float)> onScroll;
 
@@ -327,6 +328,7 @@ public:
 
 private:
     Rect ThumbRect() const;
+    void FadeBarStep();
     AnimFloat offset_;
     AnimFloat barVisible_;
     float contentH_ = 0;

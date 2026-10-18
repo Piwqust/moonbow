@@ -4,9 +4,17 @@
 
 #include <objbase.h>
 #include <shobjidl.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <wrl/client.h>
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
+
+// Media Foundation GUIDs only (a static library); the DLLs are loaded on first use.
+#pragma comment(lib, "mfuuid.lib")
 
 namespace library {
 
@@ -105,10 +113,129 @@ std::shared_ptr<ThumbnailBitmap> FromShell(const std::wstring& path, int size) {
     return bmp;
 }
 
+// --- a frame at a given time (Media Foundation) ---------------------------------------------
+
+struct MfApi {
+    HRESULT(WINAPI* createAttributes)(IMFAttributes**, UINT32) = nullptr;
+    HRESULT(WINAPI* createMediaType)(IMFMediaType**) = nullptr;
+    HRESULT(WINAPI* createReader)(LPCWSTR, IMFAttributes*, IMFSourceReader**) = nullptr;
+    bool ok = false;
+};
+
+// Loaded and started once, on a worker thread: Media Foundation costs nothing until a card
+// asks for a frame.
+const MfApi& Mf() {
+    static MfApi api;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        HMODULE plat = LoadLibraryExW(L"mfplat.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        HMODULE rw = LoadLibraryExW(L"mfreadwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!plat || !rw) return;
+        auto startup = reinterpret_cast<HRESULT(WINAPI*)(ULONG, DWORD)>(GetProcAddress(plat, "MFStartup"));
+        api.createAttributes = reinterpret_cast<decltype(api.createAttributes)>(GetProcAddress(plat, "MFCreateAttributes"));
+        api.createMediaType = reinterpret_cast<decltype(api.createMediaType)>(GetProcAddress(plat, "MFCreateMediaType"));
+        api.createReader = reinterpret_cast<decltype(api.createReader)>(GetProcAddress(rw, "MFCreateSourceReaderFromURL"));
+        api.ok = startup && api.createAttributes && api.createMediaType && api.createReader &&
+                 SUCCEEDED(startup(MF_VERSION, MFSTARTUP_LITE));
+    });
+    return api;
+}
+
+// The video frame within a second of `seconds` (decoding on from the key frame before it, at most
+// 240 frames), as BGRA; null when Media Foundation can't decode the file (then the shell's
+// thumbnail is used).
+std::shared_ptr<ThumbnailBitmap> FrameAt(const std::wstring& path, double seconds, int size) {
+    using Microsoft::WRL::ComPtr;
+    const MfApi& mf = Mf();
+    if (!mf.ok) return nullptr;
+    ComPtr<IMFAttributes> attrs;
+    if (FAILED(mf.createAttributes(&attrs, 1))) return nullptr;
+    attrs->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);  // decode to RGB32
+    ComPtr<IMFSourceReader> reader;
+    if (FAILED(mf.createReader(path.c_str(), attrs.Get(), &reader))) return nullptr;
+    const DWORD video = static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+    reader->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS), FALSE);
+    if (FAILED(reader->SetStreamSelection(video, TRUE))) return nullptr;
+    ComPtr<IMFMediaType> want;
+    if (FAILED(mf.createMediaType(&want))) return nullptr;
+    want->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+    want->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+    if (FAILED(reader->SetCurrentMediaType(video, nullptr, want.Get()))) return nullptr;
+    ComPtr<IMFMediaType> got;
+    if (FAILED(reader->GetCurrentMediaType(video, &got))) return nullptr;
+    UINT32 w = 0, h = 0;
+    if (FAILED(MFGetAttributeSize(got.Get(), MF_MT_FRAME_SIZE, &w, &h)) || w == 0 || h == 0 || w > 8192 || h > 8192)
+        return nullptr;
+    const LONGLONG target = static_cast<LONGLONG>(std::max(0.0, seconds) * 1e7);
+    PROPVARIANT pos;
+    PropVariantInit(&pos);
+    pos.vt = VT_I8;
+    pos.hVal.QuadPart = target;
+    reader->SetCurrentPosition(GUID_NULL, pos);  // lands on the key frame before the target
+    ComPtr<IMFSample> sample;
+    for (int i = 0; i < 240; ++i) {
+        DWORD flags = 0;
+        LONGLONG ts = 0;
+        ComPtr<IMFSample> s;
+        if (FAILED(reader->ReadSample(video, 0, nullptr, &flags, &ts, &s))) break;
+        if (flags & (MF_SOURCE_READERF_ENDOFSTREAM | MF_SOURCE_READERF_ERROR)) break;
+        if (!s) continue;
+        sample = s;
+        if (ts + 10000000 >= target) break;  // within a second of the moment
+    }
+    if (!sample) return nullptr;
+    ComPtr<IMFMediaBuffer> buffer;
+    if (FAILED(sample->ConvertToContiguousBuffer(&buffer))) return nullptr;
+    auto frame = std::make_shared<ThumbnailBitmap>();
+    frame->width = w;
+    frame->height = h;
+    frame->pixels.resize(static_cast<size_t>(w) * h * 4);
+    BYTE* scan0 = nullptr;
+    LONG pitch = 0;
+    ComPtr<IMF2DBuffer> buffer2d;
+    bool locked2d = SUCCEEDED(buffer.As(&buffer2d)) && SUCCEEDED(buffer2d->Lock2D(&scan0, &pitch));
+    BYTE* data = nullptr;
+    DWORD length = 0;
+    if (!locked2d) {
+        if (FAILED(buffer->Lock(&data, nullptr, &length))) return nullptr;
+        UINT32 stride = 0;
+        pitch = SUCCEEDED(got->GetUINT32(MF_MT_DEFAULT_STRIDE, &stride)) ? static_cast<LONG>(stride) : static_cast<LONG>(w * 4);
+        scan0 = pitch < 0 ? data + static_cast<size_t>(-pitch) * (h - 1) : data;
+        if (static_cast<size_t>(std::abs(pitch)) * h > length) {
+            buffer->Unlock();
+            return nullptr;
+        }
+    }
+    for (UINT32 y = 0; y < h; ++y) {
+        const BYTE* src = scan0 + static_cast<ptrdiff_t>(pitch) * static_cast<ptrdiff_t>(y);
+        uint8_t* dst = frame->pixels.data() + static_cast<size_t>(y) * w * 4;
+        memcpy(dst, src, static_cast<size_t>(w) * 4);
+        for (UINT32 x = 0; x < w; ++x) dst[x * 4 + 3] = 255;  // RGB32's fourth byte is padding
+    }
+    if (locked2d)
+        buffer2d->Unlock2D();
+    else
+        buffer->Unlock();
+    if (frame->width > static_cast<uint32_t>(size) || frame->height > static_cast<uint32_t>(size)) return Downscale(*frame, size);
+    return frame;
+}
+
 }  // namespace
+
+std::wstring FramePath(const std::wstring& path, double seconds) {
+    // Whole 5-second steps: the position saved every few seconds doesn't make a new image each time.
+    const long long s = static_cast<long long>(std::max(0.0, seconds) / 5) * 5;
+    return path + L"|" + std::to_wstring(s);
+}
 
 std::shared_ptr<ThumbnailBitmap> ExtractThumbnail(const std::wstring& path, int size) {
     if (size <= 0) return nullptr;
+    // "<file>|<seconds>": that moment of the video (Continue Watching), else its usual thumbnail.
+    if (const size_t bar = path.rfind(L'|'); bar != std::wstring::npos) {
+        const std::wstring file = path.substr(0, bar);
+        if (auto frame = FrameAt(file, _wtof(path.c_str() + bar + 1), size)) return frame;
+        return ExtractThumbnail(file, size);
+    }
     std::shared_ptr<ThumbnailBitmap> bmp = FromShell(path, size);
     if (bmp || KindOf(path) != MediaKind::Audio) return bmp;
     // No embedded cover: look for the usual album art files next to the song.

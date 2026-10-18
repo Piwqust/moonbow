@@ -17,8 +17,8 @@
  L"В папках медиатеки нет видео и музыки. Добавьте другую папку или откройте файл."},
 {L"Scanning your library…", L"Сканируем медиатеку…"},
 {L"Your videos and music will appear here in a moment.", L"Видео и музыка появятся здесь через мгновение."},
-{L"No videos or music match “{0}”. Try a shorter or different word.",
- L"По запросу «{0}» ничего не нашлось. Попробуйте другое или более короткое слово."},
+{L"No videos or music match “{0}”. Try a shorter or different\u00A0word.",
+ L"По запросу «{0}» ничего не нашлось. Попробуйте другое или более короткое\u00A0слово."},
 
 // Folders
 {L"Add folder", L"Добавить папку"},
@@ -54,8 +54,8 @@
 {L"Scanning library…", L"Сканирование медиатеки…"},
 {L"Scanning library… {0} files so far", L"Сканирование медиатеки… найдено файлов: {0}"},
 {L"Nothing found", L"Ничего не найдено"},
-{L"No matches for “{0}” here. Try a shorter or different word.",
- L"Здесь нет совпадений с «{0}». Попробуйте другое или более короткое слово."},
+{L"No matches for “{0}” here. Try a shorter or different\u00A0word.",
+ L"Здесь нет совпадений с «{0}». Попробуйте другое или более короткое\u00A0слово."},
 {L"Nothing here yet", L"Здесь пока пусто"},
 
 // Item menus

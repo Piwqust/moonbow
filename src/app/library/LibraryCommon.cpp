@@ -5,6 +5,7 @@
 #include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/dialogs/DialogKit.h"
 #include "library/MediaTypes.h"
 
 #include <shellapi.h>
@@ -151,6 +152,16 @@ std::wstring ArtistLabel(const std::wstring& artist) {
 
 std::wstring AlbumLabel(const std::wstring& album) {
     return album.empty() ? std::wstring(Tr(L"Unknown album")) : album;
+}
+
+std::wstring ShortQuery(const std::wstring& query) {
+    constexpr size_t kMax = 40;
+    if (query.size() <= kMax) return query;
+    size_t n = kMax;
+    if (n > 0 && IS_HIGH_SURROGATE(query[n - 1])) --n;  // don't split an emoji
+    std::wstring out = query.substr(0, n);
+    while (!out.empty() && iswspace(out.back())) out.pop_back();
+    return out + L"…";
 }
 
 void SearchDebounce::Run(ui::Widget* owner, const std::wstring& text, std::function<void()> apply) {
@@ -446,15 +457,16 @@ std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
         out.push_back(std::move(m));
     }
     if (!out.empty()) out.push_back(MenuItem::Separator());
-    out.push_back(Item(L"New Playlist…", "add", [items, toPlaylist] {
-        ShowNewPlaylistDialog([items, toPlaylist](const std::string& id) {
-            if (id.empty()) return;
-            if (TheApp().playlists().Add(id, toPlaylist(items))) {
-                if (const library::Playlist* p = TheApp().playlists().Find(id))
-                    Toast(Fmt(Tr(L"Added to “{0}”"), {p->name}), "playlist");
-                TheApp().libraryChanged.Emit();
-            }
-        });
+    out.push_back(Item(L"New Playlist…", "add", [items] {
+        std::vector<NewPlaylistFile> files;
+        files.reserve(items.size());
+        for (const QueueItem& q : items) files.push_back({q.path, q.title, q.duration});
+        // The dialog lists the files and adds the ones left on Create.
+        ShowNewPlaylistDialog(
+            [](const std::string& id) {
+                if (!id.empty()) TheApp().libraryChanged.Emit();
+            },
+            std::move(files));
     }));
     return out;
 }
@@ -517,26 +529,31 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
                     const std::wstring& placeholder) {
     MainWindow* w = TheApp().main();
     if (!w) return;
-    auto d = std::make_unique<Dialog>(title, 480);
-    if (!label.empty()) d->Body()->Add<Label>(label, TextStyle::Body, Tone::Tertiary);
-    auto* box = d->Body()->Add<TextBox>(placeholder);
+    auto frame = std::make_unique<dlg::Frame>(title, dlg::FitWidth(w, 480));
+    dlg::Frame* f = frame.get();
+    if (!label.empty()) {
+        auto* t = f->Body()->Add<Label>(label, TextStyle::Large);
+        t->color = dlg::SoftText;  // the field titles of the other dialogs (New Playlist)
+    }
+    auto* box = f->Body()->Add<TextBox>(placeholder);
     box->width = Length::Grow();
+    box->height = Length::Px(37);
     box->SetText(initial);
-    d->Footer()->Add<Spacer>();
-    Dialog* raw = d.get();
-    d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost)->onClick = [raw] { raw->Close(); };
-    auto ok = [raw, box, done] {
+    f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral)->onClick = [f] { f->Close(); };
+    f->Footer()->Add<Spacer>();
+    auto ok = [f, box, done] {
         std::wstring text = box->Text();
         while (!text.empty() && iswspace(text.back())) text.pop_back();
         while (!text.empty() && iswspace(text.front())) text.erase(text.begin());
         if (text.empty()) return;
         auto run = done;  // the dialog (and this lambda) is gone after Close()
-        raw->Close();
+        f->Close();
         if (run) run(text);
     };
-    d->Footer()->Add<Button>(okText, ButtonKind::Primary)->onClick = ok;
+    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = ok;
     box->onSubmit = [ok](const std::wstring&) { ok(); };
-    ShowDialog(w, std::move(d));
+    f->onSubmit = ok;
+    dlg::ShowFrame(w, std::move(frame), box);
     w->SetFocus(box, true);
     box->SelectAll();
 }
@@ -545,21 +562,21 @@ void ShowConfirm(const std::wstring& title, const std::wstring& text, const std:
                  std::function<void()> done) {
     MainWindow* w = TheApp().main();
     if (!w) return;
-    auto d = std::make_unique<Dialog>(title, 440);
-    auto* l = d->Body()->Add<Label>(text, TextStyle::Body, Tone::Secondary);
+    auto frame = std::make_unique<dlg::Frame>(title, dlg::FitWidth(w, 440));
+    dlg::Frame* f = frame.get();
+    auto* l = f->Body()->Add<Label>(text, TextStyle::Body, Tone::Secondary);
     l->wrap = true;
     l->width = Length::Grow();
-    d->Footer()->Add<Spacer>();
-    Dialog* raw = d.get();
-    d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost)->onClick = [raw] { raw->Close(); };
-    auto* okBtn = d->Footer()->Add<Button>(okText, ButtonKind::Primary);
-    okBtn->onClick = [raw, done] {
+    auto* cancel = f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral);
+    cancel->onClick = [f] { f->Close(); };
+    f->Footer()->Add<Spacer>();
+    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = [f, done] {
         auto run = done;  // the dialog (and this lambda) is gone after Close()
-        raw->Close();
+        f->Close();
         if (run) run();
     };
-    ShowDialog(w, std::move(d));
-    w->SetFocus(okBtn, true);
+    dlg::ShowFrame(w, std::move(frame), cancel);
+    w->SetFocus(cancel, true);  // with its ring: Enter and Space cancel, Tab reaches the action
 }
 
 void Toast(const std::wstring& text, const char* icon) {

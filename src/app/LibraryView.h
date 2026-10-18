@@ -24,6 +24,8 @@ class LibraryView : public ui::Widget {
 public:
     virtual std::vector<Crumb> Breadcrumbs() const = 0;
     virtual long long ItemCount() const { return -1; }  // < 0 hides the counter
+    // Nothing to sort or lay out: the page shows its empty state (the counter may be hidden too).
+    virtual bool IsEmpty() const { return false; }
     virtual bool HasViewModes() const { return false; }
     virtual ViewMode GetViewMode() const { return ViewMode::Grid; }
     virtual void SetViewMode(ViewMode) {}
@@ -33,6 +35,9 @@ public:
     virtual std::vector<ui::MenuItem> MoreMenu() { return {}; }
     // Keyboard focus target when the page opens (list/grid).
     virtual ui::Widget* InitialFocus() { return nullptr; }
+    // Scroll offset and selection, saved when the page is left and restored by Back/Forward.
+    virtual ViewState SaveState() const { return {}; }
+    virtual void RestoreState(const ViewState&) {}
 
     Signal<> headerChanged;  // count / crumbs / modes changed
 };

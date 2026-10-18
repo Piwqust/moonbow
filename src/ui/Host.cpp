@@ -728,6 +728,8 @@ void Host::Render() {
     }
     g_frameStats.Add(t1 - t0, t2 - t1, AnimFloat::Now() - t2);
     gfx::Text::Get().EndFrame();
+    // Tooltips set or cleared while painting or laying out (grid items, a collapsed rail).
+    if (hot_ || tooltipFor_) UpdateTooltip();
     if (AnimFloat::AnyActive()) RequestRender();
 }
 
@@ -970,10 +972,16 @@ void Host::OnKey(UINT vk, bool down, bool repeat) {
 
 void Host::UpdateTooltip() {
     Widget* target = hot_ && !hot_->tooltip.empty() ? hot_ : nullptr;
-    if (target == tooltipFor_) return;
+    // A widget that paints many items (a grid) changes its tooltip as the pointer moves between
+    // them, and one whose tooltip was cleared (the expanded rail) or that moved loses the bubble.
+    const bool moved = tooltipFor_ && (tooltipFor_->rect.x != tooltipRect_.x || tooltipFor_->rect.y != tooltipRect_.y ||
+                                       tooltipFor_->rect.w != tooltipRect_.w || tooltipFor_->rect.h != tooltipRect_.h);
+    if (target == tooltipFor_ && !moved && (!target || target->tooltip == tooltipText_)) return;
     HideTooltip();
-    if (!target || target->tooltip.empty() || pressed_) return;
+    if (!target || pressed_) return;
     tooltipFor_ = target;
+    tooltipText_ = target->tooltip;
+    tooltipRect_ = target->rect;
     tooltipTimer_ = StartTimer(kTooltipDelayMs, [this] {
         tooltipTimer_ = 0;
         if (!tooltipFor_ || hot_ == nullptr || !mouseInside_) return;
@@ -991,7 +999,7 @@ void Host::UpdateTooltip() {
         o.passthrough = true;
         o.focusContent = false;
         o.dismissOnOutside = false;
-        auto bubble = std::make_unique<TooltipBubble>(tooltipFor_->tooltip);
+        auto bubble = std::make_unique<TooltipBubble>(tooltipText_);
         Size s = bubble->Measure(400, 200);
         if (r.w < 80 && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
             o.anchor.x -= s.w / 2;
@@ -999,8 +1007,11 @@ void Host::UpdateTooltip() {
             if (r.Bottom() + 6 + s.h > ClientSize().h - 8) o.anchor.y = r.y - 6 - s.h;
         }
         Widget* target = tooltipFor_;
+        std::wstring text = tooltipText_;
         tooltipWidget_ = ShowPopup(std::move(bubble), o);  // (ShowPopup hides any tooltip first)
         tooltipFor_ = target;
+        tooltipText_ = std::move(text);
+        tooltipRect_ = target->rect;
     });
 }
 
@@ -1010,6 +1021,7 @@ void Host::HideTooltip() {
         tooltipTimer_ = 0;
     }
     tooltipFor_ = nullptr;
+    tooltipText_.clear();
     if (tooltipWidget_) {
         Widget* w = tooltipWidget_;
         tooltipWidget_ = nullptr;
@@ -1338,6 +1350,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             } else {
                 UpdateHot(x, y);
                 if (hot_) hot_->OnMouseMove(e);
+                UpdateTooltip();  // the hot widget may have changed its tooltip for the item under the pointer
             }
             if (tooltipWidget_ && tooltipFor_ && !tooltipFor_->rect.Contains(x, y)) HideTooltip();
             return 0;

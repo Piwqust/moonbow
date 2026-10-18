@@ -149,6 +149,57 @@ void TakeFreeFocus(LibraryView& view, bool compact, bool& done) {
         if (w->visible) h->SetFocus(w);
 }
 
+// --- view state (Back / Forward) -----------------------------------------------------------------
+
+void SaveSelection(const ItemGrid& grid, ViewState& st) {
+    const int sel = grid.Selected();
+    const auto& v = grid.Entries();
+    if (sel < 0 || sel >= static_cast<int>(v.size())) return;
+    st.selPath = v[static_cast<size_t>(sel)].path;
+    st.selTitle = v[static_cast<size_t>(sel)].title;
+    st.within = false;
+}
+
+int FindStateEntry(const ItemGrid& grid, const ViewState& st) {
+    if (st.selPath.empty() && st.selTitle.empty()) return -1;
+    const auto& v = grid.Entries();
+    int best = -1;
+    size_t bestLen = 0;
+    for (size_t i = 0; i < v.size(); ++i) {
+        const Entry& e = v[i];
+        if (e.kind == EntryKind::Header || e.kind == EntryKind::Columns) continue;
+        if (!st.within) {
+            if (e.path == st.selPath && e.title == st.selTitle) return static_cast<int>(i);
+            continue;
+        }
+        // The folder that holds the page we came from: the longest path that is a prefix of it.
+        const std::wstring& p = e.path;
+        if (p.empty() || p.size() > st.selPath.size() || p.size() <= bestLen) continue;
+        const bool prefix = _wcsnicmp(p.c_str(), st.selPath.c_str(), p.size()) == 0 &&
+                            (p.size() == st.selPath.size() || st.selPath[p.size()] == L'\\' || st.selPath[p.size()] == L'/' ||
+                             p.back() == L'\\');
+        if (prefix) {
+            best = static_cast<int>(i);
+            bestLen = p.size();
+        }
+    }
+    return best;
+}
+
+bool ApplyViewState(ItemGrid& grid, ScrollView& scroll, const ViewState& st) {
+    const int i = FindStateEntry(grid, st);
+    if (i >= 0) grid.Select(i, false);
+    if (st.scroll >= 0) {
+        scroll.ScrollTo(st.scroll, false, false);
+    } else if (i >= 0) {
+        // Only the item is known (going up a level): bring it into view, a third from the top.
+        const Rect r = grid.ItemRect(i);
+        if (r.y < scroll.rect.y || r.Bottom() > scroll.rect.Bottom())
+            scroll.ScrollTo(scroll.Offset() + r.y - scroll.rect.y - scroll.rect.h / 3, false, false);
+    }
+    return i >= 0;
+}
+
 // --- Page ------------------------------------------------------------------------------------
 
 Widget* Page::HitTest(float x, float y) {
@@ -157,7 +208,25 @@ Widget* Page::HitTest(float x, float y) {
 
 void Page::OnLayout() {
     LibraryView::OnLayout();
+    if (restorePending_) {
+        restorePending_ = false;
+        if (!empty_->visible) ApplyViewState(*grid_, *scroll_, pendingState_);
+    }
     TakeFreeFocus(*this, compact_, focusTaken_);
+}
+
+ViewState Page::SaveState() const {
+    ViewState st;
+    if (empty_->visible) return st;
+    st.scroll = scroll_->Offset();
+    SaveSelection(*grid_, st);
+    return st;
+}
+
+void Page::RestoreState(const ViewState& st) {
+    pendingState_ = st;
+    restorePending_ = true;
+    InvalidateLayout();
 }
 
 Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)), compact_(compact), key_(std::move(key)) {
@@ -290,7 +359,9 @@ int Page::AddMedia(const library::MediaItem& m) {
     e.audio = m.kind == library::MediaKind::Audio;
     e.title = MediaTitle(m.path, &m);
     if (e.audio) {
-        e.subtitle = ArtistLabel(m.artist);
+        // G-08: a card of an untagged song leaves its second line empty instead of repeating
+        // "Unknown artist" under every cover; list columns still say it.
+        e.subtitle = !m.artist.empty() || list_ || compact_ ? ArtistLabel(m.artist) : std::wstring();
         e.extra = AlbumLabel(m.album);
     }
     if (!m.offline) e.image = m.path;
@@ -412,7 +483,7 @@ void Page::Refresh() {
     if (showEmpty) {
         if (!filter_.empty())
             empty_->Set("search", Tr(L"Nothing found"),
-                        Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different word."), {filter_}));
+                        Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {ShortQuery(filter_)}));
         else
             FillEmpty(*empty_);
         scan_->visible = false;  // the empty state explains the scan itself

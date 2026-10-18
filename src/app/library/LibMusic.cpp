@@ -181,9 +181,13 @@ public:
             play->onClick = [this] { PlayInOrder(queue_, queueName_); };
             auto* shuffle = toolbar_->Add<Button>(Tr(L"Shuffle"), ButtonKind::Secondary, "shuffle_right");
             shuffle->onClick = [this] { PlayShuffled(queue_, queueName_); };
-            toolbar_->Add<Spacer>();
+            // "1355 songs · 9:31:45" takes the rest of the row, right-aligned: in a narrow window it
+            // ends with "…" (full text in the tooltip) instead of running past the window edge.
             summary_ = toolbar_->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
-        summary_->visible = !compact;  // no room next to the buttons in the side panel
+            summary_->width = Length::Grow();
+            summary_->halign = HAlign::Trailing;
+            summary_->interactive = true;  // hover shows the tooltip when cut
+            summary_->visible = !compact;  // no room next to the buttons in the side panel
             toolbar_->visible = true;
         }
         Refresh();
@@ -214,6 +218,19 @@ public:
     }
 
     bool HasViewModes() const override { return !compact_ && mode_ != MusicMode::Root; }
+    void OnLayout() override {
+        Page::OnLayout();
+        if (summary_ && summary_->visible) {
+            // Too narrow for "1355 songs · 9:31:45": the count alone, then the count with "…";
+            // the tooltip always has the whole line.
+            auto& t = gfx::Text::Get();
+            const float w = summary_->rect.w + 0.5f;
+            const std::wstring& shown =
+                t.Measure(summaryFull_, summary_->style).width <= w || summaryShort_.empty() ? summaryFull_ : summaryShort_;
+            summary_->SetText(shown);
+            summary_->tooltip = shown != summaryFull_ || t.Measure(shown, summary_->style).width > w ? summaryFull_ : std::wstring();
+        }
+    }
     // Song lists say "8 songs · 6:15" beside their buttons; the header doesn't repeat the count.
     long long ItemCount() const override { return countShown_ ? -1 : count_; }
 
@@ -322,9 +339,14 @@ protected:
         if (summary_) {
             double total = 0;
             for (const QueueItem& q : queue_) total += q.duration;
-            std::wstring s = CountSongs(static_cast<long long>(queue_.size()));
-            if (total > 0) s += L" · " + FormatDuration(total);
-            summary_->SetText(queue_.empty() ? std::wstring() : s);
+            summaryShort_ = CountSongs(static_cast<long long>(queue_.size()));
+            summaryFull_ = summaryShort_;
+            if (total > 0) summaryFull_ += L" · " + FormatDuration(total);
+            if (queue_.empty()) {
+                summaryFull_.clear();
+                summaryShort_.clear();
+            }
+            summary_->SetText(summaryFull_);
             toolbar_->visible = !queue_.empty();
             countShown_ = !queue_.empty() && summary_->visible;
         }
@@ -382,8 +404,10 @@ protected:
                   {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }}});
             return;
         }
+        // G-09: the same two buttons as the empty Videos page.
         e.Set("songs", Tr(L"No music found"), Tr(L"The library folders don't contain supported audio files yet."),
-              {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }}});
+              {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }},
+               {Tr(L"Rescan"), ButtonKind::Secondary, "refresh", [] { RescanLibrary(); }}});
     }
 
     void ShowMenu(int index, Point at) override {
@@ -647,7 +671,9 @@ private:
                 e.subtitle = g.mixed ? std::wstring(Tr(L"Various artists")) : ArtistLabel(g.artist);
             else
                 e.subtitle = CountSongs(static_cast<long long>(g.songs.size()));
-            if (list_ && kind == EntryKind::Album) e.count = static_cast<int>(g.songs.size());
+            // List rows put the song count at the row's right edge, like folder counts, and give
+            // the name the whole width (artists and genres too, not only albums).
+            if (list_ && (kind == EntryKind::Album || !byArtist)) e.count = static_cast<int>(g.songs.size());
             library::SortItems(g.songs, library::SortKey::Name);
             for (const library::MediaItem* m : g.songs)
                 if (!m->offline) {
@@ -663,6 +689,7 @@ private:
     std::wstring arg_;
     std::wstring albumFolder_;  // album page: AlbumFolderKey of the album, empty = any folder
     Label* summary_ = nullptr;
+    std::wstring summaryFull_, summaryShort_;  // "8 songs · 6:15" and "8 songs"
     CoverArt* cover_ = nullptr;  // album / artist header (not in the side panel)
     Label* byline_ = nullptr;
     Label* meta_ = nullptr;

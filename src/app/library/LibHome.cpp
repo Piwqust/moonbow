@@ -216,9 +216,32 @@ public:
         return m;
     }
     Widget* InitialFocus() override {
+        if (restoreGrid_ && restoreGrid_->Parent() && restoreGrid_->Parent()->visible) return restoreGrid_;
         for (auto& c : content_->Children())
             if (auto* s = dynamic_cast<HomeSection*>(c.get()); s && s->visible) return s->Grid();
         return nullptr;
+    }
+    ViewState SaveState() const override {
+        ViewState st;
+        st.scroll = scroll_->Offset();
+        // The selection of the focused row, else of the first row that has one.
+        const Widget* focus = GetHost() ? GetHost()->Focus() : nullptr;
+        const ItemGrid* chosen = nullptr;
+        for (HomeSection* s : All())
+            if (s->visible && s->Grid()->Selected() >= 0 && (!chosen || s->Grid() == focus)) chosen = s->Grid();
+        if (chosen) SaveSelection(*chosen, st);
+        return st;
+    }
+    void RestoreState(const ViewState& st) override {
+        pendingState_ = st;
+        restorePending_ = true;
+        restoreGrid_ = nullptr;
+        for (HomeSection* s : All())
+            if (s->visible && FindStateEntry(*s->Grid(), st) >= 0) {
+                restoreGrid_ = s->Grid();
+                break;
+            }
+        InvalidateLayout();
     }
     Widget* HitTest(float x, float y) override {
         auto* first = static_cast<ItemGrid*>(InitialFocus());
@@ -226,6 +249,14 @@ public:
     }
     void OnLayout() override {
         LibraryView::OnLayout();
+        if (restorePending_) {
+            restorePending_ = false;
+            if (restoreGrid_) {
+                ApplyViewState(*restoreGrid_, *scroll_, pendingState_);
+            } else if (pendingState_.scroll >= 0) {
+                scroll_->ScrollTo(pendingState_.scroll, false, false);
+            }
+        }
         TakeFreeFocus(*this, compact_, focusTaken_);
     }
 
@@ -243,7 +274,9 @@ private:
         e.audio = m ? m->kind == library::MediaKind::Audio
                     : h ? h->kind == library::MediaKind::Audio : library::KindOf(path) != library::MediaKind::Video;
         e.title = MediaTitle(path, m, h ? h->title : std::wstring());
-        if (e.audio) e.subtitle = m ? ArtistLabel(m->artist) : url ? std::wstring(Tr(L"Network stream")) : std::wstring();
+        // Untagged songs leave the card's second line empty (G-08): "Unknown artist" under every
+        // cover said nothing.
+        if (e.audio) e.subtitle = m ? m->artist : url ? std::wstring(Tr(L"Network stream")) : std::wstring();
         if (!url && !(m && m->offline)) e.image = path;
         e.icon = url ? "streaming" : e.audio ? "music" : "video";
         e.duration = m && m->duration > 0 ? m->duration : h ? h->duration : 0;
@@ -295,7 +328,10 @@ private:
                 const std::wstring q = library::SearchFold(filter_);
                 for (const library::MediaItem* m : found) {
                     Entry e = MediaCard(m->path, m, nullptr);
-                    if (k == 1) e.extra = AlbumLabel(m->album);
+                    if (k == 1) {
+                        e.subtitle = ArtistLabel(m->artist);  // a list column: says "Unknown artist"
+                        e.extra = AlbumLabel(m->album);
+                    }
                     // Matched by the file name only: show it, or the row wouldn't say why it is here.
                     if (k == 1 && !library::FoldedContains(library::SearchFold(m->title + L"\n" + m->artist + L"\n" + m->album), q))
                         e.subtitle = library::FileNameOf(m->path);
@@ -311,7 +347,7 @@ private:
             empty_->visible = n == 0;
             if (n == 0)
                 empty_->Set("search", Tr(L"Nothing found"),
-                            Fmt(Tr(L"No videos or music match “{0}”. Try a shorter or different word."), {filter_}));
+                            Fmt(Tr(L"No videos or music match “{0}”. Try a shorter or different\u00A0word."), {ShortQuery(filter_)}));
             InvalidateLayout();
             headerChanged.Emit();
             return;
@@ -340,6 +376,8 @@ private:
             e.duration = h.duration;
             if (h.duration > 0 && h.position > 0 && h.position < h.duration)
                 e.subtitle = Fmt(Tr(L"{0} left"), {FormatDuration(h.duration - h.position)});
+            // The frame where playback stopped, as Continue Watching rows in other players show.
+            if (!e.image.empty() && h.position > 0) e.image = library::FramePath(h.path, h.position);
             if (library::EpisodeInfo ep; !IsUrl(h.path) && library::ParseEpisode(library::StemOf(h.path), &ep))
                 shows.insert(showKey(h.path, ep));
             cards.push_back({h.lastPlayed, std::move(e), MakeQueueItem(h.path, h.title, h.duration)});
@@ -606,6 +644,9 @@ private:
     bool focusTaken_ = false;
     bool stale_ = false;  // a file started or stopped while the player screen hid Home
     SearchDebounce searchDebounce_;
+    ViewState pendingState_;  // Back/Forward: applied after the first layout
+    bool restorePending_ = false;
+    ItemGrid* restoreGrid_ = nullptr;  // the row that holds the restored selection
 
     // The regular sections (not the search results).
     std::vector<HomeSection*> Sections() const {
