@@ -249,7 +249,7 @@ public:
     bool Open() {
         MainWindow* main = TheApp().main();
         HostOptions o;
-        o.title = L"Lumen Setup";
+        o.title = Tr(L"Lumen Setup");
         o.width = kW;
         o.height = kH;
         o.minWidth = kW;
@@ -284,7 +284,9 @@ public:
     void Finish() {
         if (finished_) return;
         finished_ = true;
-        CommitFolder();
+        // Skip, Escape or closing on the first page add nothing: the default folder (the user's
+        // real Videos) is scanned only after Continue confirmed it.
+        if (folderConfirmed_) CommitFolder();
         MainWindow* main = TheApp().main();
         // Re-enable the owner before this window goes away so activation returns to it.
         if (main) EnableWindow(main->Hwnd(), TRUE);
@@ -344,6 +346,7 @@ private:
     }
 
     void Relabel() {
+        SetWindowTextW(host_.Hwnd(), Tr(L"Lumen Setup"));
         skip_->text = Tr(L"Skip");
         skip_->tooltip = Tr(L"Keep the defaults and start using Lumen");
         back_->SetText(Tr(L"Back"));
@@ -375,7 +378,10 @@ private:
     }
 
     void Next() {
-        if (step_ == 0) CommitFolder();
+        if (step_ == 0) {
+            CommitFolder();
+            folderConfirmed_ = true;
+        }
         if (step_ >= kSteps - 1) {
             Finish();
             return;
@@ -564,10 +570,6 @@ private:
             {"privacy.rememberPosition", L"Continue where you left off",
              L"Save where you stopped and continue from there next time."},
             {"library.thumbnails", L"Show thumbnails", L"Use Windows thumbnails for videos and embedded covers for music."},
-            {"privacy.fetchMetadata", L"Fetch titles and cover art from the internet",
-             L"Look up missing titles and album art online. File names are sent to the metadata service."},
-            {"general.checkUpdates", L"Check for updates automatically",
-             L"Look for a new version of Lumen once a day. Nothing else is sent."},
         };
         for (size_t i = 0; i < std::size(opts); ++i) {
             if (i > 0) AddSeparator(list);
@@ -579,7 +581,9 @@ private:
             row->gap = 24;
             auto* text = row->Add<Widget>();
             text->dir = Dir::Column;
-            text->width = Length::Grow();
+            // A known width: measured as Grow, the description was one line and its second line
+            // ran into the separator below.
+            text->width = Length::Px(760 - 24 - 66);  // list - gap - toggle
             text->gap = 4;
             text->Add<Label>(Tr(opts[i].title), TextStyle::Large)->color = SoftText;
             auto* d = text->Add<Label>(Tr(opts[i].desc), TextStyle::Body, Tone::Tertiary);
@@ -587,11 +591,7 @@ private:
             d->width = Length::Grow();
             const std::string key = opts[i].key;
             auto* t = row->Add<Toggle>(Cfg().GetBool(key));
-            t->onChange = [key](bool on) {
-                Cfg().SetBool(key, on);
-                // Internet metadata also switches the library source.
-                if (key == "privacy.fetchMetadata") Cfg().SetString("library.metadata", on ? "internet" : "file");
-            };
+            t->onChange = [key](bool on) { Cfg().SetBool(key, on); };
         }
     }
 
@@ -623,11 +623,12 @@ private:
                 const float y = 154 + i * 82.0f;
                 auto* l = pg->At<Label>(Rect{x, y, 240, 42}, Tr(items[i].label), TextStyle::Large, Tone::Secondary);
                 l->valign = VAlign::Center;
-                pg->At<KeyCombo>(Rect{x + 248, y, 240, 46}, items[i].actions);
+                pg->At<KeyCombo>(Rect{x + 248, y, 210, 46}, items[i].actions);  // Ctrl Shift S: 207
             }
         };
+        // Both columns keep the 62 DIP page margin (the right one ran 3 DIP past the window).
         column(left, 62);
-        column(right, 605);
+        column(right, kW - 62 - 458);
         pg->At<Label>(Rect{62, 671, 600, 32},
                       Fmt(Tr(L"Find the full list in the menu or press {0}."), {ShortcutText(Action::KeyboardShortcuts)}),
                       TextStyle::Large, Tone::Tertiary);
@@ -640,7 +641,7 @@ private:
         pg->Centered<Label>(192, 700, 22, Tr(L"Here is how Lumen is set up. Everything can be changed later in Settings."),
                             TextStyle::Large, Tone::Tertiary)
             ->halign = HAlign::Center;
-        auto* card = pg->Centered<Panel>(250, 680, 7 * 48.0f + 16);
+        auto* card = pg->Centered<Panel>(250, 680, 5 * 48.0f + 16);
         card->fill = [] { return P().bgPanel; };
         card->radius = 12;
         card->dir = Dir::Column;
@@ -660,9 +661,11 @@ private:
             {L"Accent", Tr(Theme::AccentName(AccentIndex())), 1},
             {L"Language", Cfg().GetString("general.language") == "en" ? L"English" : L"Русский", 2},
             {L"Playback history", onOff("privacy.saveHistory"), 3},
-            {L"Internet metadata", onOff("privacy.fetchMetadata"), 3},
-            {L"Automatic updates", onOff("general.checkUpdates"), 3},
         };
+        // The key column fits the longest key ("История воспроизведения"), not a fixed 170.
+        float keyW = 0;
+        for (const Row& row : rows)
+            keyW = std::max(keyW, std::ceil(gfx::Text::Get().Measure(Tr(row.key), TextStyle::Body).width) + 1);
         for (size_t i = 0; i < rows.size(); ++i) {
             if (i > 0) AddSeparator(card);
             auto* r = card->Add<Widget>();
@@ -672,7 +675,7 @@ private:
             r->height = Length::Px(47);
             r->gap = 16;
             auto* k = r->Add<Label>(Tr(rows[i].key), TextStyle::Body, Tone::Tertiary);
-            k->width = Length::Px(170);
+            k->width = Length::Px(keyW);
             auto* v = r->Add<Label>(rows[i].value, TextStyle::Body);
             v->color = SoftText;
             v->width = Length::Grow();
@@ -694,6 +697,7 @@ private:
     std::wstring folder_, added_;
     int step_ = 0;
     bool finished_ = false;
+    bool folderConfirmed_ = false;
     ScopedConnection langConn_;
 };
 
