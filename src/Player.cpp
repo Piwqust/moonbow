@@ -262,8 +262,12 @@ unsigned Player::ProcessEvents() {
                 // On a device without passthrough mpv falls back to decoding the track, but then never
                 // restarts playback: the picture stays on its first frame until a seek. Seek in place.
                 // The audio filters failed on the undecoded data and mpv dropped them; set them again.
+                // The fallback itself is logged at verbose level, which makes every mpv module format its
+                // verbose lines (+2% of a core at 1080p), so wait for the error just before it instead.
+                // mpv falls back in the same call, before it reads these commands.
                 const auto* m = static_cast<const mpv_event_log_message*>(ev->data);
-                if (std::strcmp(m->prefix, "cplayer") == 0 && std::strncmp(m->text, "Falling back to PCM", 19) == 0) {
+                if (std::strcmp(m->prefix, "ao") == 0 &&
+                    std::strncmp(m->text, "Failed to initialize audio driver", 33) == 0) {
                     Trace("passthrough unsupported, audio decoded instead");
                     if (const std::string af = GetPropertyString("af"); !af.empty()) {
                         SetString("af", "");
@@ -330,12 +334,11 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
         case kPropHwdec: state_.hwdec = str(); return kChangeState;
         case kPropVolumeMax: volumeMax_ = has ? dbl() : 100.0; return 0;
         case kPropSpdif: {
-            // Only passthrough needs mpv's messages (see MPV_EVENT_LOG_MESSAGE), at verbose level because
-            // that is the level of the one line it waits for.
+            // Only passthrough needs mpv's messages (see MPV_EVENT_LOG_MESSAGE).
             const bool on = has && !str().empty();
             if (on != spdifLog_ && requestLog_) {
                 spdifLog_ = on;
-                requestLog_(mpv_, on ? "v" : "no");
+                requestLog_(mpv_, on ? "error" : "no");
             }
             return 0;
         }
