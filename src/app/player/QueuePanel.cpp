@@ -9,8 +9,18 @@
 #include "app/player/PanelTabs.h"
 #include "gfx/Text.h"
 
+#include <objbase.h>
+#include <propkey.h>
+#include <propsys.h>
+#include <propvarutil.h>
+#include <shobjidl.h>
+
 #include <algorithm>
+#include <deque>
+#include <mutex>
 #include <numeric>
+#include <thread>
+#include <unordered_map>
 
 namespace app::panel {
 
@@ -23,6 +33,85 @@ namespace {
 const PlayerState& PS() {
     return TheApp().player().State();
 }
+
+// Lengths of queue files that neither the library nor the history knows (a folder opened from
+// Explorer, files dropped on the window), read once per path from the Windows property store
+// on a worker thread, as the library scan does. Never destroyed: the worker may still run at exit.
+class DurationProbe {
+public:
+    static DurationProbe& Get() {
+        static DurationProbe* probe = new DurationProbe();
+        return *probe;
+    }
+    // The length in seconds, or 0 while it is unknown (the first call queues the file).
+    double Lookup(const std::wstring& path, HWND notify) {
+        if (path.empty() || path.find(L"://") != std::wstring::npos) return 0;
+        std::lock_guard lock(mu_);
+        if (const auto it = known_.find(path); it != known_.end()) return std::max(0.0, it->second);
+        known_.emplace(path, -1.0);  // queued; -1 also means "Windows doesn't know"
+        todo_.push_back(path);
+        notify_ = notify;
+        if (!running_) {
+            running_ = true;
+            std::thread([this] { Run(); }).detach();
+        }
+        return 0;
+    }
+
+private:
+    void Run() {
+        const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        for (;;) {
+            std::wstring path;
+            {
+                std::lock_guard lock(mu_);
+                if (todo_.empty()) {
+                    running_ = false;
+                    break;
+                }
+                path = std::move(todo_.front());
+                todo_.pop_front();
+            }
+            const double d = Read(path);
+            HWND notify = nullptr;
+            {
+                std::lock_guard lock(mu_);
+                known_[path] = d > 0 ? d : -1.0;
+                // One repaint per batch: at the end, or every 16 files of a long queue.
+                if (d > 0 && (todo_.empty() || ++sinceRepaint_ >= 16)) {
+                    sinceRepaint_ = 0;
+                    notify = notify_;
+                }
+            }
+            if (notify) PostMessageW(notify, Host::kRepaintMessage, 0, 0);
+        }
+        if (SUCCEEDED(co)) CoUninitialize();
+    }
+    static double Read(const std::wstring& path) {
+        // A cloud placeholder would be downloaded just to read its length.
+        const DWORD attr = GetFileAttributesW(path.c_str());
+        if (attr == INVALID_FILE_ATTRIBUTES ||
+            (attr & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS | FILE_ATTRIBUTE_RECALL_ON_OPEN)))
+            return 0;
+        IPropertyStore* store = nullptr;
+        if (FAILED(SHGetPropertyStoreFromParsingName(path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store))))
+            return 0;
+        double d = 0;
+        PROPVARIANT v;
+        PropVariantInit(&v);
+        if (SUCCEEDED(store->GetValue(PKEY_Media_Duration, &v)) && v.vt == VT_UI8)
+            d = static_cast<double>(v.uhVal.QuadPart) / 1e7;  // 100 ns units
+        PropVariantClear(&v);
+        store->Release();
+        return d;
+    }
+    std::mutex mu_;
+    std::unordered_map<std::wstring, double> known_;
+    std::deque<std::wstring> todo_;
+    HWND notify_ = nullptr;
+    int sinceRepaint_ = 0;
+    bool running_ = false;
+};
 
 std::wstring CurrentPath() {
     const QueueItem* item = TheApp().queue().CurrentItem();
@@ -189,7 +278,9 @@ public:
 
     double DurationOf(int i) {
         if (Playing(i) && PS().duration > 0) return PS().duration;
-        return Info(i).duration;
+        if (const double d = Info(i).duration; d > 0) return d;
+        return DurationProbe::Get().Lookup(TheApp().queue().Items()[static_cast<size_t>(i)].path,
+                                           GetHost() ? GetHost()->Hwnd() : nullptr);
     }
 
     double StoredDuration(int i) const {
@@ -622,7 +713,7 @@ public:
                 if (i != q.Current()) q.Remove(i);
         });
         HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
-        auto* sv = Add<ScrollView>();
+        auto* sv = Add<PanelScroll>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
         list_ = sv->SetContent<QueueList>(compact);
@@ -690,8 +781,8 @@ public:
             p.Text(loaded ? Tr(L"No bookmarks yet") : Tr(L"Nothing is playing"), {rect.x, rect.y + 24, rect.w, 24},
                    TextStyle::Body, c.textTertiary, HAlign::Center);
             if (loaded)
-                p.Text(Tr(L"Press + to bookmark the current moment."), {rect.x + 24, rect.y + 52, rect.w - 48, 20},
-                       TextStyle::Small, c.textTertiary, HAlign::Center);
+                p.Text(Tr(L"Press + to bookmark the current moment."), {rect.x + 24, rect.y + 52, rect.w - 48, 40},
+                       TextStyle::Small, c.textTertiary, HAlign::Center, VAlign::Top, gfx::kTextWrap);
             return;
         }
         for (size_t k = 0; k < marks.size(); ++k) {
@@ -832,7 +923,7 @@ public:
             if (list_->Selected() >= 0) list_->Delete(list_->Selected());
         });
         HeaderButton(header_, "add", L"Add bookmark", [this] { list_->AddCurrent(); });
-        auto* sv = Add<ScrollView>();
+        auto* sv = Add<PanelScroll>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
         list_ = sv->SetContent<BookmarkList>();
@@ -915,7 +1006,7 @@ public:
             const std::wstring title = ch.title.empty() ? Fmt(Tr(L"Chapter {0}"), static_cast<long long>(i + 1)) : ch.title;
             p.Text(title, {r.x + 48, r.y, r.w - 48 - 90, r.h}, TextStyle::Body,
                    isCur ? c.accent : hot ? c.textPrimary : RowText());
-            p.Text(FormatTime(ch.time, true), {r.Right() - 90, r.y, 86, r.h}, TextStyle::Mono,
+            p.Text(FormatTime(ch.time, PS().duration >= 3600), {r.Right() - 90, r.y, 86, r.h}, TextStyle::Mono,
                    isCur ? c.textSecondary : c.textTertiary, HAlign::Trailing);
         }
     }
@@ -977,7 +1068,7 @@ std::unique_ptr<Widget> BuildBookmarksTab() {
 }
 
 std::unique_ptr<Widget> BuildChaptersTab() {
-    auto sv = std::make_unique<ScrollView>();
+    auto sv = std::make_unique<PanelScroll>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     sv->SetContent<ChapterList>();

@@ -294,7 +294,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
 }  // namespace
 
 std::unique_ptr<Widget> BuildTracksTab(int tab) {
-    auto sv = std::make_unique<ScrollView>();
+    auto sv = std::make_unique<PanelScroll>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     auto* page = sv->SetContent<Widget>();

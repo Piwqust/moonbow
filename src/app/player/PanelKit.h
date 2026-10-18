@@ -104,6 +104,16 @@ private:
     int tab_ = 0;
 };
 
+// The scrolling body of a popover tab. A popover in a short window shows a fraction of its
+// content (720x440: 200 of 1462 DIP), and the scroll view's thumb shows only while scrolling, so a
+// cut edge fades out into the frame: there is more above or below. Overflow of a few DIP (a
+// rounding of the row heights) doesn't scroll at all.
+class PanelScroll : public ui::ScrollView {
+public:
+    void PaintOver(ui::Painter& p) override;
+    bool OnWheel(const ui::WheelEvent& e) override;
+};
+
 // --- setting rows ---------------------------------------------------------------------
 
 // A tab body that keeps its controls in sync with the player, the live values and the

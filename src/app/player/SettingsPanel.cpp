@@ -366,7 +366,7 @@ void SetShaderEnabled(const std::string& name, bool on) {
 }
 
 std::unique_ptr<Widget> Page(SyncPage** out) {
-    auto sv = std::make_unique<ScrollView>();
+    auto sv = std::make_unique<PanelScroll>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     *out = sv->SetContent<SyncPage>();

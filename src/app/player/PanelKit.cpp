@@ -312,6 +312,51 @@ void Popover::PaintOver(Painter& p) {
     p.Stroke(rect, P().line, radius);
 }
 
+// --- PanelScroll ---------------------------------------------------------------------------
+
+namespace {
+constexpr float kNoScroll = 4;  // overflow up to this much is no reason to scroll
+constexpr float kCueH = 28;
+}  // namespace
+
+void PanelScroll::PaintOver(Painter& p) {
+    const float max = MaxOffset();
+    if (max <= kNoScroll) {
+        ScrollView::PaintOver(p);
+        return;
+    }
+    Color bg = P().bgBase;
+    for (Widget* w = Parent(); w; w = w->Parent())
+        if (auto* pop = dynamic_cast<Popover*>(w)) {
+            if (pop->fill) bg = pop->fill();
+            break;
+        }
+    // Stacked bands, no gradient brush: 10 fills of 2 DIP each.
+    auto cue = [&](float y0, bool down) {
+        constexpr int kSteps = 10;
+        for (int i = 0; i < kSteps; ++i) {
+            const float t = static_cast<float>(i + 1) / kSteps;  // 0.1 inside, 1 at the cut edge
+            const float band = kCueH / kSteps;
+            const float y = down ? y0 + band * static_cast<float>(i) : y0 + band * static_cast<float>(kSteps - 1 - i);
+            p.Fill({rect.x, y, rect.w, band}, bg.Fade(0.92f * t * t));
+        }
+    };
+    if (Offset() < max - 1) cue(rect.Bottom() - kCueH, true);
+    if (Offset() > 1) cue(rect.y, false);
+    // A resting thumb, half as wide as the scroll view's own (which covers it while scrolling):
+    // how much there is and where this is in it, at a glance (as the context menu shows, P-13).
+    const float contentH = rect.h + max;
+    const float th = std::max(32.0f, rect.h * rect.h / contentH);
+    p.Fill({rect.Right() - 5, rect.y + 2 + (rect.h - 4 - th) * std::clamp(Offset() / max, 0.0f, 1.0f), 2, th},
+           P().lineStrong, 1);
+    ScrollView::PaintOver(p);
+}
+
+bool PanelScroll::OnWheel(const WheelEvent& e) {
+    if (MaxOffset() <= kNoScroll) return false;
+    return ScrollView::OnWheel(e);
+}
+
 bool Popover::OnKeyDown(const KeyEvent& e) {
     if (tabs_ && e.key == VK_TAB && e.mods.ctrl) {
         tabs_->OnKeyDown(KeyEvent{static_cast<UINT>(e.mods.shift ? VK_LEFT : VK_RIGHT), {}, false});
