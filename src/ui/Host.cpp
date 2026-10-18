@@ -997,20 +997,21 @@ void AppendRect(std::string& out, const char* prefix, const Rect& r) {
     out += buf;
 }
 
-// ` text="..."` and what happened to it: ` trunc` (wider than its box: ellipsized or cut),
-// ` clip` (taller than its box), ` overflow` (glyphs outside the widget's rect), ` faded`
-// (transparent), ` box=[...]` (the box, when it is not the widget's rect).
+// ` text="..."` and what happened to it: ` trunc` (does not fit its box: ellipsized, lines
+// dropped or running past it), ` clip` (glyph ink cut by the clip rect), ` overflow` (glyphs
+// outside the widget's rect), ` faded` (transparent), ` box=[...]` (the box, when it is not
+// the widget's rect). Ink, not line boxes, decides clipping: a one-line label in a box shorter
+// than the font's line height is fine as long as the glyphs themselves fit.
 void AppendText(std::string& out, const TextRecord& t, const Rect& owner) {
     out += " text=";
     AppendQuoted(out, t.text);
     gfx::Text& text = gfx::Text::Get();
     // Natural size, measured here once: one unlimited line, or wrapped to the box.
-    float natW = 0, natH = 0;
+    float natW = 0;
     if (IDWriteTextLayout* one = text.Layout(t.text, t.style, 100000.0f, 100000.0f, HAlign::Leading, VAlign::Top, 0)) {
         DWRITE_TEXT_METRICS m{};
         one->GetMetrics(&m);
-        natW = m.widthIncludingTrailingWhitespace;
-        natH = m.height;
+        natW = m.width;
     }
     const bool unbounded = t.box.w >= 10000;  // scrolled text (TextBox): judged against the clip
     const bool wrap = (t.flags & gfx::kTextWrap) != 0;
@@ -1018,19 +1019,28 @@ void AppendText(std::string& out, const TextRecord& t, const Rect& owner) {
     float shownW = natW;
     if (unbounded) {
         trunc = t.halign == HAlign::Leading && (t.box.x < t.clip.x - 0.5f || t.box.x + natW > t.clip.Right() + 0.5f);
-    } else if (wrap) {
-        if (IDWriteTextLayout* wrapped = text.Layout(t.text, t.style, std::max(1.0f, t.box.w), 100000.0f,
-                                                     HAlign::Leading, VAlign::Top, gfx::kTextWrap)) {
-            DWRITE_TEXT_METRICS m{};
-            wrapped->GetMetrics(&m);
-            shownW = m.widthIncludingTrailingWhitespace;
-            natH = m.height;
-        }
-        trunc = shownW > t.box.w + 0.5f;
-        if (natH > t.box.h + 1.0f) (t.flags & gfx::kTextEllipsis ? trunc : clip) = true;
     } else {
-        trunc = natW > t.box.w + 0.5f;
-        clip = natH > t.box.h + 1.0f;
+        if (wrap) {
+            if (IDWriteTextLayout* wrapped = text.Layout(t.text, t.style, std::max(1.0f, t.box.w), 100000.0f,
+                                                         HAlign::Leading, VAlign::Top, gfx::kTextWrap)) {
+                DWRITE_TEXT_METRICS m{};
+                wrapped->GetMetrics(&m);
+                shownW = m.width;  // wider than the box only for an unbreakable word
+                trunc = shownW > t.box.w + 0.5f || ((t.flags & gfx::kTextEllipsis) && m.height > t.box.h + 1.0f);
+            }
+        } else {
+            trunc = natW > t.box.w + 0.5f;
+        }
+        // The layout exactly as drawn: its ink against the clip rect in force at the time.
+        if (IDWriteTextLayout* drawn = text.Layout(t.text, t.style, t.box.w, t.box.h, t.halign, t.valign, t.flags)) {
+            DWRITE_OVERHANG_METRICS o{};
+            if (SUCCEEDED(drawn->GetOverhangMetrics(&o))) {
+                const float top = t.box.y - o.top, bottom = t.box.Bottom() + o.bottom;
+                clip = top < t.clip.y - 1.0f || bottom > t.clip.Bottom() + 1.0f;
+                if (!(t.flags & gfx::kTextEllipsis))
+                    clip = clip || t.box.x - o.left < t.clip.x - 1.0f || t.box.Right() + o.right > t.clip.Right() + 1.0f;
+            }
+        }
     }
     if (trunc) out += " trunc";
     if (clip) out += " clip";
