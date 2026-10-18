@@ -473,6 +473,9 @@ def check_tree(win: Window, allow: dict, emit):
             [n.text or ""] if "trunc" in n.flags and "clip" not in n.flags else [])
         over = [t["text"] for t in live if "overflow" in t["flags"]]
         where = f"{n.type}{'#' + n.id if n.id else ''} {fmt_rect(n.rect)}"
+        # A widget that crosses a scroll view's edge is cut by design: the row half-scrolled out.
+        if clip and any(abs(a - b) > TOL for a, b in zip(n.vis_rect, n.rect)):
+            clip = []
         if clip:
             emit("text-clip", "high", n, None, f"{where}: {len(clip)} string(s) taller than their box: {quote(clip)}")
         if over:
