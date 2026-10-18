@@ -63,6 +63,49 @@ inline std::wstring Label(const Episode& e) {
     return buf;
 }
 
+// The file name for a line under Label(): without the extension and without the S01E02 / 1x02
+// marker the label already shows. "Show.Name.S01E02.The.Title.mkv" -> "Show Name · The Title";
+// empty when nothing else is left ("S01E02.mkv").
+inline std::wstring DisplayName(const std::wstring& path) {
+    const std::wstring stem = library::StemOf(path);
+    const Episode e = Parse(path);
+    size_t from = std::wstring::npos, to = 0;
+    auto number = [&stem](size_t i, size_t* end) {
+        int v = -1;
+        while (i < stem.size() && std::iswdigit(stem[i])) v = (v < 0 ? 0 : v * 10) + (stem[i++] - L'0');
+        *end = i;
+        return v;
+    };
+    if (e.Valid())
+        for (size_t i = 0; i < stem.size() && from == std::wstring::npos; ++i) {
+            if (i > 0 && std::iswalnum(stem[i - 1])) continue;  // a marker starts a word
+            size_t j = 0, k = 0;
+            const bool s = std::towlower(stem[i]) == L's';
+            const int season = number(s ? i + 1 : i, &j);
+            if (season != e.season || j >= stem.size()) continue;
+            const wchar_t sep = static_cast<wchar_t>(std::towlower(stem[j]));
+            if ((s && sep != L'e') || (!s && sep != L'x')) continue;
+            if (number(j + 1, &k) != e.number) continue;
+            from = i, to = k;
+        }
+    auto clean = [](std::wstring t) {
+        for (wchar_t& c : t)
+            if (c == L'.' || c == L'_') c = L' ';
+        std::wstring out;
+        for (wchar_t c : t)
+            if (c != L' ' || (!out.empty() && out.back() != L' ')) out.push_back(c);
+        auto trim = [](wchar_t c) { return c == L' ' || c == L'-' || c == L'–' || c == L'·' || c == L'['; };
+        while (!out.empty() && (trim(out.back()) || out.back() == L'(')) out.pop_back();
+        size_t lead = 0;
+        while (lead < out.size() && (trim(out[lead]) || out[lead] == L']' || out[lead] == L')')) ++lead;
+        return out.substr(lead);
+    };
+    if (from == std::wstring::npos) return clean(stem);
+    const std::wstring show = clean(stem.substr(0, from)), title = clean(stem.substr(to));
+    if (show.empty() || title.empty()) return show + title;
+    return show + L" · " + title;
+}
+
 enum class ChapterKind { Other, Intro, Credits };
 
 // Chapter titles such as "Opening", "Intro", "OP", "OP1", "Заставка" (intro) or "Credits",

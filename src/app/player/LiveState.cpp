@@ -282,10 +282,16 @@ void LiveState::ObserveAll() {
                 if (std::strcmp(n->u.list->keys[i], "h") == 0) h = v.u.int64;
             }
         if (w == areaW_ && h == areaH_) return;
+        const bool first = areaW_ <= 0 || areaH_ <= 0;  // the video window just came up
         areaW_ = w, areaH_ = h;
         MainWindow* win = TheApp().main();
         if (!win || !Cfg().GetBool("video.superResolution")) return;
         if (areaTimer_) win->CancelTimer(areaTimer_);
+        areaTimer_ = 0;
+        if (first) {
+            ApplyUpscaler();
+            return;
+        }
         areaTimer_ = win->StartTimer(300, [this] {
             areaTimer_ = 0;
             ApplyUpscaler();
@@ -369,10 +375,9 @@ void LiveState::ApplyUpscaler() {
         const std::string vendor = SuperResVendor();
         std::string args;
         const HMONITOR mon = VideoMonitor();
-        MONITORINFO mi{sizeof(mi)};
-        double aw = static_cast<double>(areaW_), ah = static_cast<double>(areaH_);
-        if ((aw <= 0 || ah <= 0) && mon && GetMonitorInfoW(mon, &mi))
-            aw = mi.rcMonitor.right - mi.rcMonitor.left, ah = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        // Until mpv reports the video area (its window comes up with the first frame) the
+        // target is unknown; the osd-dimensions observer applies the filter then.
+        const double aw = static_cast<double>(areaW_), ah = static_cast<double>(areaH_);
         if (sr && !vendor.empty() && aw > 0 && ah > 0) {
             // The height the picture gets when fitted into the area at its display aspect.
             const double sw = static_cast<double>(srcW_), sh = static_cast<double>(srcH_);
