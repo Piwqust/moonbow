@@ -7,10 +7,11 @@
 // and read it without locks; Current() swaps under a short mutex.
 //
 // Scan order: (1) enumerate files (FindFirstFileExW + FIND_FIRST_EX_LARGE_FETCH, recursive,
-// hidden/system skipped) and publish; (2) read duration / title / artist / album through the
-// Windows property system and publish again. Step 2 is skipped for files whose size and
-// modification time match library-cache.json. If the first files show that reading properties
-// costs <= 3 ms per file, steps 1 and 2 run back to back with a single publish.
+// hidden/system skipped) and publish; (2) read duration and tags (title, artist, album, genre,
+// track, disc, year) through the Windows property system and publish again. Step 2 is skipped
+// for files whose size and modification time match library-cache.json. If the first files show
+// that reading properties costs <= 3 ms per file, steps 1 and 2 run back to back with a single
+// publish.
 
 #include "MediaTypes.h"
 
@@ -40,6 +41,7 @@ struct MediaItem {
     int track = 0;  // track number tag, 0 = none
     int year = 0;   // release year tag, 0 = none
     int disc = 0;   // disc number tag, 0 = none
+    std::wstring genre;  // first genre tag, may be empty
     bool offline = false;    // cloud placeholder (OneDrive etc.): content not on this disk
     // The metadata pass found the file unplayable: its header isn't the promised container, or
     // an MP4-family file has no readable length (truncated download). Never set for offline files.

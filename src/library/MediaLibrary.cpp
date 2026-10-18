@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cwctype>
 #include <thread>
 
 namespace library {
@@ -25,6 +26,7 @@ constexpr double kInlineMetadataMs = 3.0;  // per file; above this the metadata 
 constexpr int kProbeFiles = 8;
 constexpr auto kProgressInterval = std::chrono::seconds(2);
 constexpr size_t kMetadataChunk = 192;  // files read in parallel between progress checks
+constexpr int kCacheVersion = 4;        // library-cache.json format, see LoadCache
 
 
 double MsSince(Clock::time_point t) {
@@ -201,6 +203,12 @@ void ReadMetadata(MediaItem& it) {
         PropVariantClear(&n);
         if (SUCCEEDED(store->GetValue(PKEY_Music_DiscNumber, &n)) && n.vt == VT_UI4) it.disc = static_cast<int>(n.ulVal);
         PropVariantClear(&n);
+        // The MP3 handler leaves DiscNumber empty and exposes ID3 TPOS only as PartOfSet ("2/2").
+        if (it.disc <= 0) it.disc = ParseDiscNumber(PropString(store, PKEY_Music_PartOfSet));
+        // Genres are read here, with the other tags, so the Genres page never reads files itself.
+        it.genre = PropString(store, PKEY_Music_Genre);
+        if (const size_t semi = it.genre.find(L';'); semi != std::wstring::npos) it.genre.resize(semi);  // first genre
+        while (!it.genre.empty() && iswspace(it.genre.back())) it.genre.pop_back();
     }
     store->Release();
 }
@@ -209,7 +217,7 @@ struct CacheEntry {
     uint64_t size = 0;
     int64_t mtime = 0;
     double duration = 0;
-    std::wstring title, artist, album;
+    std::wstring title, artist, album, genre;
     int track = 0, year = 0, disc = 0;
     bool damaged = false;
 };
@@ -219,9 +227,9 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"library-cache.json"), &text)) return cache;
     std::optional<json::Value> doc = json::Parse(text);
-    // Version 2 added track numbers and years, 3 disc numbers and the damaged flag: older caches
-    // are read again from the files.
-    if (!doc || doc->GetInt("version") < 3) return cache;
+    // Version 2 added track numbers and years, 3 disc numbers and the damaged flag, 4 genres and
+    // the MP3 disc number (PartOfSet): older caches are read again from the files.
+    if (!doc || doc->GetInt("version") < kCacheVersion) return cache;
     const json::Value* items = doc->Find("items");
     if (!items) return cache;
     for (const json::Value& e : items->AsArray()) {
@@ -232,6 +240,7 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
         c.title = e.GetWString("t");
         c.artist = e.GetWString("a");
         c.album = e.GetWString("l");
+        c.genre = e.GetWString("g");
         c.track = static_cast<int>(e.GetInt("n"));
         c.year = static_cast<int>(e.GetInt("y"));
         c.disc = static_cast<int>(e.GetInt("k"));
@@ -291,6 +300,7 @@ void SaveCache(const Snapshot& s, const std::vector<char>* unread = nullptr) {
         if (!it.title.empty()) e.Set("t", json::ToUtf8(it.title));
         if (!it.artist.empty()) e.Set("a", json::ToUtf8(it.artist));
         if (!it.album.empty()) e.Set("l", json::ToUtf8(it.album));
+        if (!it.genre.empty()) e.Set("g", json::ToUtf8(it.genre));
         if (it.track > 0) e.Set("n", it.track);
         if (it.year > 0) e.Set("y", it.year);
         if (it.disc > 0) e.Set("k", it.disc);
@@ -298,7 +308,7 @@ void SaveCache(const Snapshot& s, const std::vector<char>* unread = nullptr) {
         items.Push(std::move(e));
     }
     json::Value doc = json::Value::MakeObject();
-    doc.Set("version", 3);
+    doc.Set("version", kCacheVersion);
     doc.Set("items", std::move(items));
     json::WriteFileAtomic(DataFilePath(L"library-cache.json"), json::Serialize(doc));
 }
@@ -437,12 +447,14 @@ bool MediaLibrary::Load() {
         return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) {
+    // Valid JSON of the wrong shape ("roots": "x") is as unreadable as broken JSON.
+    const json::Value* list = doc && doc->IsObject() ? doc->Find("roots") : nullptr;
+    if (!doc || !doc->IsObject() || (list && !list->IsArray())) {
         BackupCorruptFile(DataFilePath(L"library.json"));  // the next save would overwrite it
         return false;
     }
     std::vector<std::wstring> roots;
-    if (const json::Value* list = doc->Find("roots"))
+    if (list)
         for (const json::Value& r : list->AsArray())
             if (r.IsString() && !r.AsString().empty()) roots.push_back(NormalizePath(r.AsWString()));
     roots_ = std::move(roots);
@@ -570,6 +582,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
                 it.title = std::move(c->second.title);
                 it.artist = std::move(c->second.artist);
                 it.album = std::move(c->second.album);
+                it.genre = std::move(c->second.genre);
                 it.track = c->second.track;
                 it.year = c->second.year;
                 it.disc = c->second.disc;

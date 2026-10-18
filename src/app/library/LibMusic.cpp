@@ -1,105 +1,23 @@
-// Music: Songs, Albums, Artists, Genres and their detail pages. Uses the tags in the library
-// snapshot; genres are read on a worker thread (the snapshot has no genre field).
+// Music: Songs, Albums, Artists, Genres and their detail pages. Uses only the tags in the library
+// snapshot (the scanner reads and caches them): no file is opened on the UI path.
 #include "Util.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
 
-#include <objbase.h>
-#include <propkey.h>
-#include <propsys.h>
-#include <propvarutil.h>
 #include <shlwapi.h>
-#include <shobjidl.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <map>
-#include <mutex>
 #include <random>
-#include <thread>
-#include <unordered_map>
 
 namespace app::lib {
 
 using namespace ui;
 
 namespace {
-
-// --- genres ---------------------------------------------------------------------------------
-
-class GenreIndex {
-public:
-    static GenreIndex& Get() {
-        static GenreIndex g;
-        return g;
-    }
-    ~GenreIndex() {
-        stop_ = true;
-        if (thread_.joinable()) thread_.join();
-    }
-
-    // Reads genres of audio files that are not known yet; posts the library message when done.
-    void Request(const library::Snapshot& snap) {
-        if (busy_) return;
-        std::vector<std::wstring> todo;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            for (const library::MediaItem& m : snap.items)
-                if (m.kind == library::MediaKind::Audio && !m.offline && !genres_.count(library::PathKey(m.path)))
-                    todo.push_back(m.path);
-        }
-        if (todo.empty()) return;
-        if (thread_.joinable()) thread_.join();
-        busy_ = true;
-        HWND hwnd = TheApp().main() ? TheApp().main()->Hwnd() : nullptr;
-        thread_ = std::thread([this, todo = std::move(todo), hwnd] {
-            const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            for (const std::wstring& path : todo) {
-                if (stop_) break;
-                std::wstring genre;
-                IPropertyStore* store = nullptr;
-                if (SUCCEEDED(SHGetPropertyStoreFromParsingName(path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store)))) {
-                    PROPVARIANT v;
-                    PropVariantInit(&v);
-                    if (SUCCEEDED(store->GetValue(PKEY_Music_Genre, &v)) && v.vt != VT_EMPTY) {
-                        PWSTR s = nullptr;
-                        if (SUCCEEDED(PropVariantToStringAlloc(v, &s)) && s) {
-                            genre = s;
-                            CoTaskMemFree(s);
-                        }
-                    }
-                    PropVariantClear(&v);
-                    store->Release();
-                }
-                // Several genres come joined with "; ": the first one names the group.
-                const size_t semi = genre.find(L';');
-                if (semi != std::wstring::npos) genre.resize(semi);
-                while (!genre.empty() && iswspace(genre.back())) genre.pop_back();
-                std::lock_guard<std::mutex> lock(mutex_);
-                genres_[library::PathKey(path)] = genre;
-            }
-            if (SUCCEEDED(co)) CoUninitialize();
-            busy_ = false;
-            if (hwnd && !stop_) PostMessageW(hwnd, kLibraryMessage, 1, 0);
-        });
-    }
-
-    bool Busy() const { return busy_; }
-    std::wstring GenreOf(const std::wstring& path) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = genres_.find(library::PathKey(path));
-        return it == genres_.end() ? std::wstring() : it->second;
-    }
-
-private:
-    mutable std::mutex mutex_;
-    std::unordered_map<std::wstring, std::wstring> genres_;
-    std::thread thread_;
-    std::atomic<bool> busy_{false}, stop_{false};
-};
 
 // --- helpers --------------------------------------------------------------------------------
 
@@ -111,6 +29,10 @@ std::wstring AlbumOf(const library::MediaItem& m) {
 
 std::wstring ArtistOf(const library::MediaItem& m) {
     return m.artist;
+}
+
+std::wstring GenreOf(const library::MediaItem& m) {
+    return m.genre;
 }
 
 std::wstring GenreLabel(const std::wstring& g) {
@@ -344,9 +266,6 @@ protected:
     void Build() override {
         if (!snap_) return;
         auto songs = snap_->Music();
-        const bool needGenres = mode_ == MusicMode::Genres || mode_ == MusicMode::Genre || mode_ == MusicMode::Root ||
-                                mode_ == MusicMode::Album;
-        if (needGenres) GenreIndex::Get().Request(*snap_);
         grid_->roundImages = mode_ == MusicMode::Artists;
 
         switch (mode_) {
@@ -364,7 +283,7 @@ protected:
                 for (const library::MediaItem* m : songs) {
                     const bool in = mode_ == MusicMode::Album    ? SameText(AlbumOf(*m), arg_)
                                     : mode_ == MusicMode::Artist ? SameText(ArtistOf(*m), arg_)
-                                                                 : SameText(GenreIndex::Get().GenreOf(m->path), arg_);
+                                                                 : SameText(GenreOf(*m), arg_);
                     if (in) v.push_back(m);
                 }
                 mixedArtists_ = false;
@@ -407,7 +326,7 @@ protected:
         for (const library::MediaItem* m : all) {
             if (image.empty() && !m->offline) image = m->path;
             year = std::max(year, m->year);
-            if (genre.empty()) genre = GenreIndex::Get().GenreOf(m->path);
+            if (genre.empty()) genre = m->genre;
         }
         cover_->SetImage(image);
         double total = 0;
@@ -441,10 +360,6 @@ protected:
         const bool scanning = TheApp().library().Scanning();
         if (scanning) {
             e.Set("refresh", Tr(L"Scanning your folders…"), Tr(L"Songs appear here as soon as they are found."));
-            return;
-        }
-        if (mode_ == MusicMode::Genres && GenreIndex::Get().Busy()) {
-            e.Set("genre", Tr(L"Reading genres…"), Tr(L"Lumen is reading the genre tags of your songs."));
             return;
         }
         if (TheApp().library().Roots().empty()) {
@@ -512,7 +427,7 @@ private:
         for (const library::MediaItem* m : songs) {
             std::wstring name = kind == MusicMode::Albums    ? AlbumOf(*m)
                                 : kind == MusicMode::Artists ? ArtistOf(*m)
-                                                             : GenreIndex::Get().GenreOf(m->path);
+                                                             : GenreOf(*m);
             const std::wstring key = Upper(name);
             auto it = index.find(key);
             if (it == index.end()) {
@@ -566,7 +481,9 @@ private:
         cat(L"Albums", "album", L"albums", CountAlbums(static_cast<long long>(albums.size())), static_cast<int>(albums.size()));
         cat(L"Artists", "artist", L"artists", CountArtists(static_cast<long long>(artists.size())),
             static_cast<int>(artists.size()));
-        const bool reading = GenreIndex::Get().Busy();
+        // Until the scanner's tag pass is done (first scan only: later starts read the cache) the
+        // genre count would still grow.
+        const bool reading = !snap_->complete;
         cat(L"Genres", "genre", L"genres", reading ? std::wstring(Tr(L"Reading tags…")) : CountGenres(static_cast<long long>(genres.size())),
             static_cast<int>(genres.size()));
         if (!compact_) addFolder();
@@ -594,7 +511,18 @@ private:
                               {kHeadSubtitle, L"Artist", "artist"},
                               {kHeadExtra, L"Album", "album"},
                               {kHeadDuration, L"Length", "duration"}});
-        for (const library::MediaItem* m : filtered) AddMedia(*m);
+        // A multi-disc album in album order gets "Disc 1", "Disc 2" titles, like a box set's sleeve.
+        bool discs = false;
+        if (mode_ == MusicMode::Album && (sort == "track" || sort == "track:desc"))
+            for (const library::MediaItem* m : filtered)
+                if (m->disc > 0 && m->disc != filtered.front()->disc) discs = true;
+        int lastDisc = -1;
+        for (const library::MediaItem* m : filtered) {
+            if (discs && m->disc != lastDisc && m->disc > 0)
+                AddHeader(Fmt(Tr(L"Disc {0}"), static_cast<long long>(m->disc)));
+            lastDisc = m->disc;
+            AddMedia(*m);
+        }
     }
 
     // byArtist: the albums block of an artist page (no artist name on every album, years instead).

@@ -47,6 +47,9 @@ struct EpisodeInfo {
 };
 bool ParseEpisode(std::wstring_view name, EpisodeInfo* out);
 
+// Disc number of a "part of set" tag: "2/3" -> 2, "1" -> 1; 0 when there is no number.
+int ParseDiscNumber(std::wstring_view partOfSet);
+
 // False when the first bytes of a file clearly aren't the container its extension promises
 // (a text file named .mkv, an empty .mp4). Unknown extensions pass.
 bool HeaderMatchesExtension(std::wstring_view path, const unsigned char* head, size_t size);

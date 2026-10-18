@@ -700,6 +700,27 @@ void TestCorruptBackup() {
     CHECK(BackupCorruptFile(dir + L"\\ui").find(L"\\ui.corrupt-") != std::wstring::npos);
     TakeCorruptFileNotices();
 
+    // library.json of the wrong shape is kept like broken JSON and reads as no library.
+    WriteFile(dir + L"\\library.json", R"({"version":1,"roots":"not-an-array"})");
+    {
+        library::MediaLibrary lib;
+        CHECK(!lib.Load());
+        CHECK(lib.Roots().empty());
+    }
+    CHECK(CountFiles(dir, L"library.corrupt-*.json") == 1);
+    WriteFile(dir + L"\\library.json", R"([1,2])");
+    {
+        library::MediaLibrary lib;
+        CHECK(!lib.Load());
+    }
+    CHECK(CountFiles(dir, L"library.corrupt-*.json") == 2);
+    WriteFile(dir + L"\\library.json", R"({"version":1})");  // no roots yet: fine
+    {
+        library::MediaLibrary lib;
+        CHECK(lib.Load() && lib.Roots().empty());
+    }
+    CHECK(TakeCorruptFileNotices().size() == 2);
+
     // The log path hint follows a moved data folder.
     CHECK(DataDirOverridden());
     const std::wstring shown = DataFileDisplayPath(L"lumen.log");
@@ -1195,6 +1216,13 @@ void TestEpisodesAndOrder() {
     CHECK(library::HeaderMatchesExtension(L"notes.txt", text, 3));     // not media: nothing to judge
     CHECK(library::HeaderMatchesExtension(L"clip.rmvb", text, sizeof(text)));  // no rule for this container
 
+    CHECK(library::ParseDiscNumber(L"2/2") == 2);
+    CHECK(library::ParseDiscNumber(L" 1 / 3") == 1);
+    CHECK(library::ParseDiscNumber(L"10") == 10);
+    CHECK(library::ParseDiscNumber(L"") == 0);
+    CHECK(library::ParseDiscNumber(L"/2") == 0);
+    CHECK(library::ParseDiscNumber(L"CD1") == 0);
+
     // Album order: album first, then disc and track; untagged albums and unnumbered tracks last.
     std::vector<library::MediaItem> v(6);
     auto set = [&](size_t i, const wchar_t* album, int disc, int track, const wchar_t* title) {
@@ -1370,6 +1398,46 @@ void TestLibraryScan() {
     CHECK(!lib.RemoveRoot(root));
     auto empty = ScanAndWait(lib);
     CHECK(empty && empty->items.empty() && empty->folders.empty());
+}
+
+// Genres and discs come from library-cache.json (version 4) on a warm start, without reading
+// the files; an older cache is read again.
+void TestLibraryCacheTags() {
+    const std::wstring dir = FreshDataDir(L"library-cache");
+    const std::wstring root = MakeDir(L"lib-cache");
+    const std::wstring song = root + L"\\Album\\01 Song.mp3";
+    WriteFile(song, std::string(64, 'x'));
+    WIN32_FILE_ATTRIBUTE_DATA fa{};
+    CHECK(GetFileAttributesExW(song.c_str(), GetFileExInfoStandard, &fa));
+    const int64_t mtime = library::FileTimeToUnixMs((static_cast<uint64_t>(fa.ftLastWriteTime.dwHighDateTime) << 32) |
+                                                    fa.ftLastWriteTime.dwLowDateTime);
+    auto writeCache = [&](int version) {
+        json::Value e = json::Value::MakeObject();
+        e.Set("p", json::ToUtf8(song));
+        e.Set("s", 64);
+        e.Set("m", mtime);
+        e.Set("t", "Song");
+        e.Set("g", "Rock");
+        e.Set("k", 2);
+        json::Value items = json::Value::MakeArray();
+        items.Push(std::move(e));
+        json::Value doc = json::Value::MakeObject();
+        doc.Set("version", version);
+        doc.Set("items", std::move(items));
+        CHECK(json::WriteFileAtomic(dir + L"\\library-cache.json", json::Serialize(doc)));
+    };
+    library::MediaLibrary lib;
+    lib.SetRoots({root});
+    writeCache(4);
+    auto snap = ScanAndWait(lib);
+    const library::MediaItem* m = snap ? snap->FindItem(song) : nullptr;
+    CHECK(m && m->genre == L"Rock" && m->disc == 2 && m->title == L"Song");
+    CHECK(snap && snap->stats.metadataFiles == 0);
+    writeCache(3);
+    snap = ScanAndWait(lib);
+    m = snap ? snap->FindItem(song) : nullptr;
+    CHECK(snap && snap->stats.metadataFiles == 1);
+    CHECK(m && m->genre.empty() && m->title.empty());  // read from the (untagged) file
 }
 
 // Real media from the Windows install, to measure property-store cost and check durations.
@@ -1593,6 +1661,7 @@ const TestCase kTests[] = {
     {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},
+    {"library_cache_tags", TestLibraryCacheTags},
     {"thumbnails", TestThumbnails},
     {"lyrics_lrc", TestLyricsLrc},
 };

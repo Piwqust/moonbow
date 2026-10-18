@@ -216,6 +216,14 @@ bool ParseEpisode(std::wstring_view name, EpisodeInfo* out) {
     return false;
 }
 
+int ParseDiscNumber(std::wstring_view s) {
+    size_t i = 0;
+    while (i < s.size() && std::iswspace(s[i])) ++i;
+    int v = 0;
+    if (!ReadNumber(s, i, 3, &v)) return 0;
+    return v;
+}
+
 // --- header check ----------------------------------------------------------------------------
 
 bool HeaderMatchesExtension(std::wstring_view path, const unsigned char* h, size_t n) {
