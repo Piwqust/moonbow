@@ -157,6 +157,8 @@ private:
     std::atomic<bool> wakePending_{false};
     std::vector<std::pair<std::string, std::string>> startOptions_;
     double volumeMax_ = 150;  // mpv volume-max (Settings > Audio > Maximum volume)
+    decltype(&::mpv_request_log_messages) requestLog_ = nullptr;  // not in MpvApi: only passthrough needs it
+    bool spdifLog_ = false;  // mpv log messages requested while audio-spdif is set
     std::map<uint64_t, PropertyCallback> observers_;
     uint64_t nextObserver_ = 1000;
 };
