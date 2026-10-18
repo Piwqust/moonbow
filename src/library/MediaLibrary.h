@@ -145,7 +145,8 @@ public:
     std::shared_ptr<const Snapshot> Current() const;
 
 private:
-    void ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options);
+    void ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options,
+                    const std::atomic<bool>& cancel);
     void Publish(std::shared_ptr<const Snapshot> snapshot);
 
     std::vector<std::wstring> roots_;
@@ -155,10 +156,10 @@ private:
 
     mutable std::mutex mutex_;  // guards current_
     std::shared_ptr<const Snapshot> current_;
-    std::thread thread_;
-    std::atomic<bool> cancel_{false};
+    std::thread thread_;                          // the latest scan; it joins the one before it
+    std::shared_ptr<std::atomic<bool>> cancel_;   // the latest scan's cancel flag
     std::atomic<bool> scanning_{false};
-    uint64_t generation_ = 0;
+    std::atomic<uint64_t> generation_{0};
 };
 
 }  // namespace library

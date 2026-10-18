@@ -384,7 +384,7 @@ private:
         for (auto it = favs.rbegin(); it != favs.rend() && favCount < 20; ++it) {
             const std::wstring& path = *it;
             const library::MediaItem* m = IsUrl(path) ? nullptr : snap->FindItem(path);
-            if (!m && !IsUrl(path) && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            if (!m && !IsUrl(path) && !MaybeExists(path)) continue;
             const library::HistoryEntry* h = hist.Find(path);
             Entry e = MediaCard(path, m, h);
             e.favorite = false;  // every card here is one

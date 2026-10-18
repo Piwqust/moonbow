@@ -8,6 +8,7 @@
 #include "library/MediaTypes.h"
 
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -149,6 +150,15 @@ std::wstring ArtistLabel(const std::wstring& artist) {
 
 std::wstring AlbumLabel(const std::wstring& album) {
     return album.empty() ? std::wstring(Tr(L"Unknown album")) : album;
+}
+
+bool MaybeExists(const std::wstring& path) {
+    if (PathIsUNCW(path.c_str())) return true;
+    if (path.size() >= 3 && path[1] == L':') {
+        const wchar_t root[4] = {path[0], L':', L'\\', 0};
+        if (GetDriveTypeW(root) == DRIVE_REMOTE) return true;
+    }
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
 std::wstring AlbumFolderKey(const library::MediaItem& m) {
@@ -595,7 +605,7 @@ std::wstring PlaylistImage(const library::Playlist& p) {
     const std::string cover = TheApp().UiValue("playlist.cover." + p.id);
     if (!cover.empty()) {
         std::wstring path = Utf8ToWide(cover);
-        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+        if (MaybeExists(path)) return path;
     }
     const auto snap = TheApp().library().Current();
     for (const auto& it : p.items)

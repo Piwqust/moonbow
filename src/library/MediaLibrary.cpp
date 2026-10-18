@@ -522,32 +522,42 @@ void MediaLibrary::Publish(std::shared_ptr<const Snapshot> snapshot) {
         std::lock_guard lock(mutex_);
         current_ = std::move(snapshot);
     }
-    if (complete) scanning_ = false;  // before the message, so the UI sees a finished scan
+    // Before the message, so the UI sees a finished scan (unless a newer one has started).
+    if (complete && generation == generation_) scanning_ = false;
     HWND hwnd = notifyWnd_.load();
     if (hwnd) PostMessageW(hwnd, notifyMsg_.load(), complete ? 1 : 0, static_cast<LPARAM>(generation));
 }
 
 void MediaLibrary::Cancel() {
-    cancel_ = true;
+    if (cancel_) *cancel_ = true;
     if (thread_.joinable()) thread_.join();
-    cancel_ = false;
     scanning_ = false;
 }
 
 uint64_t MediaLibrary::Rescan() {
-    Cancel();
-    uint64_t generation = ++generation_;
+    // No join here: a scan of a sleeping NAS or USB disk can take seconds to notice the cancel.
+    // The new thread waits for the old one (so publishes and cache writes stay in order).
+    if (cancel_) *cancel_ = true;
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    cancel_ = cancel;
+    auto previous = std::make_shared<std::thread>(std::move(thread_));
+    const uint64_t generation = ++generation_;
     scanning_ = true;
     try {
-        thread_ = std::thread(&MediaLibrary::ScanThread, this, generation, roots_, options_);
+        thread_ = std::thread([this, generation, roots = roots_, options = options_, cancel, previous]() mutable {
+            if (previous->joinable()) previous->join();
+            ScanThread(generation, std::move(roots), options, *cancel);
+        });
     } catch (...) {
+        if (previous->joinable()) previous->join();
         scanning_ = false;
         return 0;
     }
     return generation;
 }
 
-void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options) {
+void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roots, ScanOptions options,
+                              const std::atomic<bool>& cancel) {
     HRESULT com = options.readMetadata ? CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE) : E_FAIL;
 
     auto snap = std::make_shared<Snapshot>();
@@ -557,14 +567,14 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     // 1. Enumerate.
     auto t0 = Clock::now();
     for (const std::wstring& root : roots) {
-        if (cancel_) break;
+        if (cancel) break;
         DWORD attr = GetFileAttributesW(root.c_str());
         if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) continue;
         TempFolder t;
         t.path = root;
         t.name = FileNameOf(root);
         if (t.name.empty() || (root.size() == 3 && root[1] == L':')) t.name = root;  // "D:\"
-        Enumerate(t, options, cancel_, snap->stats);
+        Enumerate(t, options, cancel, snap->stats);
         ++snap->stats.folders;
         Flatten(t, -1, *snap);
     }
@@ -572,7 +582,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     // 2. Metadata: cached values first, then probe the cost of reading the rest.
     std::vector<size_t> pending;
-    if (options.readMetadata && !cancel_) {
+    if (options.readMetadata && !cancel) {
         auto cache = LoadCache();
         for (size_t i = 0; i < snap->items.size(); ++i) {
             MediaItem& it = snap->items[i];
@@ -597,7 +607,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     size_t done = 0;
     auto tm = Clock::now();
-    while (done < pending.size() && done < kProbeFiles && !cancel_) {
+    while (done < pending.size() && done < kProbeFiles && !cancel) {
         ReadMetadata(snap->items[pending[done]]);
         FillSearchKey(snap->items[pending[done]]);
         ++done;
@@ -606,7 +616,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     snap->stats.metadataSecondPass = done > 0 && probeMs / static_cast<double>(done) > kInlineMetadataMs &&
                                      done < pending.size();
 
-    if (cancel_) {
+    if (cancel) {
         if (SUCCEEDED(com)) CoUninitialize();
         return;
     }
@@ -622,10 +632,10 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     const int threads = MetadataThreads();
     std::vector<char> unread(snap->items.size(), 0);
     for (size_t i = done; i < pending.size(); ++i) unread[pending[i]] = 1;
-    while (done < pending.size() && !cancel_) {
+    while (done < pending.size() && !cancel) {
         const size_t last = std::min(pending.size(), done + kMetadataChunk);
-        ReadMetadataParallel(*snap, pending, done, last, threads, cancel_);
-        if (cancel_) break;
+        ReadMetadataParallel(*snap, pending, done, last, threads, cancel);
+        if (cancel) break;
         for (size_t i = done; i < last; ++i) unread[pending[i]] = 0;
         done = last;
         if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
@@ -639,13 +649,14 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     snap->stats.metadataFiles = done;
     snap->stats.metadataMsPerFile = done ? snap->stats.metadataMs / static_cast<double>(done) : 0;
 
-    if (!cancel_ && (!snap->complete || done > 0)) {
+    if (!cancel && (!snap->complete || done > 0)) {
         snap->complete = true;
         if (options.readMetadata && done > 0) SaveCache(*snap);
         Publish(std::make_shared<const Snapshot>(std::move(*snap)));
     }
     if (SUCCEEDED(com)) CoUninitialize();
-    scanning_ = false;  // also covers a scan that ended without a complete publish
+    // Also covers a scan that ended without a complete publish; a newer scan keeps the flag.
+    if (generation == generation_) scanning_ = false;
 }
 
 }  // namespace library

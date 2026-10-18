@@ -1001,7 +1001,7 @@ protected:
         for (auto it = favs.rbegin(); it != favs.rend(); ++it) {
             const std::wstring& path = *it;
             const library::MediaItem* m = snap_ && !IsUrl(path) ? snap_->FindItem(path) : nullptr;
-            if (!m && !IsUrl(path) && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            if (!m && !IsUrl(path) && !MaybeExists(path)) continue;
             const library::HistoryEntry* he = TheApp().history().Find(path);
             Entry e = Row(path, he);
             if (!Matches(e.title + L" " + e.subtitle + L" " + path)) {

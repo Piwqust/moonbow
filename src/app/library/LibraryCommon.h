@@ -29,6 +29,10 @@ std::wstring CountEpisodes(long long n);  // "1 выпуск"
 // Tag labels for untagged songs: "Unknown artist" / "Unknown album".
 std::wstring ArtistLabel(const std::wstring& artist);
 std::wstring AlbumLabel(const std::wstring& album);
+// False only for a local file that is gone. Network paths (\\server\share, mapped drives)
+// count as present without a look: with the NAS off, GetFileAttributesW blocks the UI thread
+// for the network timeout on every page rebuild.
+bool MaybeExists(const std::wstring& path);
 // Albums are told apart by name and folder ("Greatest Hits" by Queen and by ABBA are two). A
 // "CD1" / "Disc 2" subfolder counts as its parent, so a multi-disc album stays one.
 std::wstring AlbumFolderKey(const library::MediaItem& m);  // PathKey of that folder
