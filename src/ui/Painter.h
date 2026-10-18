@@ -42,7 +42,6 @@ public:
     void Fill(const Rect& r, Color c, float radius = 0);
     // Stroke drawn inside `r` (crisp 1 px borders on integer rects).
     void Stroke(const Rect& r, Color c, float radius = 0, float width = 1);
-    void Line(Point a, Point b, Color c, float width = 1);
     void FillCircle(Point center, float radius, Color c);
     void FillGeometry(ID2D1Geometry* g, Color c);
 

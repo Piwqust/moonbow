@@ -119,8 +119,4 @@ void Icons::Draw(ID2D1DeviceContext5* ctx, std::string_view name, const ui::Rect
     ctx->SetTransform(saved);
 }
 
-void Icons::Reset() {
-    Cache().clear();
-}
-
 }  // namespace gfx

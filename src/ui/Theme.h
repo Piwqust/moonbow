@@ -27,8 +27,6 @@ public:
     const Palette& P() const { return p_; }
     ThemeMode Mode() const { return mode_; }
     int Accent() const { return accent_; }
-    // Bumped on every change, so caches keyed on colors can notice.
-    uint32_t Version() const { return version_; }
 
     void Set(ThemeMode mode, int accent);
     // Swatch shown in accent pickers for tone `index` in the current mode.
@@ -40,7 +38,6 @@ private:
     Palette p_{};
     ThemeMode mode_ = ThemeMode::Dark;
     int accent_ = 0;
-    uint32_t version_ = 1;
 };
 
 inline const Palette& P() {

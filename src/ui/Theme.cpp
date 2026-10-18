@@ -89,7 +89,6 @@ void Theme::Rebuild() {
     p.accentFaint = Color::Mix(p.bgBase, p.accent, 0.07f);
     p.onAccent = p.bgBase;
     p.danger = Color::Hex(0xC42B1C);
-    ++version_;
 }
 
 }  // namespace ui

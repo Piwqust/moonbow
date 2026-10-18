@@ -485,12 +485,6 @@ void Host::CloseAllPopups() {
     while (!popups_.empty()) ClosePopupAt(popups_.size() - 1);
 }
 
-void Host::RepositionPopup(Widget* content) {
-    for (Popup& p : popups_)
-        if (p.content.get() == content) PlacePopup(p);
-    RequestRender();
-}
-
 void Host::PlacePopup(Popup& popup) {
     const Size client = ClientSize();
     const PopupOptions& o = popup.options;

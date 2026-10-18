@@ -16,7 +16,6 @@ public:
     static void Draw(ID2D1DeviceContext5* ctx, std::string_view name, const ui::Rect& box, ui::Color primary,
                      ui::Color secondary);
     // Releases cached documents (after device loss or a theme change).
-    static void Reset();
 };
 
 }  // namespace gfx

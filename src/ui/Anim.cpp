@@ -17,14 +17,8 @@ std::vector<AnimFloat*>& ActiveList() {
 
 float Curve(Ease e, float t) {
     switch (e) {
-        case Ease::Linear: return t;
         case Ease::Out: return 1 - (1 - t) * (1 - t) * (1 - t);
         case Ease::InOut: return t < 0.5f ? 4 * t * t * t : 1 - std::pow(-2 * t + 2, 3.0f) / 2;
-        case Ease::Spring: {
-            // Critically damped-ish spring with a small overshoot.
-            const float k = 1 - std::exp(-7 * t) * std::cos(5 * t);
-            return t >= 1 ? 1 : k;
-        }
     }
     return t;
 }

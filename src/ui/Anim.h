@@ -3,7 +3,7 @@
 
 namespace ui {
 
-enum class Ease : uint8_t { Linear, Out, InOut, Spring };
+enum class Ease : uint8_t { Out, InOut };
 
 // A float that animates toward a target. While any AnimFloat is moving the
 // host keeps rendering frames (vsync-paced); otherwise nothing ticks.
