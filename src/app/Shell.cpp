@@ -7,6 +7,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PlayerView.h"
 #include "gfx/Icons.h"
 
@@ -208,12 +209,15 @@ void TitleBar::Refresh() {
     changed |= crumb_->visible != crumbShown;
     crumb_->visible = crumbShown;
     crumbLabel_->SetText(folder);
-    std::wstring title = media ? (s.title.empty() ? FileNameOf(item->path) : s.title) : std::wstring();
+    // The library's tags when it knows the file (CP1251 and artist lists read right), as on the
+    // player screens.
+    const PlayingTags& tags = CurrentTags();
+    std::wstring title = media ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : std::wstring();
     if (media && _wcsicmp(title.c_str(), FileNameOf(item->path).c_str()) == 0) {
         const size_t dot = title.find_last_of(L'.');
         if (dot != std::wstring::npos && dot > 0) title.resize(dot);
     }
-    if (media && !s.artist.empty() && !app.player().State().hasVideo) title += L" · " + s.artist;
+    if (media && !tags.artist.empty() && !s.hasVideo) title += L" · " + tags.artist;
     if (!app.config().GetBool("interface.titleFileName")) title.clear();
     title_->SetText(title.empty() ? L"Lumen" : title);
     std::wstring caption = title.empty() ? L"Lumen" : title + L" — Lumen";
