@@ -31,6 +31,7 @@ std::wstring ArtistLabel(const std::wstring& artist);
 std::wstring AlbumLabel(const std::wstring& album);
 // Title shown for a file or stream: tags for songs, the file name without its extension for
 // videos and unknown files, the stored title (history, playlist) or the address for streams.
+// Library items: the title tag of songs, "S01E02 · Title" for episodes, else the file name.
 std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item, const std::wstring& storedTitle = {});
 bool SamePath(const std::wstring& a, const std::wstring& b);
 // Current media of the player (empty when nothing is loaded).

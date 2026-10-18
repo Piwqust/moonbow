@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstring>
+#include <cwchar>
 #include <cwctype>
 #include <initializer_list>
 
@@ -178,6 +179,41 @@ std::wstring ShowName(std::wstring_view s) {
     return out.substr(b);
 }
 
+// Release tags end an episode title ("Pilot.1080p.WEB-DL.x264" -> "Pilot").
+bool IsReleaseTag(std::wstring_view word) {
+    static constexpr std::wstring_view kTags[] = {
+        L"480p", L"576p", L"720p", L"1080p", L"1080i", L"2160p", L"4k",  L"uhd",   L"web",    L"web-dl", L"webdl",
+        L"webrip", L"hdtv", L"hdrip", L"bluray", L"bdrip", L"brrip", L"dvdrip", L"x264", L"x265", L"h264", L"h265",
+        L"hevc", L"avc", L"hdr", L"hdr10", L"dv", L"aac", L"ac3", L"dts", L"proper", L"repack", L"multi", L"internal"};
+    std::wstring w(word);
+    for (wchar_t& c : w) c = static_cast<wchar_t>(std::towlower(c));
+    for (std::wstring_view t : kTags)
+        if (w == t) return true;
+    return false;
+}
+
+std::wstring EpisodeTitle(std::wstring_view rest) {
+    std::wstring words;
+    size_t i = 0;
+    bool first = true;
+    while (i < rest.size()) {
+        while (i < rest.size() && (rest[i] == L'.' || rest[i] == L'_' || rest[i] == L' ')) ++i;
+        size_t e = i;
+        while (e < rest.size() && rest[e] != L'.' && rest[e] != L'_' && rest[e] != L' ') ++e;
+        if (e == i) break;
+        std::wstring_view w = rest.substr(i, e - i);
+        i = e;
+        // A double episode's second number ("S01E02E03") and dashes between parts are not words.
+        if (first && w.size() >= 2 && (w[0] == L'E' || w[0] == L'e') && IsDigit(w[1])) continue;
+        if (w == L"-" || w == L"—" || w == L"–") continue;
+        if (IsReleaseTag(w) || (w.front() == L'[' || w.front() == L'(')) break;
+        first = false;
+        if (!words.empty()) words += L' ';
+        words += w;
+    }
+    return words;
+}
+
 }  // namespace
 
 bool ParseEpisode(std::wstring_view name, EpisodeInfo* out) {
@@ -210,10 +246,22 @@ bool ParseEpisode(std::wstring_view name, EpisodeInfo* out) {
             out->show = ShowName(name.substr(0, i));
             out->season = season;
             out->episode = episode;
+            out->title = EpisodeTitle(name.substr(j));
         }
         return true;
     }
     return false;
+}
+
+std::wstring EpisodeLabel(std::wstring_view name) {
+    EpisodeInfo ep;
+    if (!ParseEpisode(name, &ep)) return {};
+    wchar_t code[32];
+    swprintf_s(code, L"S%02dE%02d", ep.season, ep.episode);
+    std::wstring out = code;
+    const std::wstring& rest = ep.title.empty() ? ep.show : ep.title;
+    if (!rest.empty()) out += L" · " + rest;
+    return out;
 }
 
 int ParseDiscNumber(std::wstring_view s) {

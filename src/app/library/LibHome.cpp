@@ -283,9 +283,13 @@ private:
                 const library::MediaKind kind = k == 0 ? library::MediaKind::Video : library::MediaKind::Audio;
                 auto found = snap->Search(filter_, kind);
                 library::SortItems(found, library::SortKey::Name);
+                const std::wstring q = library::SearchFold(filter_);
                 for (const library::MediaItem* m : found) {
                     Entry e = MediaCard(m->path, m, nullptr);
                     if (k == 1) e.extra = AlbumLabel(m->album);
+                    // Matched by the file name only: show it, or the row wouldn't say why it is here.
+                    if (k == 1 && !library::FoldedContains(library::SearchFold(m->title + L"\n" + m->artist + L"\n" + m->album), q))
+                        e.subtitle = library::FileNameOf(m->path);
                     e.ref = s->AddQueue(MakeQueueItem(m->path, k == 1 ? m->DisplayTitle() : std::wstring(), m->duration));
                     s->AddEntry(std::move(e));
                     ++n;

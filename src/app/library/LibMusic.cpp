@@ -166,6 +166,7 @@ public:
             auto* shuffle = buttons->Add<Button>(Tr(L"Shuffle"), ButtonKind::Secondary, "shuffle_right");
             shuffle->onClick = [this] { PlayShuffled(queue_, queueName_); };
             toolbar_->visible = true;
+            if (mode_ == MusicMode::Artist) AddAlbumsBlock();
         } else if (mode_ != MusicMode::Root && mode_ != MusicMode::Albums && mode_ != MusicMode::Artists &&
                    mode_ != MusicMode::Genres) {
             auto* play = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Primary, "play");
@@ -267,6 +268,7 @@ protected:
         if (!snap_) return;
         auto songs = snap_->Music();
         grid_->roundImages = mode_ == MusicMode::Artists;
+        grid_->thumbs = mode_ != MusicMode::Album;  // every row would repeat the album's cover
 
         switch (mode_) {
             case MusicMode::Root: BuildRoot(songs); break;
@@ -293,7 +295,10 @@ protected:
                     // The artist's albums first, then all of their songs.
                     auto albums = Groups(v, MusicMode::Albums);
                     const bool tagged = std::any_of(albums.begin(), albums.end(), [](const Group& g) { return !g.name.empty(); });
-                    if (tagged && folded_.empty()) {
+                    const bool show = tagged && folded_.empty();
+                    if (albums_) {
+                        FillAlbums(show ? std::move(albums) : std::vector<Group>{});
+                    } else if (show) {
                         AddHeader(Tr(L"Albums"));
                         BuildGroups(std::move(albums), EntryKind::Album, "album", L"album:", true);
                         AddHeader(Tr(L"Songs"));
@@ -377,26 +382,98 @@ protected:
         if (!e || !GetHost()) return;
         if (e->kind == EntryKind::Album || e->kind == EntryKind::Artist || e->kind == EntryKind::Genre) {
             const Route* r = RouteAt(index);
-            const Route target = r ? *r : Route{};
-            auto q = GroupQueue(index);
-            const std::wstring name = e->kind == EntryKind::Artist ? ArtistLabel(e->path) : e->title;
-            std::vector<MenuItem> m;
-            m.push_back(Item(L"Open", e->kind == EntryKind::Album ? "album" : e->kind == EntryKind::Artist ? "artist" : "genre",
-                             [target] { TheApp().Navigate(target); }));
-            m.push_back(Item(L"Play", "playback", [q, name] { PlayInOrder(q, name); }));
-            m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
-            m.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(q); }));
-            m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
-            MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
-            pl.submenu = AddToPlaylistMenu(q);
-            m.push_back(std::move(pl));
-            ShowContextMenu(GetHost(), at, std::move(m));
+            GroupMenu(e->kind, r ? *r : Route{}, GroupQueue(index), e->kind == EntryKind::Artist ? ArtistLabel(e->path) : e->title, at);
             return;
         }
         Page::ShowMenu(index, at);
     }
 
 private:
+    void GroupMenu(EntryKind kind, Route target, std::vector<QueueItem> q, const std::wstring& name, Point at) {
+        if (!GetHost()) return;
+        std::vector<MenuItem> m;
+        m.push_back(Item(L"Open", kind == EntryKind::Album ? "album" : kind == EntryKind::Artist ? "artist" : "genre",
+                         [target] { TheApp().Navigate(target); }));
+        m.push_back(Item(L"Play", "playback", [q, name] { PlayInOrder(q, name); }));
+        m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
+        m.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(q); }));
+        m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
+        MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
+        pl.submenu = AddToPlaylistMenu(q);
+        m.push_back(std::move(pl));
+        ShowContextMenu(GetHost(), at, std::move(m));
+    }
+
+    // Artist page: "Albums" as a row of cover cards (art + year) above the "Songs" list, as in
+    // Apple Music and Spotify. A grid of its own, so the songs below can stay a list.
+    void AddAlbumsBlock() {
+        auto title = [&](const wchar_t* text, int index, float top) {
+            auto* box = content_->AddChild(std::make_unique<Widget>(), index);
+            box->dir = Dir::Column;
+            box->width = Length::Grow();
+            box->pad = {0, top, 0, 16};
+            box->visible = false;
+            box->Add<Label>(Tr(text), TextStyle::Section, Tone::Secondary)->width = Length::Grow();
+            return box;
+        };
+        albumsTitle_ = title(L"Albums", 1, 0);
+        albums_ = static_cast<ItemGrid*>(content_->AddChild(std::make_unique<ItemGrid>(), 2));
+        albums_->SetStyle(GridStyle::SquareCards);
+        albums_->stretch = false;
+        albums_->visible = false;
+        albums_->onActivate = [this](int i) {
+            if (i >= 0 && i < static_cast<int>(albumRoutes_.size())) TheApp().Navigate(albumRoutes_[static_cast<size_t>(i)]);
+        };
+        albums_->onMenu = [this](int i, Point at) {
+            if (i < 0 || i >= static_cast<int>(albumRoutes_.size())) return;
+            std::vector<QueueItem> q;
+            for (const library::MediaItem* m : albumSongs_[static_cast<size_t>(i)])
+                q.push_back(MakeQueueItem(m->path, m->DisplayTitle(), m->duration));
+            GroupMenu(EntryKind::Album, albumRoutes_[static_cast<size_t>(i)], std::move(q),
+                      albums_->Entries()[static_cast<size_t>(i)].title, at);
+        };
+        songsTitle_ = title(L"Songs", 3, 40);
+    }
+
+    // Newest first (unknown years last), like an artist's discography.
+    void FillAlbums(std::vector<Group> groups) {
+        auto yearOf = [](const Group& g) {
+            int y = 0;
+            for (const library::MediaItem* m : g.songs) y = std::max(y, m->year);
+            return y;
+        };
+        std::stable_sort(groups.begin(), groups.end(), [&](const Group& a, const Group& b) {
+            if (a.name.empty() != b.name.empty()) return b.name.empty();
+            const int ya = yearOf(a), yb = yearOf(b);
+            if (ya != yb) return ya > yb;
+            return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
+        });
+        std::vector<Entry> entries;
+        albumRoutes_.clear();
+        albumSongs_.clear();
+        for (Group& g : groups) {
+            Entry e;
+            e.kind = EntryKind::Album;
+            e.title = AlbumLabel(g.name);
+            e.path = g.name;
+            e.icon = "album";
+            const int year = yearOf(g);
+            e.subtitle = year > 0 ? std::to_wstring(year) : CountSongs(static_cast<long long>(g.songs.size()));
+            library::SortItems(g.songs, library::SortKey::Track);
+            for (const library::MediaItem* m : g.songs)
+                if (!m->offline) {
+                    e.image = m->path;
+                    break;
+                }
+            entries.push_back(std::move(e));
+            albumRoutes_.push_back(Route{Section::Music, L"album:" + g.name});
+            albumSongs_.push_back(std::move(g.songs));
+        }
+        const bool any = !entries.empty();
+        albums_->SetEntries(std::move(entries));
+        albums_->visible = albumsTitle_->visible = songsTitle_->visible = any;
+    }
+
     const char* ModeKey() const {
         switch (mode_) {
             case MusicMode::Root: return "root";
@@ -454,8 +531,8 @@ private:
 
     void BuildRoot(const std::vector<const library::MediaItem*>& songs) {
         if (songs.empty()) return;  // the empty state offers "Add folder"
-        // Same items in grid and list: the four categories and an "Add folder" tile/row, which
-        // leads the side panel's list (its design) and closes the page's grid.
+        // The four categories. "Add folder" leads the side panel's list (its design); on the page it
+        // lives in the header's "⋯" menu, not as a fifth tile that reads like a category.
         auto addFolder = [&] {
             Entry add;
             add.kind = EntryKind::Action;
@@ -486,7 +563,6 @@ private:
         const bool reading = !snap_->complete;
         cat(L"Genres", "genre", L"genres", reading ? std::wstring(Tr(L"Reading tags…")) : CountGenres(static_cast<long long>(genres.size())),
             static_cast<int>(genres.size()));
-        if (!compact_) addFolder();
     }
 
     void BuildSongs(std::vector<const library::MediaItem*> v, const std::string& defaultSort) {
@@ -521,7 +597,10 @@ private:
             if (discs && m->disc != lastDisc && m->disc > 0)
                 AddHeader(Fmt(Tr(L"Disc {0}"), static_cast<long long>(m->disc)));
             lastDisc = m->disc;
-            AddMedia(*m);
+            const int i = AddMedia(*m);
+            // Filtered by text that only the file name holds: the file name says why the row is here.
+            if (!folded_.empty() && !library::FoldedContains(library::SearchFold(m->title + L"\n" + m->artist + L"\n" + m->album), folded_))
+                SetSubtitle(i, library::FileNameOf(m->path));
         }
     }
 
@@ -577,6 +656,12 @@ private:
     bool mixedArtists_ = false;
     bool countShown_ = false;
     std::map<int, std::vector<const library::MediaItem*>> groupSongs_;
+    // Artist page albums block (not in the side panel).
+    Widget* albumsTitle_ = nullptr;
+    ItemGrid* albums_ = nullptr;
+    Widget* songsTitle_ = nullptr;
+    std::vector<Route> albumRoutes_;
+    std::vector<std::vector<const library::MediaItem*>> albumSongs_;
 };
 
 bool LooksLikeFolder(const std::wstring& p) {

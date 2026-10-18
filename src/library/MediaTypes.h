@@ -44,8 +44,12 @@ struct EpisodeInfo {
     std::wstring show;
     int season = 0;
     int episode = 0;
+    std::wstring title;  // text after the marker up to release tags ("Pilot" in "Show.S01E01.Pilot.1080p")
 };
 bool ParseEpisode(std::wstring_view name, EpisodeInfo* out);
+// Card title of an episode file: "S01E02 · Pilot", "S01E02 · Show" when the name has no episode
+// title, or empty when the name is not an episode.
+std::wstring EpisodeLabel(std::wstring_view name);
 
 // Disc number of a "part of set" tag: "2/3" -> 2, "1" -> 1; 0 when there is no number.
 int ParseDiscNumber(std::wstring_view partOfSet);

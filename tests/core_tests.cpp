@@ -1204,6 +1204,13 @@ void TestEpisodesAndOrder() {
     CHECK(!library::ParseEpisode(L"Series S01", nullptr));
     CHECK(!library::ParseEpisode(L"Chaptered Demo (1080p)", nullptr));
     CHECK(!library::ParseEpisode(L"BS01E02", nullptr));  // glued to a word
+    CHECK(library::EpisodeLabel(L"Show.Name.S01E01.Pilot.1080p.WEB-DL") == L"S01E01 · Pilot");
+    CHECK(library::EpisodeLabel(L"Show.Name.S01E02.The.Second.One") == L"S01E02 · The Second One");
+    CHECK(library::EpisodeLabel(L"Show Name - S01E03") == L"S01E03 · Show Name");
+    CHECK(library::EpisodeLabel(L"Show 1x03 - Pilot") == L"S01E03 · Pilot");
+    CHECK(library::EpisodeLabel(L"S03E01E02 [1080p]") == L"S03E01");
+    CHECK(library::EpisodeLabel(L"The.Show.s2e10.720p") == L"S02E10 · The Show");
+    CHECK(library::EpisodeLabel(L"Chaptered Demo (1080p)").empty());
 
     const unsigned char mp4[] = {0, 0, 0, 0x20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 2, 0};
     const unsigned char mkv[] = {0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 1, 0x42, 0xF7, 0x81, 1, 0x42};

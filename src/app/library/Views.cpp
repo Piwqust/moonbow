@@ -233,6 +233,10 @@ int Page::AddRoute(Entry e, Route target) {
     return i;
 }
 
+void Page::SetSubtitle(int index, std::wstring text) {
+    if (index >= 0 && index < static_cast<int>(entries_.size())) entries_[static_cast<size_t>(index)].subtitle = std::move(text);
+}
+
 int Page::AddAction(Entry e, std::function<void()> action) {
     e.kind = e.kind == EntryKind::Media ? EntryKind::Action : e.kind;
     const int i = Push(std::move(e));
@@ -686,9 +690,11 @@ protected:
             return;
         }
 
-        // The section's landing level has the design's "Add folder" tile/row, in grid and list alike.
+        // The side panel's landing level leads with the design's "Add folder" row. The page keeps it
+        // in the header's "⋯" menu (and the empty state): a tile beside the folders read as one more
+        // item that the header's count left out, and filled a narrow window on its own.
         const bool landing = route_.path.empty() || SamePath(path, SoleRoot());
-        if (landing) {
+        if (landing && compact_) {
             Entry add;
             add.kind = EntryKind::Action;
             add.title = Tr(L"Add folder");
@@ -854,6 +860,26 @@ public:
         modes_ = false;
         list_ = true;
         queueName_ = Tr(L"Recent");
+        if (!compact) {
+            // The views as visible tabs, not hidden in "⋯" (the side panel keeps them in its menu).
+            int current = 0;
+            for (int i = 0; i < 4; ++i)
+                if (route_.path == kViews[i].path) current = i;
+            std::vector<Choice> choices;
+            float widest = 96;  // segments share one width: the longest label sets it
+            for (const View& v : kViews) {
+                choices.push_back({Tr(v.label), {}, {}});
+                widest = std::max(widest, std::ceil(gfx::Text::Get().Measure(choices.back().label, TextStyle::Body).width) + 24);
+            }
+            auto* tabs = toolbar_->Add<Segmented>(std::move(choices), current);
+            tabs->segmentWidth = widest;
+            tabs->onChange = [this](int i) {
+                const std::wstring path = kViews[i].path;
+                // Posted: navigating replaces this page while its control is still handling the click.
+                if (Host* h = GetHost()) h->Post([path] { TheApp().Navigate(Route{Section::Recent, path}); });
+            };
+            toolbar_->visible = true;
+        }
         Refresh();
     }
 
@@ -867,20 +893,18 @@ public:
 
     std::vector<MenuItem> MoreMenu() override {
         std::vector<MenuItem> m;
-        auto view = [&](const wchar_t* label, const wchar_t* path) {
-            MenuItem it;
-            it.label = Tr(label);
-            it.radio = true;
-            it.checked = route_.path == path;
-            const std::wstring p = path;
-            it.action = [p] { TheApp().Navigate(Route{Section::Recent, p}); };
-            m.push_back(std::move(it));
-        };
-        view(L"Everything", L"");
-        view(L"Continue Watching", L"continue");
-        view(L"Listen Again", L"audio");
-        view(L"Favorites", L"favorites");
-        m.push_back(MenuItem::Separator());
+        if (compact_) {
+            for (const View& v : kViews) {
+                MenuItem it;
+                it.label = Tr(v.label);
+                it.radio = true;
+                it.checked = route_.path == v.path;
+                const std::wstring p = v.path;
+                it.action = [p] { TheApp().Navigate(Route{Section::Recent, p}); };
+                m.push_back(std::move(it));
+            }
+            m.push_back(MenuItem::Separator());
+        }
         m.push_back(Item(L"Clear History…", "remove", [] {
             ShowConfirm(Tr(L"Clear history"), Tr(L"Recently played items and saved positions will be forgotten."),
                         Tr(L"Clear"), [] {
@@ -896,6 +920,10 @@ protected:
     unsigned RowColumns() const override { return kColSubtitle | kColDuration | kColDate | kColTime; }
 
     void Build() override {
+        AddColumns({}, {{kHeadTitle, L"Title", ""},
+                        {kHeadSubtitle, L"Details", ""},
+                        {kHeadDuration, L"Length", ""},
+                        {kHeadDate, L"Last played", ""}});
         if (Favorites()) {
             BuildFavorites();
             return;
@@ -1027,6 +1055,13 @@ protected:
     }
 
 private:
+    struct View {
+        const wchar_t* label;
+        const wchar_t* path;
+    };
+    static constexpr View kViews[4] = {
+        {L"Everything", L""}, {L"Continue Watching", L"continue"}, {L"Listen Again", L"audio"}, {L"Favorites", L"favorites"}};
+
     bool Favorites() const { return route_.path == L"favorites"; }
 };
 
