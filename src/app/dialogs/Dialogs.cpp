@@ -113,10 +113,12 @@ public:
                         gapW->height = Length::Px(24);
                         AddSeparator(this);
                     }
-                    // Group title: clearly above its rows, with more air before than after.
+                    // Group title: clearly above its rows, with more air before than after
+                    // (spacers: a Label centers its text inside its padding).
+                    Add<Widget>()->height = Length::Px(shown > 0 ? 28.0f : 18.0f);
                     auto* h = Add<Label>(Tr(g.c_str()), TextStyle::Heading);
                     h->color = SoftText;
-                    h->pad = {0, shown > 0 ? 28.0f : 20.0f, 0, 12};
+                    Add<Widget>()->height = Length::Px(12);
                     section = Add<Widget>();
                     section->dir = Dir::Column;
                     section->width = Length::Grow();
@@ -421,6 +423,12 @@ std::wstring Prop(const char* name) {
     return Utf8ToWide(TheApp().player().GetPropertyString(name));
 }
 
+// Decimal comma in Russian, as in the library sizes.
+std::wstring Decimal(std::wstring s) {
+    if (CurrentLanguage() == Language::Russian) std::replace(s.begin(), s.end(), L'.', L',');
+    return s;
+}
+
 std::wstring Kbps(const std::wstring& bitsPerSecond) {
     if (bitsPerSecond.empty()) return {};
     const double v = _wtof(bitsPerSecond.c_str());
@@ -430,7 +438,7 @@ std::wstring Kbps(const std::wstring& bitsPerSecond) {
         swprintf(buf, 32, L"%.1f %s", v / 1e6, Tr(L"Mbit/s"));
     else
         swprintf(buf, 32, L"%.0f %s", v / 1e3, Tr(L"kbit/s"));
-    return buf;
+    return Decimal(buf);
 }
 
 std::vector<InfoSection> CollectMediaInfo() {
@@ -465,7 +473,7 @@ std::vector<InfoSection> CollectMediaInfo() {
         if (!fps.empty()) {
             wchar_t buf[32];
             swprintf(buf, 32, L"%.3g", _wtof(fps.c_str()));
-            add(video, L"Frame rate", std::wstring(buf) + L" " + Tr(L"fps"));
+            add(video, L"Frame rate", Decimal(buf) + L" " + Tr(L"fps"));
         }
         add(video, L"Bitrate", Kbps(Prop("video-bitrate")));
         add(video, L"Pixel format", Prop("video-params/pixelformat"));

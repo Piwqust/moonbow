@@ -165,7 +165,8 @@ public:
 
     std::wstring TitleOf(int i) const {
         const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
-        if (!item.title.empty()) return item.title;
+        // Folder queues store the file name as the title: tags are better when known.
+        if (!item.title.empty() && item.title != FileNameOf(item.path)) return item.title;
         if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().title.empty()) return PS().title;
         if (const library::MediaItem* m = LibraryItem(i); m && !m->title.empty()) return m->title;
         return FileNameOf(item.path);
