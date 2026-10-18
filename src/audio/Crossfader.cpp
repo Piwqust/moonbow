@@ -341,7 +341,8 @@ void Crossfader::Fade() {
     double last = NowSeconds();
     while (!helperEnded_) {
         const bool wasPaused = mainPaused_;
-        const bool ok = Wait(wasPaused ? -1 : 0.01);
+        // 50 steps a second: a long, slow ramp needs no more (the handoff above uses 200).
+        const bool ok = Wait(wasPaused ? -1 : 0.02);
         const double now = NowSeconds();
         if (!wasPaused) elapsed += (now - last) * speedApplied_;
         last = now;
