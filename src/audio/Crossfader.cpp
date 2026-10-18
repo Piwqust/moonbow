@@ -1,8 +1,10 @@
 #include "audio/Crossfader.h"
 
+#include "Player.h"
 #include "Trace.h"
 #include "Util.h"
 #include "audio/CrossfadeMath.h"
+#include "library/TagReader.h"
 
 #include <objbase.h>
 #include <propkey.h>
@@ -29,8 +31,11 @@ double NowSeconds() {
     return static_cast<double>(t.QuadPart) / freq;
 }
 
-// The album tag as Windows reads it (the same reader as the library), empty when unknown.
+// The album tag, read the way the library reads it: Lumen's own tag reader, then the Windows
+// property system for the formats it doesn't cover (Matroska). Empty when unknown.
 std::wstring AlbumOf(const std::wstring& path) {
+    library::TagInfo tags;
+    if (library::ReadTagsFromFile(path, &tags) && !tags.album.empty()) return tags.album;
     IPropertyStore* store = nullptr;
     if (FAILED(SHGetPropertyStoreFromParsingName(path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store))))
         return {};
@@ -61,7 +66,6 @@ Crossfader::Crossfader(const MpvApi& api, mpv_handle* main, CrossfadePlan plan)
     : api_(api), main_(main), plan_(std::move(plan)) {
     // Not in MpvApi: only this worker makes synchronous sets.
     setProperty_ = reinterpret_cast<decltype(setProperty_)>(GetProcAddress(api_.module, "mpv_set_property"));
-    paused_ = mainPaused_ = plan_.paused;
     volume_ = plan_.volume;
     mute_ = plan_.mute;
     speed_ = speedApplied_ = plan_.speed > 0 ? plan_.speed : 1;
@@ -187,13 +191,9 @@ bool Crossfader::PrepareHelper() {
     auto opt = [this](const char* name, const std::string& value) {
         api_.mpv_set_option_string(helper_, name, value.c_str());
     };
-    // Audio only, no UI, no scripts, nothing remembered, no media session next to Lumen's own.
-    for (const char* name : {"osc", "terminal", "config", "load-scripts", "ytdl", "input-default-bindings",
-                             "input-vo-keyboard", "resume-playback", "save-position-on-quit", "keep-open",
-                             "media-controls", "load-stats-overlay", "load-console", "load-select",
-                             "load-positioning", "load-commands", "load-context-menu", "sub-auto", "audio-file-auto",
-                             "cover-art-auto", "audio-display", "gapless-audio", "prefetch-playlist", "cache",
-                             "audio-pitch-correction"})
+    // Audio only, one file, no media session next to Lumen's own.
+    SetQuietMpvOptions(api_, helper_);
+    for (const char* name : {"keep-open", "audio-display", "gapless-audio", "prefetch-playlist", "audio-pitch-correction"})
         opt(name, "no");
     opt("vid", "no");
     opt("sid", "no");
@@ -216,7 +216,7 @@ bool Crossfader::PrepareHelper() {
     opt("speed", num);
     // The tail must sound like it did a moment ago in the main instance: same filters, device and
     // loudness settings.
-    for (const char* name : {"volume-max", "af", "audio-device", "audio-channels", "replaygain", "replaygain-preamp",
+    for (const char* name : {"volume-max", "af", "audio-delay", "audio-device", "audio-channels", "replaygain", "replaygain-preamp",
                              "replaygain-clip", "replaygain-fallback", "audio-normalize-downmix", "audio-samplerate",
                              "audio-format"}) {
         char* v = nullptr;
@@ -320,18 +320,22 @@ bool Crossfader::Handoff() {
         if (now >= end) break;
         if (!Wait(std::min(0.005, std::max(0.001, end - now)))) return false;
     }
-    std::lock_guard lock(mu_);
-    if (cancel_ || stop_) return false;
     // Still the same file: had mpv already gone on by itself (a duration estimate that was too
-    // long), playlist-next would skip a song.
+    // long), playlist-next would skip a song. Read before the lock: Cancel must never wait on mpv.
     char* path = nullptr;
     const bool same = api_.mpv_get_property(main_, "path", MPV_FORMAT_STRING, &path) >= 0 && path &&
                       Utf8ToWide(path) == plan_.outgoing;
     if (path) api_.mpv_free(path);
     if (!same) return false;
-    const char* next[] = {"playlist-next", nullptr};
-    api_.mpv_command_async(main_, 0, next);
-    switched_ = true;
+    {
+        std::lock_guard lock(mu_);
+        if (cancel_ || stop_) return false;
+        // Before the command: the next file's START_FILE must find the switch made, or Player
+        // takes it for mpv going on by itself and cancels the fade.
+        switched_ = true;
+        const char* next[] = {"playlist-next", nullptr};
+        api_.mpv_command_async(main_, 0, next);
+    }
     TraceXf("switched at main %.3f (planned %.3f)", MainPts(), t);
     return true;
 }
@@ -419,7 +423,9 @@ void Crossfader::ApplyRequests() {
         SetHelperDouble("volume", volume);
         SetHelperFlag("mute", mute);
     }
-    if (speedDirty && speed != speedApplied_) {
+    // After the switch main plays the next song, at its own speed (per-file settings): the tail
+    // keeps the old song's.
+    if (speedDirty && speed != speedApplied_ && !switched_) {
         speedApplied_ = speed;
         SetHelperDouble("speed", speed);
     }

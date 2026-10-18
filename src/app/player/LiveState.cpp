@@ -145,6 +145,15 @@ double DefaultSubPos() {
     return Cfg().GetDouble("subtitles.position");
 }
 
+// The track a file opens with when nothing is stored for it; "no" when Settings turn it off.
+std::string ConfigAid() {
+    return ConfigOption("playback.audioTrack", "aid", "auto");
+}
+
+std::string ConfigSid() {
+    return ConfigOption("playback.subtitleTrack", "sid", "auto");
+}
+
 std::string DefaultDeinterlace() {
     return ConfigOption("video.deinterlace", "deinterlace", "no");
 }
@@ -161,12 +170,13 @@ bool ExcludedFromMemory(const std::wstring& path) {
     return TheApp().history().IsExcluded(path);
 }
 
-// Settings whose mpv mapping rewrites the whole vf chain (dropping Lumen's labelled filters).
-bool RewritesVf(const std::string& key) {
+// Settings whose mpv mapping rewrites a whole filter chain ("vf", "af"), dropping Lumen's
+// labelled filters in it.
+bool Rewrites(const std::string& key, const char* chain) {
     const settings::Item* item = settings::FindItem(key);
     if (!item) return false;
     for (const settings::MpvMap& m : item->mpv)
-        if (m.option == "vf") return true;
+        if (m.option == chain) return true;
     return false;
 }
 
@@ -204,7 +214,7 @@ LiveState::LiveState() {
     LoadCropSetting();
     // App leaves vf to us (ApplyVideoFilters); it writes the whole af chain, so put ours back on top.
     configToken_ = TheApp().config().Subscribe("", [this](const std::string& key) {
-        if (RewritesVf(key)) ApplyVideoFilters();
+        if (Rewrites(key, "vf")) ApplyVideoFilters();
         if (key == "performance.hwdec") ApplyHwdec();
         if (key.rfind("video.crop", 0) == 0) {
             LoadCropSetting();
@@ -215,7 +225,7 @@ LiveState::LiveState() {
             ApplyUpscaler();
             Notify();
         }
-        if (key.rfind("audio.", 0) == 0) ApplyAudioFilters();
+        if (Rewrites(key, "af")) ApplyAudioFilters();
         if (key == "playback.perFile" || key == "playback.perFileAll") {
             Mpv().confirmTracks = FileSettingsOn();
             // From now on for the playing file too (what it opened with is its starting point).
@@ -238,9 +248,7 @@ LiveState::LiveState() {
 
 LiveState::~LiveState() {
     if (loader_.joinable()) loader_.join();
-    // At exit: the last change may still wait for its capture (the window and its timers are gone).
-    if (captureTimer_) Capture(false);
-    if (store_.Loaded()) store_.Flush();
+    FlushFileSettings();
 }
 
 void LiveState::LoadCropSetting() {
@@ -552,11 +560,7 @@ void LiveState::SetZoomMode(const std::string& mode) {
     zoomMode = mode;
     const bool unscaled = mode != "fit";
     Mpv().SetProperty("video-unscaled", std::string(unscaled ? "yes" : "no"));
-    double z = 0;
-    if (mode == "quarter") z = -2;
-    if (mode == "half") z = -1;
-    if (mode == "double") z = 1;
-    Mpv().SetProperty("video-zoom", z);
+    Mpv().SetProperty("video-zoom", ModeZoom(mode));
     Notify();
 }
 
@@ -616,6 +620,14 @@ void LiveState::SetDeinterlace(const std::string& d) {
     deinterlace = d;
     Mpv().SetProperty("deinterlace", d);
     Notify();
+}
+
+// D: between the default and its opposite, so pressing it twice leaves nothing stored for the
+// file (mpv's own cycle went on through all three values).
+const std::string& LiveState::ToggleDeinterlace() {
+    const std::string def = DefaultDeinterlace();
+    SetDeinterlace(deinterlace != def ? def : def == "no" ? "yes" : "no");
+    return deinterlace;
 }
 
 void LiveState::ResetPicture() {
@@ -840,9 +852,11 @@ std::string LiveState::FileOptionsFor(const std::wstring& path) {
     auto track = [](int64_t id) { return id > 0 ? std::to_string(id) : std::string("no"); };
     // The tracks always: a file without a stored choice gets the configured one, not the choice
     // mpv's watch-later put back for the previous file (it outlives that file on a gapless move).
-    // A sidecar track is picked (or added) once the file has loaded, see FixTracks.
-    add("aid", o.aid && !o.audioFile ? track(*o.aid) : ConfigOption("playback.audioTrack", "aid", "auto"));
-    add("sid", o.sid && !o.subFile ? track(*o.sid) : ConfigOption("playback.subtitleTrack", "sid", "auto"));
+    // A sidecar track is picked (or added) once the file has loaded, see FixTracks. Sound or
+    // subtitles turned off in Settings stay off, whatever was chosen for the file.
+    const std::string aid = ConfigAid(), sid = ConfigSid();
+    add("aid", aid != "no" && o.aid && !o.audioFile ? track(*o.aid) : aid);
+    add("sid", sid != "no" && o.sid && !o.subFile ? track(*o.sid) : sid);
     add("secondary-sid", o.secondarySid ? track(*o.secondarySid) : std::string("no"));
     if (o.audioDelay) add("audio-delay", Num(*o.audioDelay));
     if (o.subDelay) add("sub-delay", Num(*o.subDelay));
@@ -851,7 +865,7 @@ std::string LiveState::FileOptionsFor(const std::wstring& path) {
     if (o.aspect) add("video-aspect-override", *o.aspect);
     if (o.zoomMode) {
         add("video-unscaled", "yes");
-        add("video-zoom", Num(ModeZoom(*o.zoomMode)));
+        add("video-zoom", Num(o.zoom.value_or(ModeZoom(*o.zoomMode))));  // Z / Shift+Z on top of the mode
     } else if (o.zoom) {
         add("video-zoom", Num(*o.zoom));
     }
@@ -926,23 +940,28 @@ void LiveState::FixTracks() {
         return nullptr;
     };
     const library::FileOptions o = fileOpts_;
-    if (o.audioFile) {
-        if (const Track* t = byFile(L"audio", *o.audioFile)) {
-            if (!t->selected) p.SetTrack("aid", t->id);
-        } else {
-            p.AddAudio(*o.audioFile);  // a file that is gone only fails inside mpv
+    // Sound or subtitles turned off in Settings: the file opened without them and stays so.
+    if (ConfigAid() != "no") {
+        if (o.audioFile) {
+            if (const Track* t = byFile(L"audio", *o.audioFile)) {
+                if (!t->selected) p.SetTrack("aid", t->id);
+            } else {
+                p.AddAudio(*o.audioFile);  // a file that is gone only fails inside mpv
+            }
+        } else if (o.aid && *o.aid > 0 && !byId(L"audio", *o.aid)) {
+            p.SetProperty("aid", std::string("auto"));
         }
-    } else if (o.aid && *o.aid > 0 && !byId(L"audio", *o.aid)) {
-        p.SetProperty("aid", std::string("auto"));
     }
-    if (o.subFile) {
-        if (const Track* t = byFile(L"sub", *o.subFile)) {
-            if (!t->selected) p.SetTrack("sid", t->id);
-        } else {
-            p.AddSubtitle(*o.subFile);
+    if (ConfigSid() != "no") {
+        if (o.subFile) {
+            if (const Track* t = byFile(L"sub", *o.subFile)) {
+                if (!t->selected) p.SetTrack("sid", t->id);
+            } else {
+                p.AddSubtitle(*o.subFile);
+            }
+        } else if (o.sid && *o.sid > 0 && !byId(L"sub", *o.sid)) {
+            p.SetProperty("sid", std::string("auto"));
         }
-    } else if (o.sid && *o.sid > 0 && !byId(L"sub", *o.sid)) {
-        p.SetProperty("sid", std::string("auto"));
     }
     if (o.secondarySid && *o.secondarySid > 0 && !byId(L"sub", *o.secondarySid))
         p.SetProperty("secondary-sid", std::string("no"));
@@ -1008,7 +1027,7 @@ void LiveState::Capture(bool notify) {
         o.zoomMode.reset();
         o.zoom.reset();
         if (zoomMode != "fit") o.zoomMode = zoomMode;
-        else num(o.zoom, v_.zoom, 0, 0.001);
+        num(o.zoom, v_.zoom, ModeZoom(zoomMode), 0.001);
         num(o.panX, v_.panX, 0, 0.001);
         num(o.panY, v_.panY, 0, 0.001);
         num(o.rotate, v_.rotate, 0, 0.5);
@@ -1030,13 +1049,22 @@ void LiveState::Capture(bool notify) {
     if (notify) Repaint();
 }
 
+// The user's last change, made a moment ago, without waiting for its timer.
+void LiveState::CaptureNow() {
+    if (!captureTimer_) return;
+    if (MainWindow* w = TheApp().main()) w->CancelTimer(captureTimer_);
+    captureTimer_ = 0;
+    Capture(false);
+}
+
 void LiveState::LeaveFile() {
-    if (captureTimer_) {
-        if (MainWindow* w = TheApp().main()) w->CancelTimer(captureTimer_);
-        captureTimer_ = 0;
-        Capture(false);  // the user's last change, made a moment ago
-    }
+    CaptureNow();
     fileOpen_ = false;
+}
+
+void LiveState::FlushFileSettings() {
+    CaptureNow();
+    if (store_.Loaded()) store_.Flush();
 }
 
 void LiveState::ScheduleSave() {
@@ -1050,11 +1078,7 @@ void LiveState::ScheduleSave() {
 
 void LiveState::ResetFileSettings() {
     if (filePath_.empty()) return;
-    if (captureTimer_) {
-        if (MainWindow* w = TheApp().main()) w->CancelTimer(captureTimer_);
-        captureTimer_ = 0;
-        Capture(false);
-    }
+    CaptureNow();
     const library::FileOptions old = FileSettingsStored();
     if (Store().Remove(filePath_)) ScheduleSave();
     fileOpts_ = {};
@@ -1084,6 +1108,7 @@ void LiveState::ResetFileSettings() {
         tracksTouched_[k] = false;
     }
     trackFixPending_ = false;
+    p.RequeueNext();  // the next file in the queue may be this one: it got the stored options
     Repaint();
 }
 
@@ -1099,6 +1124,7 @@ void LiveState::ForgetAllFileSettings() {
     fileOpts_ = {};
     fileOpen_ = false;
     trackFixPending_ = false;
+    Mpv().RequeueNext();  // it was handed to mpv with what was stored for it
     Repaint();
 }
 

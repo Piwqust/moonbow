@@ -4,6 +4,7 @@
 #include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/player/NowPlaying.h"
 #include "core/ShellText.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
@@ -131,34 +132,43 @@ struct SystemIntegration::Impl {
         return play != nullptr;
     }
 
-    void AddButtons() {
-        if (!taskbar || buttonsAdded || !EnsureIcons()) return;
-        THUMBBUTTON b[3]{};
+    // The three thumbnail buttons, with tooltips in the current language.
+    void FillButtons(THUMBBUTTON (&b)[3]) const {
         const struct {
             UINT id;
             HICON icon;
             const wchar_t* tip;
-        } defs[] = {{kBtnPrev, prev, L"Previous"}, {kBtnPlay, play, L"Play"}, {kBtnNext, next, L"Next"}};
+        } defs[] = {{kBtnPrev, prev, Tr(L"Previous")},
+                    {kBtnPlay, shownPlaying ? pause : play, shownPlaying ? Tr(L"Pause") : Tr(L"Play")},
+                    {kBtnNext, next, Tr(L"Next")}};
         for (int i = 0; i < 3; ++i) {
+            b[i] = {};
             b[i].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
             b[i].iId = defs[i].id;
             b[i].hIcon = defs[i].icon;
-            wcscpy_s(b[i].szTip, defs[i].tip);
+            wcsncpy_s(b[i].szTip, defs[i].tip, _TRUNCATE);
             b[i].dwFlags = THBF_ENABLED;
         }
+    }
+
+    void AddButtons() {
+        if (!taskbar || buttonsAdded || !EnsureIcons()) return;
+        THUMBBUTTON b[3];
+        FillButtons(b);
         buttonsAdded = SUCCEEDED(taskbar->ThumbBarAddButtons(hwnd, 3, b));
     }
 
+    void UpdateButtons() {
+        if (!buttonsAdded) return;
+        THUMBBUTTON b[3];
+        FillButtons(b);
+        taskbar->ThumbBarUpdateButtons(hwnd, 3, b);
+    }
+
     void UpdatePlayButton(bool playing) {
-        if (!buttonsAdded || playing == shownPlaying) return;
+        if (playing == shownPlaying) return;
         shownPlaying = playing;
-        THUMBBUTTON b{};
-        b.dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
-        b.iId = kBtnPlay;
-        b.hIcon = playing ? pause : play;
-        wcscpy_s(b.szTip, playing ? L"Pause" : L"Play");
-        b.dwFlags = THBF_ENABLED;
-        taskbar->ThumbBarUpdateButtons(hwnd, 1, &b);
+        UpdateButtons();
     }
 
     // The notification needs the icon too, so either setting shows it.
@@ -297,6 +307,10 @@ void SystemIntegration::Attach(HWND window) {
     impl_->SyncTray();
 }
 
+void SystemIntegration::LanguageChanged() {
+    impl_->UpdateButtons();
+}
+
 void SystemIntegration::SettingsChanged() {
     Impl& d = *impl_;
     d.SyncTray();
@@ -407,20 +421,24 @@ void SystemIntegration::Update(unsigned changes) {
         }
     }
 
+    if (!(changes & (kChangeState | kChangeFile | kChangeMeta))) return;
+    // The tags as the player screens show them (the library's reader first, then mpv's).
+    const PlayingTags& tags = CurrentTags();
+    const QueueItem* item = app.queue().CurrentItem();
+    const std::wstring& title = tags.title.empty() && item ? FileNameOf(item->path) : tags.title;
+
     // Tray tooltip and track notification (once per file).
     if (changes & (kChangeFile | kChangeMeta)) {
-        const QueueItem* item = app.queue().CurrentItem();
-        std::wstring title = s.title.empty() && item ? FileNameOf(item->path) : s.title;
         d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" — Lumen", std::size(NOTIFYICONDATAW{}.szTip))
                                                      : L"Lumen");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
-            d.NotifyTrack(s.artist.empty() ? title : title + L"\n" + s.artist);
+            d.NotifyTrack(tags.artist.empty() ? title : title + L"\n" + tags.artist);
         }
     }
 
     // Media transport controls.
-    if (!d.smtc || !(changes & (kChangeState | kChangeFile | kChangeMeta))) return;
+    if (!d.smtc) return;
     try {
         const bool enabled = s.fileLoaded && app.config().GetBool("interface.mediaControls");
         d.smtc.IsEnabled(enabled);
@@ -428,16 +446,14 @@ void SystemIntegration::Update(unsigned changes) {
         d.smtc.PlaybackStatus(s.paused ? wm::MediaPlaybackStatus::Paused : wm::MediaPlaybackStatus::Playing);
         if (changes & (kChangeFile | kChangeMeta)) {
             auto updater = d.smtc.DisplayUpdater();
-            const QueueItem* item = app.queue().CurrentItem();
-            std::wstring title = s.title.empty() && item ? FileNameOf(item->path) : s.title;
             if (s.hasVideo) {
                 updater.Type(wm::MediaPlaybackType::Video);
                 updater.VideoProperties().Title(title);
             } else {
                 updater.Type(wm::MediaPlaybackType::Music);
                 updater.MusicProperties().Title(title);
-                updater.MusicProperties().Artist(s.artist);
-                updater.MusicProperties().AlbumTitle(s.album);
+                updater.MusicProperties().Artist(tags.artist);
+                updater.MusicProperties().AlbumTitle(tags.album);
             }
             updater.Update();
         }

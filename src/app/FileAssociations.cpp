@@ -19,7 +19,8 @@ constexpr wchar_t kCapabilities[] = L"Software\\Lumen\\Capabilities";
 
 const wchar_t* const kVideo[] = {L".mkv", L".mp4", L".m4v", L".avi", L".mov", L".webm", L".wmv", L".flv", L".ts",
                                  L".m2ts", L".mts", L".mpg", L".mpeg", L".vob", L".ogv", L".3gp", L".rmvb", L".hevc"};
-const wchar_t* const kAudio[] = {L".mp3", L".flac", L".m4a", L".aac", L".ogg", L".opus", L".wav", L".wma", L".ac3", L".dts"};
+const wchar_t* const kAudio[] = {L".mp3", L".flac", L".m4a", L".aac", L".ogg", L".opus", L".wav", L".wma", L".ac3",
+                                 L".dts", L".mka", L".m4b", L".ape", L".wv",  L".aiff"};
 const wchar_t* const kPlaylists[] = {L".m3u", L".m3u8", L".pls"};
 
 std::wstring ExePath() {

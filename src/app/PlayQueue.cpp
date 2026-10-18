@@ -34,12 +34,22 @@ void PlayQueue::Add(std::vector<QueueItem> items) {
     if (!shuffle_) {
         Reshuffle();
     } else {
-        for (int i = first; i < static_cast<int>(items_.size()); ++i) {
-            const auto cur = std::find(order_.begin(), order_.end(), current_);
-            const auto from = cur == order_.end() ? order_.begin() : cur + 1;
-            const auto span = static_cast<int>(order_.end() - from);
-            order_.insert(from + std::uniform_int_distribution<int>(0, span)(Rng()), i);
+        // The new items in random order, merged at random into what is still to play: each
+        // interleaving equally likely, in one pass (one insert per item was O(n) each).
+        std::vector<int> added(items_.size() - static_cast<size_t>(first));
+        std::iota(added.begin(), added.end(), first);
+        std::shuffle(added.begin(), added.end(), Rng());
+        const auto cur = std::find(order_.begin(), order_.end(), current_);
+        const size_t from = cur == order_.end() ? 0 : static_cast<size_t>(cur - order_.begin()) + 1;
+        std::vector<int> merged(order_.begin(), order_.begin() + static_cast<std::ptrdiff_t>(from));
+        merged.reserve(order_.size() + added.size());
+        size_t a = from, b = 0;
+        while (a < order_.size() || b < added.size()) {
+            const size_t oldLeft = order_.size() - a, newLeft = added.size() - b;
+            const bool takeNew = newLeft > 0 && std::uniform_int_distribution<size_t>(0, oldLeft + newLeft - 1)(Rng()) < newLeft;
+            merged.push_back(takeNew ? added[b++] : order_[a++]);
         }
+        order_ = std::move(merged);
     }
     changed.Emit();
 }
@@ -178,12 +188,6 @@ int PlayQueue::IndexOfStarted(const std::wstring& path, int hint) const {
         if (items_[static_cast<size_t>(i)].path == path) return i;
     }
     return -1;
-}
-
-double PlayQueue::TotalDuration() const {
-    double sum = 0;
-    for (const QueueItem& i : items_) sum += i.duration;
-    return sum;
 }
 
 }  // namespace app

@@ -2685,6 +2685,31 @@ void TestPlayQueue() {
     CHECK(seen.size() == q.Items().size());
     q.SetShuffle(false);
 
+    // Shuffled Add: what was still to play keeps its order, every new item lands after the
+    // current one, and a large add stays linear.
+    q.Set(make(6), 2);
+    q.SetShuffle(true);
+    std::vector<int> before;
+    for (int i = q.NextIndex(false), k = 0; i >= 0 && k < 8; ++k) {
+        before.push_back(i);
+        const int cur = q.Current();
+        q.SetCurrent(i);
+        i = q.NextIndex(false);
+        q.SetCurrent(cur);
+    }
+    q.Add(make(4000));
+    std::vector<int> walk;
+    for (int i = q.Current(), k = 0; i >= 0 && k < 5000; i = q.NextIndex(false), ++k) {
+        walk.push_back(i);
+        q.SetCurrent(i);
+    }
+    CHECK(walk.size() == q.Items().size());
+    std::vector<int> oldOnes;
+    for (size_t k = 1; k < walk.size(); ++k)
+        if (walk[k] < 6) oldOnes.push_back(walk[k]);
+    CHECK(oldOnes == before);
+    q.SetShuffle(false);
+
     // What a played file said about itself sticks to its row.
     q.Set(make(2), 0);
     q.SetInfo(0, L"Tagged", 90);
@@ -2745,6 +2770,9 @@ void TestCrossfadeMath() {
     CHECK(DecideArm(s - 0.3, d, f) == ArmDecision::TooLate);
     CHECK(DecideArm(d - 1, d, f) == ArmDecision::TooLate);
     CHECK(DecideArm(10, d, 0) == ArmDecision::TooLate);
+    // The length isn't known yet (mpv reports it after the file loads): wait for it, never give up.
+    CHECK(DecideArm(0, 0, EffectiveFade(3, 0)) == ArmDecision::Wait);
+    CHECK(DecideArm(5, -1, 0) == ArmDecision::Wait);
     // Albums: tags win (case and spaces ignored); without them the folder is the album.
     CHECK(SameAlbum(L"Kind of Blue", L"kind of  blue", L"D:\\a\\1.mp3", L"E:\\b\\2.mp3"));
     CHECK(!SameAlbum(L"Kind of Blue", L"Blue Train", L"D:\\a\\1.mp3", L"D:\\a\\2.mp3"));

@@ -670,7 +670,11 @@ void Run(Action a) {
             Toast(Fmt(Tr(L"Rotation {0}°"), r), "refresh");
             break;
         }
-        case Action::Deinterlace: p.Command({"cycle", "deinterlace"}); Toast(Tr(L"Deinterlace toggled"), "video"); break;
+        case Action::Deinterlace: {
+            const std::string& d = Live().ToggleDeinterlace();
+            Toast(std::wstring(Tr(L"Deinterlace")) + L": " + Tr(d == "yes" ? L"On" : d == "no" ? L"Off" : L"Auto"), "video");
+            break;
+        }
         case Action::ToggleStats: {
             // "Developer mode" is the persistent switch; PlayerView shows the panel while it is on.
             const bool on = !app.config().GetBool("general.developerMode");

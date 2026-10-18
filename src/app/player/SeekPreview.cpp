@@ -310,17 +310,12 @@ private:
         if (!api.mpv_create || !render_.Load(api.module)) return false;
         h_ = api.mpv_create();
         if (!h_) return false;
+        SetQuietMpvOptions(api, h_);
         const char* opts[][2] = {
             {"vo", "libmpv"}, {"aid", "no"}, {"sid", "no"}, {"pause", "yes"}, {"keep-open", "always"},
-            {"idle", "yes"}, {"force-window", "no"}, {"terminal", "no"}, {"msg-level", "all=no"}, {"config", "no"},
-            {"load-scripts", "no"}, {"osc", "no"}, {"ytdl", "no"}, {"load-stats-overlay", "no"},
-            {"load-console", "no"}, {"load-auto-profiles", "no"}, {"load-select", "no"}, {"load-commands", "no"},
-            {"load-positioning", "no"}, {"load-context-menu", "no"}, {"input-default-bindings", "no"},
-            {"input-vo-keyboard", "no"}, {"resume-playback", "no"}, {"save-position-on-quit", "no"},
-            {"stop-screensaver", "no"}, {"osd-level", "0"}, {"osd-on-seek", "no"}, {"sub-auto", "no"},
-            {"audio-file-auto", "no"}, {"cover-art-auto", "no"}, {"autoload-files", "no"},
-            // Read as little as possible: no cache, no read-ahead, no back buffer.
-            {"cache", "no"}, {"demuxer-readahead-secs", "0"}, {"demuxer-max-bytes", "2MiB"},
+            {"idle", "yes"}, {"force-window", "no"}, {"msg-level", "all=no"}, {"osd-level", "0"}, {"osd-on-seek", "no"},
+            // Read as little as possible: no cache (above), no read-ahead, no back buffer.
+            {"demuxer-readahead-secs", "0"}, {"demuxer-max-bytes", "2MiB"},
             {"demuxer-max-back-bytes", "0"}, {"demuxer-seekable-cache", "no"},
             // Decode fast rather than pretty: no loop filter, no bit-exact tricks, one frame early.
             {"vd-lavc-skiploopfilter", "all"}, {"vd-lavc-fast", "yes"}, {"vd-lavc-threads", "2"},

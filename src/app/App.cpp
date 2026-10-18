@@ -7,9 +7,11 @@
 #include "app/Dialogs.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/SeekPreview.h"
 #include "core/Json.h"
 #include "core/Paths.h"
+#include "library/MediaTypes.h"
 #include "ui/Theme.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
@@ -188,6 +190,7 @@ void App::OnConfigChanged(const std::string& key) {
     }
     if (key == "general.language") {
         SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
+        system_.LanguageChanged();
         languageChanged.Emit();
         return;
     }
@@ -211,7 +214,7 @@ void App::OnConfigChanged(const std::string& key) {
     // Settings mapped to mpv apply live as properties. vf and hwdec are LiveState's: CPU filters
     // need copy-back decoding first, in that order.
     for (const auto& [name, value] : MpvOptionFor(config_, key))
-        if (name != "vf" && name != "hwdec") player_.SetProperty(name.c_str(), value);
+        if (name != "vf" && name != "hwdec") player_.ApplySetting(name, value);
 }
 
 std::string App::UiValue(const std::string& key, const std::string& fallback) const {
@@ -353,6 +356,9 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
 
     main_ = std::make_unique<MainWindow>();
     if (!main_->Create()) return 1;
+    // From now on other launches find this window: theirs join these files (OnCopyData).
+    forwarded_ = pendingOpen_;
+    forwardedAt_ = ui::AnimFloat::Now();
     RestoreWindowPlacement();
     if (!IsWindowVisible(main_->Hwnd())) main_->Show();
     ApplyWindowOptions();
@@ -485,11 +491,13 @@ void App::OnPlayerEvents() {
     if ((changes & kChangeTime) && s.fileLoaded && s.position >= 1 && s.loadSerial != infoSerial_)
         if (const QueueItem* item = queue_.CurrentItem(); item && item->path == s.path) {
             infoSerial_ = s.loadSerial;
-            // A folder queue's title is the file name; tags win, a playlist's own title stays.
+            // A folder queue's title is the file name; tags win (the library's reader first, as the
+            // player screens show them), a playlist's own title stays.
             const std::wstring file = FileNameOf(item->path);
-            const bool learnTitle = !s.title.empty() && s.title != file && !IsUrl(item->path) &&
+            const std::wstring& title = CurrentTags().title;
+            const bool learnTitle = !title.empty() && title != file && !IsUrl(item->path) &&
                                     (item->title.empty() || item->title == file);
-            queue_.SetInfo(queue_.Current(), learnTitle ? s.title : std::wstring(), s.duration);
+            queue_.SetInfo(queue_.Current(), learnTitle ? title : std::wstring(), s.duration);
         }
     if ((changes & kChangeFile) && s.fileLoaded) fitPending_ = true;
     if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
@@ -646,21 +654,12 @@ void App::BuildFolderQueue(const std::wstring& file) {
         return;
     }
     std::vector<std::wstring> siblings = ListSiblingMedia(file);
-    const bool audio = [&] {
-        const wchar_t* ext = PathFindExtensionW(file.c_str());
-        for (const wchar_t* e : {L".mp3", L".flac", L".m4a", L".aac", L".ogg", L".opus", L".wav", L".wma"})
-            if (_wcsicmp(ext, e) == 0) return true;
-        return false;
-    }();
-    // Same kind only: a song doesn't pull the folder's videos into the queue.
+    // Same kind only: a song doesn't pull the folder's videos into the queue (nor a film its .ac3).
+    const bool audio = library::KindOf(file) == library::MediaKind::Audio;
     std::vector<QueueItem> items;
     int index = -1;
     for (const auto& s : siblings) {
-        const wchar_t* ext = PathFindExtensionW(s.c_str());
-        bool isAudio = false;
-        for (const wchar_t* e : {L".mp3", L".flac", L".m4a", L".aac", L".ogg", L".opus", L".wav", L".wma"})
-            if (_wcsicmp(ext, e) == 0) isAudio = true;
-        if (isAudio != audio) continue;
+        if ((library::KindOf(s) == library::MediaKind::Audio) != audio) continue;
         if (_wcsicmp(s.c_str(), file.c_str()) == 0) index = static_cast<int>(items.size());
         items.push_back(ItemFor(s));
     }
@@ -907,6 +906,25 @@ void App::BeginQuit() {
     // The close hides the window first; the final FlushStores skips a hidden one.
     SaveWindowPlacement();
     quitting_ = true;
+    player_.Detach();
+}
+
+void App::EndSession() {
+    if (!main_) return;
+    // The usual close (hide, mpv shut down on another thread), unless it already runs.
+    if (!quitting_) SendMessageW(main_->Hwnd(), WM_CLOSE, 0, 0);
+    FlushStores();
+    if (engineReady_) Live().FlushFileSettings();
+    Trace("close: session end, stores saved");
+    // mpv writes watch-later on the shutdown thread. Its video window is a child of ours, so this
+    // thread keeps answering sent messages meanwhile; posted ones wait.
+    const ULONGLONG until = GetTickCount64() + 3000;
+    while (!player_.Stopped() && GetTickCount64() < until)
+        if (MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_SENDMESSAGE) == WAIT_OBJECT_0) {
+            MSG m;
+            PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        }
+    Trace(player_.Stopped() ? "close: session end, player stopped" : "close: session end, player still stopping");
 }
 
 void App::Quit() {
@@ -928,7 +946,29 @@ void App::OnCopyData(const std::wstring& payload) {
         Enqueue(files);
         return;
     }
-    Open(files);
+    // Explorer starts one Lumen per file when several are opened together, and each hands its
+    // file over moments after the others: together they are one queue, as if opened at once.
+    const double now = ui::AnimFloat::Now();
+    const bool together = now - forwardedAt_ < 1000 && !forwarded_.empty();
+    forwardedAt_ = now;
+    if (!together) {
+        forwarded_ = files;
+        Open(files);
+        return;
+    }
+    forwarded_.insert(forwarded_.end(), files.begin(), files.end());
+    // The first one plays already: the queue grows around it instead of opening it again.
+    const QueueItem* current = queue_.CurrentItem();
+    const bool plain = std::all_of(forwarded_.begin(), forwarded_.end(), [](const std::wstring& p) {
+        return !IsUrl(p) && !IsPlaylistFile(p) && library::IsMediaPath(p) && GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
+    });
+    if (engineReady_ && plain && current && current->path == forwarded_[0]) {
+        std::vector<QueueItem> items;
+        for (const auto& p : forwarded_) items.push_back(ItemFor(p));
+        queue_.Set(std::move(items), 0);
+        return;
+    }
+    Open(forwarded_);
 }
 
 void App::OnMainDestroyed() {

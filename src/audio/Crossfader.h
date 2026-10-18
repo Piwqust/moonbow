@@ -27,8 +27,7 @@ struct CrossfadePlan {
     bool differentAlbumsOnly = false;
     double volume = 100;  // mpv volume as set on the main instance
     bool mute = false;
-    double speed = 1;
-    bool paused = false;
+    double speed = 1;  // armed only while playing
 };
 
 class Crossfader {
