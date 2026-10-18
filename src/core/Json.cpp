@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <unordered_map>
 
 namespace json {
 
@@ -18,6 +19,7 @@ const Value::Object kEmptyObject;
 const Value kNull;
 
 constexpr int kMaxDepth = 256;
+constexpr size_t kLinearKeys = 16;  // objects up to this size check duplicate keys by scanning
 
 void AppendUtf8(std::string& out, uint32_t cp) {
     if (cp < 0x80) {
@@ -267,6 +269,7 @@ private:
     bool ParseObject(Value& out, int depth) {
         ++pos_;
         Value::Object obj;
+        std::unordered_map<std::string, size_t> index;  // key -> member, for large objects only
         SkipSpace();
         if (pos_ < s_.size() && s_[pos_] == '}') {
             ++pos_;
@@ -283,16 +286,24 @@ private:
             ++pos_;
             Value item;
             if (!ParseValue(item, depth + 1)) return false;
-            // Duplicate keys: last one wins, position of the first is kept.
-            bool replaced = false;
-            for (Member& m : obj) {
-                if (m.key == key) {
-                    m.value = std::move(item);
-                    replaced = true;
-                    break;
-                }
+            // Duplicate keys: last one wins, position of the first is kept. Large objects (a skin,
+            // a 4 MB server answer) look keys up in a hash map, or the check alone is O(n^2).
+            size_t at = obj.size();
+            if (obj.size() < kLinearKeys) {
+                for (size_t i = 0; i < obj.size(); ++i)
+                    if (obj[i].key == key) {
+                        at = i;
+                        break;
+                    }
+            } else {
+                if (index.empty())
+                    for (size_t i = 0; i < obj.size(); ++i) index.emplace(obj[i].key, i);
+                at = index.try_emplace(key, obj.size()).first->second;
             }
-            if (!replaced) obj.push_back(Member{std::move(key), std::move(item)});
+            if (at < obj.size())
+                obj[at].value = std::move(item);
+            else
+                obj.push_back(Member{std::move(key), std::move(item)});
             SkipSpace();
             if (pos_ >= s_.size()) return Fail("unterminated object");
             char c = s_[pos_++];
