@@ -453,13 +453,17 @@ private:
             const QueueItem* item = TheApp().queue().CurrentItem();
             const std::wstring media = item ? item->path : s.path;
             // Songs always ask the worker: without a .lrc it reads SYLT/USLT with our tag parser,
-            // which mpv's metadata list below lacks (it has no synced SYLT).
-            if (library::KindOf(media) == library::MediaKind::Audio || !LyricsPathFor(media).empty()) {
+            // which mpv's metadata list below lacks (it has no synced SYLT). Other files only
+            // look for a .lrc: parsing a film's tags for lyrics is wasted work.
+            const bool song = library::KindOf(media) == library::MediaKind::Audio;
+            const std::wstring lrc = LyricsPathFor(media);
+            if (song || !lrc.empty()) {
                 auto job = std::make_shared<LyricsLoad>();
                 pending_ = job;
                 const HWND hwnd = GetHost() ? GetHost()->Hwnd() : nullptr;
-                std::thread([job, media, hwnd] {
-                    Lyrics l = LoadLyricsFor(media);  // the .lrc, else SYLT / USLT from the file
+                std::thread([job, media, lrc, song, hwnd] {
+                    // The .lrc, else (songs) SYLT / USLT from the file.
+                    Lyrics l = song ? LoadLyricsFor(media) : LoadLyricsFile(lrc);
                     {
                         std::lock_guard lock(job->mu);
                         job->lyrics = std::move(l);
