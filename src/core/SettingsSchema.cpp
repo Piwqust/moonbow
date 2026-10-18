@@ -1146,6 +1146,7 @@ void BuildMedia(Builder& b) {
         .When("video.smoothMotion", "true")
         .MpvBuild("tscale", BuildTscale, "oversample");
     // Enabled user shaders ("a.glsl|b.hook" in <data>\shaders); toggled in the player's quick settings.
+    b.Sec("shaders", L"Shaders", L"Шейдеры");
     b.Text("video.shaders", L"Custom shaders", L"Свои шейдеры")
         .Desc(L"Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Lumen, separated by |. Easier to "
               L"turn on one by one in the player: Settings > Video > Shaders.",
