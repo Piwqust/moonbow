@@ -3,6 +3,7 @@
 #include "Trace.h"
 #include "Util.h"
 #include "core/Paths.h"
+#include "core/SettingsSchema.h"
 
 #include <algorithm>
 #include <cstring>
@@ -64,17 +65,31 @@ bool NodeFlag(const mpv_node* n) {
 }  // namespace
 
 std::wstring Track::Label() const {
+    std::wstring label = Name();
+    if (!codec.empty()) label += L" · " + codec;
+    return label;
+}
+
+bool Track::TitleFromFileName() const {
+    // mpv titles a sidecar file with the part of its name that differs from the video's: for
+    // "Movie.srt" next to "Movie.mp4" that is just "srt".
+    if (!external || file.empty()) return false;
+    if (title.empty()) return true;
+    const std::wstring name = FileNameOf(file);
+    return name.size() > title.size() && name.compare(name.size() - title.size(), title.size(), title) == 0;
+}
+
+std::wstring Track::Name() const {
     std::wstring label;
-    if (!title.empty())
-        label = title;
-    else if (external && !file.empty())
+    if (TitleFromFileName())
         label = FileNameOf(file);
+    else if (!title.empty())
+        label = title;
     else if (!lang.empty())
         label = lang;
     else
         label = L"#" + std::to_wstring(id);
-    if (!title.empty() && !lang.empty()) label += L" (" + lang + L")";
-    if (!codec.empty()) label += L" · " + codec;
+    if ((!title.empty() || TitleFromFileName()) && !lang.empty()) label += L" (" + lang + L")";
     return label;
 }
 
@@ -108,7 +123,9 @@ bool Player::InitOnWorker(int64_t wid) {
 
     api_.mpv_set_option(mpv_, "wid", MPV_FORMAT_INT64, &wid);
     opt("vo", "gpu-next");
-    opt("hwdec", "auto-safe");
+    // Defaults for the settings below (performance.hwdec / decodeThreads); see SettingsSchema.h.
+    opt("hwdec", settings::kAutoHwdec);
+    opt("vd-lavc-threads", std::to_string(settings::AutoDecodeThreads()));
     opt("keep-open", "yes");
     opt("idle", "yes");
     opt("osc", "no");

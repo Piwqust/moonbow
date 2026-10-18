@@ -101,7 +101,7 @@ bool Config::LoadFrom(const std::wstring& path) {
     std::optional<json::Value> doc = json::Parse(text);
     if (!doc || !doc->IsObject()) {
         // Keep the broken file for the user instead of overwriting it on the next save.
-        CopyFileW(path.c_str(), (path + L".bad").c_str(), FALSE);
+        BackupCorruptFile(path);
         return false;
     }
     bool ok = ApplyDocument(*doc);
@@ -200,6 +200,8 @@ bool Config::IsDefault(std::string_view key) const {
 
 bool Config::IsEnabled(const Item& item) const {
     if (!item.enabledWhen) return true;
+    // A hidden switch cannot be changed, so a stale stored value must not lock its dependents.
+    if (const Item* parent = settings::FindItem(item.enabledWhen->key); parent && parent->hidden) return true;
     bool equal = ConditionText(Get(item.enabledWhen->key)) == item.enabledWhen->value;
     return item.enabledWhen->negate ? !equal : equal;
 }

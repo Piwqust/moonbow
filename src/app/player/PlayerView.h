@@ -52,6 +52,7 @@ public:
     explicit MiniPlayer(MainWindow* window);
     ~MiniPlayer() override;
     ui::Rect VideoRect() const;
+    ui::Size MeasureContent(float availW, float availH) override;
     void Paint(ui::Painter& p) override;
     void PaintOver(ui::Painter& p) override;
     void OnLayout() override;
@@ -59,8 +60,10 @@ public:
     void OnMouseLeave() override;
 
 private:
+    ui::Rect VideoBox() const;  // video or cover art
     MainWindow* window_;
     ui::Widget* overlay_ = nullptr;
+    bool compact_ = false;  // one row (thumbnail, title, play) in a small window
     ui::AnimFloat hover_;
     ScopedConnection playerConn_, imagesConn_;
 };

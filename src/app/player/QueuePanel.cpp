@@ -166,10 +166,15 @@ public:
     std::wstring TitleOf(int i) const {
         const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
         // Folder queues store the file name as the title: tags are better when known.
-        if (!item.title.empty() && item.title != FileNameOf(item.path)) return item.title;
-        if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().title.empty()) return PS().title;
-        if (const library::MediaItem* m = LibraryItem(i); m && !m->title.empty()) return m->title;
-        return FileNameOf(item.path);
+        const std::wstring file = FileNameOf(item.path);
+        if (!item.title.empty() && item.title != file) return item.title;
+        if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().title.empty() && PS().title != file)
+            return PS().title;
+        if (const library::MediaItem* m = LibraryItem(i); m && !m->title.empty() && m->title != file) return m->title;
+        // Like the title bar: the file name without its extension.
+        const size_t dot = file.find_last_of(L'.');
+        return dot != std::wstring::npos && dot > 0 && item.path.find(L"://") == std::wstring::npos ? file.substr(0, dot)
+                                                                                                  : file;
     }
 
     // Artist of an audio item when its tags (or the playing file) know it.

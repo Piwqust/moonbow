@@ -368,6 +368,9 @@ namespace {
 
 constexpr float kMiniW = 280;
 constexpr float kMiniVideoH = 148;
+// Below this window size the full card would cover a third of the library.
+constexpr float kMiniCompactW = 1000, kMiniCompactH = 560;
+constexpr float kMiniCompactCardW = 320, kMiniCompactCardH = 72;
 
 class MiniOverlayButton : public IconButton {
 public:
@@ -381,8 +384,8 @@ public:
 
 MiniPlayer::MiniPlayer(MainWindow* window) : window_(window) {
     interactive = true;
-    width = Length::Px(kMiniW);
-    height = Length::Px(kMiniVideoH + 16 + 60);
+    width = Length::Auto();
+    height = Length::Auto();
     dir = Dir::None;
     onClick = [] { TheApp().ShowPlayer(true); };
 
@@ -430,16 +433,45 @@ MiniPlayer::MiniPlayer(MainWindow* window) : window_(window) {
 
 MiniPlayer::~MiniPlayer() = default;
 
-Rect MiniPlayer::VideoRect() const {
-    if (!visible || !TheApp().player().State().hasVideo) return {};
+Size MiniPlayer::MeasureContent(float availW, float availH) {
+    compact_ = availW < kMiniCompactW || availH < kMiniCompactH;
+    return compact_ ? Size{kMiniCompactCardW, kMiniCompactCardH} : Size{kMiniW, kMiniVideoH + 16 + 60};
+}
+
+Rect MiniPlayer::VideoBox() const {
+    if (compact_) return {rect.x + 8, rect.y + 8, 100, rect.h - 16};  // 16:9 at 56 DIP
     return {rect.x + 8, rect.y + 8, rect.w - 16, kMiniVideoH};
 }
 
+Rect MiniPlayer::VideoRect() const {
+    if (!visible || !TheApp().player().State().hasVideo) return {};
+    return VideoBox();
+}
+
 void MiniPlayer::OnLayout() {
-    const Rect v{rect.x + 8, rect.y + 8, rect.w - 16, kMiniVideoH};
+    const Rect v = VideoBox();
+    if (compact_) {
+        // Play/pause stays visible on the card (not over the picture); the rest is one click away
+        // in the player.
+        overlay_->Arrange(rect);
+        overlay_->visible = true;
+        for (auto& c : overlay_->Children()) {
+            c->visible = c->id == "play";
+            if (c->visible) {
+                const Size s = c->Measure(100, 100);
+                c->Arrange({rect.Right() - 12 - s.w, rect.Cy() - s.h / 2, s.w, s.h});
+            }
+        }
+        for (auto& c : Children()) {
+            if (c->id == "queue") c->visible = false;
+            if (c->id == "seek") c->Arrange({v.Right() + 10, rect.Bottom() - 18, rect.Right() - 60 - v.Right() - 10, 12});
+        }
+        return;
+    }
     overlay_->Arrange(v);
     overlay_->visible = hover_.Get() > 0.01f;
     for (auto& c : overlay_->Children()) {
+        c->visible = true;
         const Size s = c->Measure(100, 100);
         if (c->id == "close") c->Arrange({v.x + 6, v.y + 6, s.w, s.h});
         else if (c->id == "expand") c->Arrange({v.Right() - 6 - s.w, v.y + 6, s.w, s.h});
@@ -449,7 +481,10 @@ void MiniPlayer::OnLayout() {
     }
     for (auto& c : Children()) {
         if (c->id == "seek") c->Arrange({rect.x + 8, v.Bottom() + 4, rect.w - 16, 12});
-        if (c->id == "queue") c->Arrange({rect.Right() - 8 - 28, rect.Bottom() - 8 - 28, 28, 28});
+        if (c->id == "queue") {
+            c->visible = true;
+            c->Arrange({rect.Right() - 8 - 28, rect.Bottom() - 8 - 28, 28, 28});
+        }
     }
 }
 
@@ -468,8 +503,8 @@ void MiniPlayer::OnMouseLeave() {
 
 void MiniPlayer::Paint(Painter& p) {
     const PlayerState& s = PS();
-    const Rect v{rect.x + 8, rect.y + 8, rect.w - 16, kMiniVideoH};
-    const float k = hover_.Get();
+    const Rect v = VideoBox();
+    const float k = compact_ ? 0.0f : hover_.Get();
     p.Shadow(rect, 8, 18, 8);
     p.Fill(rect, P().bgPanel, 8);
     p.Stroke(rect, P().line, 8);
@@ -495,11 +530,25 @@ void MiniPlayer::Paint(Painter& p) {
             p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true);
         } else {
             // The hover controls take the center: fade the note out under them.
-            p.Icon("music", v.Center(40, 40), P().textTertiary.Fade(1 - k));
+            const float icon = compact_ ? 24.0f : 40.0f;
+            p.Icon("music", v.Center(icon, icon), P().textTertiary.Fade(1 - k));
         }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
     const std::wstring name = item ? (PS().title.empty() ? FileNameOf(item->path) : PS().title) : L"";
+    if (compact_) {
+        // Title and folder/artist between the thumbnail and the play button; seek bar below.
+        const float x = v.Right() + 12, w = std::max(0.0f, rect.Right() - 60 - x);
+        p.Text(name, {x, rect.y + 10, w, 20}, TextStyle::Body, P().textPrimary);
+        std::wstring sub = PS().artist;
+        if (sub.empty() && item) {
+            const size_t slash = item->path.find_last_of(L"\\/");
+            if (slash != std::wstring::npos && item->path.find(L"://") == std::wstring::npos)
+                sub = FileNameOf(item->path.substr(0, slash));
+        }
+        p.Text(sub, {x, rect.y + 30, w, 18}, TextStyle::Small, P().textTertiary);
+        return;
+    }
     p.Text(name, {rect.x + 12, v.Bottom() + 18, rect.w - 24, 20}, TextStyle::Body, P().textPrimary);
     std::wstring folder;
     if (item) {

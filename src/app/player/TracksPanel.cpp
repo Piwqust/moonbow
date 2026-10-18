@@ -216,19 +216,19 @@ std::wstring TrackLabel(const Track& t, int ordinal) {
     return label;
 }
 
-// Embedded or external tracks of one type, plus "None" for the embedded list.
+// Embedded or external tracks of one type.
 std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
     std::vector<ChoiceRow> rows;
     const char* prop = TrackProp(type);
-    bool any = false;
     int ordinal = 0;
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
         ++ordinal;
-        any |= t.selected;
         if (t.external != external) continue;
         ChoiceRow r;
-        r.label = external && t.title.empty() ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal)) : TrackLabel(t, ordinal);
+        r.label = t.TitleFromFileName() ? t.Name()
+                  : external && t.title.empty() ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
+                                                 : TrackLabel(t, ordinal);
         r.detail = t.codec;
         r.checked = t.selected;
         const int64_t id = t.id;
@@ -239,13 +239,22 @@ std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
         }
         rows.push_back(std::move(r));
     }
-    if (!external && PS().fileLoaded) {
-        ChoiceRow none;
-        none.label = Tr(L"None");
-        none.checked = !any;
-        none.select = [prop] { TheApp().player().SetTrack(prop, 0); };
-        rows.insert(rows.begin(), std::move(none));
-    }
+    return rows;
+}
+
+// The "off" choice sits above the track lists on its own, so it never reads as a track.
+std::vector<ChoiceRow> OffRows(const wchar_t* type) {
+    std::vector<ChoiceRow> rows;
+    if (!PS().fileLoaded) return rows;
+    const std::wstring_view t(type);
+    const char* prop = TrackProp(type);
+    bool any = false;
+    for (const Track& track : PS().tracks) any |= track.type == type && track.selected;
+    ChoiceRow off;
+    off.label = t == L"video" ? Tr(L"No video") : t == L"audio" ? Tr(L"No audio") : Tr(L"Subtitles off");
+    off.checked = !any;
+    off.select = [prop] { TheApp().player().SetTrack(prop, 0); };
+    rows.push_back(std::move(off));
     return rows;
 }
 
@@ -264,6 +273,9 @@ std::vector<ChoiceRow> DeviceRows() {
 }
 
 void AddTracksSection(Widget* page, const wchar_t* type) {
+    page->Add<Widget>()->height = Length::Px(16);
+    page->Add<ChoiceList>([type] { return OffRows(type); });
+    AddSectionLine(page);
     AddListTitle(page, Tr(L"Embedded Tracks"));
     page->Add<ChoiceList>([type] { return TrackRows(type, false); }, Tr(L"No tracks"));
     if (std::wstring_view(type) == L"video") return;

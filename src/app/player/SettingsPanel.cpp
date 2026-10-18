@@ -595,8 +595,35 @@ std::unique_ptr<Widget> AudioTab() {
     auto* eqgap = eq->Add<Widget>();
     eqgap->height = Length::Px(10);
     Expander* bands = AddExpander(eq, "audio.eq", L"", Tr(L"Equalizer bands"));
-    AddConfigRange(page, bands->Body(), settings::kEqPreampKey);
-    for (const char* key : settings::kEqBandKeys) AddConfigRange(page, bands->Body(), key);
+    // Bands keep working while the EQ is off (moving one turns it on), but look inactive.
+    class DimWhenOff : public Widget {
+    public:
+        DimWhenOff() {
+            dir = Dir::Column;
+            width = Length::Grow();
+        }
+        void Paint(Painter& p) override {
+            dimmed_ = !Cfg().GetBool("audio.eq");
+            if (dimmed_) p.PushOpacity(0.45f);
+        }
+        void PaintOver(Painter& p) override {
+            if (dimmed_) p.PopOpacity();
+        }
+
+    private:
+        bool dimmed_ = false;
+    };
+    auto* dim = bands->Body()->Add<DimWhenOff>();
+    page->OnSync([dim] { dim->Invalidate(); });
+    AddConfigRange(page, dim, settings::kEqPreampKey);
+    for (const char* key : settings::kEqBandKeys) {
+        Range* r = AddConfigRange(page, dim, key);
+        if (!r) continue;
+        r->onCommit = [prev = r->onCommit](float v) {
+            prev(v);
+            if (!Cfg().GetBool("audio.eq")) Cfg().SetBool("audio.eq", true);
+        };
+    }
     AddConfigToggle(page, eq, Tr(L"2 Pass"), "audio.eqTwoPass", 48);
 
     struct Effect {
