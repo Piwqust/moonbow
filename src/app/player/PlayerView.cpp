@@ -6,6 +6,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/Shell.h"
+#include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
@@ -391,8 +392,7 @@ public:
         App& app = TheApp();
         title_->SetText(Fmt(Tr(L"Can't open “{0}”"), {FileNameOf(app.FailedPath())}));
         const std::wstring& err = app.FailedError();
-        const bool missing = GetFileAttributesW(app.FailedPath().c_str()) == INVALID_FILE_ATTRIBUTES &&
-                             app.FailedPath().find(L"://") == std::wstring::npos;
+        const bool missing = app.FailedPath().find(L"://") == std::wstring::npos && !lib::MaybeExists(app.FailedPath());
         body_->SetText(missing ? Tr(L"The file was moved or deleted.")
                        : app.FailedPath().find(L"://") != std::wstring::npos
                            ? Tr(L"The stream is unavailable. Check the link and your connection.")
