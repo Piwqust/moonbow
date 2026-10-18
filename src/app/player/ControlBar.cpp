@@ -607,6 +607,11 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
         b->onClick = [a] { Run(a); };
         return b;
     };
+    auto skip = [](const char* icon, const wchar_t* tip, double seconds) {
+        auto b = std::make_unique<IconButton>(icon, Tr(tip));
+        b->onClick = [seconds] { SeekBy(seconds); };  // with the position message, like the keys
+        return b;
+    };
     switch (id) {
         case ControlId::Previous: return button("previous", L"Previous", Action::Previous);
         case ControlId::PlayPause: return std::make_unique<PlayButton>();
@@ -631,18 +636,11 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
             return d;
         }
         case ControlId::Speed: return std::make_unique<SpeedButton>();
-        case ControlId::Forward10: return button("forward-10-sec", L"Forward 10s", Action::SeekForward);
-        case ControlId::Backward10: return button("backward-10-sec", L"Backward 10s", Action::SeekBackward);
-        case ControlId::Forward15: {
-            auto b = std::make_unique<IconButton>("forward-15-sec", Tr(L"Forward 15s"));
-            b->onClick = [] { TheApp().player().SeekRelative(15); };
-            return b;
-        }
-        case ControlId::Backward15: {
-            auto b = std::make_unique<IconButton>("backward-15-sec", Tr(L"Backward 15s"));
-            b->onClick = [] { TheApp().player().SeekRelative(-15); };
-            return b;
-        }
+        // The icons say the step: not the configurable arrow-key skip.
+        case ControlId::Forward10: return skip("forward-10-sec", L"Forward 10s", 10);
+        case ControlId::Backward10: return skip("backward-10-sec", L"Backward 10s", -10);
+        case ControlId::Forward15: return skip("forward-15-sec", L"Forward 15s", 15);
+        case ControlId::Backward15: return skip("backward-15-sec", L"Backward 15s", -15);
         case ControlId::Stop: return button("stop", L"Stop", Action::Stop);
         case ControlId::Repeat: return panel::MakeRepeatButton();  // the queue's: it shows One apart from All
         case ControlId::Shuffle:
