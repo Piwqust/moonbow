@@ -1,0 +1,46 @@
+# Round 4 — Window & Library UI bug hunt (build-r4)
+
+Tester: window/library agent. Instances: `--automation` via launch.ps1, data dirs `%TEMP%\lumen-qa\r4-win-*`.
+Screenshots: `%TEMP%\lumen-qa\round4\shots-window-ui\`.
+
+## Top 10
+
+1. W-01 Major — unpainted gutters (left 8 px, under the sidebar) after any grow: root cause of the see-through strips; skeleton painted only before the first GPU frame.
+2. W-09 Major — dialogs taller than a 720x440 window: Open/Cancel buttons off-screen, no scrolling.
+3. W-03 Major — same as W-01 but black bars on the light theme.
+4. W-04 Minor — maximized window covers the taskbar (client 2560x1440 vs work area 1392) — re-check on a normal instance.
+5. W-02 Minor — breadcrumb drops the current folder at narrow widths and the count overlaps the chevron.
+6. W-05 Minor — last 14 DIP of every scrollable list row is dead (no click / no context menu).
+7. W-10 Minor — player side panel doesn't adapt below ~900 px; video gets 294 px at 720.
+8. W-11 Minor — Home "Recently Added" shows 4 of 9 videos even on a 2560 window.
+9. W-06 Polish — collapsed-rail tooltip covers the hovered icon.
+10. W-07 Polish — Settings content has no max width at large sizes.
+## Owner-reported (confirmation only)
+
+| # | Status | Note |
+|---|---|---|
+
+## Findings
+
+| ID | Severity | Size/mode | What happened | Steps | Expected | Evidence | Likely cause |
+|---|---|---|---|---|---|---|---|| W-01 | Major | any size after growing | Grown-window gutters are never painted: 8-DIP strip left of the sidebar below the previous height and the 8-DIP strip under the sidebar stay empty (pure black in capture, see-through on screen). Persists across maximize/restore. Same root as owner bug 1, listed so the fix covers *every* unpainted gutter (left, top-left y 40-48, under sidebar), not only the side-panel case. | Start at 1280x780, SetWindowPos 720x440, then 1000x600 / 1920x1080 | Whole client area painted with bgBase | 02-home-1000x600.png, 03-home-1920x1080.png, 05-restored.png (x=2, y>=440 black) | NavSidebar::Paint insets fill by 8 (src\app\Shell.cpp:276); no root background fill; Gpu.cpp:239 clears to transparent; Host.cpp:1214 paints GDI skeleton only until first GPU frame |
+| W-02 | Minor | 720x440 (and any width where the header is tight) | Breadcrumb loses the current folder: inside Видео > Videos the header shows only "Видео" + chevron, the current crumb "Videos" gets width 0, and the item-count label is drawn on top of the chevron (count 361-448 overlaps chevron 359-375). User sees the parent name as if they were on the parent page. | Videos page -> double-click "Videos" folder -> resize to 720x440 | Current crumb keeps priority (ellipsized parent / hidden count first), no overlap | 08-videos-in-list-720.png; dump: CrumbButton [377,63 0x24], Label [361,65 87x20] | Shell.cpp:433 last crumb is Length::Grow() while the count label (Shell.cpp:353) and fixed-width search (Shell.cpp:459, min 140) keep their size; Grow shrinks to 0 first |
+| W-03 | Major | light theme, any size after growing | W-01 is glaring in the light theme: a black 8-px bar along the left edge and a black 200x8 bar under the sidebar on a #F2F2F2 window. | Light theme, start 1280x780, resize to 720x440 and back | No dark strips | 18-light-grow-scrolled.png | as W-01 |
+| W-04 | Minor | maximized | Maximize (app caption button) gives client 2560x1440 at -8,-8 on a monitor whose work area is 2560x1392: the bottom 48 px of the window (sidebar end, bottom of lists/control bar) sit under the taskbar. Seen on an --automation instance (WS_EX_TOOLWINDOW); please re-check on a normal instance. | 1280x780 -> click maximize (1185,20) -> GetWindowRect/GetClientRect | Maximized client = monitor work area | 04-maximized.png, w.ps1 output "zoom=True win=-8,-8 2576x1456 client=2560x1440" | Host.cpp:1194 WM_GETMINMAXINFO sets only ptMinTrackSize, never ptMaxPosition/ptMaxSize from rcWork; NCCALCSIZE (Host.cpp:1002) insets only the frame |
+| W-05 | Minor | any, lists with a scrollbar | Rows are dead in the last 14 DIP before the right edge: right-click there opens no context menu, clicks do nothing (row highlight still covers that strip). At 720x440 Songs: right-click x=650/680/695 opens the menu, x=700/706 nothing. | Music > Songs, window 720x440, right-click a row at x>=700 | Row's context menu; scrollbar only steals hits where the thumb is | 20-ctx-edge-720.png (no menu), probe log | ui\Controls.cpp:914 ScrollView::HitTest returns itself for any x >= Right()-14 whenever content scrolls, regardless of button/thumb |
+| W-06 | Polish | sidebar collapsed (rail) | Tooltip of a rail item is drawn over the item's own icon (starts at x~28-33 instead of right of the 56-px rail), so the hovered icon is hidden. | Click the sidebar toggle (92,20), hover "Музыка"/"Сеть" in the rail | Tooltip beside the rail (x >= 56) | 09-collapsed-720.png, 09-collapsed-tip2.png | Host.cpp:913 beside-branch should give x = 8+40+8; the observed x follows the mouse, so the beside anchor is apparently not used (check NavItem tooltip path / tooltipFor_) |
+| W-07 | Polish | Settings, 1600x1100 | Settings content has no max width: at 1600 px labels sit on the far left and their toggles/selects ~1100 px away on the far right; hard to match a label to its control. | Open Settings, SetWindowPos 1600x1100 | Content column capped (~720-800 DIP) or centered | 12-settings-big.png | settings\SettingsWindow.cpp page layout (Grow width, no maxW) |
+| W-08 | Polish | Settings (ru) | Toggle caption "выкл" fills the whole track and touches its right end (no padding); "вкл" fits. | Settings > Общие, look at "Проверять обновления автоматически" | Text centred in the free part of the track with padding, or a shorter label | 12-toggle-zoom.png | ui\Controls.cpp toggle paint — width fixed for the English "Off" |
+| W-09 | Major | 720x440 (allowed minimum) and any window < ~600 px high | In-app dialogs are taller than the window and neither shrink nor scroll: "Open Network Stream" at 720x440 has its buttons at y=558 (client height 440), so Open/Cancel are unreachable with the mouse; mouse wheel does nothing. | Window 720x440, title-bar menu > Open network stream (Ctrl+N) | Dialog capped to client height - 16 with a scrolling body, buttons always visible | 28-stream-dialog-720.png, 28-stream-dialog-720-wheel.png; dump DButton [44,558] / [576,558] | ui\Host.cpp:521-529 Place::Center + clamp only positions the popup, never limits its height; DialogKit.cpp:492 builds the dialog without a max height / ScrollView |
+| W-10 | Minor | 720x440 - 900x560 with side panel (Ctrl+B) | The player side panel keeps a fixed 360+56 DIP while the window shrinks: at 720x440 it takes 416 of 720 px and the video gets 294 px; nothing collapses (rail stays, panel doesn't narrow or overlay). | Play a video, Ctrl+B, resize to 720x440 | Panel narrows / overlays the video, or the rail hides, below ~900 px | 14-panel-720.png; dump NavSidebar [0,40 56], LibraryPane [56,40 360] | PlayerView side panel width fixed (app\player\PlayerView.cpp) |
+| W-11 | Minor | 1920x1080, 2560x1392 | Home "Недавно добавленные / Recently Added" shows only 4 videos (silent vp9, S01E03-E01) although 9 videos with known length are in the library (all have durations in library-cache.json) and 7 cards fit at 2560 px; the other 5 (4K Mandelbrot, Chaptered Demo, Long Seek, Vertical, Фильм) never appear. Leaves ~1100 px empty. | Fresh data dir, library = media, open Home at 2560 | Row filled with the newest videos up to the width | 03-home-2560-half.png, 26-home-grow-after-scroll.png | LibHome.cpp:463-476 loop (n<20, duration>0) should yield 9 — the filter/sort input differs from the cache; not located |
+| W-12 | Polish | any | Empty Playlists page still shows Sort and Grid/List buttons in the header that do nothing useful with zero playlists. | Fresh data dir > Playlists | Hide sort/view until there is something to sort | 23-playlists.png | Shell.cpp:439-442 visibility depends only on view support, not on item count |
+| W-13 | Polish | Home search, en | "Nothing found" description wraps with a one-word orphan line ("word."). | Home, type "trackzzzq" in Search | Balanced wrap / wider text box | 25-search-none.png | EmptyState label width (LibraryCommon EmptyState) |
+| W-14 | Polish | Network stream dialog | The URL box shows the red "Line 1 is not a link" error after the very first typed character, before the user had a chance to finish typing. | Ctrl+N, type one character | Validate on blur / on Open, or after a pause | 28-stream-dialog-720.png | dialogs\Dialogs.cpp stream dialog onChange validation |
+
+## Notes / not bugs
+- Resize performance is fine: 40 SetWindowPos calls (720..2520 wide) in 637 ms, final frame correct apart from W-01 (27-after-rapid-resize.png).
+- Rapid page switching (30 nav clicks, 15 ms apart) — no crash, no stale page, process responsive (22-rapid-switch.png).
+- Context menus flip above/left correctly near the bottom-right edge (20-ctx-edge-720b.png); sort menu fine (07-videos-sortmenu.png).
+- Keyboard: arrows move selection in lists, Tab cycles title bar -> sidebar with a visible ring in light theme (21-kbd-*.png).
+- "n" in the stream URL box after Ctrl+N is an artifact of posted WM_KEYDOWN (TranslateMessage sees no real Ctrl) — not a bug.
