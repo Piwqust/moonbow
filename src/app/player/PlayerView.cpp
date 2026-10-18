@@ -378,6 +378,14 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     width = Length::Grow();
     height = Length::Grow();
 
+    // Children paint first-to-last and are hit-tested last-to-first: whatever may lie over the
+    // full-size video (the fullscreen side panel, the chips, the bar) comes after it.
+    video_ = Add<VideoArea>(window, this);
+    music_ = AddChild(CreateMusicView());
+    music_->visible = false;
+    error_ = Add<ErrorCard>();
+    error_->visible = false;
+
     // Opaque: the rail draws its panel 8 DIP inside, and over the picture that gutter showed video.
     auto* side = Add<Panel>();
     side->fill = [] { return P().bgBase; };
@@ -389,13 +397,8 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     sidePane_ = side_->Add<LibraryPane>(true);
     sidePane_->width = Length::Px(kSidePanel);
 
-    video_ = Add<VideoArea>(window, this);
-    music_ = AddChild(CreateMusicView());
-    music_->visible = false;
     pip_ = AddChild(CreatePipOverlay(window));
     pip_->visible = false;
-    error_ = Add<ErrorCard>();
-    error_->visible = false;
     nextEpisode_ = Add<NextEpisodeCard>(window);
     skipChapter_ = Add<SkipChapterButton>(nextEpisode_);
     bar_ = Add<ControlBar>();
@@ -429,7 +432,8 @@ void PlayerView::UpdateStats() {
 }
 
 void PlayerView::SetSidePanel(bool shown) {
-    side_->visible = shown;
+    sideWanted_ = shown;
+    side_->visible = shown && !window_->PictureInPicture();
     InvalidateLayout();
 }
 
@@ -472,6 +476,8 @@ void PlayerView::OnLayout() {
     const float barH = bar_->BarHeight();
     const bool pip = window_->PictureInPicture();
 
+    // PiP has no room for it; it comes back with the full window.
+    side_->visible = sideWanted_ && !pip;
     float x = rect.x;
     // At most 45% of a small window (800 DIP: 360 instead of 416), so the video stays usable.
     const float sideW = std::min({kSideRail + kSidePanel, std::max(280.0f, std::floor(rect.w * 0.45f)), rect.w});
