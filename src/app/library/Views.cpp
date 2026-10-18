@@ -420,7 +420,7 @@ std::vector<MenuItem> Page::FolderMenu(const std::wstring& folder, library::Medi
     auto q = FolderQueue(folder, kind);
     const std::wstring name = FileNameOf(folder).empty() ? folder : FileNameOf(folder);
     m.push_back(Item(L"Open", "folder", [folder, section] { TheApp().Navigate(Route{section, folder}); }));
-    m.push_back(Item(L"Play All", "play", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
+    m.push_back(Item(L"Play All", "playback", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
     m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }, !q.empty()));
     MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr, !q.empty());
     if (!q.empty()) pl.submenu = AddToPlaylistMenu(q);
@@ -588,7 +588,7 @@ public:
         if (!path.empty()) {
             auto q = FolderQueue(path, kind_);
             const std::wstring name = FileNameOf(path);
-            m.push_back(Item(L"Play All", "play", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
+            m.push_back(Item(L"Play All", "playback", [q, name] { PlayQueue(q, 0, name); }, !q.empty()));
             m.push_back(Item(L"Show in File Explorer", "open",
                              [path] { ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
             m.push_back(MenuItem::Separator());

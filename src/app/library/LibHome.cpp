@@ -111,7 +111,7 @@ private:
             }));
             if (e.kind == EntryKind::Playlist) {
                 const std::string plId = e.key;
-                m.push_back(Item(L"Play", "play", [plId] {
+                m.push_back(Item(L"Play", "playback", [plId] {
                     if (const library::Playlist* p = TheApp().playlists().Find(plId)) {
                         std::vector<QueueItem> q;
                         for (const auto& it : p->items) q.push_back(MakeQueueItem(it.path, it.title, it.duration));
@@ -122,7 +122,7 @@ private:
             }
             if (e.kind == EntryKind::Folder && !IsUrl(e.path)) {
                 const std::wstring path = e.path;
-                m.push_back(Item(L"Play All", "play", [path] { TheApp().Open({path}); }));
+                m.push_back(Item(L"Play All", "playback", [path] { TheApp().Open({path}); }));
                 m.push_back(Item(L"Show in File Explorer", "open", [path] {
                     ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 }));

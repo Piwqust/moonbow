@@ -99,7 +99,7 @@ std::vector<MenuItem> PlaylistMenu(const library::Playlist& p, bool onPage) {
     const bool has = !p.items.empty();
     std::vector<MenuItem> m;
     if (!onPage) m.push_back(Item(L"Open", "playlist", [id] { TheApp().Navigate(Route{Section::Playlists, Utf8ToWide(id)}); }));
-    m.push_back(Item(L"Play", "play", [id] { PlayPlaylist(id, false); }, has));
+    m.push_back(Item(L"Play", "playback", [id] { PlayPlaylist(id, false); }, has));
     m.push_back(Item(L"Shuffle", "shuffle_right", [id] { PlayPlaylist(id, true); }, has));
     auto q = PlaylistQueue(p);
     m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }, has));

@@ -405,8 +405,8 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem>
     std::vector<MenuItem> m;
     QueueItem self = index >= 0 && index < static_cast<int>(queue.size()) ? queue[static_cast<size_t>(index)]
                                                                           : MakeQueueItem(path);
-    m.push_back(Item(L"Play", "play", [queue, index, queueName] { PlayQueue(queue, index, queueName); }));
-    m.push_back(Item(L"Play next", "next", [self] { PlayNext({self}); }));
+    m.push_back(Item(L"Play", "playback", [queue, index, queueName] { PlayQueue(queue, index, queueName); }));
+    m.push_back(Item(L"Play next", "next_twotone", [self] { PlayNext({self}); }));
     m.push_back(Item(L"Add to Queue", "queue", [self] { AddToQueue({self}); }));
     MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
     pl.submenu = AddToPlaylistMenu({self});

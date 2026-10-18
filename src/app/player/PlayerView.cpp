@@ -68,9 +68,9 @@ void ShowVideoContextMenu(Host* host, Point at) {
     MenuItem play = Item(s.paused || !s.fileLoaded ? L"Play" : L"Pause", Action::PlayPause,
                          s.paused || !s.fileLoaded ? "play" : "pause");
     items.push_back(play);
-    items.push_back(Item(L"Stop", Action::Stop, "stop"));
-    items.push_back(Item(L"Previous Item", Action::Previous, "previous"));
-    items.push_back(Item(L"Next Item", Action::Next, "next"));
+    items.push_back(Item(L"Stop", Action::Stop, "stop_twotone"));
+    items.push_back(Item(L"Previous Item", Action::Previous, "previous_twotone"));
+    items.push_back(Item(L"Next Item", Action::Next, "next_twotone"));
     items.push_back(Item(L"Record", Action::Record, "record"));
     items.push_back(Item(L"Hide UI", Action::HideUI, "ui"));
 

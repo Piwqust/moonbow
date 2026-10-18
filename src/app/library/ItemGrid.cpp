@@ -309,8 +309,12 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
 
     if (now) {
-        p.Fill(t, c.scrim.Fade(0.5f), kCardRadius);
-        p.Icon("waveform_twotone", t.Center(32, 32), c.accent, c.accentMid);
+        // On artwork: a fixed dark chip with a white glyph, the same in both themes.
+        const Color white = Color::Hex(0xFFFFFF);
+        p.FillCircle({t.Cx(), t.Cy()}, 26, Color::Hex(0x000000, 0.62f));
+        const bool paused = TheApp().player().State().paused;
+        p.Icon(paused ? "pause" : "waveform_twotone", t.Center(paused ? 24.0f : 30.0f, paused ? 24.0f : 30.0f), white,
+               white.Fade(0.6f));
     }
     if (hot) {
         p.Fill(t, pressed ? c.press : c.hover, kCardRadius);

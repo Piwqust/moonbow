@@ -243,7 +243,7 @@ public:
         if (!queue_.empty() && mode_ != MusicMode::Root) {
             auto q = queue_;
             const std::wstring name = queueName_;
-            m.push_back(Item(L"Play All", "play", [q, name] { PlayInOrder(q, name); }));
+            m.push_back(Item(L"Play All", "playback", [q, name] { PlayInOrder(q, name); }));
             m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
             m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
             MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
@@ -335,9 +335,9 @@ protected:
             std::vector<MenuItem> m;
             m.push_back(Item(L"Open", e->kind == EntryKind::Album ? "album" : e->kind == EntryKind::Artist ? "artist" : "genre",
                              [target] { TheApp().Navigate(target); }));
-            m.push_back(Item(L"Play", "play", [q, name] { PlayInOrder(q, name); }));
+            m.push_back(Item(L"Play", "playback", [q, name] { PlayInOrder(q, name); }));
             m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
-            m.push_back(Item(L"Play next", "next", [q] { PlayNext(q); }));
+            m.push_back(Item(L"Play next", "next_twotone", [q] { PlayNext(q); }));
             m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
             MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
             pl.submenu = AddToPlaylistMenu(q);
