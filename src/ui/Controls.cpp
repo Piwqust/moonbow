@@ -1333,7 +1333,8 @@ private:
     }
 
     void Activate(int i) {
-        if (i < 0 || i >= static_cast<int>(items_.size())) return;
+        // Typed matches inside submenus come after items_ (see Refilter).
+        if (i < 0 || i >= static_cast<int>(items_.size() + flat_.size())) return;
         const MenuItem& m = At(i);
         if (m.separator || !m.enabled) return;
         if (!m.submenu.empty()) {
