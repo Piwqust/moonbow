@@ -1,4 +1,5 @@
-# Writes the widget tree of a Lumen window and prints it (UTF-8).
+# Writes the widget tree of a Lumen window and prints it (UTF-8). Only --automation instances
+# answer (launch.ps1 starts them that way); a normal Lumen ignores the request.
 # Usage:
 #   tools\dev\dump-tree.ps1 -ProcessId 1234              main window
 #   tools\dev\dump-tree.ps1 -ProcessId 1234 -All         every visible window (Settings, dialogs...)
