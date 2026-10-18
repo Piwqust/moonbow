@@ -38,6 +38,17 @@ Not done, with reasons:
 
 If the work stops (limits), the hourly fallback job resumes it from this file.
 
+## Final state (2026-10-19)
+
+✅ Everything is done:
+- **Round 7:** merged and verified (verify.md, V7-01…10 fixed in round 8).
+- **Round 8 audit:** 5 reviewers.
+- **Fixes:** 5 fixers, 112 fixed and 8 rejected, all merged.
+- **Final build:** 47 tests / 6521 checks; sweep 378/378 ok, 0 medium/high; first frame 66–74 ms; idle and paused CPU 0.
+- **Report:** qa/round8/REPORT.md.
+- **Docs:** STATUS.md section 6в, the README, memory.
+- **Last steps:** build\Lumen.exe rebuilt, the cron job deleted, then sleep.
+
 ## State (updated as work goes)
 
 - **Round 7:** the full sweep (378 scenarios) shows 0 medium/high findings; first frame 69–85 ms. ⏳ r7-verify (fresh eyes on round 7; report qa/round7/verify.md).
