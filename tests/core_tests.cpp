@@ -7,6 +7,7 @@
 #include "../src/core/Paths.h"
 #include "../src/core/SettingsSchema.h"
 #include "../src/core/ShellText.h"
+#include "../src/core/Skin.h"
 #include "../src/app/player/Lyrics.h"
 #include "../src/library/Bookmarks.h"
 #include "../src/library/FileSettings.h"
@@ -2344,6 +2345,198 @@ void TestSubtitleText() {
     CHECK(LookupUrl(L"", L"x", L"en").empty());
 }
 
+// --- skins (core/Skin.h, design/SKINS.md) ----------------------------------------------------
+
+std::wstring RepoPath(const wchar_t* rel) {
+    std::wstring self = json::ToWide(__FILE__);  // ...\tests\core_tests.cpp, as given to cl
+    self = self.substr(0, self.find_last_of(L"\\/") + 1);
+    return self + L"..\\" + rel;
+}
+
+bool HasWarning(const skin::ParseResult& r, const char* part) {
+    for (const std::string& w : r.warnings)
+        if (w.find(part) != std::string::npos) return true;
+    return false;
+}
+
+void TestSkinParse() {
+    using namespace skin;
+    // Every kind of key at once.
+    ParseResult r = Parse(R"({
+        "lumenSkin": 1, "_comment": "ignored", "$schema": "x",
+        "name": {"en": "Test", "ru": "Тест"},
+        "colors": {"accent": "#FF8800", "bg.base": "#101010"},
+        "dark": {"bg.base": "#000", "text.primary": "#FFFFFFFF", "bg.hover": "#FFFFFF20"},
+        "light": {"text.primary": "#202020"},
+        "radius": {"control": 0, "window": 20},
+        "controlBar": {"opacity": 0.8}
+    })");
+    CHECK(r.ok);
+    CHECK_MSG(r.warnings.empty(), "%s", r.warnings.empty() ? "" : r.warnings[0].c_str());
+    const Skin& s = r.skin;
+    CHECK(s.name == L"Test" && s.nameRu == L"Тест" && s.Name(true) == L"Тест" && s.Name(false) == L"Test");
+    CHECK(s.mode == Mode::Any);
+    CHECK(s.dark[kBgBase] && s.dark[kBgBase]->Rgb() == 0x000000);   // "dark" wins over "colors"
+    CHECK(s.light[kBgBase] && s.light[kBgBase]->Rgb() == 0x101010);
+    CHECK(s.dark[kAccent] && s.light[kAccent] && s.dark[kAccent]->Rgb() == 0xFF8800);
+    CHECK(s.dark[kTextPrimary] && s.dark[kTextPrimary]->a == 1.0f);
+    CHECK(s.dark[kHover] && std::fabs(s.dark[kHover]->a - 0x20 / 255.0f) < 1e-6f);
+    CHECK(s.light[kTextPrimary]->Rgb() == 0x202020 && !s.dark[kTextSecondary]);
+    CHECK(s.radius[kRadiusControl] == 0.0f && s.radius[kRadiusWindow] == 20.0f && !s.radius[kRadiusCard]);
+    CHECK(s.barOpacity && *s.barOpacity == 0.8f);
+    CHECK(!s.Empty());
+    CHECK(FindToken("bg.deep") == kBgDeep && FindToken("danger") == kDanger && FindToken("video.bg") < 0);
+    for (int i = 0; i < kTokenCount; ++i) CHECK(FindToken(TokenName(i)) == i);
+
+    // A plain string name, one mode.
+    r = Parse(R"({"name": "Solo", "mode": "light"})");
+    CHECK(r.ok && r.warnings.empty() && r.skin.name == L"Solo" && r.skin.Name(true) == L"Solo");
+    CHECK(r.skin.mode == Mode::Light && !r.skin.Empty());
+    CHECK(Parse(R"({"name": "Only a name"})").skin.Empty());
+    CHECK(Parse("{}").skin.Empty() && Parse("{}").ok);
+}
+
+void TestSkinFallback() {
+    using namespace skin;
+    // Bad values fall back per key; the good keys around them still apply.
+    ParseResult r = Parse(R"({
+        "lumenSkin": 7,
+        "colour": {}, "font": {"family": "Comic Sans MS"},
+        "name": 5, "mode": "sideways",
+        "colors": {"accent": "#12", "bg.panel": "#00FF00", "bg.nonsense": "#FFFFFF", "line": 12},
+        "dark": {"text.primary": "red", "text.secondary": "#GGGGGG", "bg.base": "#11223380", "scrim": "#00000080",
+                 "accent.dim": null},
+        "light": "white",
+        "radius": {"control": -1, "card": 30, "popup": "x", "window": 10, "huge": 3},
+        "controlBar": {"opacity": 0.2, "blur": 1}
+    })");
+    CHECK(r.ok);
+    const Skin& s = r.skin;
+    CHECK(HasWarning(r, "lumenSkin"));
+    CHECK(HasWarning(r, "colour: unknown key"));
+    CHECK(HasWarning(r, "font: fonts cannot be changed"));
+    CHECK(HasWarning(r, "name:"));
+    CHECK(HasWarning(r, "mode:") && s.mode == Mode::Any);
+    CHECK(HasWarning(r, "colors.accent:") && !s.dark[kAccent] && !s.light[kAccent]);
+    CHECK(s.dark[kBgPanel] && s.light[kBgPanel] && s.dark[kBgPanel]->Rgb() == 0x00FF00);
+    CHECK(HasWarning(r, "colors.bg.nonsense: unknown colour token"));
+    CHECK(HasWarning(r, "colors.line:") && !s.dark[kLine]);
+    CHECK(HasWarning(r, "dark.text.primary:") && !s.dark[kTextPrimary]);
+    CHECK(HasWarning(r, "dark.text.secondary:") && !s.dark[kTextSecondary]);
+    // Backgrounds stay opaque; scrim may be translucent.
+    CHECK(HasWarning(r, "dark.bg.base: this token is always opaque") && s.dark[kBgBase] && s.dark[kBgBase]->a == 1.0f &&
+          s.dark[kBgBase]->Rgb() == 0x112233);
+    CHECK(s.dark[kScrim] && s.dark[kScrim]->a < 0.6f);
+    CHECK(HasWarning(r, "dark.accent.dim:") && !s.dark[kAccentDim]);
+    CHECK(HasWarning(r, "light: expected an object"));
+    CHECK(HasWarning(r, "radius.control:") && !s.radius[kRadiusControl]);
+    CHECK(HasWarning(r, "radius.card:") && !s.radius[kRadiusCard]);
+    CHECK(HasWarning(r, "radius.popup:") && !s.radius[kRadiusPopup]);
+    CHECK(HasWarning(r, "radius.huge: unknown radius"));
+    CHECK(s.radius[kRadiusWindow] == 10.0f);
+    CHECK(HasWarning(r, "controlBar.opacity:") && !s.barOpacity);
+    CHECK(HasWarning(r, "controlBar.blur: unknown key"));
+    CHECK_MSG(r.warnings.size() == 19, "%zu", r.warnings.size());
+
+    // Not a skin at all: no crash, nothing applied, one warning.
+    for (const char* text : {"", "not json", "[1, 2]", "\"#000000\"", "{\"colors\": ", "null"}) {
+        ParseResult bad = Parse(text);
+        CHECK_MSG(!bad.ok && bad.skin.Empty() && bad.warnings.size() == 1, "%s", text);
+    }
+    // Containers of the wrong type inside are skipped, not fatal.
+    r = Parse(R"({"colors": 5, "dark": [1], "radius": [], "controlBar": true})");
+    CHECK(r.ok && r.skin.Empty() && r.warnings.size() == 4);
+    // Upper and lower case, #RGB.
+    r = Parse(R"({"colors": {"accent": "#aBc"}})");
+    CHECK(r.ok && r.warnings.empty() && r.skin.dark[kAccent]->Rgb() == 0xAABBCC);
+}
+
+void TestSkinResolve() {
+    using namespace skin;
+    // No skin: the brand palette of DESIGN.md, the accent family from the tone.
+    Colors dark = Resolve(true, 0, nullptr);
+    CHECK(dark[kBgBase].Rgb() == 0x0E0E0E && dark[kTextPrimary].Rgb() == 0xEAEAEA && dark[kAccent].Rgb() == 0xEDEDED);
+    CHECK(dark[kOnAccent] == dark[kBgBase]);
+    CHECK(dark[kAccentMid] == Mix(dark[kAccent], dark[kBgBase], 0.25f));
+    Colors light = Resolve(false, 4, nullptr);
+    CHECK(light[kBgBase].Rgb() == 0xF2F2F2 && light[kAccent].Rgb() == 0x808080);
+    CHECK(Resolve(true, 99, nullptr)[kAccent].Rgb() == 0x6B6B6B);  // tone clamped
+    Skin empty;
+    CHECK(Resolve(true, 2, &empty) == Resolve(true, 2, nullptr));
+
+    // A skin accent replaces the tone; the family follows unless set.
+    ParseResult r = Parse(R"({"colors": {"accent": "#3366FF", "bg.base": "#202020"}, "dark": {"accent.dim": "#001133"}})");
+    Colors c = Resolve(true, 3, &r.skin);
+    CHECK(c[kAccent].Rgb() == 0x3366FF && c[kBgBase].Rgb() == 0x202020);
+    CHECK(c[kAccentDim].Rgb() == 0x001133);
+    CHECK(c[kAccentMid] == Mix(c[kAccent], c[kBgBase], 0.25f));
+    CHECK(c[kOnAccent].Rgb() == 0x202020);
+    CHECK(Resolve(false, 3, &r.skin)[kAccentDim] == Mix(Rgba::Hex(0x202020), Rgba::Hex(0x3366FF), 0.12f));
+    CHECK(c[kTextPrimary].Rgb() == 0xEAEAEA);  // untouched tokens keep the brand value
+}
+
+void TestSkinContrast() {
+    using namespace skin;
+    CHECK(std::fabs(Contrast(Rgba::Hex(0x000000), Rgba::Hex(0xFFFFFF)) - 21.0) < 1e-9);
+    CHECK(std::fabs(Contrast(Rgba::Hex(0x777777), Rgba::Hex(0x777777)) - 1.0) < 1e-9);
+    // The brand passes in both modes with every accent tone.
+    for (int tone = 0; tone < kAccentTones; ++tone) {
+        const auto issues = CheckContrast(nullptr, tone);
+        CHECK_MSG(issues.empty(), "tone %d: %s", tone, issues.empty() ? "" : Describe(issues[0]).c_str());
+    }
+    // A dim skin: text.secondary #555 on #222 is ~2.2:1, the accent the same as the page.
+    ParseResult r = Parse(R"({"mode": "dark", "dark": {"text.secondary": "#555555", "bg.base": "#222222",
+                              "accent": "#222222", "on.accent": "#222222"}})");
+    const auto issues = CheckContrast(&r.skin, 0);
+    bool secondary = false, accent = false, onAccent = false, anyLight = false;
+    for (const ContrastIssue& i : issues) {
+        secondary |= i.fg == kTextSecondary && i.bg == kBgBase && i.need == 4.5 && !i.icon;
+        accent |= i.fg == kAccent && i.bg == kBgBase && i.need == 3.0 && i.icon;
+        onAccent |= i.fg == kOnAccent && i.bg == kAccent;
+        anyLight |= !i.dark;
+    }
+    CHECK(secondary && accent && onAccent);
+    CHECK(!anyLight);  // a dark-only skin is not checked in light
+    ContrastIssue sample{true, kTextSecondary, kBgPanel, 3.97, 4.5, false};
+    CHECK(Describe(sample) == "dark: text.secondary on bg.panel 3.9:1 (needs 4.5:1)");
+    // #8A8A8A on bg.selected #242424 is 4.497:1: reported, and shown as 4.4, not a rounded 4.5.
+    ParseResult edge = Parse(R"({"mode": "dark", "dark": {"text.secondary": "#8A8A8A"}})");
+    std::vector<std::string> edgeLines;
+    for (const ContrastIssue& i : CheckContrast(&edge.skin, 0)) edgeLines.push_back(Describe(i));
+    CHECK_MSG(edgeLines.size() == 1 && edgeLines[0] == "dark: text.secondary on bg.selected 4.4:1 (needs 4.5:1)", "%zu %s",
+              edgeLines.size(), edgeLines.empty() ? "" : edgeLines[0].c_str());
+}
+
+void TestBuiltinSkins() {
+    using namespace skin;
+    // Every built-in skin in res/skins parses without a warning and passes the contrast check
+    // with every accent tone (a skin accent replaces the tone, so most repeat the same check).
+    const settings::Item* item = settings::FindItem("interface.skin");
+    CHECK(item && item->def.AsString() == "lumen");
+    if (!item) return;
+    int files = 0;
+    for (const settings::Choice& ch : item->choices) {
+        if (ch.value == "lumen") continue;
+        std::string text;
+        const std::wstring path = RepoPath((L"res\\skins\\" + json::ToWide(ch.value) + L".json").c_str());
+        CHECK_MSG(json::ReadFileUtf8(path, &text), "%s", ch.value.c_str());
+        ParseResult r = Parse(text);
+        CHECK_MSG(r.ok && r.warnings.empty(), "%s: %s", ch.value.c_str(), r.warnings.empty() ? "" : r.warnings[0].c_str());
+        CHECK_MSG(!r.skin.name.empty() && !r.skin.nameRu.empty(), "%s", ch.value.c_str());
+        CHECK(!r.skin.barOpacity);  // built-in panels stay opaque (round 5)
+        for (int tone = 0; tone < kAccentTones; ++tone) {
+            const auto issues = CheckContrast(&r.skin, tone);
+            CHECK_MSG(issues.empty(), "%s tone %d: %zu issues, first %s", ch.value.c_str(), tone, issues.size(),
+                      issues.empty() ? "" : Describe(issues[0]).c_str());
+        }
+        ++files;
+    }
+    CHECK(files == 3);
+    const settings::Item* custom = settings::FindItem("interface.customSkin");
+    const settings::Item* file = settings::FindItem("interface.skinFile");
+    CHECK(custom && !custom->hidden && file && !file->hidden && file->enabledWhen);
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -2382,6 +2575,11 @@ const TestCase kTests[] = {
     {"spectrum", TestSpectrum},
     {"music_settings", TestMusicSettings},
     {"subtitle_text", TestSubtitleText},
+    {"skin_parse", TestSkinParse},
+    {"skin_fallback", TestSkinFallback},
+    {"skin_resolve", TestSkinResolve},
+    {"skin_contrast", TestSkinContrast},
+    {"builtin_skins", TestBuiltinSkins},
 };
 
 }  // namespace

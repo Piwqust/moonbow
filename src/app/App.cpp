@@ -14,6 +14,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/Shell.h"
+#include "app/Skins.h"
 #include "app/player/PlayerView.h"
 #include "app/settings/ShortcutStore.h"
 #include "core/SettingsSchema.h"
@@ -321,6 +322,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     LoadKeyBindings();
     SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
     ApplyTheme();
+    Skins::Get().Start(config_);
     LoadUiState();
     SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
     // The library opens on the section it was left in (only the section: a folder may be gone).
@@ -405,6 +407,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     Trace("close: stores saved");
     ShutdownSeekPreview();
     Trace("close: seek preview stopped");
+    Skins::Get().Stop();
     main_.reset();
     Trace("close: window objects freed");
     return static_cast<int>(msg.wParam);
