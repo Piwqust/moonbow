@@ -115,3 +115,11 @@
 // --- audio and subtitles
 {L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network).", L"Для ссылок на видеосайты нужен yt-dlp.exe рядом с Lumen.exe (Настройки > Сеть)."},
 {L"The video page opens through yt-dlp.", L"Страница с видео откроется через yt-dlp."},
+// --- about
+{L"Version {0}", L"Версия {0}"},
+{L"known once a file has been opened", L"станет известна после открытия файла"},
+{L"Licences", L"Лицензии"},
+{L"Lumen: GNU GPL 3.0 or later", L"Lumen: GNU GPL 3.0 или новее"},
+{L"mpv and libmpv: GPL 2.0 or later", L"mpv и libmpv: GPL 2.0 или новее"},
+{L"FFmpeg: LGPL 2.1 or later", L"FFmpeg: LGPL 2.1 или новее"},
+{L"Inter typeface: SIL Open Font License 1.1", L"Шрифт Inter: SIL Open Font License 1.1"},

@@ -195,6 +195,7 @@ private:
     std::vector<Choice> choices_;
     int selected_;
     Widget* menu_ = nullptr;
+    bool autoTooltip_ = false;  // `tooltip` holds the cut value, set by Paint
 };
 
 // Horizontal slider. Value in [min, max], optionally snapped to `step`.

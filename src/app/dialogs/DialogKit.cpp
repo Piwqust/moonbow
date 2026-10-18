@@ -1,6 +1,7 @@
 #include "app/dialogs/DialogKit.h"
 #include "ui/Host.h"
 
+#include "app/I18n.h"
 #include "app/library/LibraryCommon.h"
 #include "gfx/Text.h"
 
@@ -418,7 +419,7 @@ Frame::Frame(std::wstring title, float w, float h) {
     row->pad = {10, 0, 0, 0};
     auto* label = row->Add<Label>(std::move(title), TextStyle::Body, Tone::Secondary);
     label->width = Length::Grow();
-    auto* close = row->Add<IconButton>("close", L"", 32, 24);
+    auto* close = row->Add<IconButton>("close", Tr(L"Close"), 32, 24);
     close->focusable = false;  // Esc closes; keep Tab on the content
     close->onClick = [this] { Close(); };
 
@@ -489,8 +490,32 @@ bool Frame::OnKeyDown(const KeyEvent& e) {
     return false;
 }
 
+namespace {
+
+// A dialog's popup: a Frame, a ui::Dialog, or a full-window editor holding a Frame (Customize).
+bool IsDialogPopup(Widget* w) {
+    if (dynamic_cast<Frame*>(w) || dynamic_cast<ui::Dialog*>(w)) return true;
+    for (auto& c : w->Children())
+        if (dynamic_cast<Frame*>(c.get())) return true;
+    return false;
+}
+
+}  // namespace
+
+void CloseTransientPopups(Host* host) {
+    if (!host) return;
+    // From the top down to the first dialog: menus, submenus, popovers, tooltips and toasts.
+    for (size_t guard = host->PopupCount(); guard > 0 && host->PopupCount() > 0; --guard) {
+        Widget* top = host->PopupAt(host->PopupCount() - 1);
+        if (IsDialogPopup(top)) break;
+        host->ClosePopup(top);
+    }
+}
+
 Frame* ShowFrame(Host* host, std::unique_ptr<Frame> frame, Widget* focus) {
     if (!host) return nullptr;
+    // A menu left open under the scrim would take the first Esc after the dialog closes.
+    CloseTransientPopups(host);
     Frame* raw = frame.get();
     PopupOptions o;
     o.place = Place::Center;

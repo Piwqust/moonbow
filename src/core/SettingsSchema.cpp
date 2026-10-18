@@ -928,7 +928,7 @@ void BuildApp(Builder& b) {
           L"Мышь, клавиатура и пульт");
 
     b.Sec("shortcuts", L"Keyboard Shortcuts", L"Сочетания клавиш");
-    b.Button("controls.editShortcuts", L"Defaults", L"Сочетания по умолчанию", "edit-shortcuts", L"Edit Keyboard Shortcuts",
+    b.Button("controls.editShortcuts", L"Shortcut list", L"Список сочетаний", "edit-shortcuts", L"Edit Keyboard Shortcuts",
              L"Изменить сочетания клавиш");
     b.Button("controls.resetShortcuts", L"Reset all shortcuts", L"Сбросить все сочетания", "reset-shortcuts", L"Reset",
              L"Сбросить");
@@ -1889,7 +1889,7 @@ void BuildSystem(Builder& b) {
         .Reset("libmpv");
 
     // ===== Performance =====
-    b.Cat("performance", "system", "preferences", L"Performance", L"Производительность", L"Performance Settings",
+    b.Cat("performance", "system", "speed", L"Performance", L"Производительность", L"Performance Settings",
           L"Производительность");
 
     b.Sec("decoding", L"Decoding", L"Декодирование");

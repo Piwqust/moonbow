@@ -2,6 +2,10 @@
 #include <functional>
 #include <string>
 
+namespace ui {
+class Host;
+}
+
 // Entry points of the dialogs module (src/app/dialogs) and the settings
 // window (src/app/settings). All run on the UI thread and return immediately.
 namespace app {
@@ -18,6 +22,8 @@ void ShowNewPlaylistDialog(std::function<void(const std::string& playlistId)> do
 // "Add Subtitles to Playlist/Folder": pairs subtitle files with videos by name.
 void ShowAddSubtitlesDialog(const std::wstring& folderOrPlaylist = {});
 void ShowMediaInfoDialog();
+// Version, libmpv/FFmpeg versions and licences; over `host` (Settings) or the main window.
+void ShowAboutDialog(ui::Host* host = nullptr);
 
 // First-run setup window; `done` runs after it closes (finished or skipped).
 void ShowOnboarding(std::function<void()> done);

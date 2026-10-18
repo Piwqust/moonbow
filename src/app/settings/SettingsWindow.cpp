@@ -71,7 +71,7 @@ public:
     explicit NavGroupLabel(std::wstring text) : PadLabel(std::move(text), TextStyle::Body, Tone::Tertiary) {
         width = Length::Grow();
         height = Length::Px(33);
-        pad = {10, 8, 10, 8};
+        pad = {10, 6, 10, 7};  // a 20-DIP line box: 17 cut the descenders
     }
 };
 
@@ -154,16 +154,8 @@ public:
         o.showInTaskbar = o.owner == nullptr;
         o.minWidth = 760;
         o.minHeight = 520;
-        o.width = kWindowW;
+        o.width = kWindowW;  // Host::Create fits it to the owner's work area on small screens
         o.height = kWindowH;
-        // Fit small screens (work area of the owner's monitor, in DIPs).
-        MONITORINFO mi{sizeof(mi)};
-        HMONITOR mon = MonitorFromWindow(o.owner, MONITOR_DEFAULTTOPRIMARY);
-        if (GetMonitorInfoW(mon, &mi)) {
-            const float scale = (o.owner ? GetDpiForWindow(o.owner) : GetDpiForSystem()) / 96.0f * ui::Host::ScaleOverride();
-            o.width = std::min(o.width, (mi.rcWork.right - mi.rcWork.left) / scale - 24);
-            o.height = std::min(o.height, (mi.rcWork.bottom - mi.rcWork.top) / scale - 24);
-        }
         if (!Create(o)) return false;
 
         category_ = settings::FindCategory(category) ? category : std::string("general");
@@ -177,7 +169,10 @@ public:
         langConn_ = Connect(TheApp().languageChanged, [this] {
             Post([this] {
                 SetTitle(std::wstring(Tr(L"Settings")) + L" — Lumen");
+                // Same page, same place: the scroll offset survives the rebuild.
+                const float offset = content_ ? content_->Offset() : 0.0f;
                 BuildUi();
+                pendingScroll_ = offset;
             });
         });
         onKey = [this](const KeyEvent& e) { return OnWindowKey(e); };
@@ -202,6 +197,11 @@ public:
         const float side = 24 + std::max(0.0f, (w - 48 - kMaxPageW) / 2);
         page->pad = {side, 20, side, 40};
         page->InvalidateLayout();
+        // The header title starts where the page column starts (8 = the header's own padding).
+        if (titleGap_ && titleGap_->width.value != side + 8) {
+            titleGap_->width = Length::Px(side + 8);
+            titleGap_->InvalidateLayout();
+        }
     }
     void OnResize() override { FitPage(); }
     void OnLayoutDone() override {
@@ -209,6 +209,10 @@ public:
         const float w = content_ ? content_->rect.w : 0;
         const float side = 24 + std::max(0.0f, (w - 48 - kMaxPageW) / 2);
         if (page && w > 0 && std::abs(page->pad.l - side) > 0.5f) FitPage();  // first layout after a build
+        if (pendingScroll_ >= 0 && content_ && content_->MaxOffset() > 0) {
+            content_->ScrollTo(std::min(pendingScroll_, content_->MaxOffset()), false);
+            pendingScroll_ = -1;
+        }
     }
     static constexpr float kMaxPageW = 880;
 
@@ -242,12 +246,19 @@ public:
 
 private:
     void BuildUi() {
+        // The close button is the last child, so Tab reaches it after the nav and the page
+        // (reading order), although it sits in the header: a stack lays it over the header's end.
         auto root = std::make_unique<Panel>();
         root->fill = [] { return P().bgBase; };
-        root->dir = Dir::Column;
+        root->dir = Dir::Stack;
+        root->align = Align::End;
+        auto* frame = root->Add<Widget>();
+        frame->dir = Dir::Column;
+        frame->width = Length::Grow();
+        frame->height = Length::Grow();
 
         // Header: search (over the nav column), category title, close. Drags the window.
-        auto* header = root->Add<Panel>();
+        auto* header = frame->Add<Panel>();
         header->fill = [] { return P().bgDeep; };
         header->dir = Dir::Row;
         header->align = Align::Center;
@@ -270,13 +281,14 @@ private:
             else
                 Close();
         };
-        header->Add<Widget>()->width = Length::Px(32);
+        titleGap_ = header->Add<Widget>();
+        titleGap_->width = Length::Px(32);
         title_ = header->Add<Label>(L"", TextStyle::Large, Tone::Secondary);
         title_->width = Length::Grow();
-        auto* close = header->Add<CloseButton>();
-        close->onClick = [this] { Close(); };
+        title_->maxW = kMaxPageW;
+        header->Add<Widget>()->width = Length::Px(32 + 8);  // under the close button
 
-        auto* body = root->Add<Widget>();
+        auto* body = frame->Add<Widget>();
         body->dir = Dir::Row;
         body->width = Length::Grow();
         body->height = Length::Grow();
@@ -293,6 +305,8 @@ private:
         navPanel->width = Length::Grow();
         navPanel->height = Length::Grow();
         auto* navScroll = navPanel->Add<ScrollView>();
+        navScroll->width = Length::Grow();
+        navScroll->height = Length::Grow();
         auto* nav = navScroll->SetContent<Widget>();
         nav->dir = Dir::Column;
         nav->pad = Insets::All(6);
@@ -304,8 +318,27 @@ private:
             for (const Category& c : settings::Categories())
                 if (c.group == g.id) navItems_.push_back(nav->Add<NavItem>(this, c));
         }
+        // Version, libmpv and licences.
+        auto* aboutRow = navPanel->Add<Widget>();
+        aboutRow->dir = Dir::Column;  // under a line: not one of the categories above
+        aboutRow->width = Length::Grow();
+        aboutRow->pad = {16, 0, 16, 10};
+        aboutRow->gap = 8;
+        aboutRow->Add<Divider>();
+        auto* about = aboutRow->Add<LinkButton>(Tr(L"About Lumen"), TextStyle::Small);
+        about->id = "about";
+        about->onClick = [this] { ShowAboutDialog(this); };
 
         content_ = body->Add<ScrollView>();
+
+        auto* closeBox = root->Add<Widget>();
+        closeBox->dir = Dir::Row;
+        closeBox->align = Align::Center;
+        closeBox->height = Length::Px(kHeaderH);
+        closeBox->pad = {0, 0, 14, 0};
+        closeBox->ncRole = NcRole::Caption;
+        auto* close = closeBox->Add<CloseButton>();
+        close->onClick = [this] { Close(); };
         SetRoot(std::move(root));
         RefreshNav();
         BuildPage();
@@ -313,7 +346,12 @@ private:
 
     void RefreshNav() {
         const bool searching = !query_.empty();
-        for (NavItem* n : navItems_) n->SetSelected(!searching && n->Cat().id == category_);
+        // One Tab stop for the whole list (the selected item); Up/Down move inside it.
+        for (NavItem* n : navItems_) {
+            const bool sel = !searching && n->Cat().id == category_;
+            n->SetSelected(sel);
+            n->focusable = sel || (searching && n == navItems_.front());
+        }
         if (!title_) return;
         if (searching) {
             title_->SetText(Tr(L"Search results"));
@@ -532,6 +570,8 @@ private:
     bool syncPosted_ = false;
 
     SearchField* search_ = nullptr;
+    Widget* titleGap_ = nullptr;
+    float pendingScroll_ = -1;
     Label* title_ = nullptr;
     ScrollView* content_ = nullptr;
     std::vector<NavItem*> navItems_;
