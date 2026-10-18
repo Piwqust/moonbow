@@ -419,19 +419,22 @@ void SubtitleWords::Rebuild() {
     std::wstring key = text + num;
     if (key == key_) return;
     key_ = std::move(key);
-    if (text != textKey_) {
-        // The line changed: what was picked in the old one means nothing now.
-        textKey_ = std::move(text);
-        hover_ = anchor_ = selA_ = selB_ = pressed_ = focus_ = -1;
-        dragging_ = clickPending_ = false;
-        if (menu_ && host && host->IsPopupOpen(menu_)) host->ClosePopup(menu_);
-        menu_ = nullptr;
-    }
+    // The picked words are indices into words_: they mean nothing once the line changed, or when
+    // the same line has other words now (a block too small to point at is left out).
+    const bool newText = text != textKey_;
+    const size_t oldWords = words_.size();
+    auto dropStalePick = [&] {
+        if (newText || words_.size() != oldWords) DropPick();
+    };
+    textKey_ = std::move(text);
     blocks_.clear();
     words_.clear();
     bounds_ = {};
     IDWriteFactory5* dw = gfx::Gpu::Get().DWrite();
-    if (!dw || video_.Empty()) return;
+    if (!dw || video_.Empty()) {
+        dropStalePick();
+        return;
+    }
     LARGE_INTEGER t0{}, t1{}, freq{};
     QueryPerformanceCounter(&t0);
 
@@ -569,9 +572,11 @@ void SubtitleWords::Rebuild() {
             i = e;
         }
         const int col = (g.align - 1) % 3;  // 0 left, 1 center, 2 right
-        b.layout->SetTextAlignment(col == 0 ? DWRITE_TEXT_ALIGNMENT_LEADING
-                                   : col == 2 ? DWRITE_TEXT_ALIGNMENT_TRAILING
-                                              : DWRITE_TEXT_ALIGNMENT_CENTER);
+        // Leading is the right edge of a right-to-left layout.
+        const int leading = b.rtl ? 2 : 0;
+        b.layout->SetTextAlignment(col == 1          ? DWRITE_TEXT_ALIGNMENT_CENTER
+                                   : col == leading ? DWRITE_TEXT_ALIGNMENT_LEADING
+                                                    : DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (b.rtl) b.layout->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
         DWRITE_TEXT_METRICS m{};
         b.layout->GetMetrics(&m);
@@ -645,6 +650,7 @@ void SubtitleWords::Rebuild() {
         }
     }
     bounds_ = bounds_.Intersect(video_);
+    dropStalePick();
     // Stepping frames from the keyboard: the focus lands on the new line's first word.
     if (keyboard_ && focus_ < 0 && !words_.empty()) {
         focus_ = anchor_ = FirstWord();
@@ -862,13 +868,18 @@ void SubtitleWords::OnMouseLeave() {
     Invalidate();
 }
 
-void SubtitleWords::ResetInteraction() {
+void SubtitleWords::DropPick() {
     Host* host = GetHost();
     if (menu_ && host && host->IsPopupOpen(menu_)) host->ClosePopup(menu_);
     menu_ = nullptr;
     hover_ = anchor_ = selA_ = selB_ = focus_ = pressed_ = -1;
     dragging_ = clickPending_ = false;
+}
+
+void SubtitleWords::ResetInteraction() {
+    DropPick();
     cursor = IDC_ARROW;
+    Host* host = GetHost();
     if (keyboard_) {
         keyboard_ = false;
         focusable = false;

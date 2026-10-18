@@ -118,6 +118,7 @@ private:
     void FontRatios(const std::wstring& name, bool bold, float& em, float& ascent);
     void Rebuild();
     bool Record(ID2D1DeviceContext5* ctx, Block& b);
+    void DropPick();  // hover, selection, focus and the word menu
     void ResetInteraction();
     void EnterKeyboard();
     int WordAt(float x, float y, int block = -1) const;
