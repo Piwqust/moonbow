@@ -248,14 +248,17 @@ private:
         };
         cat(L"Podcasts", "audio", L"podcasts", "podcasts");
         cat(L"Radio", "streaming", L"radio", "radio");
+        // The group counts say what the search left, as the rows below them do.
         const auto saved = SavedStreams("saved");
-        if (!saved.empty()) {
-            AddHeader(Tr(L"Saved Streams"), CountItems(static_cast<long long>(saved.size())));
+        const auto shown =
+            std::count_if(saved.begin(), saved.end(), [this](const SavedStream& s) { return Matches(s.title + L" " + s.url); });
+        if (shown > 0) {
+            AddHeader(Tr(L"Saved Streams"), CountItems(static_cast<long long>(shown)));
             AddStreams("saved");
         }
         std::vector<const library::HistoryEntry*> recent;
         for (const library::HistoryEntry& h : TheApp().history().Entries())
-            if (IsUrl(h.path)) recent.push_back(&h);
+            if (IsUrl(h.path) && Matches(h.title + L" " + h.path)) recent.push_back(&h);
         if (!recent.empty()) {
             AddHeader(Tr(L"Recently Played"), CountItems(static_cast<long long>(recent.size())));
             for (const library::HistoryEntry* h : recent) AddStream(h->path, h->title, "history", h->lastPlayed);

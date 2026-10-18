@@ -27,6 +27,7 @@ public static class LumenIn {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="PostMessageW")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", EntryPoint="GetWindowLongW")] public static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   public static IntPtr Find(uint pid, string title) {
     IntPtr found = IntPtr.Zero;
@@ -45,6 +46,8 @@ public static class LumenIn {
 "@
 $h = [LumenIn]::Find([uint32]$ProcessId, $Title)
 if ($h -eq [IntPtr]::Zero) { throw "no visible LumenHost window for process $ProcessId" }
+# Never the owner's Lumen: only --automation instances, whose windows are WS_EX_NOACTIVATE (ui/Host.cpp).
+if (([LumenIn]::GetWindowLong($h, -20) -band 0x08000000) -eq 0) { throw "process $ProcessId is not a --automation instance: no input sent" }
 function MakeLParam([int]$x, [int]$y) { [IntPtr](($y -shl 16) -bor ($x -band 0xFFFF)) }
 function Post([uint32]$m, [int64]$w, [IntPtr]$l) { [LumenIn]::PostMessage($h, $m, [IntPtr]$w, $l) | Out-Null }
 $mk = 0; if ($Ctrl) { $mk = $mk -bor 0x8 }; if ($Shift) { $mk = $mk -bor 0x4 }

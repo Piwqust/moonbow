@@ -978,6 +978,7 @@ void ShowNetworkStreamDialog() {
         if (!listName.empty()) {
             const std::string id = TheApp().playlists().Create(listName);
             TheApp().playlists().AddPaths(id, links);
+            TheApp().libraryChanged.Emit();  // the Playlists page and Home show the new list
             std::vector<QueueItem> items;
             for (const auto& l : links) items.push_back({l, {}, 0});
             TheApp().PlayQueueItems(std::move(items), 0, listName);
@@ -1341,9 +1342,11 @@ public:
         Widget* content = Message(Tr(L"Searching…"));
         (void)content;
         auto self = weak_from_this();
+        // Only the latest search shows: an older answer that arrives later is dropped.
+        const unsigned serial = ++searches_;
         net::online::SearchMetadata(query_->Text(), std::max(0, _wtoi(year_->Text().c_str())), tv,
-                                    [self](const std::vector<net::MetaMatch>& results, const std::wstring& error) {
-                                        if (auto d = self.lock()) d->Show(results, error);
+                                    [self, serial](const std::vector<net::MetaMatch>& results, const std::wstring& error) {
+                                        if (auto d = self.lock(); d && serial == d->searches_) d->Show(results, error);
                                     });
     }
 
@@ -1404,6 +1407,7 @@ private:
     ScrollView* scroll_ = nullptr;
     Label* status_ = nullptr;
     bool closed_ = false;
+    unsigned searches_ = 0;  // serial of the latest Search()
 };
 
 }  // namespace

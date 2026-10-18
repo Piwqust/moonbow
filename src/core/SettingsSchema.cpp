@@ -924,8 +924,10 @@ void BuildApp(Builder& b) {
               L"например *\\Private\\*;*.tmp.mkv")
         .When("privacy.saveHistory", "true");
     b.Button("privacy.clearHistory", L"Clear history now", L"Очистить историю", "clear-history", L"Clear", L"Очистить")
-        .Desc(L"Forget all recently played items, saved positions and per-file settings. This cannot be undone.",
-              L"Забыть все недавние файлы, сохранённые позиции и настройки отдельных файлов. Отменить нельзя.");
+        .Desc(L"Forget all recently played items, saved positions, per-file settings and online data (posters, descriptions, lyrics). "
+              L"This cannot be undone.",
+              L"Забыть все недавние файлы, сохранённые позиции, настройки отдельных файлов и данные онлайн-сервисов "
+              L"(постеры, описания, тексты песен). Отменить нельзя.");
 
     b.Sec("network", L"Network", L"Сеть");
     // Online services (src/net/Online.cpp). Each is off until the user turns it on; the services

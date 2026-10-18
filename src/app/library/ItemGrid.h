@@ -82,11 +82,9 @@ public:
 
     int Selected() const { return selected_; }
     void Select(int index, bool scrollIntoView = true);
-    int SelectedOr(int fallback) const { return selected_ >= 0 ? selected_ : fallback; }
     // Absolute rect of an entry's slot (empty when hidden by maxRows).
     ui::Rect ItemRect(int index) const;
     int IndexAt(float x, float y) const;
-    int VisibleCount() const;  // entries that fit (maxRows)
     // True for a double-click time after the grid was created. A page opened by a single click
     // ignores input meanwhile, so the second click of a double-click can't start what lands
     // under the cursor on the new page.
