@@ -89,6 +89,7 @@ protected:
     int Push(Entry e);
     int AddRoute(Entry e, Route target);
     int AddAction(Entry e, std::function<void()> action);
+    void SetSubtitle(int index, std::wstring text);  // of an entry added in this Build
     void AddHeader(const std::wstring& title, const std::wstring& right = {});
     // Column titles above list rows (list mode only). `sort` is the page's current sort value.
     struct Column {

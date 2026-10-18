@@ -152,7 +152,12 @@ std::wstring AlbumLabel(const std::wstring& album) {
 
 std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item, const std::wstring& storedTitle) {
     if (IsUrl(path)) return storedTitle.empty() ? path : storedTitle;
-    if (item) return item->kind == library::MediaKind::Audio ? item->DisplayTitle() : item->name;
+    if (item) {
+        if (item->kind == library::MediaKind::Audio) return item->DisplayTitle();
+        // Episodes read "S01E02 · Pilot" instead of the raw "Show.Name.S01E02.Pilot.1080p".
+        if (std::wstring ep = library::EpisodeLabel(item->name); !ep.empty()) return ep;
+        return item->name;
+    }
     // Outside the library: a stored title unless it is just the file name (mpv's default title).
     if (!storedTitle.empty() && !SamePath(storedTitle, library::FileNameOf(path))) return storedTitle;
     return library::StemOf(path);
