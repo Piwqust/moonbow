@@ -1265,7 +1265,8 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_MOUSELEAVE:
-            if (g_automation) return 0;
+            // --automation never calls TrackMouseEvent, so a leave here was posted by a test
+            // (input.ps1 -Leave) and runs the same path as a real one.
             trackingLeave_ = false;
             mouseInside_ = false;
             if (!capture_) UpdateHot(-1, -1);

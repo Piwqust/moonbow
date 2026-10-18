@@ -149,8 +149,8 @@ public:
 
     // Every live host, e.g. to repaint all windows after a theme change.
     static const std::vector<Host*>& All();
-    // Test runs drive windows with posted messages while the real cursor is
-    // elsewhere: keep hover state instead of dropping it on WM_MOUSELEAVE.
+    // Test runs drive windows with posted messages while the real cursor is elsewhere: they
+    // skip TrackMouseEvent, so hover stays until a test posts WM_MOUSELEAVE itself.
     // --automation: test instances run in the background. Their windows are cloaked
     // (invisible but still composed, so PrintWindow captures them), never activate,
     // have no taskbar button and stay at the bottom of the z-order.
