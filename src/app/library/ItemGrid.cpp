@@ -36,7 +36,7 @@ constexpr float kColumnsH = 32, kTrackW = 28, kDurationW = 76;
 
 constexpr float kChipH = 20;
 
-// "Damaged" chip of a file the scanner found unplayable: a warning triangle and the word, the
+// "Damaged" chip of a file the scanner found unplayable: the warning icon and the word, the
 // same on cards (the badge slot) and on list rows (after the title).
 float DamagedChipWidth(Painter& p) {
     return 6 + 14 + 5 + std::ceil(p.Measure(Tr(L"Damaged"), TextStyle::Small).width) + 8;
@@ -46,12 +46,7 @@ void PaintDamagedChip(Painter& p, const Rect& b, Color bg) {
     const Palette& c = P();
     p.Fill(b, bg, 4);
     const float x = b.x + 6, cy = b.Cy();
-    const Point top{x + 7, cy - 6}, left{x, cy + 5.5f}, right{x + 14, cy + 5.5f};
-    p.Line(top, left, c.danger, 1.5f);
-    p.Line(left, right, c.danger, 1.5f);
-    p.Line(right, top, c.danger, 1.5f);
-    p.Fill({x + 6.25f, cy - 2.5f, 1.5f, 4.5f}, c.danger);
-    p.Fill({x + 6.25f, cy + 2.75f, 1.5f, 1.5f}, c.danger);
+    p.Icon("warning", {x - 1, cy - 8, 16, 16}, c.danger);
     p.Text(Tr(L"Damaged"), {x + 19, b.y, b.Right() - x - 19 - 6, b.h}, TextStyle::Small, c.textPrimary, HAlign::Leading,
            VAlign::Center, 0);
 }
