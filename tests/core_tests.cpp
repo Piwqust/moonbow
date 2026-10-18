@@ -1,4 +1,4 @@
-// Unit tests for src/core and src/library. Build and run with tests\build-tests.bat.
+// Unit tests for src/core, src/library and the LRC parser. Build and run with tests\build-tests.bat.
 // A tiny runner: CHECK() records failures and keeps going; the exit code is the failure count.
 // Every test works inside a fresh temp folder; SetDataDirForTests keeps %APPDATA%\Lumen untouched.
 
@@ -6,6 +6,7 @@
 #include "../src/core/Json.h"
 #include "../src/core/Paths.h"
 #include "../src/core/SettingsSchema.h"
+#include "../src/app/player/Lyrics.h"
 #include "../src/library/Bookmarks.h"
 #include "../src/library/History.h"
 #include "../src/library/MediaLibrary.h"
@@ -1507,6 +1508,63 @@ void TestThumbnails() {
     if (SUCCEEDED(com)) CoUninitialize();
 }
 
+void TestLyricsLrc() {
+    // Several stamps per line, offset, ID tags, word stamps, CRLF, out-of-order lines.
+    const app::Lyrics l = app::ParseLyrics(
+        L"[ar:Someone]\r\n[ti:Song]\r\n[offset:+500]\r\n[00:01.00]\r\n[00:12.50][01:02.25]Chorus line\r\n"
+        L"[00:05.5]First <00:05.80>words <00:06.10>here\r\n[1:00:00.00]Late\r\n[00:20:50]Old style\r\n"
+        L"[00:30.00]\r\n[00:31.00]\r\n[00:40.123]Last  \r\n[00:50.00]\r\n");
+    CHECK(l.synced);
+    CHECK_MSG(l.lines.size() == 8, "%zu lines", l.lines.size());
+    if (l.lines.size() == 8) {
+        CHECK(std::abs(l.lines[0].time - 5.0) < 1e-6 && l.lines[0].text == L"First words here");
+        CHECK(std::abs(l.lines[1].time - 12.0) < 1e-6 && l.lines[1].text == L"Chorus line");
+        CHECK(std::abs(l.lines[2].time - 20.0) < 1e-6 && l.lines[2].text == L"Old style");
+        CHECK(l.lines[3].text.empty());  // one blank stamp kept as a pause, the repeat dropped
+        CHECK(std::abs(l.lines[4].time - 39.623) < 1e-6 && l.lines[4].text == L"Last");
+        CHECK(std::abs(l.lines[5].time - 49.5) < 1e-6 && l.lines[5].text.empty());
+        CHECK(std::abs(l.lines[6].time - 61.75) < 1e-6 && l.lines[6].text == L"Chorus line");
+        CHECK(std::abs(l.lines[7].time - 3599.5) < 1e-6 && l.lines[7].text == L"Late");
+    }
+    CHECK(l.LineAt(0) == -1);
+    CHECK(l.LineAt(4.99) == -1);
+    CHECK(l.LineAt(5.0) == 0);
+    CHECK(l.LineAt(13) == 1);
+    CHECK(l.LineAt(1e6) == 7);
+
+    // No stamps: unsynced text, stanza breaks kept once, ID tags and blank edges dropped.
+    const app::Lyrics u = app::ParseLyrics(L"[ar:X]\n\nLine one\n[Chorus]\nLine two\n\n\n\nLine three\n\n");
+    CHECK(!u.synced);
+    CHECK_MSG(u.lines.size() == 5, "%zu lines", u.lines.size());
+    if (u.lines.size() == 5) {
+        CHECK(u.lines[0].text == L"Line one" && u.lines[1].text == L"[Chorus]" && u.lines[3].text.empty());
+        CHECK(u.lines[4].text == L"Line three");
+    }
+    CHECK(u.LineAt(10) == -1);
+
+    // Broken stamps are text; empty input is empty.
+    const app::Lyrics b = app::ParseLyrics(L"[00:1x.00]not a stamp\n[12]\n");
+    CHECK(!b.synced && b.lines.size() == 2);
+    CHECK(app::ParseLyrics(L"").Empty());
+    CHECK(app::ParseLyrics(L"[00:10.00]\n[00:20.00]\n").Empty());
+
+    // File decoding: UTF-8 with and without BOM, UTF-16 LE/BE, legacy code page.
+    CHECK(app::DecodeLyricsFile("\xEF\xBB\xBF[00:01.00]\xD0\x9F\xD1\x80\xD0\xB8") == L"[00:01.00]При");
+    CHECK(app::DecodeLyricsFile("[00:01.00]ok") == L"[00:01.00]ok");
+    CHECK(app::DecodeLyricsFile(std::string("\xFF\xFE" "a\0b\0", 6)) == L"ab");
+    CHECK(app::DecodeLyricsFile(std::string("\xFE\xFF\0a\0b", 6)) == L"ab");
+    CHECK(!app::DecodeLyricsFile("caf\xE9").empty());
+
+    // Where the .lrc is looked for, which tags carry lyrics.
+    CHECK(app::LyricsPathFor(L"C:\\Music\\A.B\\01 Song.mp3") == L"C:\\Music\\A.B\\01 Song.lrc");
+    CHECK(app::LyricsPathFor(L"C:\\Music\\A.B\\noext") == L"C:\\Music\\A.B\\noext.lrc");
+    CHECK(app::LyricsPathFor(L"https://example.com/a.mp3").empty());
+    CHECK(app::LyricsPathFor(L"C:\\Music\\").empty());
+    CHECK(app::IsLyricsTag("LYRICS") && app::IsLyricsTag("lyrics-eng") && app::IsLyricsTag("UNSYNCEDLYRICS"));
+    CHECK(!app::IsLyricsTag("lyricist") && !app::IsLyricsTag("lyrics-") && !app::IsLyricsTag("title"));
+    CHECK(app::LoadLyricsFile(L"Z:\\definitely\\missing.lrc").Empty());
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -1536,6 +1594,7 @@ const TestCase kTests[] = {
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},
     {"thumbnails", TestThumbnails},
+    {"lyrics_lrc", TestLyricsLrc},
 };
 
 }  // namespace

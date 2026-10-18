@@ -33,6 +33,12 @@ void AssignBindings(Action a, std::vector<KeyBinding> keys);
 void ResetBindings(Action a);
 void ResetAllBindings();
 
+// Key presets: a whole layout applied at once on top of the defaults. "youtube": K / Space play
+// and pause, J / L seek 10 s, 0-9 jump to 0-90%, Shift+, / Shift+. slower / faster, C subtitles,
+// Shift+N / Shift+P next / previous, I picture in picture; the actions whose keys it takes move
+// to free ones (audio delay to Shift+J / Shift+K, repeat to R). Returns false for an unknown id.
+bool ApplyKeyPreset(std::string_view id);
+
 // Stable text form used in settings.json: "Ctrl+Shift+Right", "Space", "F11".
 std::string BindingToken(const KeyBinding& k);
 bool ParseBinding(std::string_view text, KeyBinding* out);

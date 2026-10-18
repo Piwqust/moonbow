@@ -26,6 +26,8 @@ enum class Action : int {
     Search, Back, Forward, AddBookmark, ToggleFavorite, ShowInfo, ShowInExplorer,
     // App
     Settings, KeyboardShortcuts, CustomizePlayer, Quit,
+    // Jump to 0%, 10% ... 90% of the file (no default keys; the "YouTube" key preset binds 0-9).
+    JumpTo0, JumpTo10, JumpTo20, JumpTo30, JumpTo40, JumpTo50, JumpTo60, JumpTo70, JumpTo80, JumpTo90,
     Count,
 };
 
