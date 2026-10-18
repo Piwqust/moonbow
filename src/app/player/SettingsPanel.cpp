@@ -388,13 +388,14 @@ std::unique_ptr<Widget> PlaybackTab() {
     AddSegments(
         page, s, Tr(L"Repeat"), {{Tr(L"Off"), "off", ""}, {Tr(L"All"), "all", ""}, {Tr(L"One"), "one", ""}},
         [] { return static_cast<int>(TheApp().queue().RepeatMode()); },
+        // Through the settings, like the L and Shuffle keys: they persist, drive mpv's loop-file
+        // and the queue, and the keys then toggle from the value shown here.
         [](int i) {
             const Repeat r = static_cast<Repeat>(i);
-            TheApp().queue().SetRepeat(r);
-            TheApp().player().SetProperty("loop-file", std::string(r == Repeat::One ? "inf" : "no"));
+            Cfg().SetString("playback.repeat", r == Repeat::One ? "one" : r == Repeat::All ? "all" : "off");
         });
     AddToggle(page, s, Tr(L"Shuffle"), [] { return TheApp().queue().Shuffle(); },
-              [](bool v) { TheApp().queue().SetShuffle(v); });
+              [](bool v) { Cfg().SetBool("playback.shuffle", v); });
     AddToggle(page, s, Tr(L"Stop after this item"), [] { return Live().stopAfter; },
               [](bool v) { Live().SetStopAfter(v); });
     std::vector<ui::Choice> sleep{{Tr(L"Off"), "0", ""}};

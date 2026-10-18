@@ -160,6 +160,10 @@ bool MainWindow::Create() {
     };
     dropHint = Tr(L"Drop to play");
     onCloseRequest = [this] {
+        // A second close (Quit from the tray, "when finished: close") would start a second
+        // shutdown of the same mpv.
+        if (TheApp().Quitting()) return false;
+        TheApp().BeginQuit();
         // mpv's video window is a child of ours, owned by an mpv thread, so
         // shut mpv down off the UI thread while this thread keeps pumping.
         ShowWindow(Hwnd(), SW_HIDE);
@@ -445,6 +449,11 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
         case WM_COPYDATA: {
             auto* cds = reinterpret_cast<COPYDATASTRUCT*>(lp);
             if (!cds || cds->dwData != kCopyDataOpen) return false;
+            // Closing: refuse, so the sending instance opens the files itself (main.cpp).
+            if (TheApp().Quitting()) {
+                *result = FALSE;
+                return true;
+            }
             std::wstring payload(static_cast<const wchar_t*>(cds->lpData), cds->cbData / sizeof(wchar_t));
             while (!payload.empty() && payload.back() == L'\0') payload.pop_back();
             if (!Host::Automation() && (IsIconic(Hwnd()) || !IsWindowVisible(Hwnd()))) ShowWindow(Hwnd(), SW_RESTORE);

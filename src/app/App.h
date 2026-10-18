@@ -115,6 +115,10 @@ public:
     void OpenSettings(const std::string& category = {});
     void ShowOnboarding();
     void Quit();
+    // Set once the main window starts closing (mpv shuts down on another thread): from then on
+    // nothing may touch the player, and files sent by a new instance are refused.
+    void BeginQuit() { quitting_ = true; }
+    bool Quitting() const { return quitting_; }
 
     // --- signals --------------------------------------------------------------------
     Signal<unsigned> playerChanged;  // PlayerChange mask
@@ -171,6 +175,7 @@ private:
     uint64_t recordedSerial_ = 0;
     RECT preFitRect_{};  // window rect before FitWindowToVideo grew it; empty when not fitted  // PlayerState::loadSerial already counted in history  // Previous restarted the file at this time (ms)
     std::vector<std::wstring> pendingOpen_;
+    int pendingIndex_ = -1;  // PlayIndex before mpv was ready: the queue is built, play this item
     bool engineReady_ = false;
     bool fitPending_ = false;
     bool fittedOnce_ = false;

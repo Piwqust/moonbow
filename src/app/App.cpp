@@ -401,13 +401,20 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
 }
 
 void App::OnPlayerReady(bool ok) {
+    // Closed during the cold start: the shutdown thread joins the init thread and destroys mpv;
+    // joining it here too, or setting mpv up, would race with that.
+    if (quitting_) return;
     if (!player_.FinishStart(ok)) {
         ShowToast(main_.get(), player_.Error(), "info", 6000);
         return;
     }
     Trace("mpv ready");
     engineReady_ = true;
-    if (!pendingOpen_.empty()) {
+    if (pendingIndex_ >= 0) {
+        const int i = pendingIndex_;
+        pendingIndex_ = -1;
+        PlayIndex(i);
+    } else if (!pendingOpen_.empty()) {
         auto files = std::move(pendingOpen_);
         pendingOpen_.clear();
         Open(files);
@@ -416,6 +423,7 @@ void App::OnPlayerReady(bool ok) {
 }
 
 void App::OnPlayerEvents() {
+    if (quitting_) return;  // mpv is being destroyed on the shutdown thread
     unsigned changes = player_.ProcessEvents();
     if (!changes) return;
     const PlayerState& s = player_.State();
@@ -603,7 +611,7 @@ void App::Enqueue(const std::vector<std::wstring>& paths) {
     const int first = static_cast<int>(queue_.Items().size());
     queue_.Add(std::move(items));
     // Nothing plays yet: the first added item starts, as with the queue's own "+" button.
-    if (!player_.State().fileLoaded && pendingOpen_.empty()) {
+    if (!player_.State().fileLoaded && pendingOpen_.empty() && pendingIndex_ < 0) {
         PlayIndex(first, false);
         return;
     }
@@ -624,7 +632,7 @@ void App::BuildFolderQueue(const std::wstring& file) {
     }();
     // Same kind only: a song doesn't pull the folder's videos into the queue.
     std::vector<QueueItem> items;
-    int index = 0;
+    int index = -1;
     for (const auto& s : siblings) {
         const wchar_t* ext = PathFindExtensionW(s.c_str());
         bool isAudio = false;
@@ -634,7 +642,12 @@ void App::BuildFolderQueue(const std::wstring& file) {
         if (_wcsicmp(s.c_str(), file.c_str()) == 0) index = static_cast<int>(items.size());
         items.push_back(ItemFor(s));
     }
-    if (items.empty()) items.push_back(ItemFor(file));
+    // A file the sibling scan doesn't list (an extension IsMediaFile doesn't know: .mka, .ape,
+    // .aiff, .pls) plays alone; its folder's first file must not play in its place.
+    if (index < 0) {
+        items = {ItemFor(file)};
+        index = 0;
+    }
     const size_t slash = file.find_last_of(L"\\/");
     PlayQueueItems(std::move(items), index, slash == std::wstring::npos ? L"" : FileNameOf(file.substr(0, slash)));
 }
@@ -643,6 +656,7 @@ void App::Open(const std::vector<std::wstring>& paths) {
     if (paths.empty()) return;
     if (!engineReady_) {
         pendingOpen_ = paths;
+        pendingIndex_ = -1;  // the newer request wins
         return;
     }
     if (AddedAsSubtitles(paths)) return;
@@ -700,7 +714,10 @@ void App::PlayIndex(int index, bool showPlayer) {
     const QueueItem* item = queue_.CurrentItem();
     if (!item) return;
     if (!engineReady_) {
-        pendingOpen_ = {item->path};
+        // Keep the queue (a playlist, a folder) as built: reopening the path would rebuild it
+        // from the file's folder.
+        pendingOpen_.clear();
+        pendingIndex_ = queue_.Current();
         return;
     }
     // A jump the user asked for: "replace" (it also drops the queued next file), then queue anew.
@@ -866,6 +883,7 @@ void App::Quit() {
 }
 
 void App::OnCopyData(const std::wstring& payload) {
+    if (quitting_) return;
     std::vector<std::wstring> files;
     size_t start = 0;
     while (start < payload.size()) {
