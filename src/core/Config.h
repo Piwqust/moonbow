@@ -129,3 +129,8 @@ std::vector<MpvOption> MpvOptionFor(const Config& config, std::string_view key);
 
 // Splits "--name=value --flag name2=value2" (quotes allowed) into options; "--flag" -> "yes".
 std::vector<MpvOption> ParseMpvArgs(std::string_view args);
+
+// yt-dlp.exe next to Lumen.exe or in a local folder on PATH; empty when there is none. Looked up
+// once per process (network drives on PATH are skipped so the lookup cannot stall). Lumen never
+// downloads it. Thread-safe.
+const std::wstring& YtDlpPath();

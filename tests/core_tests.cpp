@@ -343,7 +343,8 @@ void TestSchema() {
                 CHECK_MSG(it.placeholder.empty() == it.placeholderRu.empty(), "%s placeholder pair", k);
                 CHECK_MSG(it.actionLabel.empty() == it.actionLabelRu.empty(), "%s caption pair", k);
                 CHECK_MSG(it.label != it.labelRu || it.label.find_first_of(L"0123456789") != std::wstring::npos ||
-                              it.label == L"Replay gain" || it.label == L"User agent",
+                              it.label == L"Replay gain" || it.label == L"User agent" ||
+                              it.key.rfind("audio.spdif", 0) == 0,  // format names: DTS, Dolby TrueHD
                           "%s not translated", k);
 
                 if (it.HasValue()) {
@@ -800,6 +801,83 @@ void TestConfigMpv() {
     }
     CHECK(ParseMpvArgs("").empty());
     CHECK(ParseMpvArgs("  --a  --b=  'c d'=e").size() == 3);
+}
+
+void TestAudioSubtitleOptions() {
+    FreshDataDir(L"config-audio-subs");
+    Config c;
+    auto opts = MpvOptions(c);
+    bool found = false;
+    FindOption(opts, "audio-spdif", &found);
+    CHECK(!found);  // passthrough is off by default
+    CHECK(FindOption(opts, "gapless-audio") == "weak");
+    CHECK(FindOption(opts, "audio-exclusive") == "no");
+    CHECK(FindOption(opts, "audio-file-auto") == "fuzzy");
+    CHECK(FindOption(opts, "sub-border-style") == "outline-and-shadow");
+    CHECK(FindOption(opts, "sub-back-color") == "#99000000");  // 60% black
+    CHECK(FindOption(opts, "sub-use-margins") == "yes" && FindOption(opts, "sub-ass-force-margins") == "yes");
+    CHECK(FindOption(opts, "sub-margin-y") == "34" && FindOption(opts, "secondary-sub-pos") == "0");
+    FindOption(opts, "demuxer-readahead-secs", &found);
+    CHECK(!found);  // mpv's own read-ahead unless buffering is custom
+    CHECK(FindOption(opts, "ytdl") == (YtDlpPath().empty() ? "no" : "yes"));
+
+    // Passthrough: the ticked formats, in a fixed order; turning it off clears the list live.
+    c.SetBool("audio.passthrough", true);
+    CHECK(FindOption(MpvOptionFor(c, "audio.passthrough"), "audio-spdif") == "ac3,dts");
+    c.SetBool("audio.spdifTrueHd", true);
+    c.SetBool("audio.spdifAc3", false);
+    CHECK(FindOption(MpvOptionFor(c, "audio.spdifTrueHd"), "audio-spdif") == "dts,truehd");
+    c.SetBool("audio.passthrough", false);
+    auto live = MpvOptionFor(c, "audio.passthrough");
+    CHECK(FindOption(live, "audio-spdif", &found).empty() && found);
+
+    // Normalization modes share the equalizer's filter chain and come after it.
+    c.SetBool("audio.eq", true);
+    c.ApplyEqPreset("rock");
+    c.SetBool("audio.normalize", true);
+    c.SetString("audio.normalizeMode", "dynamic");
+    std::string af = FindOption(MpvOptionFor(c, "audio.normalizeMode"), "af");
+    CHECK(af.find("equalizer=") != std::string::npos && af.find("dynaudnorm=") != std::string::npos);
+    CHECK(af.find("equalizer=") < af.find("dynaudnorm=") && af.find("loudnorm") == std::string::npos);
+    c.SetString("audio.normalizeMode", "ebu");
+    af = FindOption(MpvOptions(c), "af");
+    CHECK(af.find("loudnorm=I=-23") != std::string::npos && af.find("dynaudnorm") == std::string::npos);
+    c.SetString("audio.replayGain", "album");
+    CHECK(FindOption(MpvOptions(c), "replaygain") == "album");
+
+    c.SetString("subtitles.background", "box");
+    c.SetString("subtitles.backColor", "#202020");
+    c.SetDouble("subtitles.backOpacity", 100);
+    CHECK(FindOption(MpvOptionFor(c, "subtitles.backOpacity"), "sub-back-color") == "#FF202020");
+    CHECK(FindOption(MpvOptionFor(c, "subtitles.background"), "sub-border-style") == "background-box");
+    c.SetBool("subtitles.useBlackBars", false);
+    live = MpvOptionFor(c, "subtitles.useBlackBars");
+    CHECK(FindOption(live, "sub-use-margins") == "no" && FindOption(live, "sub-ass-force-margins") == "no");
+    c.SetDouble("subtitles.blur", 1.5);
+    CHECK(FindOption(MpvOptionFor(c, "subtitles.blur"), "sub-blur") == "1.5");
+
+    c.SetString("network.buffering", "custom");
+    c.SetDouble("network.cacheLocal", 300);
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "0.3");
+    c.SetString("network.buffering", "normal");
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "1");  // reset
+
+    c.SetDouble("audio.maxVolume", 300);
+    CHECK(c.GetDouble("audio.maxVolume") == 200);
+    CHECK(FindOption(MpvOptions(c), "volume-max") == "200");
+
+    // yt-dlp's path and the user's script options share one list; the user's come last.
+    c.SetString("extensions.scriptOpts", "osc-visibility=always");
+    const std::string so = FindOption(MpvOptionFor(c, "extensions.scriptOpts"), "script-opts");
+    if (YtDlpPath().empty()) {
+        CHECK(so == "osc-visibility=always");
+    } else {
+        CHECK(so.rfind("ytdl_hook-ytdl_path=%", 0) == 0);
+        CHECK(so.size() > 22 && so.substr(so.size() - 22) == ",osc-visibility=always");
+    }
+    c.SetBool("network.ytdl", false);
+    CHECK(FindOption(MpvOptionFor(c, "network.ytdl"), "ytdl") == "no");
+    CHECK(FindOption(MpvOptions(c), "script-opts") == "osc-visibility=always");
 }
 
 // --- History / playlists / bookmarks --------------------------------------------------------------
@@ -1341,6 +1419,7 @@ const TestCase kTests[] = {
     {"config_subscribe", TestConfigSubscribe},
     {"config_persistence", TestConfigPersistence},
     {"config_mpv", TestConfigMpv},
+    {"audio_subtitle_options", TestAudioSubtitleOptions},
     {"corrupt_backup", TestCorruptBackup},
     {"hidden_condition", TestHiddenCondition},
     {"history", TestHistory},
