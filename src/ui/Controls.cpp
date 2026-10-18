@@ -254,7 +254,7 @@ void Toggle::Paint(Painter& p) {
     const float k = knob_.Get();
     const Rect box = rect.Center(66, 30);
     const Color bg = Color::Mix(c.bgCard, c.accentDim, k);
-    p.Fill(box, IsEnabled() ? bg : c.bgPanel, 4);
+    p.Fill(box, IsEnabled() ? bg : Color::Mix(c.bgBase, c.bgCard, 0.5f), 4);  // flatter than a live track
     p.Stroke(box, Color::Mix(c.bgDeep, c.accentFaint, k), 4, 2);
     if (IsHot()) p.Fill(box, c.hover, 4);
     PaintFocusRing(p, box, 4);

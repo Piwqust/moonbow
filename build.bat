@@ -27,8 +27,11 @@ set "OBJ=%OUT%\obj\%CONFIG%"
 if not exist "%OBJ%" mkdir "%OBJ%"
 
 rem Every .cpp under src (object files share one folder, so basenames must be unique).
-set "SOURCES="
-for /r "%ROOT%src" %%f in (*.cpp) do set "SOURCES=!SOURCES! "%%f""
+rem They go to a response file: on the command line the list outgrows cmd's 8191-character
+rem limit when the checkout path is long (worktrees).
+set "RSP=%OBJ%\sources.rsp"
+if exist "%RSP%" del "%RSP%"
+for /r "%ROOT%src" %%f in (*.cpp) do echo "%%f">>"%RSP%"
 
 set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /permissive- /Zc:__cplusplus /MP /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /I"%ROOT%src" /I"%ROOT%third_party\mpv\include""
 set "LFLAGS=/SUBSYSTEM:WINDOWS /MANIFEST:NO /DYNAMICBASE /NXCOMPAT"
@@ -44,7 +47,7 @@ if /i "%CONFIG%"=="debug" (
 set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib windowsapp.lib delayimp.lib"
 
 rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
-cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" %SOURCES% "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1
+cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 copy /y "%ROOT%third_party\mpv\libmpv-2.dll" "%OUT%\" >nul || exit /b 1
 echo Built %OUT%\Lumen.exe (%CONFIG%)
