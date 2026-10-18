@@ -12,23 +12,23 @@ Line numbers refer to the worktree source at d2b6b81.
 
 ## Summary
 
-| ID | Sev | Status | Ch. | Finding |
-|---|---|---|---|---|
-| FL-01 | Broken | confirmed | 1 | In fullscreen the side panel (Ctrl+B) is drawn but dead: clicks, double clicks and the wheel go to the video under it. |
-| FL-02 | Broken | confirmed (code) | 1, 2 | Dropping files on the window, even onto the open queue, **replaces** the whole queue. The queue's own empty-state text says to drop files to add them. |
-| FL-03 | Broken | confirmed | 2 | Zoom mode "1:2 / 1:4 / 1:1 / 2:1" leaks into the next file: it shows at 1:1, cropped, while the panel says "По размеру окна". |
-| FL-04 | Ugly | confirmed | 4 | A click outside a context menu closes the menu **and** acts on what is under it. Dismissing the video menu pauses or resumes the film. |
-| FL-05 | Broken | confirmed | 6 | In the player's side panel, any section in the rail (Главная, Видео, Музыка…) throws you out of the player into the library. |
-| FL-06 | Ugly | confirmed | 1 | Keyboard editing of the queue: Up/Down change the volume while the queue is open, and the row that Del removes is invisible after a mouse action. |
-| FL-07 | Fragile | confirmed | 1 | Losing mouse capture mid-drag (Alt+Tab, a toast, a UAC prompt) **commits** the queue reorder instead of cancelling it. |
-| FL-08 | Ugly | confirmed | 3 | When the seek bar is narrower than the preview (small windows), the preview is pinned in place, and the code calls `std::clamp` with lo > hi, which is undefined behaviour. |
-| FL-09 | Ugly | suspected | 3 | The seek preview never shows the exact frame on a file with one keyframe (4K Mandelbrot), even after a 2 s rest, although the code promises one. |
-| FL-10 | Fragile | confirmed | 2 | Flip (Отражение) carries over to the next file while rotation, zoom and aspect reset. The rule is inconsistent. |
-| FL-11 | Ugly | confirmed | 4 | A submenu opened while filtering a menu stays open, detached from its row, after Esc clears the filter. |
-| FL-12 | Fragile | confirmed | 1 | After "×" removes a queue row, the next row slides under the pointer with its "×" already armed: a double click removes two rows. |
-| FL-13 | Ugly | confirmed | 2 | At the end of the last file the bar reads 0:07 / 0:08, not 0:08 / 0:08. |
-| FL-14 | Ugly | confirmed | 6 | Restart does not bring back the side panel or the library section: it always opens on Главная with the panel closed. |
-| — | Info | — | 6 | Maximized restore can't be tested under `--automation` (`App.cpp:267` forces `SW_SHOWNOACTIVATE`). Window size and position, resume position, bar style and theme do persist. |
+| ID | Sev | Status | Ch. | Finding | Fix (r5-fix-flows) |
+|---|---|---|---|---|---|
+| FL-01 | Broken | confirmed | 1 | In fullscreen the side panel (Ctrl+B) is drawn but dead: clicks, double clicks and the wheel go to the video under it. | fixed |
+| FL-02 | Broken | confirmed (code) | 1, 2 | Dropping files on the window, even onto the open queue, **replaces** the whole queue. The queue's own empty-state text says to drop files to add them. | fixed (drop branch by code) |
+| FL-03 | Broken | confirmed | 2 | Zoom mode "1:2 / 1:4 / 1:1 / 2:1" leaks into the next file: it shows at 1:1, cropped, while the panel says "По размеру окна". | fixed |
+| FL-04 | Ugly | confirmed | 4 | A click outside a context menu closes the menu **and** acts on what is under it. Dismissing the video menu pauses or resumes the film. | fixed |
+| FL-05 | Broken | confirmed | 6 | In the player's side panel, any section in the rail (Главная, Видео, Музыка…) throws you out of the player into the library. | fixed |
+| FL-06 | Ugly | confirmed | 1 | Keyboard editing of the queue: Up/Down change the volume while the queue is open, and the row that Del removes is invisible after a mouse action. | fixed |
+| FL-07 | Fragile | confirmed | 1 | Losing mouse capture mid-drag (Alt+Tab, a toast, a UAC prompt) **commits** the queue reorder instead of cancelling it. | fixed |
+| FL-08 | Ugly | confirmed | 3 | When the seek bar is narrower than the preview (small windows), the preview is pinned in place, and the code calls `std::clamp` with lo > hi, which is undefined behaviour. | fixed |
+| FL-09 | Ugly | suspected | 3 | The seek preview never shows the exact frame on a file with one keyframe (4K Mandelbrot), even after a 2 s rest, although the code promises one. | rejected (slow, arrives) |
+| FL-10 | Fragile | confirmed | 2 | Flip (Отражение) carries over to the next file while rotation, zoom and aspect reset. The rule is inconsistent. | fixed |
+| FL-11 | Ugly | confirmed | 4 | A submenu opened while filtering a menu stays open, detached from its row, after Esc clears the filter. | fixed |
+| FL-12 | Fragile | confirmed | 1 | After "×" removes a queue row, the next row slides under the pointer with its "×" already armed: a double click removes two rows. | fixed |
+| FL-13 | Ugly | confirmed | 2 | At the end of the last file the bar reads 0:07 / 0:08, not 0:08 / 0:08. | fixed |
+| FL-14 | Ugly | confirmed | 6 | Restart does not bring back the side panel or the library section: it always opens on Главная with the panel closed. | fixed |
+| — | Info | — | 6 | Maximized restore can't be tested under `--automation` (`App.cpp:267` forces `SW_SHOWNOACTIVATE`). Window size and position, resume position, bar style and theme do persist. | — |
 
 ### Charter 1 conclusion: the owner's "can't edit the queue in fullscreen"
 
@@ -229,6 +229,8 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 ## Audit items
 
 Items of `qa/AUDIT-PONYTAIL.md` in the player and queue code, taken by r5-fix-flows. Each was confirmed in the code or at runtime before the change.
+
+Files touched outside the brief's list, each with a small local hunk: `src/ui/Widget.h` (`MouseEvent::cancelled`, FL-07), `src/ui/Controls.cpp` (`MenuPopup::Refilter`, FL-11), `src/app/App.h` (`Enqueue`, `BeginQuit`/`Quitting`, `pendingIndex_`), `src/app/Actions.h` (`WheelVolume`), `src/main.cpp` (#3), `tests/core_tests.cpp` (one check). In `src/ui/Host.cpp` only the popup dismissal in `OnMouseButton` and the `WM_CAPTURECHANGED` case changed.
 
 - **#16 (crash when dragging in the queue): fixed.** Confirmed at runtime: press the handle of the last row, Del: the base removed the row mid-drag and painted the floating row from past the end of the list (an empty row, `%TEMP%\lumen-qa\r5ff\fl16-pair.png`, left; out-of-bounds read, no crash in release). Now a queue change cancels the drag, `PaintOver` checks the index, and the list's keys are ignored (but consumed) mid-drag. Fixed: Del does nothing until the drag ends (`fl16-pair.png`, right).
 - **#3 (shutdown race): fixed.** Confirmed at runtime: launching on 4K Mandelbrot and posting `WM_CLOSE` three times during the cold start crashed the base in 6 of 12 runs (exit codes 0xC0000005 and 0xC0000409); the fixed build exited with 0 in 12 of 12. Changes: `onCloseRequest` sets `App::BeginQuit()` (the unused `quitting_`) and ignores a second close; `OnPlayerReady` returns before `FinishStart` (which joined the init thread that the shutdown thread also joins) when quitting; `OnPlayerEvents` and `OnCopyData` return at once; `WM_COPYDATA` answers FALSE while closing, and `main.cpp` treats a FALSE answer as "not forwarded", so the new process opens the files itself.
