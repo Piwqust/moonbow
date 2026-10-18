@@ -401,16 +401,21 @@ void LibraryPane::RefreshHeader() {
     crumbs_->ClearChildren();
     if (view_) {
         auto crumbs = view_->Breadcrumbs();
-        // Long paths collapse to "… › parent › current".
-        const size_t keep = compact_ ? 2 : 4;
+        // Long paths collapse to "… › parent › current". The narrow side panel names only the
+        // current page (Back goes up).
+        const size_t keep = compact_ ? 1 : 4;
         size_t start = crumbs.size() > keep ? crumbs.size() - keep : 0;
-        if (start > 0) crumbs_->Add<Label>(L"…", TextStyle::Large, Tone::Secondary);
+        if (start > 0 && !compact_) crumbs_->Add<Label>(L"…", TextStyle::Large, Tone::Secondary);
         for (size_t i = start; i < crumbs.size(); ++i) {
-            if (i > start || start > 0) crumbs_->Add<IconView>("chevron_right", 16, Tone::Tertiary);
-            crumbs_->Add<CrumbButton>(crumbs[i].label, crumbs[i].route, i + 1 == crumbs.size());
+            if (i > start || (start > 0 && !compact_)) crumbs_->Add<IconView>("chevron_right", 16, Tone::Tertiary);
+            const bool last = i + 1 == crumbs.size();
+            auto* crumb = crumbs_->Add<CrumbButton>(crumbs[i].label, crumbs[i].route, last);
+            // The current page takes the room that's left and ends with "…" instead of being cut.
+            if (last) crumb->width = Length::Grow();
         }
         const long long n = view_->ItemCount();
-        count_->visible = n >= 0;
+        // The side panel is too narrow for crumbs and a count side by side.
+        count_->visible = n >= 0 && !compact_;
         count_->SetText(n >= 0 ? CountItems(n) : L"");
         mode_->visible = view_->HasViewModes();
         mode_->icon = view_->GetViewMode() == ViewMode::Grid ? "list" : "grid";
