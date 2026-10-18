@@ -28,4 +28,10 @@ Not done, with reasons:
 2. Build, run the tests and the checks, run the full sweep: 0 medium/high findings.
 3. Measure: qa/perf/firstframe.ps1 and idle CPU.
 4. Run a verification agent (fresh eyes) over all new features, then fix what it finds.
-5. Update STATUS.md (section 7 and a new section for the round), memory, and the report to the owner.
+5. Update STATUS.md (section 7 and a new section for the round) and memory.
+6. The owner's request (2026-10-18, before stepping away): when round 7 is done, run a whole-repo audit with the `ponytail-audit` skill. Then apply every reasonable fix (agents in worktrees, split by disjoint files). Verify: build, tests, checks, the sweep, perf. Write a proper report (qa/round8/REPORT.md, in Russian).
+7. The very last step, after everything is committed and reported: put the PC to sleep.
+   `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)"`
+   Before that, delete the fallback cron job (CronDelete).
+
+If the work stops (limits), the hourly fallback job resumes it from this file.
