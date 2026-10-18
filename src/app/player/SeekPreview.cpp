@@ -79,7 +79,7 @@ struct Request {
     double step = 2;      // grid bucket size
     double duration = 0;
     long long bucket = 0;
-    bool hw = false;      // decode on the GPU with copy-back (4K, HEVC, AV1)
+    bool hw = false;      // decode on the GPU with copy-back (above 4K)
     double changedAt = 0; // when the cursor last moved to another time
 };
 
@@ -225,8 +225,9 @@ private:
             closing_ = true;
         }
         const bool open = h_ != nullptr;
+        const double started = NowMs();
         Close();
-        if (open) PreviewTrace(0, "preview instance closed");
+        if (open) PreviewTrace(NowMs() - started, "preview instance closed");
         std::lock_guard lock(mu_);
         closing_ = false;
         if (stop_ || !hasWant_) return false;
@@ -457,13 +458,13 @@ struct ShownBitmap {
     gfx::ComPtr<ID2D1Bitmap> bitmap;
 } g_shown;
 
+// Copy-back hardware decoding costs a decoder pool of full-size surfaces and device setup, and
+// part of that memory stays with the process after the instance closes (4K HEVC: +250 MB while
+// scrubbing, +135 MB for good). Software decoding with the loop filter skipped is as quick on
+// 4K keyframes (H.264 35 ms, HEVC 93 ms cold) and gives everything back, so only video above
+// 4K goes to the GPU.
 bool HeavyVideo(const PlayerState& s) {
-    if (s.videoW > 2560 || s.videoH > 1440) return true;
-    for (const Track& t : s.tracks)
-        if (t.selected && t.type == L"video")
-            return t.codec.find(L"hevc") != std::wstring::npos || t.codec.find(L"av1") != std::wstring::npos ||
-                   t.codec.find(L"vp9") != std::wstring::npos || t.codec.find(L"265") != std::wstring::npos;
-    return false;
+    return s.videoW > 4096 || s.videoH > 2304;
 }
 
 }  // namespace
