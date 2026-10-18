@@ -259,16 +259,23 @@ void Toggle::Paint(Painter& p) {
     if (IsHot()) p.Fill(box, c.hover, 4);
     PaintFocusRing(p, box, 4);
 
-    const float knobW = 26, knobH = 22;
+    // A 20 DIP knob leaves the caption 38 DIP ("выкл" got 32 with no room to spare).
+    const float knobW = 20, knobH = 22;
     const float x = box.x + 4 + (box.w - 8 - knobW) * k;
-    // Disabled: no white knob or label, so a switch that can't be used never outshines live ones.
+    // Disabled: an outlined knob in the disabled tone, so it reads as unusable rather than off.
+    // Live off: knob and caption at >= 3:1 on the track in both themes (lineStrong was ~1.5:1).
     const bool live = IsEnabled();
+    const Color knobOff = Color::Mix(c.textTertiary, c.textSecondary, 0.4f);
     const Color knobOn = live ? c.accent : c.textDisabled, textOn = live ? c.accent : c.textDisabled;
-    p.Fill({x, box.y + 4, knobW, knobH}, Color::Mix(c.lineStrong, knobOn, k), 3);
-    const Rect textOffRect{box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
-    const Rect textOnRect{box.x + 4, box.y, box.w - 8 - knobW, box.h};
+    const Rect knob{x, box.y + 4, knobW, knobH};
+    if (live)
+        p.Fill(knob, Color::Mix(knobOff, knobOn, k), 3);
+    else
+        p.Stroke(knob.Inset(0.75f), c.textDisabled, 3, 1.5f);
+    const Rect textOffRect{box.x + 4 + knobW + 2, box.y, box.w - 8 - knobW - 4, box.h};
+    const Rect textOnRect{box.x + 6, box.y, box.w - 8 - knobW - 4, box.h};
     if (k < 0.99f)
-        p.Text(g_toggleOff, textOffRect, TextStyle::Micro, (live ? c.textTertiary : c.textDisabled).Fade(1 - k),
+        p.Text(g_toggleOff, textOffRect, TextStyle::Micro, (live ? c.textSecondary : c.textDisabled).Fade(1 - k),
                HAlign::Center);
     if (k > 0.01f) p.Text(g_toggleOn, textOnRect, TextStyle::Micro, textOn.Fade(k), HAlign::Center);
 }

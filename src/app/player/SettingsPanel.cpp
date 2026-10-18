@@ -910,14 +910,10 @@ private:
 class SettingsFooter : public Widget {
 public:
     explicit SettingsFooter(Popover* owner) {
-        dir = Dir::Column;
         width = Length::Grow();
-        height = Length::Px(125);
-        pad = {20, 21, 20, 20};
-        gap = 10;
         Add<PresetField>();
-        auto* adv = Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
-        adv->onClick = [owner] {
+        adv_ = Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
+        adv_->onClick = [owner] {
             static const char* kCats[] = {"playback", "video", "audio", "subtitles"};
             const std::string cat = kCats[std::clamp(owner->CurrentTab(), 0, 3)];
             Later([cat] {
@@ -925,10 +921,31 @@ public:
                 TheApp().OpenSettings(cat);
             });
         };
+        SetCompact(false);
+        owner->fitFooter = [this](float h) { SetCompact(h < 560); };
     }
     void Paint(Painter& p) override {
         p.Fill({rect.x, rect.y, rect.w, 1}, SectionLine());
     }
+
+private:
+    // Short popover (an 800x500 window): one row, the settings button shows its icon only, so
+    // the footer takes 62 DIP instead of 125 and leaves the room to the scrolling rows.
+    void SetCompact(bool on) {
+        if (compact_ == (on ? 1 : 0)) return;
+        compact_ = on ? 1 : 0;
+        dir = on ? Dir::Row : Dir::Column;
+        height = Length::Px(on ? 62.0f : 125.0f);
+        pad = on ? Insets{20, 10, 20, 10} : Insets{20, 21, 20, 20};
+        gap = on ? 8.0f : 10.0f;
+        adv_->text = on ? L"" : Tr(L"Open Advanced Settings");
+        adv_->tooltip = on ? Tr(L"Open Advanced Settings") : L"";
+        adv_->width = on ? Length::Px(42) : Length::Grow();
+        adv_->height = Length::Px(on ? 42.0f : 32.0f);
+        adv_->filled = on;
+    }
+    FlatButton* adv_ = nullptr;
+    int compact_ = -1;
 };
 
 }  // namespace

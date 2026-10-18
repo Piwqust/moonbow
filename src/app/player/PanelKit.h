@@ -76,6 +76,8 @@ public:
     std::function<std::unique_ptr<ui::Widget>(int tab)> build;
     // Called after the tab changed (by click or code).
     std::function<void(int tab)> onTab;
+    // Called with the popover height before the footer is measured, so it can shrink in short windows.
+    std::function<void(float height)> fitFooter;
     // Fill of the frame (defaults to opaque bgBase).
     std::function<ui::Color()> fill;
     float radius = kRadius;
