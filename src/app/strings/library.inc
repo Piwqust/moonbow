@@ -51,8 +51,12 @@
 {L"“{0}” will no longer appear in Lumen. The files stay on your disk.",
  L"«{0}» больше не будет показываться в Lumen. Файлы останутся на диске."},
 {L"Remove from Library", L"Убрать из медиатеки"},
-{L"Scanning library…", L"Сканирование медиатеки…"},
-{L"Scanning library… {0} files so far", L"Сканирование медиатеки… найдено файлов: {0}"},
+// Scan banner (Home and the library pages, while a scan runs)
+{L"Indexing your library… {0} of {1}", L"Индексируем медиатеку… {0} из {1}"},
+{L"Indexing your library… files found: {0}", L"Индексируем медиатеку… найдено файлов: {0}"},
+{L"Indexing… {0} of {1}", L"Индексация… {0} из {1}"},
+{L"Indexing… files found: {0}", L"Индексация… найдено файлов: {0}"},
+{L"Hide", L"Скрыть"},
 {L"Nothing found", L"Ничего не найдено"},
 {L"No matches for “{0}” here. Try a shorter or different\u00A0word.",
  L"Здесь нет совпадений с «{0}». Попробуйте другое или более короткое\u00A0слово."},
@@ -232,5 +236,6 @@
 {L"Play {0}", L"Смотреть {0}"},
 {L"Other videos", L"Другие видео"},
 
-// Files the scanner can't play
-{L"Damaged", L"Повреждён"},
+// Files the scanner can't play; files found since the library was last opened
+{L"Damaged file", L"Битый файл"},
+{L"New", L"Новое"},

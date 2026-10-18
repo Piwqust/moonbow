@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <cwctype>
 #include <thread>
 
@@ -29,6 +30,12 @@ constexpr double kInlineMetadataTotalMs = 300;  // estimated rest of the pass; a
 constexpr auto kProgressInterval = std::chrono::seconds(2);
 constexpr size_t kMetadataChunk = 192;  // files read in parallel between progress checks
 constexpr int kCacheVersion = 5;        // library-cache.json format, see LoadCache
+// A scan still running after this tells the window once (pages then follow its progress); quicker
+// scans post nothing but their result.
+constexpr double kAnnounceMs = 400;
+// An inline metadata pass (one publish at the end) that runs longer than this publishes what it
+// has and continues as a second pass: the files show while slow ones are read.
+constexpr double kInlineLimitMs = 1000;
 
 
 double MsSince(Clock::time_point t) {
@@ -56,7 +63,8 @@ struct TempFolder {
 };
 
 void Enumerate(TempFolder& node, const ScanOptions& opt, const std::atomic<bool>& cancel, ScanStats& stats,
-               std::atomic<size_t>& found) {
+               std::atomic<size_t>& found, const std::function<void()>& tick) {
+    tick();
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileExW(Join(node.path, L"*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
                                 FIND_FIRST_EX_LARGE_FETCH);
@@ -73,7 +81,7 @@ void Enumerate(TempFolder& node, const ScanOptions& opt, const std::atomic<bool>
             auto child = std::make_unique<TempFolder>();
             child->path = Join(node.path, name);
             child->name = name;
-            Enumerate(*child, opt, cancel, stats, found);
+            Enumerate(*child, opt, cancel, stats, found, tick);
             if (!child->items.empty() || !child->children.empty()) {
                 ++stats.folders;
                 node.children.push_back(std::move(child));
@@ -249,7 +257,8 @@ void ReadMetadata(MediaItem& it) {
                 it.year = t.year;
                 it.disc = t.disc;
             }
-            if (it.duration > 0) return;
+            // Matroska gives only the length: a .mka song still asks the property system for its tags.
+            if (it.duration > 0 && !(t.format == TagFormat::Matroska && o.tags)) return;
         }
     }
     ReadShellMetadata(it, headRead);
@@ -653,6 +662,13 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     counting_ = true;  // again: the scan before this one may have touched the counters
     progressDone_ = progressTotal_ = 0;
     const int64_t scanTime = UnixMsNow();
+    const auto started = Clock::now();
+    bool announced = false;
+    auto announce = [&] {
+        if (announced || MsSince(started) < kAnnounceMs) return;
+        announced = true;
+        if (HWND hwnd = notifyWnd_.load()) PostMessageW(hwnd, notifyMsg_.load(), 0, static_cast<LPARAM>(generation));
+    };
 
     // 1. Enumerate.
     auto t0 = Clock::now();
@@ -670,7 +686,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         t.path = root;
         t.name = FileNameOf(root);
         if (t.name.empty() || (root.size() == 3 && root[1] == L':')) t.name = root;  // "D:\"
-        Enumerate(t, options, cancel, snap->stats, progressTotal_);
+        Enumerate(t, options, cancel, snap->stats, progressTotal_, announce);
         ++snap->stats.folders;
         Flatten(t, -1, *snap);
     }
@@ -753,6 +769,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         FillSearchKey(snap->items[pending[done]]);
         ++done;
         ++progressDone_;
+        announce();
     }
     double probeMs = MsSince(tm);
     // Slow files, or fast ones in such numbers (20 000 songs) that the list would stay empty for
@@ -784,6 +801,17 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         if (cancel) break;
         for (size_t i = done; i < last; ++i) unread[pending[i]] = 0;
         done = last;
+        announce();
+        // The probe guessed fast files, but slow ones followed (MKVs for the property system):
+        // show the files now and fill in the rest as a second pass.
+        if (!snap->stats.metadataSecondPass && done < pending.size() && MsSince(tm) > kInlineLimitMs) {
+            snap->stats.metadataSecondPass = true;
+            snap->complete = false;
+            snap->stats.metadataFiles = done;
+            if (options.readMetadata) SaveCache(*snap, &unread, kept);
+            Publish(std::make_shared<Snapshot>(*snap));
+            lastPublish = Clock::now();
+        }
         if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
             snap->stats.metadataFiles = done;
             if (options.readMetadata) SaveCache(*snap, &unread, kept);

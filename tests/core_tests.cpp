@@ -1801,6 +1801,18 @@ std::vector<std::string> TagSamples() {
     }
     // 11: AIFF, 2 s, ID3 chunk.
     s.push_back(Aiff(Tag(3, Frame("TIT2", Text(0, "Aiff title")))));
+    // 12: Matroska: EBML header, a Segment of unknown size, Void, Info (scale 1 ms, 12 345 ms), Cluster.
+    {
+        double ms = 12345.0;
+        uint64_t bits;
+        memcpy(&bits, &ms, 8);
+        std::string dur;
+        for (int i = 7; i >= 0; --i) dur += static_cast<char>(bits >> (i * 8));
+        const std::string info = std::string("\x2A\xD7\xB1\x83\x0F\x42\x40", 7) + std::string("\x44\x89\x88", 3) + dur;
+        s.push_back(std::string("\x1A\x45\xDF\xA3\x84\x42\x82\x81w", 9) + std::string("\x18\x53\x80\x67\x01\xFF\xFF\xFF\xFF\xFF\xFF\xFF", 12) +
+                    std::string("\xEC\x83\0\0\0", 5) + std::string("\x15\x49\xA9\x66", 4) + static_cast<char>(0x80 | info.size()) + info +
+                    std::string("\x1F\x43\xB6\x75\x84", 5) + std::string(4, 'c'));
+    }
     return s;
 }
 
@@ -1852,8 +1864,13 @@ void TestTagReader() {
     CHECK(t.title == L"Id3 name" && t.artist == L"Info ar");
     CHECK(ParseBytes(s[11], &t) && t.format == library::TagFormat::Aiff && std::fabs(t.duration - 2.0) < 1e-9 && t.title == L"Aiff title");
 
+    CHECK(ParseBytes(s[12], &t) && t.format == library::TagFormat::Matroska && std::fabs(t.duration - 12.345) < 1e-9);
+    // FLAC metadata cut off before the audio: no length (the property system decides).
+    CHECK(ParseBytes(s[6].substr(0, 60), &t) && t.format == library::TagFormat::Flac && t.duration == 0);
+
     // Not a tagged format: the property system takes over.
-    CHECK(!ParseBytes("\x1A\x45\xDF\xA3 matroska", &t) && t.format == library::TagFormat::Unknown);
+    CHECK(!ParseBytes("\x1A\x45\xDF matroska", &t) && t.format == library::TagFormat::Unknown);
+    CHECK(!ParseBytes(std::string("RIFF\x10\0\0\0AVI LIST", 16), &t) && t.format == library::TagFormat::Unknown);
     CHECK(!ParseBytes("", &t));
     CHECK(!ParseBytes("hello world, plain text", &t));
 
@@ -1925,8 +1942,8 @@ void TestTagReaderFuzz() {
         static const std::string kMagic[] = {std::string("ID3\x03\0\0", 6), std::string("ID3\x04\0\0", 6), "fLaC", "OggS",
                                              std::string("RIFF\0\0\0\0WAVE", 12), std::string("FORM\0\0\0\0" "AIFF", 12),
                                              std::string("\0\0\0\x18" "ftypM4A ", 12), "MAC ", "wvpk",
-                                             std::string("\xFF\xFB\x90\x00", 4)};
-        std::string b = kMagic[i % 10];
+                                             std::string("\xFF\xFB\x90\x00", 4), "\x1A\x45\xDF\xA3"};
+        std::string b = kMagic[i % std::size(kMagic)];
         const size_t n = next() % 3000;
         for (size_t k = 0; k < n; ++k) b += static_cast<char>(next());
         ParseBytes(b, &t);
@@ -1939,7 +1956,8 @@ void TestTagReaderFuzz() {
     // A terabyte of garbage behind each magic: the reads stay bounded (the budget is 4096 reads
     // and 48 MB; the whole "file" is never read).
     const std::string kEndless[] = {std::string("ID3\x03\0\0\x7F\x7F\x7F\x7F", 10), "fLaC", "OggS", "RIFF\xFF\xFF\xFF\xFFWAVE",
-                                    std::string("\0\0\0\x10" "ftypM4A ", 12), "FORM\xFF\xFF\xFF\xFF" "AIFF", "MAC ", "wvpk"};
+                                    std::string("\0\0\0\x10" "ftypM4A ", 12), "FORM\xFF\xFF\xFF\xFF" "AIFF", "MAC ", "wvpk",
+                                    std::string("\x1A\x45\xDF\xA3\x80\x18\x53\x80\x67\x01\xFF\xFF\xFF\xFF\xFF\xFF\xFF", 17)};
     for (const std::string& magic : kEndless) {
         for (uint32_t seed = 1; seed <= 3; ++seed) {
             EndlessSource src(magic, seed);
@@ -2127,6 +2145,33 @@ void TestThumbnails() {
     auto direct = library::ExtractThumbnail(bmp, 100);
     CHECK(direct && direct->width == 100 && direct->height == 50);
     CHECK(library::ExtractThumbnail(txt, 100) == nullptr);
+
+    // A cover the shell can't show (Opus METADATA_BLOCK_PICTURE) comes from the tag reader.
+    {
+        std::string image;  // small: one Ogg page holds the comment packet
+        const std::wstring smallBmp = dir + L"\\small.bmp";
+        WriteBmp(smallBmp, 32, 16);
+        CHECK(json::ReadFileUtf8(smallBmp, &image) && image.size() > 54);
+        const std::string block = tagbytes::Be32(3) + tagbytes::Be32(9) + "image/bmp" + tagbytes::Be32(0) + std::string(16, '\0') +
+                                  tagbytes::Be32(static_cast<uint32_t>(image.size())) + image;
+        static const char* const kB64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string b64;
+        for (size_t i = 0; i < block.size(); i += 3) {
+            uint32_t v = static_cast<uint8_t>(block[i]) << 16;
+            if (i + 1 < block.size()) v |= static_cast<uint8_t>(block[i + 1]) << 8;
+            if (i + 2 < block.size()) v |= static_cast<uint8_t>(block[i + 2]);
+            b64 += kB64[(v >> 18) & 63];
+            b64 += kB64[(v >> 12) & 63];
+            b64 += i + 1 < block.size() ? kB64[(v >> 6) & 63] : '=';
+            b64 += i + 2 < block.size() ? kB64[v & 63] : '=';
+        }
+        const std::wstring opus = dir + L"\\cover.opus";
+        WriteFile(opus, tagbytes::Opus({"title=With cover", "METADATA_BLOCK_PICTURE=" + b64}));
+        auto cover = library::ExtractThumbnail(opus, 64);
+        CHECK_MSG(cover && cover->width == 32 && cover->height == 16, "cover %ux%u", cover ? cover->width : 0, cover ? cover->height : 0);
+        auto smaller = library::ExtractThumbnail(opus, 16);  // scaled to fit
+        CHECK(smaller && smaller->width == 16 && smaller->height == 8);
+    }
     if (SUCCEEDED(com)) CoUninitialize();
 }
 

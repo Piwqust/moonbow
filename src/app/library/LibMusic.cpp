@@ -31,6 +31,12 @@ std::wstring ArtistOf(const library::MediaItem& m) {
     return m.artist;
 }
 
+// Who an album is by: its album artist tag ("Various Artists" on a compilation), else the
+// track's artist.
+const std::wstring& AlbumArtistOf(const library::MediaItem& m) {
+    return m.albumArtist.empty() ? m.artist : m.albumArtist;
+}
+
 std::wstring GenreOf(const library::MediaItem& m) {
     return m.genre;
 }
@@ -316,7 +322,9 @@ protected:
                 }
                 mixedArtists_ = false;
                 for (const library::MediaItem* m : v)
-                    if (!SameText(m->artist, v.front()->artist)) mixedArtists_ = true;
+                    if (mode_ == MusicMode::Album ? !SameText(AlbumArtistOf(*m), AlbumArtistOf(*v.front()))
+                                                  : !SameText(m->artist, v.front()->artist))
+                        mixedArtists_ = true;
                 if (mode_ == MusicMode::Artist) {
                     // The artist's albums first, then all of their songs.
                     auto albums = Groups(v, MusicMode::Albums);
@@ -375,7 +383,7 @@ protected:
         };
         if (mode_ == MusicMode::Album) {
             byline_->SetText(mixedArtists_ ? std::wstring(Tr(L"Various artists"))
-                                           : ArtistLabel(all.empty() ? std::wstring() : all.front()->artist));
+                                           : ArtistLabel(all.empty() ? std::wstring() : AlbumArtistOf(*all.front())));
             if (year > 0) add(std::to_wstring(year));
             add(genre);
         } else {
@@ -547,11 +555,11 @@ private:
                 Group g;
                 g.name = name;
                 g.key = album ? AlbumRouteArg(*m) : name;
-                g.artist = m->artist;
+                g.artist = album ? AlbumArtistOf(*m) : m->artist;
                 groups.push_back(std::move(g));
             }
             Group& g = groups[it->second];
-            if (!g.mixed && !SameText(g.artist, m->artist)) g.mixed = true;
+            if (!g.mixed && !SameText(g.artist, album ? AlbumArtistOf(*m) : m->artist)) g.mixed = true;
             g.songs.push_back(m);
         }
         return groups;

@@ -871,6 +871,7 @@ bool ParseFlac(Reader& r, uint64_t pos, TagInfo& t, const TagOptions& o) {
     if (!r.Get(pos, m, 4) || memcmp(m, "fLaC", 4) != 0) return false;
     t.format = TagFormat::Flac;
     pos += 4;
+    bool last = false;
     for (int blocks = 0; blocks < 256 && !r.Spent(); ++blocks) {
         uint8_t h[4];
         if (!r.Get(pos, h, 4)) break;
@@ -897,7 +898,86 @@ bool ParseFlac(Reader& r, uint64_t pos, TagInfo& t, const TagOptions& o) {
             break;  // invalid
         }
         pos = data + len;
-        if (h[0] & 0x80) break;  // last block
+        if (h[0] & 0x80) {
+            last = true;
+            break;
+        }
+    }
+    // Metadata cut off before the audio (a broken download): STREAMINFO's length would promise
+    // audio that isn't there, so the property system decides as before.
+    if (!last || pos >= r.Size()) t.duration = 0;
+    return true;
+}
+
+// --- Matroska / WebM: only the duration (Segment > Info), for videos ----------------------------
+
+// An EBML element header at `pos`: id (with its marker bits) and data size (~0 = unknown).
+bool EbmlElement(Reader& r, uint64_t pos, uint64_t limit, uint32_t* id, uint64_t* size, uint64_t* data) {
+    uint8_t b[12];
+    const size_t n = static_cast<size_t>(std::min<uint64_t>(sizeof(b), limit > pos ? limit - pos : 0));
+    if (n < 2 || !r.Get(pos, b, n)) return false;
+    int idLen = 1;
+    while (idLen <= 4 && !(b[0] & (0x80 >> (idLen - 1)))) ++idLen;
+    if (idLen > 4 || static_cast<size_t>(idLen) >= n) return false;
+    uint32_t v = 0;
+    for (int i = 0; i < idLen; ++i) v = (v << 8) | b[i];
+    const uint8_t first = b[idLen];
+    int sizeLen = 1;
+    while (sizeLen <= 8 && !(first & (0x80 >> (sizeLen - 1)))) ++sizeLen;
+    if (sizeLen > 8 || static_cast<size_t>(idLen + sizeLen) > n) return false;
+    uint64_t s = first & (0xFF >> sizeLen);
+    bool ones = s == (0xFFu >> sizeLen);
+    for (int i = 1; i < sizeLen; ++i) {
+        s = (s << 8) | b[idLen + i];
+        ones = ones && b[idLen + i] == 0xFF;
+    }
+    *id = v;
+    *size = ones ? ~0ull : s;
+    *data = pos + idLen + sizeLen;
+    return true;
+}
+
+bool ParseMatroska(Reader& r, TagInfo& t) {
+    const uint64_t size = r.Size();
+    uint32_t id = 0;
+    uint64_t len = 0, data = 0;
+    if (!EbmlElement(r, 0, size, &id, &len, &data) || id != 0x1A45DFA3 || len == ~0ull) return false;
+    t.format = TagFormat::Matroska;
+    if (!EbmlElement(r, data + len, size, &id, &len, &data) || id != 0x18538067) return true;
+    const uint64_t segEnd = len == ~0ull ? size : std::min(size, data + len);
+    uint64_t pos = data;
+    for (int n = 0; n < 64 && pos < segEnd && !r.Spent(); ++n) {
+        if (!EbmlElement(r, pos, segEnd, &id, &len, &data)) break;
+        if (id == 0x1F43B675 || len == ~0ull) break;  // the first Cluster: Info comes before it
+        if (id == 0x1549A966) {  // Info
+            uint64_t scale = 1000000, p = data;
+            double duration = 0;
+            const uint64_t end = std::min(segEnd, data + len);
+            for (int k = 0; k < 64 && p < end; ++k) {
+                uint32_t cid = 0;
+                uint64_t clen = 0, cdata = 0;
+                if (!EbmlElement(r, p, end, &cid, &clen, &cdata) || clen == ~0ull) break;
+                uint8_t v[8];
+                if (cid == 0x2AD7B1 && clen >= 1 && clen <= 8 && r.Get(cdata, v, static_cast<size_t>(clen))) {
+                    scale = 0;
+                    for (uint64_t i = 0; i < clen; ++i) scale = (scale << 8) | v[i];
+                } else if (cid == 0x4489 && (clen == 4 || clen == 8) && r.Get(cdata, v, static_cast<size_t>(clen))) {
+                    if (clen == 4) {
+                        const uint32_t bits = Be32(v);
+                        float f;
+                        memcpy(&f, &bits, 4);
+                        duration = f;
+                    } else {
+                        const uint64_t bits = Be64(v);
+                        memcpy(&duration, &bits, 8);
+                    }
+                }
+                p = cdata + clen;
+            }
+            if (std::isfinite(duration) && duration > 0 && scale > 0) t.duration = duration * static_cast<double>(scale) / 1e9;
+            break;
+        }
+        pos = data + len;
     }
     return true;
 }
@@ -1310,6 +1390,13 @@ size_t FileSource::Read(uint64_t offset, void* buf, size_t n) {
     return done;
 }
 
+namespace {
+unsigned SystemCodePage() {
+    static const unsigned cp = json::LegacyCodePage();  // once: the scan asks for every file
+    return cp;
+}
+}  // namespace
+
 std::wstring Id3GenreName(int index) {
     if (index < 0 || index >= static_cast<int>(std::size(kGenres))) return {};
     return kGenres[index];
@@ -1323,7 +1410,7 @@ std::wstring DecodeLegacyText(const uint8_t* data, size_t size, unsigned codePag
     std::wstring w = Widen(data, size, CP_UTF8, MB_ERR_INVALID_CHARS);
     if (!w.empty()) return w;
     // Not CP_ACP: the manifest makes that UTF-8 inside Lumen.exe.
-    return Widen(data, size, codePage ? codePage : json::LegacyCodePage(), 0);
+    return Widen(data, size, codePage ? codePage : SystemCodePage(), 0);
 }
 
 bool ReadTags(ByteSource& src, TagInfo* out, const TagOptions& opt) {
@@ -1331,13 +1418,14 @@ bool ReadTags(ByteSource& src, TagInfo* out, const TagOptions& opt) {
     *out = TagInfo{};
     TagInfo& t = *out;
     Reader r(src);
-    const unsigned cp = opt.codePage ? opt.codePage : json::LegacyCodePage();
+    const unsigned cp = opt.codePage ? opt.codePage : SystemCodePage();
     uint8_t head[12] = {};
     const size_t got = src.Read(0, head, sizeof(head));
     if (got < 4) return false;
 
     if (memcmp(head, "fLaC", 4) == 0) return ParseFlac(r, 0, t, opt);
     if (memcmp(head, "OggS", 4) == 0) return ParseOgg(r, t, opt);
+    if (memcmp(head, "\x1A\x45\xDF\xA3", 4) == 0) return ParseMatroska(r, t);
     if (got >= 12 && (memcmp(head, "RIFF", 4) == 0 || memcmp(head, "FORM", 4) == 0)) return ParseRiff(r, t, opt, cp);
     if (got >= 8) {
         for (const char* type : {"ftyp", "moov", "mdat", "free", "skip", "wide"})

@@ -10,6 +10,7 @@
 //   ©day, ©lyr, covr); a file without a readable moov is reported damaged;
 // - WAV (LIST INFO, "id3 " chunk) and AIFF/AIFC (COMM, "ID3 " chunk), duration from the header;
 // - APE tags (and ID3v1) at the end of Monkey's Audio, WavPack and Musepack files.
+// - Matroska / WebM: the duration only (Segment > Info), no tags.
 //
 // Safety: only headers and tag regions are read, through bounded reads; every size field is
 // checked against the bytes that exist and every loop advances, so truncated or garbage files end
@@ -71,7 +72,7 @@ private:
     uint32_t clock_ = 0;
 };
 
-enum class TagFormat : uint8_t { Unknown, Mp3, Flac, Ogg, Opus, Mp4, Wav, Aiff, Ape };
+enum class TagFormat : uint8_t { Unknown, Mp3, Flac, Ogg, Opus, Mp4, Wav, Aiff, Ape, Matroska };
 
 struct SyncedLyric {
     double time = 0;  // seconds

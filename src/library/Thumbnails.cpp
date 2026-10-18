@@ -1,12 +1,14 @@
 #include "Thumbnails.h"
 
 #include "MediaTypes.h"
+#include "TagReader.h"
 
 #include <objbase.h>
 #include <shobjidl.h>
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
+#include <wincodec.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -15,6 +17,7 @@
 
 // Media Foundation GUIDs only (a static library); the DLLs are loaded on first use.
 #pragma comment(lib, "mfuuid.lib")
+#pragma comment(lib, "windowscodecs.lib")
 
 namespace library {
 
@@ -110,6 +113,48 @@ std::shared_ptr<ThumbnailBitmap> FromShell(const std::wstring& path, int size) {
     DeleteObject(hbm);
     if (bmp && (bmp->width > static_cast<uint32_t>(size) || bmp->height > static_cast<uint32_t>(size)))
         bmp = Downscale(*bmp, size);
+    return bmp;
+}
+
+// The cover embedded in a song, found by TagReader and decoded with WIC: for the formats the shell
+// has no thumbnail handler for (Opus, Ogg Vorbis, WavPack, AIFF, WAV with ID3...).
+std::shared_ptr<ThumbnailBitmap> FromEmbeddedCover(const std::wstring& path, int size) {
+    TagInfo tags;
+    TagOptions opt;
+    opt.cover = true;
+    if (!ReadTagsFromFile(path, &tags, opt) || tags.cover.empty() || tags.cover.size() > 0xFFFFFFFFu) return nullptr;
+    using Microsoft::WRL::ComPtr;
+    ComPtr<IWICImagingFactory> wic;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic)))) return nullptr;
+    ComPtr<IWICStream> stream;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(wic->CreateStream(&stream)) ||
+        FAILED(stream->InitializeFromMemory(tags.cover.data(), static_cast<DWORD>(tags.cover.size()))) ||
+        FAILED(wic->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder)) ||
+        FAILED(decoder->GetFrame(0, &frame)))
+        return nullptr;
+    UINT w = 0, h = 0;
+    if (FAILED(frame->GetSize(&w, &h)) || w == 0 || h == 0 || w > 16384 || h > 16384) return nullptr;
+    const double k = std::min(1.0, static_cast<double>(size) / std::max(w, h));
+    const UINT nw = std::max(1u, static_cast<UINT>(std::lround(w * k))), nh = std::max(1u, static_cast<UINT>(std::lround(h * k)));
+    ComPtr<IWICBitmapSource> source = frame;
+    if (nw != w || nh != h) {
+        ComPtr<IWICBitmapScaler> scaler;
+        if (FAILED(wic->CreateBitmapScaler(&scaler)) || FAILED(scaler->Initialize(frame.Get(), nw, nh, WICBitmapInterpolationModeFant)))
+            return nullptr;
+        source = scaler;
+    }
+    ComPtr<IWICFormatConverter> converter;
+    if (FAILED(wic->CreateFormatConverter(&converter)) ||
+        FAILED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                     WICBitmapPaletteTypeCustom)))
+        return nullptr;
+    auto bmp = std::make_shared<ThumbnailBitmap>();
+    bmp->width = nw;
+    bmp->height = nh;
+    bmp->pixels.resize(static_cast<size_t>(nw) * nh * 4);
+    if (FAILED(converter->CopyPixels(nullptr, nw * 4, static_cast<UINT>(bmp->pixels.size()), bmp->pixels.data()))) return nullptr;
     return bmp;
 }
 
@@ -238,6 +283,7 @@ std::shared_ptr<ThumbnailBitmap> ExtractThumbnail(const std::wstring& path, int 
     }
     std::shared_ptr<ThumbnailBitmap> bmp = FromShell(path, size);
     if (bmp || KindOf(path) != MediaKind::Audio) return bmp;
+    if ((bmp = FromEmbeddedCover(path, size))) return bmp;
     // No embedded cover: look for the usual album art files next to the song.
     std::wstring folder = ParentFolder(path);
     for (const wchar_t* name : {L"cover.jpg", L"folder.jpg", L"front.jpg", L"cover.png", L"folder.png", L"AlbumArt.jpg"}) {

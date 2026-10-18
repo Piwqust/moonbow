@@ -28,18 +28,39 @@ public:
     ui::Widget* HitTest(float x, float y) override;
 };
 
-// "Scanning library…" pill in the bottom-right corner of a page while a scan runs. Overlays the
-// content (a Stack child) without taking layout space or input.
-class ScanBadge : public ui::Widget {
+// "Indexing your library… 412 of 1,284" with a progress bar and a "Hide" button, a slim strip
+// above a page's content while a scan runs (MARKET P2-6). It appears only after the scan has run
+// for a second, so quick rescans never flash it, and goes when the scan ends. "Hide" keeps it
+// away for the rest of that scan on every page. While a scan runs it polls the scan's counters
+// on a 250 ms timer; otherwise it has no timer and no work.
+class ScanBanner : public ui::Widget {
 public:
-    explicit ScanBadge(bool compact = false);
-    void Update();  // reads library().Scanning() and the file count
+    explicit ScanBanner(bool compact = false);
+    ~ScanBanner() override;
+    // After the library changed. `suppressed`: the page's empty state explains the scan instead.
+    void Update(bool suppressed = false);
+    // From the page's OnLayout: starts following a scan that began before the page had a window.
+    void Attach();
     void Paint(ui::Painter& p) override;
-    ui::Widget* HitTest(float, float) override { return nullptr; }
+    void OnLayout() override;
+    ui::Widget* HitTest(float x, float y) override;  // the strip only, not the space above it
+    void DebugInfo(std::string& out) const override;  // " following" / " timer" / " value=0.42"
 
 private:
-    std::wstring text_;
+    void Poll();
+    void StopTimer();
+    void UpdateTip();
+    ui::Rect Box() const;
+
     bool compact_;
+    ui::Insets box_;  // the strip inside rect
+    bool suppressed_ = false;
+    bool following_ = false;  // a scan runs: the timer should run
+    std::wstring text_;
+    float fraction_ = -1;  // < 0: still counting files, no fill
+    ui::Widget* hide_ = nullptr;
+    UINT_PTR timer_ = 0;
+    ui::Host* timerHost_ = nullptr;
 };
 
 // Section title with a chevron ("Continue Watching ›"), clickable.
@@ -151,7 +172,7 @@ protected:
     ui::ScrollView* scroll_ = nullptr;
     ui::Widget* content_ = nullptr;
     ui::Widget* toolbar_ = nullptr;   // Row above the grid, hidden unless a page fills it
-    ScanBadge* scan_ = nullptr;
+    ScanBanner* scan_ = nullptr;
     ItemGrid* grid_ = nullptr;
     EmptyState* empty_ = nullptr;
     long long count_ = -1;
