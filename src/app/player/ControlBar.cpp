@@ -374,8 +374,19 @@ public:
     bool OnKeyDown(const KeyEvent& e) override {
         if (e.key == VK_LEFT || e.key == VK_DOWN) Run(Action::VolumeDown);
         else if (e.key == VK_RIGHT || e.key == VK_UP) Run(Action::VolumeUp);
-        else return false;
+        // Collapsed, the level shows only in the slider: Enter or Space opens it from the keyboard
+        // (the arrows keep stepping the volume, and the popup shows the new level).
+        else if (collapsed_ && (e.key == VK_RETURN || e.key == VK_SPACE)) {
+            if (PopupOpen()) GetHost()->ClosePopup(popup_);
+            else OpenPopup();
+        } else return false;
         return true;
+    }
+    // The popup is placed once, above the speaker. When the bar moves (fullscreen, a resize, another
+    // bar style) or the wedge comes back, it closes instead of floating away from its speaker.
+    void OnLayout() override {
+        Widget::OnLayout();
+        if (PopupOpen() && (!collapsed_ || !SameRect(rect, popupFor_))) GetHost()->ClosePopup(popup_);
     }
 
 private:
@@ -392,6 +403,7 @@ private:
         o.offset = 8;
         o.focusContent = false;  // the arrow keys keep changing the volume through the player
         popup_ = static_cast<VolumePopup*>(h->ShowPopup(std::make_unique<VolumePopup>(speaker), o));
+        popupFor_ = rect;
         hoverArmed_ = false;  // closed while the pointer stays here (a click): no reopening by itself
     }
     bool collapsed_ = false;
@@ -423,7 +435,7 @@ private:
     }
     bool hotSpeaker_ = false, hotWedge_ = false, dragging_ = false;
     gfx::ComPtr<ID2D1PathGeometry> track_, level_;
-    Rect wedgeRect_{};
+    Rect wedgeRect_{}, popupFor_{};
     float levelT_ = -1;
 };
 

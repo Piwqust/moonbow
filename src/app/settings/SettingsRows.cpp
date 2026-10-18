@@ -3,6 +3,7 @@
 // design/ref/Settings-*.png (label column on the left, 320-wide control column on the right).
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/dialogs/DialogKit.h"
 #include "app/settings/SettingsUi.h"
 #include "core/Config.h"
 #include "gfx/Gpu.h"
@@ -1370,29 +1371,23 @@ void Confirm(Host* host, std::wstring title, std::wstring text, std::wstring okT
         ok();
         return;
     }
-    auto d = std::make_unique<Dialog>(std::move(title), 460);
-    auto* body = d->Body()->Add<Label>(std::move(text), TextStyle::Body, Tone::Secondary);
+    // The same kit and layout as the library's confirms (LibraryCommon ShowConfirm, LB-17):
+    // Cancel on the left and focused with its ring, the action on the right (VF-05).
+    auto frame = std::make_unique<dlg::Frame>(std::move(title), dlg::FitWidth(host, 440));
+    dlg::Frame* f = frame.get();
+    auto* body = f->Body()->Add<Label>(std::move(text), TextStyle::Body, Tone::Secondary);
     body->wrap = true;
     body->width = Length::Grow();
-    Dialog* raw = d.get();
-    d->Footer()->Add<Spacer>();
-    auto* cancel = d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost);
-    cancel->onClick = [raw] { raw->Close(); };
-    d->Footer()->Add<Button>(std::move(okText), ButtonKind::Primary)->onClick = [raw, ok = std::move(ok)] {
+    auto* cancel = f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral);
+    cancel->onClick = [f] { f->Close(); };
+    f->Footer()->Add<Spacer>();
+    f->Footer()->Add<dlg::DButton>(std::move(okText), dlg::BtnStyle::Accent)->onClick = [f, ok = std::move(ok)] {
         auto run = ok;  // the dialog (and this lambda) is gone after Close()
-        raw->Close();
-        run();
+        f->Close();
+        if (run) run();
     };
-    // The header's close button has no caption of its own.
-    std::function<void(Widget*)> tipClose = [&tipClose](Widget* w) {
-        if (auto* b = dynamic_cast<IconButton*>(w); b && b->icon == "close" && b->tooltip.empty()) b->tooltip = Tr(L"Close");
-        for (auto& c : w->Children()) tipClose(c.get());
-    };
-    tipClose(raw);
-    const bool keyboard = host->FocusVisible();
-    ShowDialog(host, std::move(d));
-    // Focus the safe answer, not the header's close button: these confirm destructive actions.
-    host->SetFocus(cancel, keyboard);
+    dlg::ShowFrame(host, std::move(frame), cancel);
+    host->SetFocus(cancel, true);  // with its ring: Enter and Space cancel, Tab reaches the action
 }
 
 }  // namespace app::sui

@@ -1067,9 +1067,11 @@ void ShowAboutDialog(Host* host) {
     links->Add<AboutLink>(Tr(L"Inter typeface: SIL Open Font License 1.1"), L"https://openfontlicense.org");
 
     f->Footer()->Add<Spacer>();
-    f->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Accent)->onClick = [f] { f->Close(); };
+    auto* close = f->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Accent);
+    close->onClick = [f] { f->Close(); };
     f->onSubmit = [f] { f->Close(); };
-    ShowFrame(host, std::move(frame));
+    // On "Close", not the first licence link: Enter closes, as in the other dialogs (VF-04).
+    ShowFrame(host, std::move(frame), close);
 }
 
 }  // namespace app

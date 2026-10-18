@@ -344,6 +344,10 @@ public:
         // while the keyboard is elsewhere.
         if (!floating && i == selected_) p.Fill(r, IsFocused() ? c.bgSelected : c.bgSelected.Fade(0.5f), 4);
         if (!floating && hot) p.Fill(r, c.hover, 4);
+        // The selected, playing and hovered fills are near-equal greys with the neutral accents:
+        // an accent edge says which row Del removes and Enter plays (VF-03), dimmer unfocused.
+        if (!floating && i == selected_)
+            p.Fill({r.x + 1, r.y + 6, 3, r.h - 12}, IsFocused() ? c.accent : c.textTertiary, 1.5f);
         if (!floating && i == selected_ && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, 4);
         const float box = RowH();
         const bool handleHot = hot && hoverHandle_;
