@@ -5,6 +5,7 @@
 #include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/library/LibraryCommon.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
 #include "app/player/PlayerView.h"
@@ -73,6 +74,7 @@ const std::vector<ActionInfo>& Table() {
         {Action::CycleAspect, "video.aspect", L"Next aspect ratio", L"Video", {{'X', kNone}}},
         {Action::Rotate, "video.rotate", L"Rotate 90°", L"Video", {{'R', kCtrl}}},
         {Action::Deinterlace, "video.deinterlace", L"Deinterlace", L"Video", {{'D', kNone}}},
+        {Action::ToggleStats, "video.statistics", L"Statistics", L"Video", {{'I', kCtrlShift}}},
         {Action::OpenFile, "media.open_file", L"Open file", L"Media", {{'O', kCtrl}}},
         {Action::OpenFolder, "media.open_folder", L"Open folder", L"Media", {{'F', kCtrl}}},
         {Action::OpenNetwork, "media.open_network", L"Open network stream", L"Media", {{'N', kCtrl}}},
@@ -87,6 +89,7 @@ const std::vector<ActionInfo>& Table() {
         {Action::AddBookmark, "media.bookmark", L"Add bookmark", L"Media", {{'D', kCtrl}}},
         {Action::ToggleFavorite, "media.favorite", L"Favorite", L"Media", {{'F', kCtrlShift}}},
         {Action::ShowInfo, "media.info", L"Media information", L"Media", {{'I', kCtrl}}},
+        {Action::ShowInExplorer, "media.show_in_explorer", L"Show in File Explorer", L"Media", {}},
         {Action::Settings, "app.settings", L"Settings", L"App", {{'P', kCtrl}, {VK_OEM_COMMA, kCtrl}}},
         {Action::KeyboardShortcuts, "app.shortcuts", L"Keyboard shortcuts", L"App", {{VK_F1, kNone}, {VK_OEM_2, kCtrl}}},
         {Action::CustomizePlayer, "app.customize", L"Customize player", L"App", {}},
@@ -289,6 +292,10 @@ bool Enabled(Action a) {
         case Action::AddBookmark:
         case Action::ShowInfo:
         case Action::OpenSubtitles: return s.fileLoaded;
+        case Action::ShowInExplorer: {
+            const QueueItem* item = TheApp().queue().CurrentItem();
+            return item && !lib::IsUrl(item->path);
+        }
         case Action::Previous: return TheApp().queue().PrevIndex() >= 0 || s.fileLoaded;
         case Action::Next: return TheApp().queue().NextIndex(true) >= 0;
         case Action::NextChapter:
@@ -496,6 +503,13 @@ void Run(Action a) {
             break;
         }
         case Action::Deinterlace: p.Command({"cycle", "deinterlace"}); Toast(Tr(L"Deinterlace toggled"), "video"); break;
+        case Action::ToggleStats: {
+            // "Developer mode" is the persistent switch; PlayerView shows the panel while it is on.
+            const bool on = !app.config().GetBool("general.developerMode");
+            app.config().SetBool("general.developerMode", on);
+            if (on && !app.PlayerShown() && s.fileLoaded) app.ShowPlayer(true);
+            break;
+        }
         case Action::OpenFile: app.OpenFileDialog(); break;
         case Action::OpenFolder: app.OpenFolderDialog(); break;
         case Action::OpenNetwork: app.OpenUrl(L""); break;
@@ -535,6 +549,10 @@ void Run(Action a) {
             break;
         }
         case Action::ShowInfo: ShowMediaInfoDialog(); break;
+        case Action::ShowInExplorer:
+            // Explorer is a native window: ShowInExplorer skips it in background test runs.
+            if (const QueueItem* item = app.queue().CurrentItem()) lib::ShowInExplorer(item->path);
+            break;
         case Action::Settings: app.OpenSettings(); break;
         case Action::KeyboardShortcuts: ShowKeyboardShortcutsDialog(); break;
         case Action::CustomizePlayer: ShowCustomizePlayerDialog(); break;

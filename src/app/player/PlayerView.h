@@ -6,6 +6,9 @@ namespace app {
 
 class MainWindow;
 class ControlBar;
+class StatsOverlay;
+class NextEpisodeCard;
+class SkipChapterButton;
 class LibraryPane;
 class NavSidebar;
 
@@ -31,14 +34,23 @@ public:
 private:
     class VideoArea;
     class ErrorCard;
+    void UpdateStats();
     MainWindow* window_;
     ui::Widget* side_ = nullptr;
     ErrorCard* error_ = nullptr;
     VideoArea* video_ = nullptr;
     ui::Widget* music_ = nullptr;
     ui::Widget* pip_ = nullptr;
+    NextEpisodeCard* nextEpisode_ = nullptr;
+    SkipChapterButton* skipChapter_ = nullptr;
     ControlBar* bar_ = nullptr;
-    ScopedConnection playerConn_;
+    std::unique_ptr<StatsOverlay> stats_;
+    // Thin progress line: shown on the last paint, its width and filled part in pixels.
+    bool thinShown_ = false;
+    float thinW_ = 0;
+    int thinPx_ = -1;
+    uint64_t configToken_ = 0;
+    ScopedConnection playerConn_, screenConn_;
 };
 
 // Built by the player module (MusicView.cpp): cover art, blurred backdrop, titles.
