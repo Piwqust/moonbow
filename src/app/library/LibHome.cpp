@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 
 namespace app::lib {
 
@@ -243,6 +244,29 @@ private:
         return e;
     }
 
+    // The episode after `ep` of the same show in the same folder (next number in the season, else
+    // the first of the next season), or null.
+    static const library::MediaItem* NextEpisode(const library::Snapshot& snap, const std::wstring& path,
+                                                 const library::EpisodeInfo& ep) {
+        const std::wstring show = library::SearchFold(ep.show);
+        const library::MediaItem* best = nullptr;
+        library::EpisodeInfo bestEp;
+        for (const library::MediaItem* m : snap.ItemsIn(library::ParentFolder(path), false)) {
+            library::EpisodeInfo e;
+            if (m->kind != library::MediaKind::Video || m->damaged || !library::ParseEpisode(m->name, &e) ||
+                library::SearchFold(e.show) != show)
+                continue;
+            const bool after = e.season > ep.season || (e.season == ep.season && e.episode > ep.episode);
+            const bool closer = !best || e.season < bestEp.season ||
+                                (e.season == bestEp.season && e.episode < bestEp.episode);
+            if (after && closer) {
+                best = m;
+                bestEp = e;
+            }
+        }
+        return best;
+    }
+
     void Rebuild() {
         App& app = TheApp();
         auto snap = app.library().Current();
@@ -281,7 +305,18 @@ private:
         }
         for (HomeSection* s : results_) s->Commit({});
 
-        // Continue Watching: videos stopped halfway.
+        // Continue Watching: videos stopped halfway, and after a finished episode the next one
+        // of the same show in its folder ("Up next", as in Infuse and Plex), newest first.
+        struct Card {
+            int64_t when;
+            Entry entry;
+            QueueItem item;
+        };
+        std::vector<Card> cards;
+        std::set<std::wstring> shows;  // folder|show already represented
+        auto showKey = [](const std::wstring& path, const library::EpisodeInfo& ep) {
+            return library::PathKey(library::ParentFolder(path)) + L"|" + library::SearchFold(ep.show);
+        };
         for (const library::HistoryEntry& h : hist.ContinueWatching(20)) {
             const library::MediaItem* m = snap->FindItem(h.path);
             Entry e = MediaCard(h.path, m, &h);
@@ -292,8 +327,29 @@ private:
             e.duration = h.duration;
             if (h.duration > 0 && h.position > 0 && h.position < h.duration)
                 e.subtitle = Fmt(Tr(L"{0} left"), {FormatDuration(h.duration - h.position)});
-            e.ref = continue_->AddQueue(MakeQueueItem(h.path, h.title, h.duration));
-            continue_->AddEntry(std::move(e));
+            if (library::EpisodeInfo ep; !IsUrl(h.path) && library::ParseEpisode(library::StemOf(h.path), &ep))
+                shows.insert(showKey(h.path, ep));
+            cards.push_back({h.lastPlayed, std::move(e), MakeQueueItem(h.path, h.title, h.duration)});
+        }
+        size_t scanned = 0;
+        for (const library::HistoryEntry& h : hist.Entries()) {
+            if (++scanned > 80 || cards.size() >= 20) break;
+            library::EpisodeInfo ep;
+            if (h.kind != library::MediaKind::Video || h.duration <= 0 || h.Progress() < 0.95 || IsUrl(h.path) ||
+                !library::ParseEpisode(library::StemOf(h.path), &ep) || !shows.insert(showKey(h.path, ep)).second)
+                continue;
+            const library::MediaItem* next = NextEpisode(*snap, h.path, ep);
+            if (!next) continue;
+            if (const library::HistoryEntry* seen = hist.Find(next->path); seen && seen->Progress() > 0.02) continue;
+            Entry e = MediaCard(next->path, next, nullptr);
+            e.audio = false;
+            e.subtitle = Tr(L"Next episode");
+            cards.push_back({h.lastPlayed, std::move(e), MakeQueueItem(next->path, next->DisplayTitle(), next->duration)});
+        }
+        std::stable_sort(cards.begin(), cards.end(), [](const Card& a, const Card& b) { return a.when > b.when; });
+        for (Card& c : cards) {
+            c.entry.ref = continue_->AddQueue(std::move(c.item));
+            continue_->AddEntry(std::move(c.entry));
         }
         continue_->Commit(Tr(L"Continue Watching"));
 
