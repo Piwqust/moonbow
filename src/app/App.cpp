@@ -531,6 +531,78 @@ bool App::HasMedia() const {
     return player_.State().fileLoaded;
 }
 
+namespace {
+
+// Subtitle files dropped onto a playing video are added to it.
+bool AddedAsSubtitles(const std::vector<std::wstring>& paths) {
+    App& app = TheApp();
+    if (!app.player().State().fileLoaded) return false;
+    for (const auto& p : paths) {
+        const wchar_t* ext = PathFindExtensionW(p.c_str());
+        bool sub = false;
+        for (const wchar_t* e : {L".srt", L".ass", L".ssa", L".vtt", L".sub", L".sup", L".idx", L".smi"})
+            if (_wcsicmp(ext, e) == 0) sub = true;
+        if (!sub) return false;
+    }
+    for (const auto& p : paths) app.player().AddSubtitle(p);
+    ShowToast(app.main(), Tr(L"Subtitles added"), "subtitles");
+    return true;
+}
+
+// Missing files: say so instead of playing something else from that folder.
+std::vector<std::wstring> ExistingOnly(const std::vector<std::wstring>& paths) {
+    std::vector<std::wstring> existing;
+    std::wstring missing;
+    for (const auto& p : paths) {
+        if (IsUrl(p) || GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES)
+            existing.push_back(p);
+        else if (missing.empty())
+            missing = p;
+    }
+    if (!missing.empty())
+        ShowToast(TheApp().main(), Fmt(Tr(L"File not found: {0}"), {FileNameOf(missing)}), "info", 4000);
+    return existing;
+}
+
+// The entries of an .m3u as queue items; false (with a toast) when it can't be read.
+bool ReadPlaylistItems(const std::wstring& path, std::vector<QueueItem>* out) {
+    std::vector<library::PlaylistItem> entries;
+    if (!library::ReadM3u(path, &entries) || entries.empty()) {
+        ShowToast(TheApp().main(), Fmt(Tr(L"Couldn't read the playlist {0}"), {FileNameOf(path)}), "info", 4000);
+        return false;
+    }
+    for (auto& e : entries) out->push_back({std::move(e.path), std::move(e.title), e.duration});
+    return true;
+}
+
+}  // namespace
+
+void App::Enqueue(const std::vector<std::wstring>& paths) {
+    if (paths.empty()) return;
+    if (AddedAsSubtitles(paths)) return;
+    std::vector<QueueItem> items;
+    for (const auto& p : ExistingOnly(paths)) {
+        if (!IsUrl(p) && IsDirectory(p)) {
+            for (const auto& f : MediaInFolder(p, config_.GetString("library.openFolder") != "folder"))
+                items.push_back(ItemFor(f));
+        } else if (!IsUrl(p) && IsPlaylistFile(p)) {
+            ReadPlaylistItems(p, &items);  // its tracks, not the .m3u as one line
+        } else {
+            items.push_back(ItemFor(p));
+        }
+    }
+    if (items.empty()) return;
+    const long long added = static_cast<long long>(items.size());
+    const int first = static_cast<int>(queue_.Items().size());
+    queue_.Add(std::move(items));
+    // Nothing plays yet: the first added item starts, as with the queue's own "+" button.
+    if (!player_.State().fileLoaded && pendingOpen_.empty()) {
+        PlayIndex(first, false);
+        return;
+    }
+    ShowToast(main_.get(), Fmt(Tr(L"Added to the queue: {0}"), {std::to_wstring(added)}), "list");
+}
+
 void App::BuildFolderQueue(const std::wstring& file) {
     if (!config_.GetBool("playback.folderAsPlaylist")) {
         PlayQueueItems({ItemFor(file)}, 0);
@@ -566,33 +638,8 @@ void App::Open(const std::vector<std::wstring>& paths) {
         pendingOpen_ = paths;
         return;
     }
-    // Subtitle files dropped onto a playing video are added to it.
-    if (player_.State().fileLoaded) {
-        bool allSubs = true;
-        for (const auto& p : paths) {
-            const wchar_t* ext = PathFindExtensionW(p.c_str());
-            bool sub = false;
-            for (const wchar_t* e : {L".srt", L".ass", L".ssa", L".vtt", L".sub", L".sup", L".idx", L".smi"})
-                if (_wcsicmp(ext, e) == 0) sub = true;
-            allSubs &= sub;
-        }
-        if (allSubs) {
-            for (const auto& p : paths) player_.AddSubtitle(p);
-            ShowToast(main_.get(), Tr(L"Subtitles added"), "subtitles");
-            return;
-        }
-    }
-    // Missing files: say so instead of playing something else from that folder.
-    std::vector<std::wstring> existing;
-    std::wstring missing;
-    for (const auto& p : paths) {
-        if (IsUrl(p) || GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES)
-            existing.push_back(p);
-        else if (missing.empty())
-            missing = p;
-    }
-    if (!missing.empty())
-        ShowToast(main_.get(), Fmt(Tr(L"File not found: {0}"), {FileNameOf(missing)}), "info", 4000);
+    if (AddedAsSubtitles(paths)) return;
+    const std::vector<std::wstring> existing = ExistingOnly(paths);
     if (existing.empty()) return;
     if (existing.size() != paths.size()) {
         Open(existing);
@@ -600,13 +647,8 @@ void App::Open(const std::vector<std::wstring>& paths) {
     }
     // Playlist files become the queue.
     if (paths.size() == 1 && IsPlaylistFile(paths[0])) {
-        std::vector<library::PlaylistItem> entries;
-        if (!library::ReadM3u(paths[0], &entries) || entries.empty()) {
-            ShowToast(main_.get(), Fmt(Tr(L"Couldn't read the playlist {0}"), {FileNameOf(paths[0])}), "info", 4000);
-            return;
-        }
         std::vector<QueueItem> items;
-        for (auto& e : entries) items.push_back({std::move(e.path), std::move(e.title), e.duration});
+        if (!ReadPlaylistItems(paths[0], &items)) return;
         std::wstring name = FileNameOf(paths[0]);
         if (const size_t dot = name.find_last_of(L'.'); dot != std::wstring::npos) name.resize(dot);
         PlayQueueItems(std::move(items), 0, std::move(name));
@@ -827,10 +869,7 @@ void App::OnCopyData(const std::wstring& payload) {
     }
     if (files.empty()) return;
     if (config_.GetBool("library.enqueue") && player_.State().fileLoaded) {
-        std::vector<QueueItem> items;
-        for (const auto& f : files) items.push_back(ItemFor(f));
-        queue_.Add(std::move(items));
-        ShowToast(main_.get(), Fmt(Tr(L"Added to the queue: {0}"), {std::to_wstring(files.size())}), "list");
+        Enqueue(files);
         return;
     }
     Open(files);

@@ -150,7 +150,14 @@ bool MainWindow::Create() {
         PokeChrome();
         return true;
     };
-    onDropFiles = [](std::vector<std::wstring> files) { TheApp().Open(files); };
+    // Dropped while the queue is open (the drop lands on or beside it): added to the queue, as in
+    // PotPlayer and VLC. Anywhere else the files play and replace the queue.
+    onDropFiles = [](std::vector<std::wstring> files) {
+        if (PlayerPanelOpen(PanelKind::Queue))
+            TheApp().Enqueue(files);
+        else
+            TheApp().Open(files);
+    };
     dropHint = Tr(L"Drop to play");
     onCloseRequest = [this] {
         // mpv's video window is a child of ours, owned by an mpv thread, so

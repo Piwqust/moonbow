@@ -125,8 +125,11 @@ Widget* FindId(Widget* w, const char* id) {
 
 // The queue list takes the keyboard (arrows move the selection, Del, Enter; Space still plays
 // and pauses); the other tabs leave it on the player (Space, arrows), and Tab walks into them.
+// While the queue shows, files dropped on the window are added to it (MainWindow::onDropFiles).
 void FocusQueue(MainWindow* w, Popover* pop) {
-    w->SetFocus(pop ? FindId(pop, "queue-list") : nullptr);
+    Widget* list = pop ? FindId(pop, "queue-list") : nullptr;
+    w->SetFocus(list);
+    w->dropHint = list ? Tr(L"Drop to add to the queue") : Tr(L"Drop to play");
 }
 
 std::unique_ptr<Popover> MakePopover(Group g, int tab) {
@@ -203,7 +206,10 @@ void Open(Group g, int tab) {
         if (s.pop != raw) return;
         s.pop = nullptr;
         s.group = Group::None;
-        if (MainWindow* mw = TheApp().main()) mw->RequestRender();
+        if (MainWindow* mw = TheApp().main()) {
+            mw->dropHint = Tr(L"Drop to play");
+            mw->RequestRender();
+        }
     };
     PanelState& s = S();
     s.group = g;

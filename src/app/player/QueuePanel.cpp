@@ -282,7 +282,7 @@ public:
         if (n == 0) {
             p.Text(Tr(L"Queue is empty"), {rect.x, rect.y + 24, rect.w, 24}, TextStyle::Body, c.textTertiary,
                    HAlign::Center);
-            p.Text(Tr(L"Add files with the + button or drop them on the window."), {rect.x + 24, rect.y + 52, rect.w - 48, 40},
+            p.Text(Tr(L"Add files with the + button or drop them here."), {rect.x + 24, rect.y + 52, rect.w - 48, 40},
                    TextStyle::Small, c.textTertiary, HAlign::Center, VAlign::Top, gfx::kTextWrap);
             return;
         }

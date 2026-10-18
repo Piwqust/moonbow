@@ -143,7 +143,7 @@
 {L"{0}m", L"{0} мин"},
 {L"{0}s", L"{0} с"},
 {L"Bookmark {0}", L"Закладка {0}"},
-{L"Add files with the + button or drop them on the window.", L"Добавьте файлы кнопкой «+» или перетащите их в окно."},
+{L"Add files with the + button or drop them here.", L"Добавьте файлы кнопкой «+» или перетащите их сюда."},
 {L"Remove from queue", L"Убрать из очереди"},
 {L"Drag to reorder", L"Перетащите, чтобы изменить порядок"},
 {L"Move up", L"Переместить выше"},

@@ -48,6 +48,7 @@
 {L"Couldn't register file types", L"Не удалось зарегистрировать типы файлов"},
 {L"Rescanning the library…", L"Обновляю медиатеку…"},
 {L"Drop to play", L"Отпустите, чтобы воспроизвести"},
+{L"Drop to add to the queue", L"Отпустите, чтобы добавить в очередь"},
 {L"Added to the queue: {0}", L"Добавлено в очередь: {0}"},
 {L"Show Lumen", L"Показать Lumen"},
 {L"Now playing", L"Сейчас играет"},
