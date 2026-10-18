@@ -178,11 +178,12 @@ uint64_t FetchLyrics(const TrackInfo& t, std::function<void(const LyricsAnswer&)
             done(doc ? ParseLrclibRecord(*doc) : LyricsAnswer{});
             return;
         }
-        if (resp.error != Error::None || resp.status != 404) {
+        // 404: no exact record; 5xx: /api/get could not reach its upstream lookups. The search
+        // reads LRCLIB's own records and finds the song with another album name or length.
+        if (resp.error != Error::None || (resp.status != 404 && resp.status < 500)) {
             done({});
             return;
         }
-        // No exact record: the search finds the same song with another album name or length.
         Request s = Base(LrclibBase() + L"/api/search?track_name=" + UrlEncode(track.title) + L"&artist_name=" +
                          UrlEncode(track.artist));
         s.cacheKey = "lrclib:search:" + json::ToUtf8(s.url);
@@ -765,6 +766,7 @@ struct Lookup {
     std::deque<std::wstring> queue;  // PathKeys
     bool busy = false;
     uint64_t pauseUntil = 0;  // GetTickCount64 after a 429
+    std::unordered_map<std::wstring, int> retries;  // 429 answers per file this session
 };
 
 Lookup& Q() {
@@ -864,8 +866,8 @@ void StartLookup(const std::wstring& key) {
         if (gen != Store().Generation()) return Finish(key, gen);
         MediaMeta* m = Store().Find(key);
         if (!m) return Finish(key, gen);
-        if (resp.error == Error::None && resp.status == 429) {
-            // Back off and try this one again later.
+        if (resp.error == Error::None && resp.status == 429 && ++Q().retries[key] <= 2) {
+            // Back off and try this one again later (twice; then it waits for the next session).
             m->state = MediaMeta::State::Queued;
             Q().queue.push_front(key);
             Q().pauseUntil = GetTickCount64() + 10000;

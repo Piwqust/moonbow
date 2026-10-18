@@ -687,6 +687,7 @@ private:
             row->pad = {0, 4, 0, 0};
             const std::wstring video = video_;
             auto* other = row->Add<LinkButton>(matched ? Tr(L"Find another match") : Tr(L"Find a match"));
+            other->id = "meta-rematch";
             other->trailingIcon = "search";
             other->onClick = [video] {
                 if (MainWindow* w = TheApp().main())
@@ -697,6 +698,7 @@ private:
             };
             if (matched) {
                 auto* reset = row->Add<LinkButton>(Tr(L"Reset"));
+                reset->id = "meta-reset";
                 reset->tooltip = Tr(L"Forget this match and show the file's own thumbnail");
                 reset->onClick = [video] { net::online::ResetMeta(video); };
             }
@@ -1290,6 +1292,7 @@ public:
         const net::VideoGuess g = net::online::Guess(video_);
         Widget* bar = frame_->Toolbar();
         query_ = bar->Add<TextBox>(Tr(L"Movie or series title"), "search");
+        query_->id = "meta-query";
         query_->raised = true;
         query_->width = Length::Grow();
         query_->height = Length::Px(34);

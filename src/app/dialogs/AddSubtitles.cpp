@@ -376,6 +376,7 @@ public:
         // user turns it on with their key).
         if (!model_->current.empty()) {
             auto* online = frame_->Footer()->Add<DButton>(Tr(L"Find Online"), BtnStyle::Neutral);
+            online->id = "subs-online";
             online->icon = "search";
             online->tooltip = Tr(L"Search OpenSubtitles for subtitles to this file");
             online->onClick = [this] {
@@ -668,6 +669,7 @@ public:
         Widget* bar = frame_->Toolbar();
         const net::VideoGuess g = net::online::Guess(video_);
         query_ = bar->Add<TextBox>(Tr(L"Title or file name"), "search");
+        query_->id = "os-query";
         query_->raised = true;
         query_->width = Length::Grow();
         query_->height = Length::Px(34);
@@ -703,6 +705,7 @@ public:
         lang_->tooltip = Tr(L"Subtitle languages (Settings › Subtitles › Preferred language)");
         lang_->onChange = [this](int) { Search(); };
         search_ = bar->Add<DButton>(Tr(L"Find"), BtnStyle::Accent);
+        search_->id = "os-search";
         search_->onClick = [this] { Search(); };
 
         Widget* body = frame_->Body();
