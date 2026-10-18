@@ -589,7 +589,7 @@ void Run(Action a) {
         }
         case Action::Rotate: {
             const int r = (static_cast<int>(p.GetPropertyDouble("video-rotate", 0)) + 90) % 360;
-            p.SetProperty("video-rotate", static_cast<double>(r));
+            p.SetProperty("video-rotate", std::to_string(r));  // a choice option: mpv rejects a double
             Toast(Fmt(Tr(L"Rotation {0}°"), r), "refresh");
             break;
         }

@@ -708,9 +708,10 @@ void LiveState::ApplyPreset(int index) {
     if (!v || !v->IsObject()) return;
     Player& p = Mpv();
     p.SetSpeed(v->GetNumber("speed", 1));
-    for (const char* name : {"audio-delay", "sub-delay", "brightness", "contrast", "saturation", "gamma", "hue",
-                             "video-rotate"})
+    for (const char* name : {"audio-delay", "sub-delay", "brightness", "contrast", "saturation", "gamma", "hue"})
         p.SetProperty(name, v->GetNumber(name, 0));
+    // A choice option: mpv rejects a double.
+    p.SetProperty("video-rotate", std::to_string(((v->GetInt("video-rotate", 0) % 360) + 360) % 360));
     p.SetProperty("sub-scale", v->GetNumber("sub-scale", 1));
     p.SetProperty("sub-pos", v->GetNumber("sub-pos", 100));
     SetZoomMode(v->GetString("zoom", "fit"));
@@ -735,7 +736,8 @@ void LiveState::DeletePreset(int index) {
 void LiveState::ResetToDefaults() {
     Player& p = Mpv();
     p.SetSpeed(1);
-    for (const char* name : {"audio-delay", "sub-delay", "video-rotate"}) p.SetProperty(name, 0.0);
+    for (const char* name : {"audio-delay", "sub-delay"}) p.SetProperty(name, 0.0);
+    p.SetProperty("video-rotate", std::string("0"));  // a choice option: mpv rejects a double
     p.SetProperty("sub-scale", 1.0);
     p.SetProperty("sub-pos", 100.0);
     ResetPicture();
@@ -796,10 +798,12 @@ std::string LiveState::FileOptionsFor(const std::wstring& path) {
         out += value;
     };
     auto track = [](int64_t id) { return id > 0 ? std::to_string(id) : std::string("no"); };
+    // The tracks always: a file without a stored choice gets the configured one, not the choice
+    // mpv's watch-later put back for the previous file (it outlives that file on a gapless move).
     // A sidecar track is picked (or added) once the file has loaded, see FixTracks.
-    if (o.aid && !o.audioFile) add("aid", track(*o.aid));
-    if (o.sid && !o.subFile) add("sid", track(*o.sid));
-    if (o.secondarySid) add("secondary-sid", track(*o.secondarySid));
+    add("aid", o.aid && !o.audioFile ? track(*o.aid) : ConfigOption("playback.audioTrack", "aid", "auto"));
+    add("sid", o.sid && !o.subFile ? track(*o.sid) : ConfigOption("playback.subtitleTrack", "sid", "auto"));
+    add("secondary-sid", o.secondarySid ? track(*o.secondarySid) : std::string("no"));
     if (o.audioDelay) add("audio-delay", Num(*o.audioDelay));
     if (o.subDelay) add("sub-delay", Num(*o.subDelay));
     if (!FileSettingsAll()) return out;
@@ -1024,7 +1028,7 @@ void LiveState::ResetFileSettings() {
     if (old.zoomMode || old.zoom) SetZoomMode("fit");
     if (old.panX) p.SetProperty("video-pan-x", 0.0);
     if (old.panY) p.SetProperty("video-pan-y", 0.0);
-    if (old.rotate) p.SetProperty("video-rotate", 0.0);
+    if (old.rotate) p.SetProperty("video-rotate", std::string("0"));
     if (old.flip) SetFlip(0);
     if (old.deinterlace) p.SetProperty("deinterlace", DefaultDeinterlace());
     if (old.abA || old.abB) {

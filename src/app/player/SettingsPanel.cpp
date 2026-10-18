@@ -556,7 +556,7 @@ std::unique_ptr<Widget> VideoTab() {
         page, s, Tr(L"Rotate"), [] { return FormatNumber(Live().V().rotate) + L"°"; },
         [](double v) {
             const int r = ((static_cast<int>(std::lround(v)) % 360) + 360) % 360;
-            TheApp().player().SetProperty("video-rotate", static_cast<double>(r));
+            TheApp().player().SetProperty("video-rotate", std::to_string(r));  // a choice option: mpv rejects a double
         });
     AddChoice(page, s, Tr(L"Zoom"),
               {{Tr(L"Fit to Window"), "fit", ""},
