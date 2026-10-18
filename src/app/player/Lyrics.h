@@ -30,4 +30,15 @@ Lyrics ParseLyrics(std::wstring_view text);
 // the ANSI code page (older Windows tools wrote CP-1251 files).
 std::wstring DecodeLyricsFile(std::string_view bytes);
 
+// "<folder>\<name>.lrc" for a local media file, empty for URLs and paths without a name.
+std::wstring LyricsPathFor(const std::wstring& mediaPath);
+
+// Reads and parses a .lrc file (up to 1 MB); empty lyrics when it is missing or unreadable.
+// Blocking file I/O: call it off the UI thread.
+Lyrics LoadLyricsFile(const std::wstring& lrcPath);
+
+// True for the tag names that carry lyrics: "lyrics", "lyrics-eng" (ID3 USLT as FFmpeg names
+// it), "UNSYNCEDLYRICS" (foobar2000 / Mp3tag in Vorbis comments), any case.
+bool IsLyricsTag(std::string_view key);
+
 }  // namespace app

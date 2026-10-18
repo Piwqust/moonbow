@@ -201,4 +201,39 @@ std::wstring DecodeLyricsFile(std::string_view bytes) {
     return widen(bytes, CP_ACP, 0);
 }
 
+std::wstring LyricsPathFor(const std::wstring& mediaPath) {
+    if (mediaPath.empty() || mediaPath.find(L"://") != std::wstring::npos) return {};
+    const size_t slash = mediaPath.find_last_of(L"\\/");
+    const size_t name = slash == std::wstring::npos ? 0 : slash + 1;
+    const size_t dot = mediaPath.find_last_of(L'.');
+    if (name >= mediaPath.size()) return {};
+    const size_t end = dot != std::wstring::npos && dot > name ? dot : mediaPath.size();
+    return mediaPath.substr(0, end) + L".lrc";
+}
+
+Lyrics LoadLyricsFile(const std::wstring& lrcPath) {
+    if (lrcPath.empty()) return {};
+    HANDLE f = CreateFileW(lrcPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return {};
+    LARGE_INTEGER size{};
+    std::string bytes;
+    if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= (1 << 20)) {
+        bytes.resize(static_cast<size_t>(size.QuadPart));
+        DWORD read = 0;
+        if (!ReadFile(f, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr)) read = 0;
+        bytes.resize(read);
+    }
+    CloseHandle(f);
+    return ParseLyrics(DecodeLyricsFile(bytes));
+}
+
+bool IsLyricsTag(std::string_view key) {
+    auto iequals = [](std::string_view a, std::string_view b) {
+        return a.size() == b.size() && _strnicmp(a.data(), b.data(), a.size()) == 0;
+    };
+    if (iequals(key, "lyrics") || iequals(key, "unsyncedlyrics") || iequals(key, "unsynced lyrics")) return true;
+    return key.size() > 7 && iequals(key.substr(0, 7), "lyrics-");
+}
+
 }  // namespace app

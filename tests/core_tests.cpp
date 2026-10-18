@@ -1371,6 +1371,15 @@ void TestLyricsLrc() {
     CHECK(app::DecodeLyricsFile(std::string("\xFF\xFE" "a\0b\0", 6)) == L"ab");
     CHECK(app::DecodeLyricsFile(std::string("\xFE\xFF\0a\0b", 6)) == L"ab");
     CHECK(!app::DecodeLyricsFile("caf\xE9").empty());
+
+    // Where the .lrc is looked for, which tags carry lyrics.
+    CHECK(app::LyricsPathFor(L"C:\\Music\\A.B\\01 Song.mp3") == L"C:\\Music\\A.B\\01 Song.lrc");
+    CHECK(app::LyricsPathFor(L"C:\\Music\\A.B\\noext") == L"C:\\Music\\A.B\\noext.lrc");
+    CHECK(app::LyricsPathFor(L"https://example.com/a.mp3").empty());
+    CHECK(app::LyricsPathFor(L"C:\\Music\\").empty());
+    CHECK(app::IsLyricsTag("LYRICS") && app::IsLyricsTag("lyrics-eng") && app::IsLyricsTag("UNSYNCEDLYRICS"));
+    CHECK(!app::IsLyricsTag("lyricist") && !app::IsLyricsTag("lyrics-") && !app::IsLyricsTag("title"));
+    CHECK(app::LoadLyricsFile(L"Z:\\definitely\\missing.lrc").Empty());
 }
 
 struct TestCase {
