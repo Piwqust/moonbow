@@ -44,8 +44,10 @@ inline double HelperStart(double fade, double duration) {
 enum class ArmDecision { Wait, Arm, TooLate };
 
 // Called on time updates while a next file is queued: Wait until S - kArmLead, then Arm; a
-// position past S - margin (a seek into the last seconds) plays on gaplessly instead.
+// position past S - margin (a seek into the last seconds) plays on gaplessly instead. A length
+// not known yet (mpv reports it after the file loads) waits for it.
 inline ArmDecision DecideArm(double position, double duration, double fade) {
+    if (!(duration > 0)) return ArmDecision::Wait;
     const double s = HelperStart(fade, duration);
     if (s < 0) return ArmDecision::TooLate;
     if (position < s - kArmLead) return ArmDecision::Wait;

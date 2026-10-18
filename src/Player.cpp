@@ -42,6 +42,8 @@ enum PropId : uint64_t {
     kPropGamma,
     kPropVolumeMax,
     kPropSpdif,
+    kPropAbLoopA,
+    kPropAbLoopB,
 };
 
 const mpv_node* MapGet(const mpv_node& map, const char* key) {
@@ -95,6 +97,15 @@ void InstallBuiltinShaders(const std::wstring& dataDir) {
 }
 
 }  // namespace
+
+void SetQuietMpvOptions(const MpvApi& api, mpv_handle* mpv) {
+    for (const char* name : {"terminal", "config", "osc", "ytdl", "load-scripts", "load-stats-overlay", "load-console",
+                             "load-auto-profiles", "load-select", "load-commands", "load-positioning",
+                             "load-context-menu", "media-controls", "input-default-bindings", "input-vo-keyboard",
+                             "resume-playback", "save-position-on-quit", "stop-screensaver", "sub-auto",
+                             "audio-file-auto", "cover-art-auto", "autoload-files", "cache"})
+        api.mpv_set_option_string(mpv, name, "no");
+}
 
 std::wstring Track::Label() const {
     std::wstring label = Name();
@@ -273,6 +284,8 @@ bool Player::FinishStart(bool ok) {
         {kPropGamma, "video-params/gamma", MPV_FORMAT_STRING},
         {kPropVolumeMax, "volume-max", MPV_FORMAT_DOUBLE},
         {kPropSpdif, "audio-spdif", MPV_FORMAT_STRING},
+        {kPropAbLoopA, "ab-loop-a", MPV_FORMAT_STRING},
+        {kPropAbLoopB, "ab-loop-b", MPV_FORMAT_STRING},
     };
     for (const auto& p : props) api_.mpv_observe_property(mpv_, p.id, p.name, p.format);
     api_.mpv_set_wakeup_callback(mpv_, &Player::Wakeup, this);
@@ -462,6 +475,12 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
             }
             return 0;
         }
+        case kPropAbLoopA:
+        case kPropAbLoopB:
+            // A loop that reaches into the fade would be cut by the move to the next song.
+            abLoop_[id - kPropAbLoopA] = has && str() != L"no";
+            if (abLoop_[id - kPropAbLoopA]) CancelCrossfade();
+            return 0;
         case kPropGamma: {
             const std::wstring g = str();
             state_.hdr = g == L"pq" || g == L"hlg";
@@ -515,16 +534,13 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
 
 // Commands from the UI thread are async: mpv's video window is a child of our
 // window, so a synchronous call that waits on mpv's VO thread could deadlock.
-void Player::Cmd(std::initializer_list<const char*> args, bool async) {
+void Player::Cmd(std::initializer_list<const char*> args) {
     if (!mpv_) return;
     const char* argv[10] = {};
     size_t n = 0;
     for (const char* a : args)
         if (n < std::size(argv) - 1) argv[n++] = a;
-    if (async)
-        api_.mpv_command_async(mpv_, 0, argv);
-    else
-        api_.mpv_command(mpv_, argv);
+    api_.mpv_command_async(mpv_, 0, argv);
 }
 
 void Player::Command(const std::vector<std::string>& args) {
@@ -557,8 +573,12 @@ void Player::SetProperty(const char* name, bool value) {
 
 void Player::SetProperty(const char* name, const std::string& value) {
     CountTrackChoice(name);
+    ApplySetting(name, value);
+}
+
+void Player::ApplySetting(const std::string& name, const std::string& value) {
     if (CrossfadeOption(name, value)) return;
-    SetString(name, value);
+    SetString(name.c_str(), value);
 }
 
 std::string Player::GetPropertyString(const char* name) {
@@ -639,6 +659,13 @@ void Player::QueueNext(const std::wstring& path) {
     const std::string opts = LoadfileOptions(path);
     const char* argv[] = {"loadfile", utf8.c_str(), "append", opts.empty() ? nullptr : "-1", opts.c_str(), nullptr};
     api_.mpv_command_async(mpv_, kAppendReply + queueGen_, argv);
+}
+
+void Player::RequeueNext() {
+    const std::wstring path = queuedNext_;
+    if (path.empty()) return;
+    queuedNext_.clear();
+    QueueNext(path);
 }
 
 void Player::ForgetPosition(const std::wstring& path) {
@@ -788,25 +815,37 @@ void Player::SaveWatchLater() {
         Cmd({"write-watch-later-config"});
 }
 
+void Player::Detach() {
+    // Still starting: the init thread owns mpv_ until Shutdown joins it.
+    if (init_.joinable()) return;
+    detached_ = mpv_;
+    mpv_ = nullptr;
+    detachedFader_ = std::move(crossfader_);
+    state_.ready = false;
+}
+
 void Player::Shutdown() {
     if (init_.joinable()) init_.join();
-    crossfader_.reset();  // its helper instance goes first; it also uses mpv_
-    if (mpv_) {
+    // The crossfade's helper instance goes first; it also uses the main one.
+    detachedFader_.reset();
+    crossfader_.reset();
+    mpv_handle* mpv = detached_;
+    detached_ = nullptr;
+    if (mpv_) std::swap(mpv, mpv_);  // never detached (the destructor, a close during the cold start)
+    if (mpv) {
         Trace("close: player shutdown");
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
-        if (state_.fileLoaded) {
-            if (NearEnd())
-                Cmd({"delete-watch-later-config"}, false);
-            else if (rememberPosition)
-                Cmd({"write-watch-later-config"}, false);
+        if (state_.fileLoaded && (NearEnd() || rememberPosition)) {
+            const char* argv[] = {NearEnd() ? "delete-watch-later-config" : "write-watch-later-config", nullptr};
+            api_.mpv_command(mpv, argv);
         }
         Trace("close: watch-later written");
-        api_.mpv_set_wakeup_callback(mpv_, nullptr, nullptr);
-        api_.mpv_terminate_destroy(mpv_);
+        api_.mpv_set_wakeup_callback(mpv, nullptr, nullptr);
+        api_.mpv_terminate_destroy(mpv);
         Trace("close: mpv destroyed");
-        mpv_ = nullptr;
     }
-    state_.ready = false;
+    if (state_.ready) state_.ready = false;
+    stopped_ = true;
 }
 
 // --- crossfade ---------------------------------------------------------------------------------
@@ -835,6 +874,7 @@ void Player::CheckCrossfade() {
     }
     if (crossfader_ || xfSeconds_ <= 0 || !mpv_ || !state_.fileLoaded || state_.paused || state_.eof) return;
     if (queuedEntry_ <= 0 || queuedNext_.empty()) return;  // the last song, Repeat One, Stop after each
+    if (abLoop_[0] || abLoop_[1]) return;
     if (xfSerial_ == state_.loadSerial && xfEntry_ == queuedEntry_) return;
     const double fade = audio::EffectiveFade(xfSeconds_, state_.duration);
     const audio::ArmDecision decision = audio::DecideArm(state_.position, state_.duration, fade);
@@ -859,7 +899,6 @@ void Player::CheckCrossfade() {
     plan.volume = MpvVolume(state_.volume);
     plan.mute = state_.mute;
     plan.speed = state_.speed;
-    plan.paused = state_.paused;
     crossfader_ = std::make_unique<audio::Crossfader>(api_, mpv_, std::move(plan));
 }
 

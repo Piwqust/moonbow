@@ -71,7 +71,6 @@ private:
     IAudioCaptureClient* capture_ = nullptr;
     bool started_ = false;
     bool floatFormat_ = true;
-    int channels_ = 2;
     double rate_ = 48000;
     float ring_[kFftSize] = {};  // mono, ring_[head_] is the oldest
     int head_ = 0;

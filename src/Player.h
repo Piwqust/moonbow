@@ -18,6 +18,10 @@ class Crossfader;
 inline constexpr UINT WM_APP_MPV_READY  = WM_APP + 1;  // wParam: 1 = ok, 0 = failed
 inline constexpr UINT WM_APP_MPV_WAKEUP = WM_APP + 2;
 
+// Options of every extra, unseen mpv instance (the crossfade helper, the seek preview): no UI,
+// input, config, scripts or media session, nothing remembered, no sidecar files, no cache.
+void SetQuietMpvOptions(const MpvApi& api, mpv_handle* mpv);
+
 struct Track {
     int64_t id = 0;
     std::wstring type;  // "audio", "sub", "video"
@@ -97,7 +101,12 @@ public:
     bool FinishStart(bool ok);
     // Call on WM_APP_MPV_WAKEUP. Returns a PlayerChange mask.
     unsigned ProcessEvents();
+    // UI thread, at the start of the close: from here on every call is a no-op for the UI, so
+    // its timers can't reach mpv while Shutdown destroys it on another thread.
+    void Detach();
+    // Writes watch-later and destroys mpv. Blocks: the close runs it off the UI thread.
     void Shutdown();
+    bool Stopped() const { return stopped_.load(); }  // Shutdown has finished
 
     bool Ready() const { return state_.ready; }
     const std::wstring& Error() const { return error_; }
@@ -126,14 +135,15 @@ public:
     // aid/sid/secondary-sid), counted per kind: 0 audio, 1 subtitles, 2 secondary subtitles.
     uint32_t TrackChoices(int kind) const { return kind >= 0 && kind < 3 ? trackChoices_[kind] : 0; }
 
-    // `start` > 0 begins playback at that position (seconds); otherwise mpv's
-    // watch-later resume applies.
+    // Plays `path` from its watch-later resume point, if any.
     void Open(const std::wstring& path);
     void Stop();
     // The file to play when the current one ends, kept in mpv's playlist so mpv prefetches it
     // and plays it gaplessly (gapless-audio, prefetch-playlist). Empty = stop at the end.
     // Open() and Stop() forget it. When mpv starts it, ProcessEvents reports kChangeAdvance.
     void QueueNext(const std::wstring& path);
+    // Hands the queued file to mpv again, with the options it opens with now (fileOptions changed).
+    void RequeueNext();
     bool HasQueuedNext() const { return !queuedNext_.empty(); }
     // Duration of the file that ended, and the file mpv went on to, when kChangeAdvance was reported.
     double AdvancedFromDuration() const { return advancedDuration_; }
@@ -169,6 +179,9 @@ public:
     void SetProperty(const char* name, double value);
     void SetProperty(const char* name, bool value);
     void SetProperty(const char* name, const std::string& value);
+    // A setting's mpv value applied live (App::OnConfigChanged): unlike SetProperty, an aid/sid
+    // here is not the user's track choice for the playing file.
+    void ApplySetting(const std::string& name, const std::string& value);
     // Synchronous read; only for rarely used values (never in paint).
     std::string GetPropertyString(const char* name);
     double GetPropertyDouble(const char* name, double fallback = 0);
@@ -197,7 +210,7 @@ private:
     double MpvVolume(double volume) const { return signalTap_ && volume <= 0 ? kTapVolume : volume; }
 
     bool InitOnWorker(int64_t wid);
-    void Cmd(std::initializer_list<const char*> args, bool async = true);
+    void Cmd(std::initializer_list<const char*> args);
     void SetDouble(const char* name, double value);
     void SetString(const char* name, const std::string& value);
     unsigned OnProperty(const mpv_event_property* prop, uint64_t id);
@@ -236,6 +249,11 @@ private:
     uint32_t trackChoices_[3] = {};
 
     std::unique_ptr<audio::Crossfader> crossfader_;
+    // Taken from the UI by Detach, destroyed by Shutdown.
+    mpv_handle* detached_ = nullptr;
+    std::unique_ptr<audio::Crossfader> detachedFader_;
+    std::atomic<bool> stopped_{false};
+    bool abLoop_[2] = {};     // ab-loop-a/b set: the song loops, no crossfade out of it
     double xfSeconds_ = 0;
     bool xfAlbums_ = true;
     bool exclusive_ = false;  // audio-exclusive: one stream owns the device
