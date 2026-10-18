@@ -11,6 +11,8 @@
 #include <ole2.h>
 #include <shellapi.h>
 
+#include <cstdio>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -36,25 +38,27 @@ std::vector<std::wstring> Arguments() {
 
 enum class Forward { NoWindow, Refused, Done };
 
-// The main window: an unowned LumenHost titled "Lumen", or "<file> — Lumen" while something plays
-// (an exact-title search missed it then, and a second window opened).
-HWND FindMainWindow() {
+// Lumens on one data folder form a single-instance group. A hash of the folder, never 0.
+uintptr_t InstanceGroup() {
+    std::wstring dir = DataDir();
+    if (!dir.empty()) CharUpperBuffW(dir.data(), static_cast<DWORD>(dir.size()));
+    return static_cast<uintptr_t>(std::hash<std::wstring>{}(dir)) | 1;
+}
+
+// The main window of our group (app::kInstanceGroupProp). Matching by title alone also found
+// --new-instance windows: a second window, or a test instance cloaked by --automation, where the
+// files then played unseen.
+HWND FindMainWindow(uintptr_t group) {
     HWND w = nullptr;
-    while ((w = FindWindowExW(nullptr, w, L"LumenHost", nullptr)) != nullptr) {
-        if (GetWindow(w, GW_OWNER)) continue;
-        wchar_t title[512];
-        const int n = GetWindowTextW(w, title, static_cast<int>(std::size(title)));
-        const std::wstring_view t(title, n > 0 ? static_cast<size_t>(n) : 0);
-        const std::wstring_view suffix = L" \u2014 Lumen";
-        if (t == app::kMainWindowTitle || (t.size() > suffix.size() && t.substr(t.size() - suffix.size()) == suffix))
+    while ((w = FindWindowExW(nullptr, w, L"LumenHost", nullptr)) != nullptr)
+        if (!GetWindow(w, GW_OWNER) && reinterpret_cast<uintptr_t>(GetPropW(w, app::kInstanceGroupProp)) == group)
             return w;
-    }
     return nullptr;
 }
 
 // Hands the files to an already running Lumen window.
-Forward ForwardToRunningInstance(const std::vector<std::wstring>& args) {
-    HWND other = FindMainWindow();
+Forward ForwardToRunningInstance(const std::vector<std::wstring>& args, uintptr_t group) {
+    HWND other = FindMainWindow(group);
     if (!other) return Forward::NoWindow;
     std::wstring payload;
     for (const auto& a : args)
@@ -121,14 +125,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
 
     if (!newInstance && SingleInstanceDisabled()) newInstance = true;
-    HANDLE mutex = newInstance ? nullptr : CreateMutexW(nullptr, FALSE, L"Lumen.SingleInstance.v2");
+    const uintptr_t group = InstanceGroup();
+    // The real profile keeps the old name; a --data-dir group gets a mutex of its own.
+    wchar_t mutexName[64] = L"Lumen.SingleInstance.v2";
+    if (DataDirOverridden())
+        swprintf_s(mutexName, L"Lumen.SingleInstance.v2.%016llx", static_cast<unsigned long long>(group));
+    HANDLE mutex = newInstance ? nullptr : CreateMutexW(nullptr, FALSE, mutexName);
+    if (!newInstance) app::g_instanceGroup = group;
     if (mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
         // Explorer starts one process per file when several are opened: the first may not have
         // its window yet. Wait for it (up to ~3 s) instead of opening a window of our own.
-        Forward f = ForwardToRunningInstance(files);
+        Forward f = ForwardToRunningInstance(files, group);
         for (int i = 0; f == Forward::NoWindow && i < 30; ++i) {
             Sleep(100);
-            f = ForwardToRunningInstance(files);
+            f = ForwardToRunningInstance(files, group);
         }
         if (f == Forward::Done) {
             CloseHandle(mutex);

@@ -98,6 +98,7 @@ bool MainWindow::Create() {
     o.minHeight = 440;
     o.mainWindow = true;
     if (!Host::Create(o)) return false;
+    if (g_instanceGroup) SetPropW(Hwnd(), kInstanceGroupProp, reinterpret_cast<HANDLE>(g_instanceGroup));
 
     static bool registered = [] {
         WNDCLASSEXW vc{sizeof(vc)};
@@ -182,7 +183,10 @@ bool MainWindow::Create() {
         }).detach();
         return false;
     };
-    onDestroyed = [] { TheApp().OnMainDestroyed(); };
+    onDestroyed = [this] {
+        RemovePropW(Hwnd(), kInstanceGroupProp);
+        TheApp().OnMainDestroyed();
+    };
     return true;
 }
 
