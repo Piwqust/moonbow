@@ -145,6 +145,7 @@ bool MetadataToggle() {
 
 namespace {
 std::string g_rejectedTmdbKey;  // the key TMDB answered 401 to
+uint64_t g_metaStamp = 1;       // bumped by everything that can change what Meta() answers
 }
 
 bool MetadataKeyRejected() {
@@ -571,10 +572,12 @@ public:
         return it == items_.end() ? nullptr : &it->second;
     }
     MediaMeta& Put(const std::wstring& key, const std::wstring& path) {
+        ++g_metaStamp;
         paths_[key] = path;
         return items_[key];
     }
     void Erase(const std::wstring& key) {
+        ++g_metaStamp;
         items_.erase(key);
         paths_.erase(key);
     }
@@ -585,6 +588,7 @@ public:
     ImageState& Image(const std::wstring& file) { return images_[file]; }
     void Save();
     void Clear() {
+        ++g_metaStamp;
         items_.clear();
         paths_.clear();
         images_.clear();
@@ -702,6 +706,7 @@ void MetaStore::Load() {
         [this, out, gen] {
             loading_ = false;
             loaded_ = true;
+            ++g_metaStamp;
             if (gen == generation_) {
                 for (size_t i = 0; i < out->items.size(); ++i) {
                     paths_[out->items[i].first] = out->paths[i];
@@ -761,6 +766,7 @@ Request TmdbRequest(const std::wstring& pathAndQuery) {
 void NoteTmdbAnswer(const Response& r) {
     if (r.error == Error::None && r.status == 401) {
         g_rejectedTmdbKey = Trimmed(Cfg().GetString("privacy.tmdbKey"));
+        ++g_metaStamp;
         ChangedSignal().Emit();
     }
 }
@@ -937,7 +943,9 @@ VideoGuess Guess(const std::wstring& path) {
     return GuessVideo(path);
 }
 
-const MediaMeta* Meta(const std::wstring& path) {
+namespace {
+
+const MediaMeta* FindOrQueue(const std::wstring& path) {
     if (!MetadataOn() || path.empty() || path.find(L"://") != std::wstring::npos) return nullptr;
     if (library::KindOf(path) != library::MediaKind::Video) return nullptr;
     MetaStore& store = Store();
@@ -960,6 +968,20 @@ const MediaMeta* Meta(const std::wstring& path) {
     }
     RunNext();
     return &fresh;
+}
+
+}  // namespace
+
+const MediaMeta* Meta(const std::wstring& path) {
+    // A card asks twice per paint (its artwork, then year and rating): the second ask is free.
+    static std::wstring lastPath;
+    static const MediaMeta* last = nullptr;
+    static uint64_t lastStamp = 0;
+    if (lastStamp == g_metaStamp && path == lastPath) return last;
+    last = FindOrQueue(path);
+    lastPath = path;
+    lastStamp = g_metaStamp;
+    return last;
 }
 
 std::wstring CardImage(const std::wstring& path) {
@@ -1119,6 +1141,7 @@ void Init() {
         else if (key == "library.metadata")
             c.SetBool("privacy.fetchMetadata", c.GetString("library.metadata") == "internet");
         syncing = false;
+        ++g_metaStamp;
         if (!MetadataOn()) Q().queue.clear();
         ChangedSignal().Emit();
         TheApp().images().Refresh();
@@ -1126,6 +1149,7 @@ void Init() {
     Cfg().Subscribe("privacy.fetchMetadata", sync);
     Cfg().Subscribe("library.metadata", sync);
     Cfg().Subscribe("privacy.tmdbKey", [](const std::string&) {
+        ++g_metaStamp;
         ChangedSignal().Emit();
         TheApp().images().Refresh();
     });

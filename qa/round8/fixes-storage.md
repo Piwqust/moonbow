@@ -44,6 +44,12 @@ there; see the "before" column.
 | A non-image TMDB body is kept forever | fixed | A network 200 whose content-type isn't image/* is deleted on a worker and not asked again this session (Online.cpp:812) | Traced: keepExisting meant a captive-portal page saved as a .jpg was never fetched again. The round 7 mock sends image/jpeg, so normal posters are unaffected. |
 | FitShellText underflows at capacity 1 | fixed | `capacity <= 1` returns "" (ShellText.h:13) | Test `shell_text`: before, capacity 1 returned the whole text plus "…". Now it returns "", and capacity 2 returns "…". |
 
+## Coordinator item (after the pages merge)
+
+| Item | Status | Fix | Checked |
+|------|--------|-----|---------|
+| Each video card paint calls `Meta()` twice (CardImage in PaintThumb, then the year/rating chip in PaintCard): PathKey, four config reads and a GuessVideo each time | fixed, net side only | `Meta()` keeps its last answer, keyed on the path plus `g_metaStamp`. Every store Put, Erase, Clear and Load, a rejected key, and the three config subscriptions bump the stamp (Online.cpp, `FindOrQueue` + `Meta`). The second ask for the same card returns at once. ItemGrid.cpp is unchanged: the two calls sit in different paint functions, so passing the record would have meant a header change. | Runtime against the round 7 mock (TMDB on, three copies of a real clip named as films). The cards show the backdrop and the "2010 · ★ 8,4" chip, the second Inception search was a cache hit, and metadata.json was written once with all three records (#8). `set privacy.fetchMetadata false` removes the artwork and chips on the next paint, so the stamp invalidates. |
+
 ## Outside my file scope
 
 - src/app/App.cpp: the FlushStores takeover block only, as allowed for #4.
