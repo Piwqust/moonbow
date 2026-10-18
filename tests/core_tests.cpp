@@ -732,6 +732,45 @@ void TestCorruptBackup() {
     }
     CHECK(TakeCorruptFileNotices().size() == 2);
 
+    // The same shape check for the small stores: [] is kept, not loaded as empty and overwritten.
+    WriteFile(dir + L"\\history.json", "[]");
+    WriteFile(dir + L"\\playlists.json", R"({"playlists":{}})");
+    WriteFile(dir + L"\\bookmarks.json", R"({"files":"x"})");
+    WriteFile(dir + L"\\favorites.json", "[1]");
+    {
+        library::History h;
+        library::Playlists pl;
+        library::Bookmarks bm;
+        library::Favorites fav;
+        CHECK(!h.Load() && !pl.Load() && !bm.Load() && !fav.Load());
+    }
+    CHECK(CountFiles(dir, L"history.corrupt-*.json") == 3 && CountFiles(dir, L"playlists.corrupt-*.json") == 1 &&
+          CountFiles(dir, L"bookmarks.corrupt-*.json") == 1 && CountFiles(dir, L"favorites.corrupt-*.json") == 1);
+    TakeCorruptFileNotices();
+
+    // A file that is locked (by a backup tool) while it loads is never overwritten afterwards.
+    const std::string locked = R"({"version":1,"items":[{"path":"C:\\keep.mkv","lastPlayed":1}]})";
+    WriteFile(dir + L"\\history.json", locked);
+    WriteFile(dir + L"\\playlists.json", R"({"version":1,"playlists":[{"id":"p1","name":"Keep"}]})");
+    {
+        library::History h;
+        library::Playlists pl;
+        HANDLE lockH = CreateFileW((dir + L"\\history.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        HANDLE lockP = CreateFileW((dir + L"\\playlists.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        CHECK(lockH != INVALID_HANDLE_VALUE && lockP != INVALID_HANDLE_VALUE);
+        CHECK(!h.Load() && h.Entries().empty());
+        CHECK(!pl.Load());
+        CloseHandle(lockH);
+        CloseHandle(lockP);
+        h.UpdatePosition(L"C:\\new.mkv", 5, 100);
+        pl.Create(L"New");
+        CHECK(!h.Flush() && !pl.Flush());
+    }  // the destructors flush too
+    std::string after;
+    CHECK(json::ReadFileUtf8(dir + L"\\history.json", &after) && after == locked);
+    CHECK(json::ReadFileUtf8(dir + L"\\playlists.json", &after) && after.find("Keep") != std::string::npos);
+    CHECK(TakeCorruptFileNotices().empty());
+
     // The log path hint follows a moved data folder.
     CHECK(DataDirOverridden());
     const std::wstring shown = DataFileDisplayPath(L"lumen.log");

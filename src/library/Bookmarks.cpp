@@ -15,15 +15,25 @@ namespace library {
 namespace {
 
 // Shared start of Load(): false only for a file that exists but cannot be read or parsed.
-bool ReadDoc(const wchar_t* name, std::optional<json::Value>* doc) {
+// A file that cannot be read sets *readOnly (saving would wipe it); valid JSON of the wrong shape
+// (not an object, or `list` not an array) is backed up like broken JSON.
+bool ReadDoc(const wchar_t* name, const char* list, std::optional<json::Value>* doc, bool* readOnly) {
+    *readOnly = false;
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(name), &text)) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        *readOnly = true;
+        return false;
     }
     *doc = json::Parse(text);
-    if (!doc->has_value()) BackupCorruptFile(DataFilePath(name));  // the next save would overwrite it
-    return doc->has_value();
+    const json::Value* items = *doc && (*doc)->IsObject() ? (*doc)->Find(list) : nullptr;
+    if (!*doc || !(*doc)->IsObject() || (items && !items->IsArray())) {
+        doc->reset();
+        BackupCorruptFile(DataFilePath(name));  // the next save would overwrite it
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -39,7 +49,7 @@ bool Bookmarks::Load() {
     files_.clear();
     dirty_ = false;
     std::optional<json::Value> doc;
-    if (!ReadDoc(L"bookmarks.json", &doc)) return false;
+    if (!ReadDoc(L"bookmarks.json", "files", &doc, &readOnly_)) return false;
     if (!doc) return true;
     const json::Value* files = doc->Find("files");
     if (!files) return true;
@@ -65,6 +75,7 @@ bool Bookmarks::Load() {
 }
 
 bool Bookmarks::Save() {
+    if (readOnly_) return false;
     // Stable output order: by path.
     std::vector<const FileMarks*> sorted;
     for (const auto& kv : files_) sorted.push_back(&kv.second);
@@ -146,7 +157,7 @@ bool Favorites::Load() {
     paths_.clear();
     dirty_ = false;
     std::optional<json::Value> doc;
-    if (!ReadDoc(L"favorites.json", &doc)) return false;
+    if (!ReadDoc(L"favorites.json", "paths", &doc, &readOnly_)) return false;
     if (!doc) return true;
     if (const json::Value* list = doc->Find("paths"))
         for (const json::Value& p : list->AsArray())
@@ -155,6 +166,7 @@ bool Favorites::Load() {
 }
 
 bool Favorites::Save() {
+    if (readOnly_) return false;
     json::Value doc = json::Value::MakeObject();
     doc.Set("version", 1);
     json::Value list = json::Value::MakeArray();

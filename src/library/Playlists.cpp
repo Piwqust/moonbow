@@ -131,17 +131,21 @@ bool Playlists::Load() {
     loaded_ = true;
     lists_.clear();
     dirty_ = false;
+    readOnly_ = false;
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"playlists.json"), &text)) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        readOnly_ = true;  // locked by a backup or sync tool: saving now would wipe it
+        return false;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) {
+    // Valid JSON of the wrong shape ([], "playlists": {}) is as unreadable as broken JSON.
+    const json::Value* lists = doc && doc->IsObject() ? doc->Find("playlists") : nullptr;
+    if (!doc || !doc->IsObject() || (lists && !lists->IsArray())) {
         BackupCorruptFile(DataFilePath(L"playlists.json"));  // the next save would overwrite it
         return false;
     }
-    const json::Value* lists = doc->Find("playlists");
     if (!lists) return true;
     for (const json::Value& v : lists->AsArray()) {
         Playlist p;
@@ -166,6 +170,7 @@ bool Playlists::Load() {
 }
 
 bool Playlists::Save() {
+    if (readOnly_) return false;
     json::Value lists = json::Value::MakeArray();
     for (const Playlist& p : lists_) {
         json::Value v = json::Value::MakeObject();

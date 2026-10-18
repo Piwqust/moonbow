@@ -65,6 +65,7 @@ private:
     std::vector<Playlist> lists_;
     bool dirty_ = false;
     bool loaded_ = false;
+    bool readOnly_ = false;  // the file exists but could not be read: never overwrite it
     uint32_t counter_ = 0;
 };
 

@@ -20,17 +20,21 @@ bool History::Load() {
     loaded_ = true;
     entries_.clear();
     dirty_ = false;
+    readOnly_ = false;
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"history.json"), &text)) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        readOnly_ = true;  // locked by a backup or sync tool: saving now would wipe it
+        return false;
     }
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) {
+    // Valid JSON of the wrong shape ([], "items": {}) is as unreadable as broken JSON.
+    const json::Value* items = doc && doc->IsObject() ? doc->Find("items") : nullptr;
+    if (!doc || !doc->IsObject() || (items && !items->IsArray())) {
         BackupCorruptFile(DataFilePath(L"history.json"));  // the next save would overwrite it
         return false;
     }
-    const json::Value* items = doc->Find("items");
     if (!items) return true;
     for (const json::Value& v : items->AsArray()) {
         HistoryEntry e;
@@ -51,6 +55,7 @@ bool History::Load() {
 }
 
 bool History::Save() {
+    if (readOnly_) return false;
     json::Value items = json::Value::MakeArray();
     for (const HistoryEntry& e : entries_) {
         json::Value v = json::Value::MakeObject();

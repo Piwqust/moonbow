@@ -47,6 +47,7 @@ private:
     std::unordered_map<std::wstring, FileMarks> files_;  // PathKey -> marks
     bool dirty_ = false;
     bool loaded_ = false;
+    bool readOnly_ = false;  // the file exists but could not be read: never overwrite it
 };
 
 class Favorites {
@@ -71,6 +72,7 @@ private:
     std::vector<std::wstring> paths_;
     bool dirty_ = false;
     bool loaded_ = false;
+    bool readOnly_ = false;  // the file exists but could not be read: never overwrite it
 };
 
 }  // namespace library
