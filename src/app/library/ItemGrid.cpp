@@ -25,13 +25,18 @@ bool IsCardStyle(GridStyle s) {
     return s == GridStyle::VideoCards || s == GridStyle::SquareCards;
 }
 
+// When Enter opened the page, its grid lands on the first item with a focus ring.
+uint64_t g_keyActivateTick = 0;
+
 }  // namespace
 
 ItemGrid::ItemGrid() {
+    created_ = GetTickCount64();
     interactive = true;
     focusable = true;
     width = Length::Grow();
     onContextMenu = [this](const MouseEvent& e) {
+        if (JustOpened()) return;
         const int i = IndexAt(e.x, e.y);
         if (i < 0 || !Selectable(i)) return;
         Select(i, false);
@@ -171,6 +176,21 @@ Size ItemGrid::MeasureContent(float availW, float) {
 
 void ItemGrid::OnLayout() {
     Compute(rect.w);
+    if (keyFocusPending_ && !slots_.empty()) {
+        keyFocusPending_ = false;
+        Host* h = GetHost();
+        if (h && IsFocused() && selected_ < 0)
+            for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
+                if (Selectable(i)) {
+                    Select(i, false);
+                    h->SetFocus(this, true);  // same widget: only turns the focus ring on
+                    break;
+                }
+    }
+}
+
+bool ItemGrid::JustOpened() const {
+    return GetTickCount64() - created_ < static_cast<uint64_t>(GetDoubleClickTime());
 }
 
 int ItemGrid::VisibleCount() const {
@@ -282,6 +302,12 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Text(badge, b, TextStyle::MonoSmall, c.textPrimary, HAlign::Center, VAlign::Center, 0);
     }
 
+    if (e.favorite) {
+        const Rect b{t.x + 8, t.y + 8, 24, 24};
+        p.Fill(b, c.bgBase.Fade(0.82f), 12);
+        p.Icon("favorite_active", b.Center(14, 14), c.textPrimary);
+    }
+
     if (now) {
         p.Fill(t, c.scrim.Fade(0.5f), kCardRadius);
         p.Icon("waveform_twotone", t.Center(32, 32), c.accent, c.accentMid);
@@ -316,8 +342,9 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const bool sel = i == selected_;
     const bool compact = style_ == GridStyle::CompactRows;
     const Rect bg{r.x - 8, r.y + 1, r.w + 16, r.h - 2};
+    // Selection keeps the full selected tone even without focus, so it never looks like hover.
     if (sel)
-        p.Fill(bg, IsFocused() ? c.bgSelected : c.bgSelected.Fade(0.7f), 6);
+        p.Fill(bg, c.bgSelected, 6);
     else if (hot)
         p.Fill(bg, IsPressed() ? c.press : c.hover, 6);
     if (sel && ShowFocusRing()) p.Stroke(bg, c.accentMid, 6, 1.5f);
@@ -358,6 +385,10 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         }
         right -= 36;
     }
+    if (e.favorite) {
+        p.Icon("favorite_active", {right - 16, r.Cy() - 8, 16, 16}, c.textSecondary);
+        right -= 28;
+    }
 
     const TextStyle body = TextStyle::Body;
     auto cell = [&](const std::wstring& text, float w, TextStyle st, HAlign h) {
@@ -386,14 +417,15 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         // Folders, playlists, albums: one count at the right edge; the title column lines up with media rows.
         const float reserved = ((columns & kColDate) && w > 720 ? 112.0f : 0.0f) +
                                ((columns & kColSize) && w > 600 ? 96.0f : 0.0f) + ((columns & kColDuration) ? 80.0f : 0.0f);
-        if (e.count >= 0)
-            p.Text(CountItems(e.count), {right - 160, r.y, 160, r.h}, TextStyle::Body, c.textTertiary, HAlign::Trailing);
+        // Categories carry their own noun ("8 songs", "3 artists").
+        const std::wstring count = e.kind == EntryKind::Category && !e.subtitle.empty() ? e.subtitle : CountItems(e.count);
+        if (e.count >= 0) p.Text(count, {right - 160, r.y, 160, r.h}, TextStyle::Body, c.textTertiary, HAlign::Trailing);
         right -= std::max(reserved, e.count >= 0 ? 176.0f : 0.0f);
     } else {
         if (columns & kColDate) {
             std::wstring d;
             if (e.date > 0) d = (columns & kColTime) && DayBucket(e.date) <= 1 ? FormatClock(e.date) : FormatDate(e.date);
-            cell(d, w > 720 ? 96.0f : 0.0f, TextStyle::Body, HAlign::Trailing);
+            cell(d, w > 720 ? 96.0f : 0.0f, TextStyle::Mono, HAlign::Trailing);  // tabular digits
         }
         if (columns & kColSize)
             cell(e.size > 0 ? FormatSize(e.size) : std::wstring(), w > 600 ? 80.0f : 0.0f, TextStyle::Body, HAlign::Trailing);
@@ -491,7 +523,7 @@ bool ItemGrid::OnMouseDown(const MouseEvent& e) {
     const int i = IndexAt(e.x, e.y);
     press_ = -1;
     dragging_ = false;
-    if (!Selectable(i)) return true;
+    if (JustOpened() || !Selectable(i)) return true;
     Select(i, false);
     press_ = i;
     pressAt_ = {e.x, e.y};
@@ -553,14 +585,14 @@ bool ItemGrid::OnMouseUp(const MouseEvent&) {
 void ItemGrid::OnClick() {
     const int i = press_;
     press_ = -1;
-    if (!Selectable(i)) return;
+    if (JustOpened() || !Selectable(i)) return;
     const EntryKind k = entries_[static_cast<size_t>(i)].kind;
     if ((k == EntryKind::Action || k == EntryKind::Category) && onActivate) onActivate(i);
 }
 
 bool ItemGrid::OnDoubleClick(const MouseEvent& e) {
     const int i = IndexAt(e.x, e.y);
-    if (!Selectable(i)) return true;
+    if (JustOpened() || !Selectable(i)) return true;
     Select(i, false);
     const EntryKind k = entries_[static_cast<size_t>(i)].kind;
     if (k == EntryKind::Action || k == EntryKind::Category) return true;  // already ran on the first click
@@ -575,6 +607,12 @@ void ItemGrid::OnMouseLeave() {
 }
 
 void ItemGrid::OnFocusChanged(bool focused) {
+    // The page was opened with Enter: its slots aren't laid out yet, select after layout.
+    if (focused && selected_ < 0 && GetTickCount64() - g_keyActivateTick < 1000) {
+        g_keyActivateTick = 0;
+        keyFocusPending_ = true;
+        InvalidateLayout();
+    }
     if (focused && selected_ < 0) {
         // Keyboard users land on the first item.
         Host* h = GetHost();
@@ -619,6 +657,12 @@ int ItemGrid::Navigate(int from, int dx, int dy) const {
 }
 
 bool ItemGrid::OnKeyDown(const KeyEvent& e) {
+    if (e.key == VK_BACK) {
+        // Library back, like a file browser. Posted: going back destroys this page.
+        if (e.mods.ctrl || e.mods.alt || e.mods.shift || !TheApp().CanGoBack()) return false;
+        if (Host* h = GetHost()) h->Post([] { TheApp().GoBack(); });
+        return true;
+    }
     const int n = static_cast<int>(entries_.size());
     if (n == 0) return false;
     const bool cards = IsCardStyle(style_);
@@ -666,7 +710,11 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
             break;
         }
         case VK_RETURN:
-            if (selected_ >= 0 && onActivate) onActivate(selected_);
+            if (JustOpened() || e.repeat) return true;  // the Enter that opened this page, or a held key
+            if (selected_ >= 0 && onActivate) {
+                g_keyActivateTick = GetTickCount64();
+                onActivate(selected_);  // may destroy this grid (navigation)
+            }
             return true;
         case VK_DELETE:
             if (selected_ >= 0 && onDelete) {

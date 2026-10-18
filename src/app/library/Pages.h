@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace app::lib {
@@ -53,6 +54,14 @@ private:
     bool compact_;
 };
 
+// While a freshly opened page ignores input (ItemGrid::JustOpened), every hit on it goes to
+// its grid, so toolbar and empty-state buttons can't catch the second click of a double-click
+// either. Returns `hit` otherwise.
+ui::Widget* GuardedHit(ItemGrid* grid, ui::Widget* hit);
+// The first page shown after start gets the keyboard when nothing has it (arrow keys move in
+// the grid instead of changing the volume). Not in the player's side panel.
+void TakeFreeFocus(LibraryView& view, bool compact, bool& done);
+
 struct HistoryInfo {
     double progress = -1;  // shown progress, < 0 none
     bool watched = false;
@@ -72,6 +81,8 @@ public:
     void SetViewMode(ViewMode m) override;
     void SetFilter(const std::wstring& text) override;
     ui::Widget* InitialFocus() override { return grid_; }
+    ui::Widget* HitTest(float x, float y) override;
+    void OnLayout() override;
 
 protected:
     // --- building (called from Build) ---
@@ -79,10 +90,11 @@ protected:
     int AddRoute(Entry e, Route target);
     int AddAction(Entry e, std::function<void()> action);
     void AddHeader(const std::wstring& title, const std::wstring& right = {});
-    // Media entry + queue item. `fileTitle` shows the file name with extension (video grids).
-    int AddMedia(const library::MediaItem& m, bool fileTitle);
+    // Media entry + queue item (title per MediaTitle, artist/album labels for songs).
+    int AddMedia(const library::MediaItem& m);
     Entry FolderEntry(const library::FolderNode& f, library::MediaKind kind) const;
     HistoryInfo Progress(const std::wstring& path) const;
+    bool Favorite(const std::wstring& path) const;
     bool Matches(const std::wstring& text) const;  // filter test (folded)
 
     virtual void Build() = 0;
@@ -133,8 +145,9 @@ private:
     std::vector<Route> nextRoutes_;
     std::vector<std::function<void()>> nextActions_;
     std::unordered_map<std::wstring, HistoryInfo> history_;
+    std::unordered_set<std::wstring> favorites_;  // PathKey
     ScopedConnection libConn_, playerConn_, langConn_;
-
+    bool focusTaken_ = false;
 };
 
 std::unique_ptr<LibraryView> MakeHomePage(bool compact);
@@ -145,6 +158,9 @@ std::unique_ptr<LibraryView> MakePlaylistsPage(const Route& route, bool compact)
 std::unique_ptr<LibraryView> MakeRecentPage(const Route& route, bool compact);
 
 // "C:\Video\Shows\S01" inside library root "C:\Video" -> crumbs Videos › Video › Shows › S01.
-std::vector<Crumb> FolderCrumbs(const library::Snapshot& snap, Section section, const std::wstring& folder);
+// With `sectionRoot` = "C:\Video" (the only library folder, shown as the section page itself)
+// -> Videos › Shows › S01.
+std::vector<Crumb> FolderCrumbs(const library::Snapshot& snap, Section section, const std::wstring& folder,
+                                const std::wstring& sectionRoot = {});
 
 }  // namespace app::lib

@@ -198,3 +198,13 @@
 {L"No recent items", L"Недавних файлов нет"},
 {L"Files and streams you play will appear here.", L"Здесь появятся файлы и потоки, которые вы открываете."},
 {L"Add Subtitles…", L"Добавить субтитры…"},
+
+// Favorites, music on Home, playlists
+{L"Favorites", L"Избранное"},
+{L"Recently Added Music", L"Недавно добавленная музыка"},
+{L"Unknown album", L"Неизвестный альбом"},
+{L"No favorites yet", L"В избранном пока пусто"},
+{L"Right-click a video, song or stream and choose “Favorite” to keep it here.",
+ L"Щёлкните правой кнопкой по видео, песне или потоку и выберите «Избранное», чтобы они были под рукой."},
+{L"Already in “{0}”", L"Уже в плейлисте «{0}»"},
+{L"Added to “{0}”, {1} already there", L"Добавлено в «{0}», уже были в плейлисте: {1}"},

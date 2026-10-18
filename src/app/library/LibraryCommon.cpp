@@ -11,6 +11,7 @@
 #include <shobjidl.h>
 
 #include <cwchar>
+#include <unordered_set>
 
 namespace app::lib {
 
@@ -120,6 +121,38 @@ std::wstring CountPlays(long long n) {
 
 std::wstring CountAlbums(long long n) {
     return CountWith(n, L"album", L"albums", L"альбом", L"альбома", L"альбомов");
+}
+
+std::wstring CountArtists(long long n) {
+    return CountWith(n, L"artist", L"artists", L"исполнитель", L"исполнителя", L"исполнителей");
+}
+
+std::wstring CountGenres(long long n) {
+    return CountWith(n, L"genre", L"genres", L"жанр", L"жанра", L"жанров");
+}
+
+std::wstring CountStations(long long n) {
+    return CountWith(n, L"station", L"stations", L"станция", L"станции", L"станций");
+}
+
+std::wstring CountEpisodes(long long n) {
+    return CountWith(n, L"episode", L"episodes", L"выпуск", L"выпуска", L"выпусков");
+}
+
+std::wstring ArtistLabel(const std::wstring& artist) {
+    return artist.empty() ? std::wstring(Tr(L"Unknown artist")) : artist;
+}
+
+std::wstring AlbumLabel(const std::wstring& album) {
+    return album.empty() ? std::wstring(Tr(L"Unknown album")) : album;
+}
+
+std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item, const std::wstring& storedTitle) {
+    if (IsUrl(path)) return storedTitle.empty() ? path : storedTitle;
+    if (item) return item->kind == library::MediaKind::Audio ? item->DisplayTitle() : item->name;
+    // Outside the library: a stored title unless it is just the file name (mpv's default title).
+    if (!storedTitle.empty() && !SamePath(storedTitle, library::FileNameOf(path))) return storedTitle;
+    return library::StemOf(path);
 }
 
 bool IsUrl(const std::wstring& path) {
@@ -328,8 +361,23 @@ std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
         const std::string id = pl.id;
         const std::wstring name = pl.name;
         m.action = [id, name, items, toPlaylist] {
-            if (TheApp().playlists().Add(id, toPlaylist(items))) {
-                Toast(Fmt(Tr(L"Added to “{0}”"), {name}), "playlist");
+            const library::Playlist* p = TheApp().playlists().Find(id);
+            if (!p) return;
+            // Items already in the playlist are skipped, not duplicated.
+            std::unordered_set<std::wstring> have;
+            for (const auto& it : p->items) have.insert(library::PathKey(it.path));
+            std::vector<QueueItem> fresh;
+            for (const QueueItem& q : items)
+                if (have.insert(library::PathKey(q.path)).second) fresh.push_back(q);
+            if (fresh.empty()) {
+                Toast(Fmt(Tr(L"Already in “{0}”"), {name}), "playlist");
+                return;
+            }
+            if (TheApp().playlists().Add(id, toPlaylist(fresh))) {
+                const size_t skipped = items.size() - fresh.size();
+                Toast(skipped ? Fmt(Tr(L"Added to “{0}”, {1} already there"), {name, std::to_wstring(skipped)})
+                              : Fmt(Tr(L"Added to “{0}”"), {name}),
+                      "playlist");
                 TheApp().libraryChanged.Emit();
             }
         };
@@ -385,6 +433,7 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem>
     MenuItem f = Item(fav ? L"Remove from Favorites" : L"Favorite", fav ? "favorite_active" : "favorite", [path] {
         const bool on = TheApp().favorites().Toggle(path);
         Toast(on ? Tr(L"Added to favorites") : Tr(L"Removed from favorites"), on ? "favorite_active" : "favorite");
+        TheApp().libraryChanged.Emit();  // Home's Favorites row and the heart marks
     });
     m.push_back(std::move(f));
     if (!IsUrl(path)) {

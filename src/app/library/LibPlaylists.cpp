@@ -103,7 +103,10 @@ std::vector<MenuItem> PlaylistMenu(const library::Playlist& p, bool onPage) {
     m.push_back(Item(L"Shuffle", "shuffle_right", [id] { PlayPlaylist(id, true); }, has));
     auto q = PlaylistQueue(p);
     m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }, has));
-    m.push_back(Item(L"Add Subtitles…", "subtitles", [id] { ShowAddSubtitlesDialog(Utf8ToWide(id)); }, has));
+    const bool videos = std::any_of(p.items.begin(), p.items.end(), [](const library::PlaylistItem& it) {
+        return library::KindOf(it.path) == library::MediaKind::Video;
+    });
+    if (videos) m.push_back(Item(L"Add Subtitles…", "subtitles", [id] { ShowAddSubtitlesDialog(Utf8ToWide(id)); }));
     m.push_back(MenuItem::Separator());
     m.push_back(Item(L"Rename…", "edit", [id] { RenamePlaylist(id); }));
     m.push_back(Item(L"Export Playlist…", "save", [id] { ExportPlaylist(id); }, has));
@@ -263,10 +266,9 @@ protected:
         for (size_t i = 0; i < p->items.size(); ++i) {
             const library::PlaylistItem& it = p->items[i];
             const library::MediaItem* m = snap_ && !IsUrl(it.path) ? snap_->FindItem(it.path) : nullptr;
-            std::wstring title = !it.title.empty() ? it.title
-                                 : m && m->kind == library::MediaKind::Audio ? m->DisplayTitle()
-                                 : IsUrl(it.path) ? it.path
-                                                  : FileNameOf(it.path);
+            // A title saved in the playlist (#EXTINF, a stream name) wins unless it's just the file name.
+            std::wstring title = !it.title.empty() && !SamePath(it.title, FileNameOf(it.path)) ? it.title
+                                                                                               : MediaTitle(it.path, m);
             const double dur = it.duration > 0 ? it.duration : (m ? m->duration : 0);
             total += dur;
             if (library::KindOf(it.path) == library::MediaKind::Video) ++videos;
@@ -295,8 +297,8 @@ protected:
             const bool url = IsUrl(it.path);
             if (!url && !(m && m->offline)) e.image = it.path;
             e.icon = url ? "streaming" : e.audio ? "music" : "video";
-            if (m && e.audio && !m->artist.empty())
-                e.subtitle = m->artist;
+            if (m && e.audio)
+                e.subtitle = ArtistLabel(m->artist);
             else if (url)
                 e.subtitle = Tr(L"Network stream");
             else
@@ -304,6 +306,7 @@ protected:
             const HistoryInfo h = Progress(it.path);
             e.progress = h.progress;
             e.watched = h.watched && !e.audio;
+            e.favorite = Favorite(it.path);
             e.ref = static_cast<int>(queue_.size());
             queue_.push_back(MakeQueueItem(it.path, it.title, r.duration));
             plIndex_.push_back(r.index);

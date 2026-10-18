@@ -28,6 +28,7 @@ struct Entry {
     int count = -1;     // badge on folder/category cards
     bool watched = false;
     bool audio = false;  // media entry is audio (square cover placeholder)
+    bool favorite = false;  // small heart mark
     int ref = -1;        // owner's index (queue position etc.)
 };
 
@@ -65,8 +66,13 @@ public:
     ui::Rect ItemRect(int index) const;
     int IndexAt(float x, float y) const;
     int VisibleCount() const;  // entries that fit (maxRows)
+    // True for a double-click time after the grid was created. A page opened by a single click
+    // ignores input meanwhile, so the second click of a double-click can't start what lands
+    // under the cursor on the new page.
+    bool JustOpened() const;
 
-    std::function<void(int)> onActivate;              // double click / Enter / click on actions
+    // Media plays on double click / Enter; categories and actions open on a single click.
+    std::function<void(int)> onActivate;
     std::function<void(int, ui::Point)> onMenu;      // right click / menu key / "…" button
     std::function<void(int)> onDelete;               // Delete key
     std::function<void(int from, int to)> onMove;    // drag reorder: item ends up at `to`
@@ -116,6 +122,8 @@ private:
     ui::Point pressAt_;
     bool dragging_ = false;
     int dropAt_ = -1;
+    uint64_t created_ = 0;
+    bool keyFocusPending_ = false;  // opened from the keyboard: select the first item after layout
     ScopedConnection imagesConn_, playerConn_;
 };
 
