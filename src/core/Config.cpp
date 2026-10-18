@@ -1,6 +1,7 @@
 #include "Config.h"
 
 #include "Paths.h"
+#include "../net/Secret.h"
 
 #include <windows.h>
 
@@ -141,7 +142,14 @@ bool Config::ApplyDocument(const json::Value& doc) {
             continue;
         }
         if (!item->HasValue()) continue;
-        if (std::optional<json::Value> v = Validate(*item, m.value)) next[m.key] = std::move(*v);
+        json::Value value = m.value;
+        // Secrets are stored DPAPI-protected (ToJson); one that no longer decrypts (another
+        // account or PC) reads as empty rather than as the blob.
+        if (item->secret && value.IsString()) {
+            std::string plain;
+            value = net::UnprotectSecret(value.AsString(), &plain) ? json::Value(plain) : json::Value("");
+        }
+        if (std::optional<json::Value> v = Validate(*item, value)) next[m.key] = std::move(*v);
     }
     for (const Item* item : settings::AllItems()) {
         if (!item->HasValue()) continue;
@@ -156,7 +164,14 @@ json::Value Config::ToJson() const {
     for (const Item* item : settings::AllItems()) {
         if (!item->HasValue()) continue;
         const json::Value& v = Get(item->key);
-        if (v != item->def) values.Set(item->key, v);
+        if (v == item->def) continue;
+        // API keys and passwords never reach the file in plain text.
+        if (item->secret && v.IsString() && !v.AsString().empty()) {
+            const std::string sealed = net::ProtectSecret(v.AsString());
+            if (!sealed.empty()) values.Set(item->key, sealed);
+            continue;
+        }
+        values.Set(item->key, v);
     }
     for (const json::Member& m : unknown_.AsObject()) values.Set(m.key, m.value);
     json::Value doc = json::Value::MakeObject();

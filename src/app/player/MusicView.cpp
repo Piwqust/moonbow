@@ -16,7 +16,11 @@
 #include "audio/LoopbackCapture.h"
 #include "audio/LoopbackSupport.h"
 #include "gfx/Gpu.h"
+#include "app/I18n.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
+#include "net/Http.h"
+#include "net/Online.h"
 #include "ui/Anim.h"
 
 #include <d2d1_1.h>
@@ -68,6 +72,32 @@ VizStyle VizStyleOf(const std::string& v) {
     return VizStyle::Off;
 }
 
+// Under lyrics that came from LRCLIB: the source, and a click saves them as .lrc next to the song
+// (the only way they reach the song's folder). Light on the always-dark music view.
+class LyricsSourceButton : public Widget {
+public:
+    LyricsSourceButton() {
+        interactive = true;
+        focusable = true;
+        tooltip = Tr(L"Lyrics from LRCLIB. Save them as an .lrc file next to the song");
+    }
+    void Paint(Painter& p) override {
+        const Color bg = P().videoBg, white = Color::Hex(0xFFFFFF);
+        const bool hot = IsHot() || IsPressed();
+        if (hot) p.Fill(rect, white.WithAlpha(IsPressed() ? 0.14f : 0.08f), 4);
+        const Color c = Color::Mix(bg, white, hot ? 0.9f : 0.55f);
+        p.Icon("save", {rect.x + 6, rect.Cy() - 10, 20, 20}, c);
+        p.Text(Tr(L"LRCLIB · Save .lrc"), {rect.x + 32, rect.y, rect.w - 38, rect.h}, TextStyle::Small, c);
+        PaintFocusRing(p, rect, 4);
+    }
+    float Width() const { return std::ceil(gfx::Text::Get().Measure(Tr(L"LRCLIB · Save .lrc"), TextStyle::Small).width) + 44; }
+    bool OnKeyDown(const KeyEvent& e) override {
+        if (e.key != VK_RETURN && e.key != VK_SPACE) return false;
+        OnClick();
+        return true;
+    }
+};
+
 class MusicView : public Widget {
 public:
     MusicView() {
@@ -90,12 +120,17 @@ public:
         titleTip_ = Add<Widget>();
         titleTip_->interactive = true;
         titleTip_->visible = false;
+        source_ = Add<LyricsSourceButton>();
+        source_->visible = false;
+        source_->onClick = [this] { SaveOnlineLyrics(); };
     }
     ~MusicView() override {
         TheApp().config().Unsubscribe(vizToken_);
         TheApp().player().SetSignalTap(false);
+        *alive_ = false;
+        net::Cancel(onlineReq_);
     }
-    void OnLayout() override {}  // titleTip_ is placed by Paint
+    void OnLayout() override {}  // titleTip_ and source_ are placed by Paint
 
     void DebugInfo(std::string& out) const override {
         Widget::DebugInfo(out);
@@ -185,9 +220,16 @@ public:
             titleTip_->tooltip = second.empty() ? title : title + L"\n" + second;
         }
 
+        source_->visible = false;
         if (wide) {
             const float x = left.Right() + 16;
             box_ = {x, rect.y + 48, std::min(area.Right() - 48 - x, 640.0f), rect.h - 96};
+            if (online_) {
+                // The column gives its last 40 DIP to the source line.
+                box_.h -= 40;
+                source_->visible = true;
+                source_->rect = {box_.x, box_.Bottom() + 8, std::min(source_->Width(), box_.w), 28};
+            }
             PaintLyrics(p, box_);
         } else {
             box_ = {};
@@ -215,6 +257,15 @@ public:
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
+        // Right click on lyrics from the internet: the save command; elsewhere the player's menu.
+        if (e.button == MouseButton::Right && online_ && box_.w > 0 && box_.Contains(e.x, e.y) && GetHost()) {
+            MenuItem save;
+            save.label = Tr(L"Save lyrics as .lrc next to the song");
+            save.icon = "save";
+            save.action = [this] { SaveOnlineLyrics(); };
+            ShowContextMenu(GetHost(), {e.x, e.y}, {save});
+            return true;
+        }
         if (e.button != MouseButton::Left) return false;
         const int hit = LineAt(e.x, e.y);
         if (hit < 0) return false;
@@ -392,11 +443,18 @@ private:
         if (s.loadSerial != serial_) {
             serial_ = s.loadSerial;
             pending_.reset();
+            net::Cancel(onlineReq_);
+            onlineReq_ = 0;
+            onlineSerial_ = 0;
+            online_ = false;
+            onlineAnswer_ = {};
             SetLyrics({});
             if (!s.fileLoaded) return;
             const QueueItem* item = TheApp().queue().CurrentItem();
             const std::wstring media = item ? item->path : s.path;
-            if (!LyricsPathFor(media).empty()) {
+            // Songs always ask the worker: without a .lrc it reads SYLT/USLT with our tag parser,
+            // which mpv's metadata list below lacks (it has no synced SYLT).
+            if (library::KindOf(media) == library::MediaKind::Audio || !LyricsPathFor(media).empty()) {
                 auto job = std::make_shared<LyricsLoad>();
                 pending_ = job;
                 const HWND hwnd = GetHost() ? GetHost()->Hwnd() : nullptr;
@@ -411,7 +469,43 @@ private:
                 }).detach();
             }
         }
-        if (s.fileLoaded && lyrics_.Empty()) ReadEmbeddedLyrics();
+        // A tag that arrives late still wins over lyrics from the internet.
+        if (s.fileLoaded && (lyrics_.Empty() || online_)) ReadEmbeddedLyrics();
+        FetchOnline();
+    }
+
+    // No .lrc and no tag (the local sources answered first): ask LRCLIB, when the user allowed it.
+    void FetchOnline() {
+        const PlayerState& s = TheApp().player().State();
+        if (!s.fileLoaded || !lyrics_.Empty() || pending_ || onlineSerial_ == serial_ || !net::online::LyricsOn()) return;
+        const QueueItem* item = TheApp().queue().CurrentItem();
+        net::online::TrackInfo t;
+        t.path = item ? item->path : s.path;
+        if (library::KindOf(t.path) != library::MediaKind::Audio) return;
+        t.artist = s.artist;
+        t.title = s.title;
+        t.album = s.album;
+        t.duration = s.duration;
+        const uint64_t serial = serial_;
+        auto alive = alive_;
+        onlineReq_ = net::online::FetchLyrics(t, [this, alive, serial, t](const net::LyricsAnswer& a) {
+            if (!*alive || serial != serial_) return;
+            onlineReq_ = 0;
+            if (!a.found || !lyrics_.Empty()) return;
+            Lyrics l = ParseLyrics(a.text);
+            if (l.Empty()) return;
+            onlineAnswer_ = a;
+            onlineTrack_ = t;
+            SetLyrics(std::move(l));
+            online_ = true;
+            Invalidate();
+        });
+        // Asked; or nothing to ask with yet (tags may come with the next metadata change).
+        if (onlineReq_) onlineSerial_ = serial_;
+    }
+
+    void SaveOnlineLyrics() {
+        if (online_) net::online::SaveLyrics(onlineTrack_, onlineAnswer_, GetHost());
     }
 
     void ReadEmbeddedLyrics() {
@@ -423,6 +517,7 @@ private:
             Lyrics l = ParseLyrics(Utf8ToWide(player.GetPropertyString((base + "/value").c_str())));
             if (!l.Empty()) {
                 SetLyrics(std::move(l));
+                online_ = false;
                 return;
             }
         }
@@ -437,7 +532,12 @@ private:
             l = std::move(pending_->lyrics);
         }
         pending_.reset();
-        if (!l.Empty()) SetLyrics(std::move(l));
+        if (!l.Empty()) {
+            SetLyrics(std::move(l));
+            online_ = false;
+        } else {
+            FetchOnline();
+        }
     }
 
     void SetLyrics(Lyrics l) {
@@ -702,7 +802,14 @@ private:
     }
 
     Widget* titleTip_ = nullptr;
+    LyricsSourceButton* source_ = nullptr;
     Lyrics lyrics_;
+    // Lyrics from LRCLIB, shown only while the track has none of its own.
+    bool online_ = false;
+    net::LyricsAnswer onlineAnswer_;
+    net::online::TrackInfo onlineTrack_;
+    uint64_t onlineReq_ = 0, onlineSerial_ = 0;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     uint64_t serial_ = 0;
     std::shared_ptr<LyricsLoad> pending_;
     int current_ = -1, hovered_ = -1;

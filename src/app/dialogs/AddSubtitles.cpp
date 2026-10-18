@@ -16,6 +16,7 @@
 #include "core/Paths.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
+#include "net/Online.h"
 
 #include <shlwapi.h>
 
@@ -371,6 +372,19 @@ public:
         scroll_->height = Length::Grow();
 
         frame_->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [this] { frame_->Close(); };
+        // OpenSubtitles for the playing file (off and explained in the next dialog until the
+        // user turns it on with their key).
+        if (!model_->current.empty()) {
+            auto* online = frame_->Footer()->Add<DButton>(Tr(L"Find Online"), BtnStyle::Neutral);
+            online->id = "subs-online";
+            online->icon = "search";
+            online->tooltip = Tr(L"Search OpenSubtitles for subtitles to this file");
+            online->onClick = [this] {
+                const std::wstring video = model_->current;
+                frame_->Close();
+                if (MainWindow* w = TheApp().main()) w->Post([video] { ShowOnlineSubtitlesDialog(video); });
+            };
+        }
         status_ = frame_->Footer()->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
         status_->pad = {8, 0, 0, 0};
         frame_->Footer()->Add<Spacer>();
@@ -550,7 +564,374 @@ private:
     DButton* apply_ = nullptr;
 };
 
+// --- online search (OpenSubtitles) ------------------------------------------------------------
+
+struct LangName {
+    const char* code;
+    const wchar_t* en;
+    const wchar_t* ru;
+};
+const LangName kLangNames[] = {
+    {"en", L"English", L"Английский"},     {"ru", L"Russian", L"Русский"},       {"uk", L"Ukrainian", L"Украинский"},
+    {"kk", L"Kazakh", L"Казахский"},       {"de", L"German", L"Немецкий"},       {"fr", L"French", L"Французский"},
+    {"es", L"Spanish", L"Испанский"},      {"it", L"Italian", L"Итальянский"},   {"pt-pt", L"Portuguese", L"Португальский"},
+    {"pt-br", L"Portuguese (Brazil)", L"Португальский (Бразилия)"},             {"pl", L"Polish", L"Польский"},
+    {"tr", L"Turkish", L"Турецкий"},       {"ar", L"Arabic", L"Арабский"},       {"id", L"Indonesian", L"Индонезийский"},
+    {"ja", L"Japanese", L"Японский"},      {"zh-cn", L"Chinese", L"Китайский"},  {"zh-tw", L"Chinese (Traditional)", L"Китайский (традиционный)"},
+    {"ko", L"Korean", L"Корейский"},       {"nl", L"Dutch", L"Нидерландский"},   {"sv", L"Swedish", L"Шведский"},
+    {"cs", L"Czech", L"Чешский"},          {"he", L"Hebrew", L"Иврит"},          {"hu", L"Hungarian", L"Венгерский"},
+    {"ro", L"Romanian", L"Румынский"},     {"el", L"Greek", L"Греческий"},       {"fi", L"Finnish", L"Финский"},
+    {"bg", L"Bulgarian", L"Болгарский"},   {"sr", L"Serbian", L"Сербский"},      {"vi", L"Vietnamese", L"Вьетнамский"},
+};
+
+std::wstring LanguageName(const std::string& code) {
+    std::string c = code;
+    for (char& ch : c) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    for (const LangName& l : kLangNames)
+        if (c == l.code || (c.size() == 2 && std::string(l.code).rfind(c + "-", 0) == 0))
+            return CurrentLanguage() == Language::Russian ? l.ru : l.en;
+    std::wstring w = Utf8ToWide(code);
+    for (wchar_t& ch : w) ch = static_cast<wchar_t>(std::towupper(ch));
+    return w;
+}
+
+// OpenSubtitles writes Portuguese and Chinese with a region; the rest is ISO 639-1.
+std::string OsLanguageCode(const std::string& code) {
+    if (code == "pt") return "pt-pt";
+    if (code == "zh") return "zh-cn";
+    return code;
+}
+
+std::wstring Grouped(long long n) {
+    std::wstring s = std::to_wstring(n);
+    for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), L" ");
+    return s;
+}
+
+// One search result: the release name, then language, downloads, rating and the flags.
+class OnlineSubRow : public Widget {
+public:
+    OnlineSubRow(net::SubtitleResult r, std::function<void(const net::SubtitleResult&)> pick)
+        : r_(std::move(r)), pick_(std::move(pick)) {
+        interactive = true;
+        focusable = true;
+        width = Length::Grow();
+        height = Length::Px(56);
+        tooltip = r_.release;
+        onClick = [this] {
+            if (pick_ && IsEnabled()) pick_(r_);
+        };
+        std::wstring d = LanguageName(WideToUtf8(r_.language));
+        d += L" · " + Grouped(r_.downloads) + L" " +
+             (CurrentLanguage() == Language::Russian ? Plural(r_.downloads, L"загрузка", L"загрузки", L"загрузок")
+                                                     : r_.downloads == 1 ? L"download" : L"downloads");
+        if (r_.rating > 0 && r_.votes > 0) {
+            wchar_t buf[16];
+            swprintf_s(buf, L"%.1f", r_.rating);
+            std::wstring v = buf;
+            if (CurrentLanguage() == Language::Russian) std::replace(v.begin(), v.end(), L'.', L',');
+            d += L" · ★ " + v;
+        }
+        if (r_.hearingImpaired) d += L" · " + std::wstring(Tr(L"for the hard of hearing"));
+        if (r_.foreignOnly) d += L" · " + std::wstring(Tr(L"foreign parts only"));
+        if (r_.machine) d += L" · " + std::wstring(Tr(L"machine translation"));
+        else if (r_.ai) d += L" · " + std::wstring(Tr(L"AI translation"));
+        detail_ = std::move(d);
+        if (r_.hashMatch) tooltip += L"\n" + std::wstring(Tr(L"Made for this exact file"));
+    }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const bool hot = (IsHot() || IsPressed()) && IsEnabled();
+        if (hot) p.Fill(rect, IsPressed() ? c.press : c.hover, 6);
+        PaintFocusRing(p, rect, 6);
+        const Color fg = !IsEnabled() ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+        p.Icon(r_.hashMatch ? "check_selected" : "subtitles", {rect.x + 10, rect.Cy() - 12, 24, 24},
+               r_.hashMatch ? c.accent : fg, c.accentMid);
+        const float right = hot ? 40.0f : 12.0f;
+        p.Text(r_.release, {rect.x + 46, rect.y + 7, rect.w - 46 - right, 22}, TextStyle::Body, fg);
+        p.Text(detail_, {rect.x + 46, rect.y + 29, rect.w - 46 - right, 18}, TextStyle::Small, c.textTertiary);
+        if (hot) p.Icon("save", {rect.Right() - 34, rect.Cy() - 12, 24, 24}, c.textPrimary);
+    }
+
+private:
+    net::SubtitleResult r_;
+    std::wstring detail_;
+    std::function<void(const net::SubtitleResult&)> pick_;
+};
+
+class OnlineSubsDialog : public std::enable_shared_from_this<OnlineSubsDialog> {
+public:
+    OnlineSubsDialog(MainWindow* w, std::wstring video) : window_(w), video_(std::move(video)) {}
+
+    std::unique_ptr<Frame> Build() {
+        auto frame = std::make_unique<Frame>(Tr(L"Find Subtitles Online"), FitWidth(window_, 900), FitHeight(window_, 700));
+        frame_ = frame.get();
+        Widget* bar = frame_->Toolbar();
+        const net::VideoGuess g = net::online::Guess(video_);
+        query_ = bar->Add<TextBox>(Tr(L"Title or file name"), "search");
+        query_->id = "os-query";
+        query_->raised = true;
+        query_->width = Length::Grow();
+        query_->height = Length::Px(34);
+        query_->SetText(g.title.empty() ? library::StemOf(video_) : g.title);
+        query_->tooltip = Tr(L"What to look for. The file's hash is sent too, so exact matches come first.");
+        query_->onSubmit = [this](const std::wstring&) { Search(); };
+        season_ = bar->Add<TextBox>(Tr(L"Season"));
+        season_->raised = true;
+        season_->width = Length::Px(84);
+        season_->height = Length::Px(34);
+        season_->onSubmit = [this](const std::wstring&) { Search(); };
+        episode_ = bar->Add<TextBox>(Tr(L"Episode"));
+        episode_->raised = true;
+        episode_->width = Length::Px(84);
+        episode_->height = Length::Px(34);
+        episode_->onSubmit = [this](const std::wstring&) { Search(); };
+        if (g.kind == net::VideoGuess::Episode) {
+            season_->SetText(std::to_wstring(g.season));
+            episode_->SetText(std::to_wstring(g.episode));
+        }
+        // The user's languages together, each alone, or every language.
+        langs_ = net::online::PreferredSubtitleLanguages();
+        std::vector<Choice> choices;
+        std::wstring both;
+        for (const std::string& l : langs_) both += (both.empty() ? L"" : L" + ") + LanguageName(l);
+        choices.push_back({both, "pref"});
+        if (langs_.size() > 1)
+            for (const std::string& l : langs_) choices.push_back({LanguageName(l), l});
+        choices.push_back({Tr(L"All languages"), "all"});
+        lang_ = bar->Add<FieldDropdown>(choices, 0);
+        lang_->width = Length::Px(180);
+        lang_->height = Length::Px(34);
+        lang_->tooltip = Tr(L"Subtitle languages (Settings › Subtitles › Preferred language)");
+        lang_->onChange = [this](int) { Search(); };
+        search_ = bar->Add<DButton>(Tr(L"Find"), BtnStyle::Accent);
+        search_->id = "os-search";
+        search_->onClick = [this] { Search(); };
+
+        Widget* body = frame_->Body();
+        body->pad = {};
+        body->gap = 0;
+        scroll_ = body->Add<ScrollView>();
+        scroll_->width = Length::Grow();
+        scroll_->height = Length::Grow();
+
+        frame_->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Neutral)->onClick = [this] { frame_->Close(); };
+        status_ = frame_->Footer()->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
+        status_->pad = {8, 0, 0, 0};
+        status_->width = Length::Grow();
+        // A hover target (32 DIP, the footer's button height) for the tooltip with the whole line.
+        status_->interactive = true;
+        status_->height = Length::Px(32);
+        frame_->onSubmit = [this] { Search(); };
+        return frame;
+    }
+
+    // After ShowFrame: the controller is owned by the frame's close hook.
+    void Start() {
+        if (!net::online::SubtitlesOn() || !net::online::SubtitlesKeySet()) {
+            ShowOff();
+            return;
+        }
+        Search();
+        auto self = weak_from_this();
+        net::online::SubtitleQuota([self](int, const std::wstring& error) {
+            if (auto d = self.lock()) d->ShowQuota(error);
+        });
+    }
+    Widget* FirstFocus() const { return query_; }
+    void Closed() { closed_ = true; }
+
+private:
+    Widget* Content() {
+        Widget* content = scroll_->SetContent<Widget>();
+        content->dir = Dir::Column;
+        content->width = Length::Grow();
+        content->pad = {16, 12, 16, 12};
+        content->gap = 2;
+        scroll_->ScrollTo(0, false);
+        scroll_->InvalidateLayout();
+        return content;
+    }
+
+    void Message(const std::wstring& title, const std::wstring& text, bool settingsButton = false) {
+        Widget* content = Content();
+        content->align = Align::Center;
+        content->pad = {40, 70, 40, 30};
+        content->gap = 12;
+        auto* t = content->Add<Label>(title, TextStyle::Large);
+        t->color = SoftText;
+        if (!text.empty()) {
+            auto* l = content->Add<Label>(text, TextStyle::Body, Tone::Tertiary);
+            l->wrap = true;
+            l->halign = HAlign::Center;
+            l->maxW = 560;
+        }
+        if (settingsButton) {
+            auto* b = content->Add<DButton>(Tr(L"Open Settings"), BtnStyle::Neutral);
+            b->minWidth = 160;
+            b->onClick = [this] {
+                frame_->Close();
+                if (MainWindow* w = TheApp().main()) w->Post([] { TheApp().OpenSettings("privacy"); });
+            };
+        }
+    }
+
+    void ShowOff() {
+        for (Widget* w : std::initializer_list<Widget*>{query_, season_, episode_, lang_, search_}) w->enabled = false;
+        Message(Tr(L"Subtitle search is off"),
+                Tr(L"Turn on \"Search for subtitles online\" in Settings › Privacy and paste your own OpenSubtitles "
+                   L"API key there. The key is free: sign in at opensubtitles.com, open your profile, then API "
+                   L"Consumers, and create one."),
+                true);
+        status_->SetText({});
+    }
+
+    // The footer line: what the search found, the downloads left and a login note.
+    void ShowQuota(const std::wstring& note) {
+        if (closed_) return;
+        note_ = note;
+        if (!busy_) RefreshStatus();
+    }
+    void RefreshStatus() {
+        std::wstring s = found_;
+        if (const int q = net::online::LastSubtitleQuota(); q >= 0)
+            s += (s.empty() ? L"" : L" · ") + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(q)});
+        if (!note_.empty()) s += (s.empty() ? L"" : L" · ") + note_;
+        status_->SetText(s);
+        // The whole line on hover only when the footer cuts it.
+        status_->tooltip = gfx::Text::Get().Measure(s, TextStyle::Body).width > status_->rect.w - 8 ? s : L"";
+        status_->InvalidateLayout();
+    }
+
+    int Number(TextBox* box) const { return std::max(0, _wtoi(box->Text().c_str())); }
+
+    void Search() {
+        if (busy_ || !net::online::SubtitlesOn() || !net::online::SubtitlesKeySet()) return;
+        net::online::SubtitleSearch s;
+        s.videoPath = video_;
+        s.query = query_->Text();
+        s.season = Number(season_);
+        s.episode = Number(episode_);
+        const std::string pick = lang_->Choices()[static_cast<size_t>(std::max(0, lang_->Selected()))].value;
+        if (pick == "pref")
+            for (const std::string& l : langs_) s.languages.push_back(OsLanguageCode(l));
+        else if (pick != "all")
+            s.languages.push_back(OsLanguageCode(pick));
+        busy_ = true;
+        Message(Tr(L"Searching…"), {});
+        found_.clear();
+        status_->SetText({});
+        auto self = weak_from_this();
+        net::online::SearchSubtitles(s, [self](const net::online::SubtitleSearchResult& r) {
+            if (auto d = self.lock()) d->ShowResults(r);
+        });
+    }
+
+    void ShowResults(const net::online::SubtitleSearchResult& r) {
+        if (closed_) return;
+        busy_ = false;
+        if (!r.ok) {
+            Message(Tr(L"Couldn't search"), r.error);
+            RefreshStatus();
+            return;
+        }
+        if (r.items.empty()) {
+            Message(Tr(L"Nothing found"), Tr(L"Try another title, the season and episode, or all languages."));
+            RefreshStatus();
+            return;
+        }
+        Widget* content = Content();
+        auto self = weak_from_this();
+        for (const net::SubtitleResult& item : r.items)
+            content->Add<OnlineSubRow>(item, [self](const net::SubtitleResult& it) {
+                if (auto d = self.lock()) d->Download(it);
+            });
+        int exact = 0;
+        for (const auto& it : r.items) exact += it.hashMatch ? 1 : 0;
+        found_ = Fmt(Tr(L"Found: {0}"), {std::to_wstring(r.items.size())});
+        if (exact) found_ += L" · " + Fmt(Tr(L"{0} for this exact file"), {std::to_wstring(exact)});
+        RefreshStatus();
+    }
+
+    void Download(const net::SubtitleResult& item) {
+        if (busy_) return;
+        busy_ = true;
+        if (Widget* c = scroll_->Content()) c->enabled = false;
+        scroll_->Invalidate();
+        status_->SetText(Fmt(Tr(L"Downloading {0}…"), {item.release}));
+        status_->InvalidateLayout();
+        auto self = weak_from_this();
+        const std::wstring video = video_;
+        net::online::DownloadSubtitle(item, video, [self, video](const net::online::SubtitleFetch& f) {
+            if (f.ok) Attach(video, f);
+            auto d = self.lock();
+            if (!d || d->closed_) return;
+            d->busy_ = false;
+            if (f.ok) {
+                d->frame_->Close();
+                return;
+            }
+            if (Widget* c = d->scroll_->Content()) c->enabled = true;
+            d->scroll_->Invalidate();
+            d->status_->SetText(f.error);
+            d->status_->InvalidateLayout();
+        });
+    }
+
+    // Loads the downloaded file at once and remembers it for the video (a copy in the data
+    // folder is not found by name next time).
+    static void Attach(const std::wstring& video, const net::online::SubtitleFetch& f) {
+        const PlayerState& s = TheApp().player().State();
+        if (s.fileLoaded && library::PathKey(s.path) == library::PathKey(video)) TheApp().player().AddSubtitle(f.path);
+        auto& entry = Store().pairs[library::PathKey(video)];
+        entry.first = video;
+        if (std::find(entry.second.begin(), entry.second.end(), f.path) == entry.second.end()) entry.second.push_back(f.path);
+        Store().Save();
+        if (MainWindow* w = TheApp().main()) {
+            std::wstring msg = Fmt(Tr(L"Subtitles downloaded: {0}"), {library::FileNameOf(f.path)});
+            if (f.inDataDir) msg = Fmt(Tr(L"Subtitles saved to Lumen's data folder: {0}"), {library::FileNameOf(f.path)});
+            if (const int left = net::online::LastSubtitleQuota(); left >= 0)
+                msg += L". " + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(left)});
+            ShowToast(w, msg, "subtitles", 3000);
+        }
+    }
+
+    MainWindow* window_;
+    std::wstring video_;
+    std::vector<std::string> langs_;
+    Frame* frame_ = nullptr;
+    TextBox* query_ = nullptr;
+    TextBox* season_ = nullptr;
+    TextBox* episode_ = nullptr;
+    FieldDropdown* lang_ = nullptr;
+    DButton* search_ = nullptr;
+    ScrollView* scroll_ = nullptr;
+    Label* status_ = nullptr;
+    std::wstring found_, note_;
+    bool busy_ = false, closed_ = false;
+};
+
 }  // namespace
+
+void ShowOnlineSubtitlesDialog(const std::wstring& videoPath) {
+    MainWindow* w = TheApp().main();
+    if (!w) return;
+    std::wstring video = videoPath;
+    if (video.empty()) {
+        const PlayerState& s = TheApp().player().State();
+        if (s.fileLoaded && s.path.find(L"://") == std::wstring::npos) video = s.path;
+    }
+    if (video.empty()) {
+        ShowToast(w, Tr(L"Open a video to search subtitles for it"), "subtitles");
+        return;
+    }
+    auto dialog = std::make_shared<OnlineSubsDialog>(w, video);
+    auto frame = dialog->Build();
+    Widget* focus = dialog->FirstFocus();
+    frame->OnClosed([dialog] { dialog->Closed(); });  // keeps the controller alive as long as the frame
+    ShowFrame(w, std::move(frame), focus);
+    dialog->Start();
+}
 
 void dlg::InstallSubtitleMemory() {
     static ScopedConnection conn;

@@ -30,6 +30,10 @@ void ShowNewPlaylistDialog(std::function<void(const std::string& playlistId)> do
                            std::vector<NewPlaylistFile> files = {});
 // "Add Subtitles to Playlist/Folder": pairs subtitle files with videos by name.
 void ShowAddSubtitlesDialog(const std::wstring& folderOrPlaylist = {});
+// OpenSubtitles search for a video (the playing file when empty); explains the setting when off.
+void ShowOnlineSubtitlesDialog(const std::wstring& videoPath = {});
+// TMDB: pick another movie or series for a library video ("Find another match").
+void ShowMetadataMatchDialog(const std::wstring& videoPath);
 void ShowMediaInfoDialog();
 // Version, libmpv/FFmpeg versions and licences; over `host` (Settings) or the main window.
 void ShowAboutDialog(ui::Host* host = nullptr);
