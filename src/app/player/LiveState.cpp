@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 
 namespace app {
 
@@ -103,6 +104,13 @@ bool ConfigCpuFilters() {
     return false;
 }
 
+// The configured hwdec (performance.hwdec) as mpv gets it.
+std::string ConfigHwdec() {
+    for (const auto& [name, value] : MpvOptionFor(Cfg(), "performance.hwdec"))
+        if (name == "hwdec") return value;
+    return settings::kAutoHwdec;
+}
+
 // Settings whose mpv mapping rewrites the whole vf chain (dropping Lumen's labelled filters).
 bool RewritesVf(const std::string& key) {
     const settings::Item* item = settings::FindItem(key);
@@ -142,6 +150,10 @@ LiveState::LiveState() {
             srFilter_.clear();  // gone with the old chain
             ApplyVideoFilters();
         }
+        if (key == "performance.hwdec") {
+            appliedHwdec_ = ConfigHwdec();  // what the app just set; adjust it for CPU filters
+            ApplyHwdec();
+        }
         if (key.rfind("video.crop", 0) == 0) {
             LoadCropSetting();
             ApplyCrop();
@@ -168,6 +180,8 @@ void LiveState::LoadCropSetting() {
 void LiveState::Start() {
     if (started_ || !Mpv().Ready()) return;
     started_ = true;
+    // Player started mpv with the copy-back variant when the config has CPU filters.
+    appliedHwdec_ = ConfigCpuFilters() ? Player::CopyBackHwdec(ConfigHwdec()) : ConfigHwdec();
     ObserveAll();
 }
 
@@ -255,6 +269,28 @@ void LiveState::ObserveAll() {
     };
     outSize("video-out-params/w", &LiveState::outW_);
     outSize("video-out-params/h", &LiveState::outH_);
+    // The video area in pixels: the upscaler's target. Window drags send a stream of sizes, and
+    // every new factor rebuilds mpv's filter chain, so wait until the size settles.
+    p.Observe("osd-dimensions", MPV_FORMAT_NODE, [this](const mpv_event_property& e) {
+        const mpv_node* n = e.format == MPV_FORMAT_NODE ? static_cast<const mpv_node*>(e.data) : nullptr;
+        int64_t w = 0, h = 0;
+        if (n && n->format == MPV_FORMAT_NODE_MAP)
+            for (int i = 0; i < n->u.list->num; ++i) {
+                const mpv_node& v = n->u.list->values[i];
+                if (v.format != MPV_FORMAT_INT64) continue;
+                if (std::strcmp(n->u.list->keys[i], "w") == 0) w = v.u.int64;
+                if (std::strcmp(n->u.list->keys[i], "h") == 0) h = v.u.int64;
+            }
+        if (w == areaW_ && h == areaH_) return;
+        areaW_ = w, areaH_ = h;
+        MainWindow* win = TheApp().main();
+        if (!win || !Cfg().GetBool("video.superResolution")) return;
+        if (areaTimer_) win->CancelTimer(areaTimer_);
+        areaTimer_ = win->StartTimer(300, [this] {
+            areaTimer_ = 0;
+            ApplyUpscaler();
+        });
+    });
     p.Observe("audio-device", MPV_FORMAT_STRING, [this](const mpv_event_property& e) {
         if (e.format == MPV_FORMAT_STRING && e.data) {
             const char* s = *static_cast<char**>(e.data);
@@ -297,11 +333,29 @@ void LiveState::ApplyVideoFilters() {
     if (negate) fx = "negate";
     if (grayscale) fx += std::string(fx.empty() ? "" : ",") + "hue=s=0";
     if (!fx.empty()) Mpv().Command({"vf", "add", "@lfx:lavfi=[" + fx + "]"});
+    ApplyHwdec();
     ApplyUpscaler();
 }
 
+bool LiveState::CpuFilters() const {
+    return ConfigCpuFilters() || flip != 0 || negate || grayscale;
+}
+
+// lavfi filters take frames in RAM. On zero-copy d3d11 frames mpv can't convert them, drops the
+// filter ("Disabling filter ... because it has failed") and plays on unfiltered, so decoding
+// copies frames back while one is on, and returns to zero-copy when the last one goes.
+void LiveState::ApplyHwdec() {
+    if (!started_ || !Mpv().Ready()) return;
+    std::string hwdec = ConfigHwdec();
+    if (CpuFilters()) hwdec = Player::CopyBackHwdec(hwdec);
+    if (hwdec == appliedHwdec_) return;
+    appliedHwdec_ = hwdec;
+    Mpv().SetProperty("hwdec", hwdec);
+}
+
 // AI upscaling: mpv's d3d11vpp filter with the vendor's Video Super Resolution, scaling the
-// decoded frames on the GPU to about the screen size (the renderer then only fine-tunes). It
+// decoded frames on the GPU to about the size they are shown at (the video area, the whole
+// screen in fullscreen), so the renderer only fine-tunes. It
 // takes D3D11 frames only, so it waits for zero-copy d3d11va decoding and steps aside while a
 // CPU filter is on (frames are in RAM then). RTX Video HDR rides on the same filter.
 void LiveState::ApplyUpscaler() {
@@ -311,17 +365,26 @@ void LiveState::ApplyUpscaler() {
     const bool sr = c.GetBool("video.superResolution"), trueHdr = c.GetBool("video.trueHdr");
     std::string want;
     if ((sr || trueHdr) && s.fileLoaded && s.hasVideo && s.hwdec == L"d3d11va" && srcW_ > 0 && srcH_ > 0 &&
-        !ConfigCpuFilters() && flip == 0 && !negate && !grayscale) {
+        !CpuFilters()) {
         const std::string vendor = SuperResVendor();
         std::string args;
         const HMONITOR mon = VideoMonitor();
         MONITORINFO mi{sizeof(mi)};
-        if (sr && !vendor.empty() && mon && GetMonitorInfoW(mon, &mi)) {
-            const double mw = mi.rcMonitor.right - mi.rcMonitor.left, mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
-            const double f = std::min({4.0, mw / static_cast<double>(srcW_), mh / static_cast<double>(srcH_)});
+        double aw = static_cast<double>(areaW_), ah = static_cast<double>(areaH_);
+        if ((aw <= 0 || ah <= 0) && mon && GetMonitorInfoW(mon, &mi))
+            aw = mi.rcMonitor.right - mi.rcMonitor.left, ah = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        if (sr && !vendor.empty() && aw > 0 && ah > 0) {
+            // The height the picture gets when fitted into the area at its display aspect.
+            const double sw = static_cast<double>(srcW_), sh = static_cast<double>(srcH_);
+            const double dar = s.videoW > 0 && s.videoH > 0 ? static_cast<double>(s.videoW) / static_cast<double>(s.videoH)
+                                                            : sw / sh;
+            const double shownH = std::min(ah, aw / dar);
+            // In 0.05 steps, rounded up: small resizes keep the filter, and the picture is never
+            // enlarged again after the AI pass, only scaled down a little.
+            const double f = std::min(4.0, std::ceil(shownH / sh * 20 - 1e-6) / 20);
             // Below ~1.2x the renderer's own scaler is as good and the extra pass isn't worth it.
             if (f >= 1.2) {
-                args = "scale=" + Num(std::floor(f * 100) / 100) + ":scaling-mode=" + vendor;
+                args = "scale=" + Num(f) + ":scaling-mode=" + vendor;
             }
         }
         // On an SDR screen the HDR output would only be tone-mapped back: a wasted GPU pass.
@@ -344,7 +407,7 @@ std::wstring LiveState::UpscalerStatus() const {
     const std::string vendor = SuperResVendor();
     if (vendor.empty() || (!sr && vendor != "nvidia")) return Tr(L"Not supported by this graphics card");
     if (s.hwdec != L"d3d11va") return Tr(L"Needs Direct3D 11 hardware decoding");
-    if (ConfigCpuFilters() || flip != 0 || negate || grayscale) return Tr(L"Off while CPU filters are on");
+    if (CpuFilters()) return Tr(L"Off while CPU filters are on");
     if (!sr && s.hdr) return Tr(L"The video is already HDR");
     if (!sr && !DisplayIsHdr(VideoMonitor())) return Tr(L"Needs HDR turned on in Windows");
     return Tr(L"The video already matches the screen");
@@ -505,6 +568,7 @@ void LiveState::SetStopAfter(bool on) {
             }
         });
     }
+    TheApp().SyncNextInPlayer();  // no gapless move to the next item while this is on
     Notify();
 }
 

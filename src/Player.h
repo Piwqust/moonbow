@@ -74,6 +74,7 @@ enum PlayerChange : unsigned {
     kChangeChapters  = 1u << 7,
     kChangeMeta      = 1u << 8,
     kChangeEnd       = 1u << 9,  // file reached its end (not stopped by the user)
+    kChangeAdvance   = 1u << 10, // mpv moved on to the file given to QueueNext (gapless)
 };
 
 class Player {
@@ -102,6 +103,18 @@ public:
     // watch-later resume applies.
     void Open(const std::wstring& path, double start = -1);
     void Stop();
+    // The file to play when the current one ends, kept in mpv's playlist so mpv prefetches it
+    // and plays it gaplessly (gapless-audio, prefetch-playlist). Empty = stop at the end.
+    // Open() and Stop() forget it. When mpv starts it, ProcessEvents reports kChangeAdvance.
+    void QueueNext(const std::wstring& path);
+    bool HasQueuedNext() const { return !queuedNext_.empty(); }
+    // Duration of the file that ended when kChangeAdvance was reported.
+    double AdvancedFromDuration() const { return advancedDuration_; }
+    // Drops the resume point of a file that played to its end.
+    void ForgetPosition(const std::wstring& path);
+    // hwdec value that decodes on the same device but copies frames back to RAM, for CPU
+    // filters ("d3d11va,d3d11va-copy" -> "d3d11va-copy", "auto" -> "auto-copy").
+    static std::string CopyBackHwdec(const std::string& hwdec);
     void TogglePause();
     void SetPause(bool paused);
     void SeekAbsolute(double seconds, bool exact);
@@ -160,5 +173,10 @@ private:
     decltype(&::mpv_request_log_messages) requestLog_ = nullptr;  // not in MpvApi: only passthrough needs it
     bool spdifLog_ = false;  // mpv log messages requested while audio-spdif is set
     std::map<uint64_t, PropertyCallback> observers_;
+    std::wstring queuedNext_;   // QueueNext's file, empty when none
+    int64_t queuedEntry_ = 0;   // its mpv playlist entry id, 0 until loadfile replies
+    uint64_t queueGen_ = 0;     // tells the reply of the latest append from stale ones
+    double advancedDuration_ = 0;
+    double endedDuration_ = 0;  // duration of the file at its MPV_EVENT_END_FILE
     uint64_t nextObserver_ = 1000;
 };

@@ -127,6 +127,9 @@ public:
     bool Next(bool userAction = true);  // false at the end of the queue
     void Previous();
     void StopPlayback();
+    // Hands the item that plays after the current one to mpv (gapless, prefetch), or none when
+    // the queue stops there. Called whenever the queue or its options change.
+    void SyncNextInPlayer(bool force = false);
     void OpenFileDialog();
     void OpenFolderDialog();
     void OpenSubtitleDialog();
@@ -178,6 +181,7 @@ private:
     void SaveWindowPlacement();
     void RestoreWindowPlacement();
     void OnPlaybackEnded();
+    void OnAdvanced();
     void FitWindowToVideo();
     void ApplyWindowOptions();
     void LoadUiState();
@@ -211,6 +215,8 @@ private:
     bool fitPending_ = false;
     bool fittedOnce_ = false;
     bool quitting_ = false;
+    int queuedIndex_ = -1;      // queue index of the file handed to Player::QueueNext
+    bool settingCurrent_ = false;  // PlayIndex/OnAdvanced move the queue; they sync mpv themselves
 };
 
 inline App& TheApp() {
