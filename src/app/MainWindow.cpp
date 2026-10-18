@@ -352,8 +352,8 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             if (!cds || cds->dwData != kCopyDataOpen) return false;
             std::wstring payload(static_cast<const wchar_t*>(cds->lpData), cds->cbData / sizeof(wchar_t));
             while (!payload.empty() && payload.back() == L'\0') payload.pop_back();
-            if (IsIconic(Hwnd()) || !IsWindowVisible(Hwnd())) ShowWindow(Hwnd(), SW_RESTORE);
-            SetForegroundWindow(Hwnd());
+            if (!Host::Automation() && (IsIconic(Hwnd()) || !IsWindowVisible(Hwnd()))) ShowWindow(Hwnd(), SW_RESTORE);
+            Host::Activate(Hwnd());
             // Handle after this SendMessage returns, so the sender isn't blocked.
             Post([payload] { TheApp().OnCopyData(payload); });
             *result = TRUE;

@@ -370,7 +370,7 @@ void App::RestoreWindowPlacement() {
     WINDOWPLACEMENT wp{sizeof(wp)};
     GetWindowPlacement(main_->Hwnd(), &wp);
     wp.rcNormalPosition = rc;
-    wp.showCmd = max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    wp.showCmd = ui::Host::Automation() ? SW_SHOWNOACTIVATE : max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
     wp.flags = 0;
     SetWindowPlacement(main_->Hwnd(), &wp);
 }

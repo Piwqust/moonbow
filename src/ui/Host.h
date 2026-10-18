@@ -135,7 +135,13 @@ public:
     static const std::vector<Host*>& All();
     // Test runs drive windows with posted messages while the real cursor is
     // elsewhere: keep hover state instead of dropping it on WM_MOUSELEAVE.
+    // --automation: test instances run in the background. Their windows are cloaked
+    // (invisible but still composed, so PrintWindow captures them), never activate,
+    // have no taskbar button and stay at the bottom of the z-order.
     static void SetAutomation(bool on);
+    static bool Automation();
+    // Brings a window forward, except in --automation runs.
+    static void Activate(HWND hwnd);
     static void ForgetWidget(Widget* w);
     static void ForgetSubtree(Widget* w);
 
