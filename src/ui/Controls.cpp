@@ -1130,6 +1130,18 @@ public:
             p.Text(m.label, {x, row.y, right - x, row.h}, TextStyle::Body, m.checked && m.enabled ? c.textPrimary : fg);
             cy += kMenuItemH;
         }
+        // A menu taller than a small window scrolls: fade the cut edge so the last row reads as
+        // "more below" (or above), not as the end of the menu.
+        if (MaxScroll() > 0) {
+            const float top = rect.y + kMenuPad + HeaderH(), bottom = rect.Bottom() - kMenuPad;
+            constexpr int kSteps = 6;
+            constexpr float kStep = 4;
+            for (int s = 0; s < kSteps; ++s) {
+                const Color fade = c.bgMenu.Fade(static_cast<float>(kSteps - s) / kSteps);
+                if (scroll_ < MaxScroll() - 0.5f) p.Fill({rect.x + 1, bottom - (s + 1) * kStep, rect.w - 2, kStep}, fade);
+                if (scroll_ > 0.5f) p.Fill({rect.x + 1, top + s * kStep, rect.w - 2, kStep}, fade);
+            }
+        }
         p.PopClip();
         if (MaxScroll() > 0) {  // thin position marker, like ScrollView's
             const float trackH = rect.h - kMenuPad * 2 - HeaderH();
