@@ -9,6 +9,8 @@
 #include "app/player/ControlBar.h"
 #include "app/player/PlayerView.h"
 
+#include <windowsx.h>
+
 #include <cmath>
 #include <thread>
 
@@ -83,6 +85,7 @@ MainWindow::MainWindow() = default;
 
 MainWindow::~MainWindow() {
     if (chromeTimer_) CancelTimer(chromeTimer_);
+    if (subMarginToken_) TheApp().config().Unsubscribe(subMarginToken_);
 }
 
 bool MainWindow::Create() {
@@ -113,6 +116,11 @@ bool MainWindow::Create() {
     // Over video toasts sit at the top; in the library below its header, so they never cover
     // back/forward, the search or the "⋯" button.
     toastTop = [](float) { return TheApp().PlayerShown() ? 56.0f : 122.0f; };
+    // A new base margin from Settings is what mpv has now; recompute the lift on top of it.
+    subMarginToken_ = TheApp().config().Subscribe("subtitles.marginBottom", [this](const std::string&) {
+        appliedSubMargin_ = -1;
+        RequestLayout();
+    });
 
     onKey = [this](const KeyEvent& e) {
         const bool arrow = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_LEFT || e.key == VK_RIGHT;
@@ -326,7 +334,27 @@ void MainWindow::OnFramePainted() {
     TheApp().images().EndFrame();
 }
 
+// While the control bar floats over the picture, subtitles move up above it (as in uosc and
+// YouTube) and go back down when it hides. mpv's sub-margin-y is in pixels of a 720-line OSD.
+void MainWindow::UpdateSubtitleLift() {
+    Player& mpv = TheApp().player();
+    const PlayerState& s = mpv.State();
+    if (!mpv.Ready() || !s.fileLoaded) return;
+    const int base = static_cast<int>(std::lround(TheApp().config().GetDouble("subtitles.marginBottom")));
+    int margin = base;
+    const float h = ClientSize().h;
+    if (player_ && player_->visible && player_->Bar() && player_->Bar()->visible && s.hasVideo && !pip_ &&
+        BarOverlays() && chrome_.Target() > 0.5f && h > 0) {
+        const float lift = h - player_->Bar()->rect.y + 8;
+        margin = base + static_cast<int>(std::lround(std::max(0.0f, lift) / h * 720));
+    }
+    if (margin == appliedSubMargin_) return;
+    appliedSubMargin_ = margin;
+    mpv.SetProperty("sub-margin-y", std::to_string(margin));
+}
+
 void MainWindow::OnLayoutDone() {
+    UpdateSubtitleLift();
     // Where should the video be this frame?
     Rect target{};
     if (TheApp().PlayerShown() && player_)
@@ -423,6 +451,21 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             if (!pip_) return false;
             reinterpret_cast<MINMAXINFO*>(lp)->ptMinTrackSize = {static_cast<LONG>(256 * Scale()),
                                                                   static_cast<LONG>(144 * Scale())};
+            *result = 0;
+            return true;
+        case WM_NCRBUTTONUP:
+            // In PiP the video is the caption (drag to move): a right click there would open the
+            // Windows system menu; show the player's PiP menu instead.
+            if (!pip_ || wp != HTCAPTION) return false;
+            {
+                POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                ScreenToClient(Hwnd(), &pt);
+                ShowPipContextMenu(this, {pt.x / Scale(), pt.y / Scale()});
+            }
+            *result = 0;
+            return true;
+        case WM_NCRBUTTONDOWN:
+            if (!pip_ || wp != HTCAPTION) return false;
             *result = 0;
             return true;
         case WM_NCLBUTTONDBLCLK:
