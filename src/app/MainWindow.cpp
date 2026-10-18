@@ -438,6 +438,26 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             return true;
         case WM_COPYDATA: {
             auto* cds = reinterpret_cast<COPYDATASTRUCT*>(lp);
+            if (cds && cds->dwData == kCopyDataCommand && Host::Automation()) {
+                std::wstring command(static_cast<const wchar_t*>(cds->lpData), cds->cbData / sizeof(wchar_t));
+                while (!command.empty() && command.back() == L'\0') command.pop_back();
+                std::string reply;
+                const bool ok = TheApp().AutomationCommand(command, &reply);
+                reply = (ok ? "ok\n" : "failed\n") + reply;
+                wchar_t tmp[MAX_PATH];
+                GetTempPathW(MAX_PATH, tmp);
+                const std::wstring path =
+                    std::wstring(tmp) + L"lumen-cmd-" + std::to_wstring(GetCurrentProcessId()) + L".txt";
+                if (HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                                           FILE_ATTRIBUTE_NORMAL, nullptr);
+                    f != INVALID_HANDLE_VALUE) {
+                    DWORD written = 0;
+                    WriteFile(f, reply.data(), static_cast<DWORD>(reply.size()), &written, nullptr);
+                    CloseHandle(f);
+                }
+                *result = ok ? TRUE : FALSE;
+                return true;
+            }
             if (!cds || cds->dwData != kCopyDataOpen) return false;
             std::wstring payload(static_cast<const wchar_t*>(cds->lpData), cds->cbData / sizeof(wchar_t));
             while (!payload.empty() && payload.back() == L'\0') payload.pop_back();

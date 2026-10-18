@@ -69,6 +69,8 @@ public:
     void ClosePopup(Widget* content);
     void CloseAllPopups();
     bool HasPopup() const { return !popups_.empty(); }
+    size_t PopupCount() const { return popups_.size(); }
+    Widget* PopupAt(size_t i) const { return i < popups_.size() ? popups_[i].content.get() : nullptr; }
     bool IsPopupOpen(const Widget* content) const;
     // Re-measures and re-places a popup after its content changed size.
     void RepositionPopup(Widget* content);
