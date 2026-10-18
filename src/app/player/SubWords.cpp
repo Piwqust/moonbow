@@ -114,6 +114,11 @@ void SubtitleWords::OnPlayer(unsigned m) {
         secondaryText_.clear();
         key_.clear();
     }
+    if ((m & kChangeTracks) && !observers_.empty()) {
+        // Another subtitle track: it may be .ass where the last one was not (other text form).
+        const Track* sub = SelectedSub();
+        if (!sub || sub->id != observedSid_) StopObserving();
+    }
     if ((m & kChangeState) && !PS().paused && ui::AnimFloat::Now() >= stepUntil_) {
         dismissed_ = false;  // resumed: the next pause brings the words back
         keyboardWanted_ = false;
@@ -142,15 +147,15 @@ void SubtitleWords::Reevaluate(bool inLayout) {
     const bool show = armed && known && userVisible && !words_.empty();
     if (!(stepping && !PS().paused)) SetMpvHidden(show);
 
-    if (keyboardWanted_ && armed && known) {
-        keyboardWanted_ = false;
-        if (show) EnterKeyboard();
-        else ShowToast(window_, Tr(L"No subtitle on screen right now"), "subtitles");
-    }
     if (visible != show) {
         visible = show;
         if (!show) ResetInteraction();
         if (!inLayout) InvalidateLayout();
+    }
+    if (keyboardWanted_ && armed && known) {
+        keyboardWanted_ = false;
+        if (show) EnterKeyboard();
+        else ShowToast(window_, Tr(L"No subtitle on screen right now"), "subtitles");
     }
 }
 
@@ -158,6 +163,8 @@ void SubtitleWords::StartObserving() {
     Player& p = TheApp().player();
     if (!observers_.empty() || !p.Ready()) return;
     textKnown_ = visibilityKnown_ = false;
+    const Track* sub = SelectedSub();
+    observedSid_ = sub ? sub->id : 0;
     ReadAssHeader();
     // Whole event lines for a native .ass track (their style and margins), else the text only.
     textLevel_ = std::min(maxLevel_, assMode_ ? 2 : 1);
@@ -666,10 +673,13 @@ void SubtitleWords::Rebuild() {
 // repaint (hover, selection) only replays it. The outline is the text stamped around a circle,
 // as in the Settings preview.
 bool SubtitleWords::Record(ID2D1DeviceContext5* ctx, Block& b) {
-    gfx::ComPtr<ID2D1Device> device;
-    ctx->GetDevice(&device);
-    gfx::ComPtr<ID2D1DeviceContext> rec;
-    if (!device || FAILED(device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &rec))) return false;
+    // One recording context per device, kept: a new one per line cost a few MB each time.
+    if (!recorder_) {
+        gfx::ComPtr<ID2D1Device> device;
+        ctx->GetDevice(&device);
+        if (!device || FAILED(device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &recorder_))) return false;
+    }
+    ID2D1DeviceContext* rec = recorder_.Get();
     gfx::ComPtr<ID2D1CommandList> list;
     if (FAILED(rec->CreateCommandList(&list))) return false;
     float dpiX = 96, dpiY = 96;
@@ -715,6 +725,7 @@ void SubtitleWords::Paint(Painter& p) {
     const uint32_t gen = gfx::Gpu::Get().Generation();
     const float scale = GetHost() ? GetHost()->Scale() : 1.0f;
     if (gen != generation_ || scale != builtScale_) {
+        if (gen != generation_) recorder_.Reset();
         generation_ = gen;
         builtScale_ = scale;
         for (Block& b : blocks_) b.scene.Reset();

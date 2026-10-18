@@ -147,6 +147,7 @@ private:
     bool mpvVisible_ = true;  // sub-visibility as mpv reports it
     double subPos_ = 100, subScale_ = 1, secondaryPos_ = 0;
     int64_t marginY_ = 22, secondarySid_ = 0;
+    int64_t observedSid_ = 0;  // the track the observers were set up for
 
     bool hid_ = false, hidConfirmed_ = false, hidSecondary_ = false;
     bool dismissed_ = false;  // Esc, or the user changed visibility: until playback resumes
@@ -163,6 +164,7 @@ private:
     std::vector<FontMetrics> fontCache_;
     float builtScale_ = 0;
     uint32_t generation_ = 0;
+    gfx::ComPtr<ID2D1DeviceContext> recorder_;  // records the blocks' command lists
     std::vector<Block> blocks_;
     std::vector<Word> words_;  // top to bottom, each block in logical order
 
