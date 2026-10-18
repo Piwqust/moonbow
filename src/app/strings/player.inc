@@ -298,6 +298,7 @@
 {L"Needs Direct3D 11 hardware decoding", L"Нужно аппаратное декодирование Direct3D 11"},
 {L"Off while CPU filters are on", L"Выключено, пока работают фильтры на процессоре"},
 {L"The video is already HDR", L"Видео уже в HDR"},
+{L"Needs HDR turned on in Windows", L"Нужно включить HDR в Windows"},
 {L"The video already matches the screen", L"Видео уже не меньше экрана"},
 {L"Debanding", L"Устранение полос"},
 {L"Shaders", L"Шейдеры"},

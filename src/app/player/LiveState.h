@@ -105,7 +105,7 @@ private:
     uint64_t configToken_ = 0;
     int64_t srcW_ = 0, srcH_ = 0;  // decoded frame size (video-params/w, h): crop coordinates
     std::string srFilter_;         // the @lsr filter in mpv's chain, empty when none
-    double srScale_ = 1;           // its scale factor (video-crop is applied after it)
+    int64_t outW_ = 0, outH_ = 0;  // after the filters (video-out-params): video-crop's frame
     std::string appliedCrop_;      // last video-crop sent to mpv
 };
 

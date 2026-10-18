@@ -9,8 +9,9 @@
 #include "gfx/Gpu.h"
 #include "ui/Controls.h"
 
+#include <dxgi1_6.h>
+
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
 
 namespace app {
@@ -57,6 +58,44 @@ const char* SuperResVendor() {
     return "";
 }
 
+// True when Windows HDR is on for the monitor: its DXGI output (on any adapter, so hybrid
+// laptops work too) reports the PQ colour space. Cached per monitor; ForgetDisplayHdr() clears it
+// when a file starts, so a toggle in Windows settings applies from the next file.
+HMONITOR g_hdrMonitor = nullptr;
+int g_hdrState = -1;  // -1 unknown, 0 SDR, 1 HDR
+
+void ForgetDisplayHdr() {
+    g_hdrState = -1;
+}
+
+bool DisplayIsHdr(HMONITOR mon) {
+    if (mon == g_hdrMonitor && g_hdrState >= 0) return g_hdrState == 1;
+    g_hdrMonitor = mon;
+    g_hdrState = 0;
+    IDXGIDevice* dev = gfx::Gpu::Get().DxgiDevice();
+    gfx::ComPtr<IDXGIAdapter> own;
+    gfx::ComPtr<IDXGIFactory1> factory;
+    if (!dev || FAILED(dev->GetAdapter(&own)) || FAILED(own->GetParent(IID_PPV_ARGS(&factory)))) return false;
+    gfx::ComPtr<IDXGIAdapter1> adapter;
+    for (UINT a = 0; factory->EnumAdapters1(a, adapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; ++a) {
+        gfx::ComPtr<IDXGIOutput> out;
+        for (UINT o = 0; adapter->EnumOutputs(o, out.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; ++o) {
+            gfx::ComPtr<IDXGIOutput6> out6;
+            DXGI_OUTPUT_DESC1 desc{};
+            if (SUCCEEDED(out.As(&out6)) && SUCCEEDED(out6->GetDesc1(&desc)) && desc.Monitor == mon) {
+                g_hdrState = desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ? 1 : 0;
+                return g_hdrState == 1;
+            }
+        }
+    }
+    return false;
+}
+
+HMONITOR VideoMonitor() {
+    MainWindow* w = TheApp().main();
+    return w ? MonitorFromWindow(w->Hwnd(), MONITOR_DEFAULTTONEAREST) : nullptr;
+}
+
 // True when the config's vf chain has CPU filters (a deinterlacing method, deblocking...).
 bool ConfigCpuFilters() {
     for (const auto& [name, value] : MpvOptionFor(Cfg(), "performance.postprocessing"))
@@ -93,6 +132,7 @@ LiveState::LiveState() {
             ApplyCrop();
         }
         // hwdec-current and the HDR flag arrive as state changes.
+        if (m & kChangeFile) ForgetDisplayHdr();
         if (m & (kChangeState | kChangeFile)) ApplyUpscaler();
     });
     LoadCropSetting();
@@ -204,6 +244,17 @@ void LiveState::ObserveAll() {
     };
     size("video-params/w", &LiveState::srcW_);
     size("video-params/h", &LiveState::srcH_);
+    // Size after the filters (the upscaler changes it): where video-crop's rectangle lives.
+    auto outSize = [this, &p](const char* name, int64_t LiveState::*field) {
+        p.Observe(name, MPV_FORMAT_INT64, [this, field](const mpv_event_property& e) {
+            const int64_t v = e.format == MPV_FORMAT_INT64 && e.data ? *static_cast<int64_t*>(e.data) : 0;
+            if (this->*field == v) return;
+            this->*field = v;
+            ApplyCrop();
+        });
+    };
+    outSize("video-out-params/w", &LiveState::outW_);
+    outSize("video-out-params/h", &LiveState::outH_);
     p.Observe("audio-device", MPV_FORMAT_STRING, [this](const mpv_event_property& e) {
         if (e.format == MPV_FORMAT_STRING && e.data) {
             const char* s = *static_cast<char**>(e.data);
@@ -259,31 +310,29 @@ void LiveState::ApplyUpscaler() {
     const Config& c = Cfg();
     const bool sr = c.GetBool("video.superResolution"), trueHdr = c.GetBool("video.trueHdr");
     std::string want;
-    double scale = 1;
     if ((sr || trueHdr) && s.fileLoaded && s.hasVideo && s.hwdec == L"d3d11va" && srcW_ > 0 && srcH_ > 0 &&
         !ConfigCpuFilters() && flip == 0 && !negate && !grayscale) {
         const std::string vendor = SuperResVendor();
         std::string args;
-        MainWindow* w = TheApp().main();
+        const HMONITOR mon = VideoMonitor();
         MONITORINFO mi{sizeof(mi)};
-        if (sr && !vendor.empty() && w && GetMonitorInfoW(MonitorFromWindow(w->Hwnd(), MONITOR_DEFAULTTONEAREST), &mi)) {
+        if (sr && !vendor.empty() && mon && GetMonitorInfoW(mon, &mi)) {
             const double mw = mi.rcMonitor.right - mi.rcMonitor.left, mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
             const double f = std::min({4.0, mw / static_cast<double>(srcW_), mh / static_cast<double>(srcH_)});
             // Below ~1.2x the renderer's own scaler is as good and the extra pass isn't worth it.
             if (f >= 1.2) {
-                scale = std::floor(f * 100) / 100;
-                args = "scale=" + Num(scale) + ":scaling-mode=" + vendor;
+                args = "scale=" + Num(std::floor(f * 100) / 100) + ":scaling-mode=" + vendor;
             }
         }
-        if (trueHdr && vendor == "nvidia" && !s.hdr) args += std::string(args.empty() ? "" : ":") + "nvidia-true-hdr";
+        // On an SDR screen the HDR output would only be tone-mapped back: a wasted GPU pass.
+        if (trueHdr && vendor == "nvidia" && !s.hdr && mon && DisplayIsHdr(mon))
+            args += std::string(args.empty() ? "" : ":") + "nvidia-true-hdr";
         if (!args.empty()) want = "@lsr:d3d11vpp=" + args;
     }
     if (want == srFilter_) return;
     if (!srFilter_.empty()) Mpv().Command({"vf", "remove", "@lsr"});
     if (!want.empty()) Mpv().Command({"vf", "add", want});
     srFilter_ = want;
-    srScale_ = want.empty() ? 1 : scale;
-    ApplyCrop();  // video-crop works on the upscaled frame
 }
 
 std::wstring LiveState::UpscalerStatus() const {
@@ -297,6 +346,7 @@ std::wstring LiveState::UpscalerStatus() const {
     if (s.hwdec != L"d3d11va") return Tr(L"Needs Direct3D 11 hardware decoding");
     if (ConfigCpuFilters() || flip != 0 || negate || grayscale) return Tr(L"Off while CPU filters are on");
     if (!sr && s.hdr) return Tr(L"The video is already HDR");
+    if (!sr && !DisplayIsHdr(VideoMonitor())) return Tr(L"Needs HDR turned on in Windows");
     return Tr(L"The video already matches the screen");
 }
 
@@ -341,33 +391,37 @@ void LiveState::ApplyCrop() {
     if (!Mpv().Ready()) return;
     // Source pixels; ratios are of the stored frame (anamorphic video crops its stored shape).
     const double w = static_cast<double>(srcW_), h = static_cast<double>(srcH_);
-    std::string value;  // empty = no crop
+    double cw = 0, ch = 0, x = 0, y = 0;  // cw == 0: no crop
     if (w > 0 && h > 0) {
         if (crop == "custom") {
-            const double cw = w - cropL - cropR, ch = h - cropT - cropB;
-            if ((cropL + cropR + cropT + cropB) > 0 && cw > 16 && ch > 16)
-                value = Num(std::round(cw)) + "x" + Num(std::round(ch)) + "+" + Num(cropL) + "+" + Num(cropT);
+            if ((cropL + cropR + cropT + cropB) > 0 && w - cropL - cropR > 16 && h - cropT - cropB > 16) {
+                cw = w - cropL - cropR, ch = h - cropT - cropB;
+                x = cropL, y = cropT;
+            }
         } else if (crop != "none") {
             const double r = Ratio(crop);
             if (r > 0) {
-                double cw = w, ch = std::round(w / r);
+                cw = w, ch = std::round(w / r);
                 if (ch > h) {
                     ch = h;
                     cw = std::round(h * r);
                 }
-                value = Num(cw) + "x" + Num(ch) + "+" + Num(std::round((w - cw) / 2)) + "+" + Num(std::round((h - ch) / 2));
+                x = std::round((w - cw) / 2), y = std::round((h - ch) / 2);
             }
         }
     }
-    // The upscaler's d3d11vpp enlarges the frame before the renderer crops it.
-    if (!value.empty() && srScale_ != 1) {
-        double cw = 0, ch = 0, x = 0, y = 0;
-        if (sscanf_s(value.c_str(), "%lfx%lf+%lf+%lf", &cw, &ch, &x, &y) == 4) {
-            auto px = [this](double v) { return Num(std::round(v * srScale_)); };
-            value = px(cw) + "x" + px(ch) + "+" + px(x) + "+" + px(y);
-        }
+    std::string value = "0x0+0+0";
+    if (cw > 0) {
+        // video-crop applies to the filter chain's output; the upscaler's d3d11vpp enlarges the
+        // frame on the way, so map the rectangle onto the size that actually reaches the renderer.
+        // mpv drops a rectangle that doesn't fit the current frame, and the out-params observer
+        // brings it back once the new size arrives.
+        const double ow = outW_ > 0 ? static_cast<double>(outW_) : w, oh = outH_ > 0 ? static_cast<double>(outH_) : h;
+        const double sx = ow / w, sy = oh / h;
+        x = std::round(x * sx), y = std::round(y * sy);
+        cw = std::min(std::round(cw * sx), ow - x), ch = std::min(std::round(ch * sy), oh - y);
+        value = Num(cw) + "x" + Num(ch) + "+" + Num(x) + "+" + Num(y);
     }
-    if (value.empty()) value = "0x0+0+0";
     if (value == appliedCrop_) return;
     appliedCrop_ = value;
     Mpv().SetProperty("video-crop", value);
