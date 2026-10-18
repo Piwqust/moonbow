@@ -55,121 +55,6 @@ const char* SectionIcon(Section s) {
     return "home";
 }
 
-// --- PlayQueue ------------------------------------------------------------------------
-
-const QueueItem* PlayQueue::CurrentItem() const {
-    return current_ >= 0 && current_ < static_cast<int>(items_.size()) ? &items_[static_cast<size_t>(current_)] : nullptr;
-}
-
-void PlayQueue::Set(std::vector<QueueItem> items, int current, std::wstring name) {
-    items_ = std::move(items);
-    current_ = items_.empty() ? -1 : std::clamp(current, 0, static_cast<int>(items_.size()) - 1);
-    name_ = std::move(name);
-    Reshuffle();
-    changed.Emit();
-}
-
-void PlayQueue::Add(std::vector<QueueItem> items) {
-    for (auto& i : items) items_.push_back(std::move(i));
-    if (current_ < 0 && !items_.empty()) current_ = 0;
-    Reshuffle();
-    changed.Emit();
-}
-
-void PlayQueue::InsertNext(std::vector<QueueItem> items) {
-    const size_t at = current_ < 0 ? items_.size() : static_cast<size_t>(current_) + 1;
-    items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(at), items.begin(), items.end());
-    if (current_ < 0 && !items_.empty()) current_ = 0;
-    Reshuffle();
-    changed.Emit();
-}
-
-void PlayQueue::Remove(int index) {
-    if (index < 0 || index >= static_cast<int>(items_.size())) return;
-    items_.erase(items_.begin() + index);
-    if (index < current_) --current_;
-    if (current_ >= static_cast<int>(items_.size())) current_ = static_cast<int>(items_.size()) - 1;
-    Reshuffle();
-    changed.Emit();
-}
-
-void PlayQueue::Move(int from, int to) {
-    const int n = static_cast<int>(items_.size());
-    if (from < 0 || from >= n || to < 0 || to >= n || from == to) return;
-    QueueItem item = std::move(items_[static_cast<size_t>(from)]);
-    items_.erase(items_.begin() + from);
-    items_.insert(items_.begin() + to, std::move(item));
-    if (current_ == from)
-        current_ = to;
-    else if (from < current_ && to >= current_)
-        --current_;
-    else if (from > current_ && to <= current_)
-        ++current_;
-    Reshuffle();
-    changed.Emit();
-}
-
-void PlayQueue::Clear() {
-    items_.clear();
-    order_.clear();
-    current_ = -1;
-    changed.Emit();
-}
-
-void PlayQueue::SetCurrent(int index) {
-    if (index < 0 || index >= static_cast<int>(items_.size())) return;
-    current_ = index;
-    changed.Emit();
-}
-
-void PlayQueue::SetShuffle(bool on) {
-    shuffle_ = on;
-    Reshuffle();
-    changed.Emit();
-}
-
-void PlayQueue::SetRepeat(Repeat r) {
-    repeat_ = r;
-    changed.Emit();
-}
-
-void PlayQueue::Reshuffle() {
-    order_.resize(items_.size());
-    std::iota(order_.begin(), order_.end(), 0);
-    if (!shuffle_ || order_.size() < 2) return;
-    static std::mt19937 rng{std::random_device{}()};
-    std::shuffle(order_.begin(), order_.end(), rng);
-    // The current item stays first so "next" walks the rest.
-    auto it = std::find(order_.begin(), order_.end(), current_);
-    if (it != order_.end()) std::iter_swap(order_.begin(), it);
-}
-
-int PlayQueue::NextIndex(bool userAction) const {
-    if (items_.empty()) return -1;
-    if (repeat_ == Repeat::One && !userAction) return current_;
-    if (!shuffle_) {
-        if (current_ + 1 < static_cast<int>(items_.size())) return current_ + 1;
-        return repeat_ == Repeat::All ? 0 : -1;
-    }
-    auto it = std::find(order_.begin(), order_.end(), current_);
-    if (it == order_.end() || it + 1 == order_.end()) return repeat_ == Repeat::All ? order_.front() : -1;
-    return *(it + 1);
-}
-
-int PlayQueue::PrevIndex() const {
-    if (items_.empty()) return -1;
-    if (!shuffle_) return current_ > 0 ? current_ - 1 : (repeat_ == Repeat::All ? static_cast<int>(items_.size()) - 1 : -1);
-    auto it = std::find(order_.begin(), order_.end(), current_);
-    if (it == order_.end() || it == order_.begin()) return -1;
-    return *(it - 1);
-}
-
-double PlayQueue::TotalDuration() const {
-    double sum = 0;
-    for (const QueueItem& i : items_) sum += i.duration;
-    return sum;
-}
-
 // --- App -------------------------------------------------------------------------------
 
 namespace {
@@ -558,6 +443,17 @@ void App::OnPlayerEvents() {
             SaveHistoryPosition();
         }
     }
+    // The queue keeps what the playing file says about itself, so its row stays the same after it.
+    // Once a second in: right after a gapless move on, media-title can still be the previous file's.
+    if ((changes & kChangeTime) && s.fileLoaded && s.position >= 1 && s.loadSerial != infoSerial_)
+        if (const QueueItem* item = queue_.CurrentItem(); item && item->path == s.path) {
+            infoSerial_ = s.loadSerial;
+            // A folder queue's title is the file name; tags win, a playlist's own title stays.
+            const std::wstring file = FileNameOf(item->path);
+            const bool learnTitle = !s.title.empty() && s.title != file && !IsUrl(item->path) &&
+                                    (item->title.empty() || item->title == file);
+            queue_.SetInfo(queue_.Current(), learnTitle ? s.title : std::wstring(), s.duration);
+        }
     if ((changes & kChangeFile) && s.fileLoaded) fitPending_ = true;
     if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
         fitPending_ = false;
@@ -770,13 +666,26 @@ void App::SyncNextInPlayer(bool force) {
     if (!engineReady_) return;
     // Nothing plays: an entry left in mpv's playlist would wait there for no reason.
     if (!force && player_.State().idle) return;
-    int i = -1;
-    if (queue_.CurrentItem() && !config_.GetBool("playback.stopAfterEach") && !Live().stopAfter) {
-        i = queue_.NextIndex(false);
-        if (i == queue_.Current()) i = -1;  // Repeat One: OnPlaybackEnded seeks back instead
-    }
+    // Repeat One: no entry, OnPlaybackEnded seeks back instead.
+    const int i = config_.GetBool("playback.stopAfterEach") || Live().stopAfter ? -1 : queue_.GaplessNextIndex();
     queuedIndex_ = i;
     player_.QueueNext(i >= 0 ? queue_.Items()[static_cast<size_t>(i)].path : std::wstring());
+}
+
+void App::RemoveFromQueue(int index) {
+    if (index < 0 || index >= static_cast<int>(queue_.Items().size())) return;
+    if (index != queue_.Current() || player_.State().idle) {
+        queue_.Remove(index);
+        return;
+    }
+    const bool hasNext = queue_.Items().size() > 1 && queue_.NextIndex(true) >= 0 && queue_.NextIndex(true) != index;
+    settingCurrent_ = true;
+    queue_.Remove(index);
+    settingCurrent_ = false;
+    if (hasNext)
+        PlayIndex(queue_.Current(), false);
+    else
+        StopPlayback();
 }
 
 void App::OnAdvanced() {
@@ -788,9 +697,10 @@ void App::OnAdvanced() {
             history_.UpdatePosition(prev->path, d, d);
     }
     lastRestart_ = 0;
-    if (queuedIndex_ >= 0 && queuedIndex_ < static_cast<int>(queue_.Items().size())) {
+    // By path: the queue may have been edited between mpv taking the entry and this event.
+    if (const int i = queue_.IndexOfStarted(player_.AdvancedPath(), queuedIndex_); i >= 0) {
         settingCurrent_ = true;
-        queue_.SetCurrent(queuedIndex_);
+        queue_.SetCurrent(i);
         settingCurrent_ = false;
     }
     queuedIndex_ = -1;

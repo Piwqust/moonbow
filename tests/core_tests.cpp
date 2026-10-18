@@ -14,6 +14,7 @@
 #include "../src/library/Playlists.h"
 #include "../src/library/Thumbnails.h"
 #include "../src/app/player/Episodes.h"
+#include "../src/app/PlayQueue.h"
 
 #include <windows.h>
 #include <objbase.h>
@@ -1655,6 +1656,134 @@ void TestLyricsLrc() {
     CHECK(app::LoadLyricsFile(L"Z:\\definitely\\missing.lrc").Empty());
 }
 
+// The play queue and the gapless hand-off to mpv. FakeMpv models what App::SyncNextInPlayer and
+// Player::QueueNext do to mpv's playlist: [0] plays, [1] is the appended next file.
+void TestPlayQueue() {
+    using app::PlayQueue;
+    using app::QueueItem;
+    auto make = [](int n) {
+        std::vector<QueueItem> v;
+        for (int i = 0; i < n; ++i) v.push_back({L"C:\\m\\" + std::to_wstring(i) + L".mp4", {}, 0});
+        return v;
+    };
+    struct FakeMpv {
+        std::vector<std::wstring> playlist;
+        std::wstring Next() const { return playlist.size() > 1 ? playlist[1] : L""; }
+    };
+    PlayQueue q;
+    FakeMpv mpv;
+    int queued = -1;
+    bool settingCurrent = false;
+    auto sync = [&] {
+        queued = q.GaplessNextIndex();
+        mpv.playlist.resize(std::min<size_t>(mpv.playlist.size(), 1));
+        if (queued >= 0) mpv.playlist.push_back(q.Items()[static_cast<size_t>(queued)].path);
+    };
+    q.changed.Connect([&] {
+        if (!settingCurrent) sync();
+    });
+    auto play = [&](int i) {  // App::PlayIndex
+        settingCurrent = true;
+        q.SetCurrent(i);
+        settingCurrent = false;
+        mpv.playlist = {q.CurrentItem()->path};
+        sync();
+    };
+    auto advance = [&] {  // mpv moved on by itself: App::OnAdvanced
+        mpv.playlist.erase(mpv.playlist.begin());
+        const int i = mpv.playlist.empty() ? -1 : q.IndexOfStarted(mpv.playlist[0], queued);
+        settingCurrent = true;
+        if (i >= 0) q.SetCurrent(i);
+        settingCurrent = false;
+        sync();
+        return i;
+    };
+    auto path = [&](int i) { return q.Items()[static_cast<size_t>(i)].path; };
+
+    // Round 4 P-14: two drags of row 5 to row 2; the next file is the new row 2.
+    q.Set(make(5), 0);
+    play(0);
+    CHECK(mpv.Next() == L"C:\\m\\1.mp4");
+    q.Move(4, 1);
+    q.Move(4, 1);
+    CHECK(path(1) == L"C:\\m\\3.mp4" && path(2) == L"C:\\m\\4.mp4" && path(3) == L"C:\\m\\1.mp4");
+    CHECK(mpv.Next() == L"C:\\m\\3.mp4");
+    CHECK(advance() == 1);
+    CHECK(mpv.Next() == L"C:\\m\\4.mp4");
+
+    // P-15: a row dropped onto the playing row, from above (lands after it) and from below (before it).
+    q.Set(make(5), 3);
+    play(3);
+    q.Move(0, 3);
+    CHECK(q.Current() == 2 && path(2) == L"C:\\m\\3.mp4");
+    CHECK(mpv.Next() == L"C:\\m\\0.mp4");
+    q.Move(4, 2);
+    CHECK(q.Current() == 3 && path(2) == L"C:\\m\\4.mp4");
+    CHECK(mpv.Next() == L"C:\\m\\0.mp4");
+    q.Move(q.Current(), 0);  // the playing row itself
+    CHECK(q.Current() == 0 && mpv.Next() == L"C:\\m\\1.mp4");
+
+    // Remove and insert re-sync the next file.
+    q.Set(make(4), 0);
+    play(0);
+    q.Remove(1);
+    CHECK(mpv.Next() == L"C:\\m\\2.mp4");
+    q.InsertNext({{L"C:\\m\\x.mp4", {}, 0}});
+    CHECK(path(1) == L"C:\\m\\x.mp4" && mpv.Next() == L"C:\\m\\x.mp4");
+    q.Remove(0);  // the playing item: its successor becomes current
+    CHECK(q.Current() == 0 && path(0) == L"C:\\m\\x.mp4");
+    q.Set(make(3), 2);
+    q.Remove(2);  // the last one: nothing after it
+    CHECK(q.Current() == 1);
+    q.Add({{L"C:\\m\\y.mp4", {}, 0}});
+    q.Remove(0);
+    CHECK(q.Current() == 0 && path(1) == L"C:\\m\\y.mp4");
+
+    // mpv took the old next entry (1.mp4) just before an edit moved it: found by path, not index.
+    q.Set(make(5), 0);
+    play(0);
+    const int hint = queued;
+    q.Move(1, 4);
+    CHECK(q.IndexOfStarted(L"C:\\m\\1.mp4", hint) == 4);
+    CHECK(q.IndexOfStarted(L"C:\\m\\2.mp4", hint) == 1);
+    CHECK(q.IndexOfStarted(L"C:\\m\\gone.mp4", hint) == -1);
+
+    // Repeat: one = no gapless entry (seek back), all = wrap to the first item.
+    q.Set(make(3), 2);
+    q.SetRepeat(app::Repeat::One);
+    CHECK(q.GaplessNextIndex() == -1);
+    q.SetRepeat(app::Repeat::All);
+    CHECK(q.GaplessNextIndex() == 0);
+    q.SetRepeat(app::Repeat::Off);
+    CHECK(q.GaplessNextIndex() == -1);
+
+    // Shuffled: edits keep the play order of what is queued; "play next" plays next.
+    q.Set(make(8), 0);
+    q.SetShuffle(true);
+    const std::wstring next = path(q.NextIndex(false));
+    q.Move(7, 6);
+    q.Move(6, 7);
+    q.Move(5, 2);
+    CHECK(path(q.NextIndex(false)) == next);
+    q.InsertNext({{L"C:\\m\\next.mp4", {}, 0}});
+    CHECK(path(q.NextIndex(false)) == L"C:\\m\\next.mp4");
+    q.Add(make(3));
+    q.Remove(static_cast<int>(q.Items().size()) - 1);
+    std::set<int> seen;  // the walk visits every item once
+    for (int i = q.Current(), k = 0; i >= 0 && k < 32; i = q.NextIndex(false), ++k) {
+        CHECK(seen.insert(i).second);
+        q.SetCurrent(i);
+    }
+    CHECK(seen.size() == q.Items().size());
+    q.SetShuffle(false);
+
+    // What a played file said about itself sticks to its row.
+    q.Set(make(2), 0);
+    q.SetInfo(0, L"Tagged", 90);
+    q.SetInfo(0, L"", 0);
+    CHECK(q.Items()[0].title == L"Tagged" && q.Items()[0].duration == 90);
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -1686,6 +1815,7 @@ const TestCase kTests[] = {
     {"library_cache_tags", TestLibraryCacheTags},
     {"thumbnails", TestThumbnails},
     {"lyrics_lrc", TestLyricsLrc},
+    {"play_queue", TestPlayQueue},
 };
 
 }  // namespace

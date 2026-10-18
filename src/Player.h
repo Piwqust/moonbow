@@ -108,8 +108,9 @@ public:
     // Open() and Stop() forget it. When mpv starts it, ProcessEvents reports kChangeAdvance.
     void QueueNext(const std::wstring& path);
     bool HasQueuedNext() const { return !queuedNext_.empty(); }
-    // Duration of the file that ended when kChangeAdvance was reported.
+    // Duration of the file that ended, and the file mpv went on to, when kChangeAdvance was reported.
     double AdvancedFromDuration() const { return advancedDuration_; }
+    const std::wstring& AdvancedPath() const { return advancedPath_; }
     // Drops the resume point of a file that played to its end.
     void ForgetPosition(const std::wstring& path);
     // hwdec value that decodes on the same device but copies frames back to RAM, for CPU
@@ -176,6 +177,10 @@ private:
     std::wstring queuedNext_;   // QueueNext's file, empty when none
     int64_t queuedEntry_ = 0;   // its mpv playlist entry id, 0 until loadfile replies
     uint64_t queueGen_ = 0;     // tells the reply of the latest append from stale ones
+    // Every entry appended since the last Open/Stop: mpv may already have moved on to one that a
+    // later QueueNext replaced (the queue was edited at the very end of a file).
+    std::vector<std::pair<int64_t, std::wstring>> appended_;
+    std::wstring advancedPath_;
     double advancedDuration_ = 0;
     double endedDuration_ = 0;  // duration of the file at its MPV_EVENT_END_FILE
     uint64_t nextObserver_ = 1000;

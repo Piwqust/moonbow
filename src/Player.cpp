@@ -294,10 +294,16 @@ unsigned Player::ProcessEvents() {
                 changes |= kChangeVideoSize;
                 // mpv went on to the queued file by itself.
                 const auto* start = static_cast<const mpv_event_start_file*>(ev->data);
-                if (queuedEntry_ > 0 && start && start->playlist_entry_id == queuedEntry_) {
+                const auto it = std::find_if(appended_.begin(), appended_.end(), [start](const auto& e) {
+                    return start && e.first == start->playlist_entry_id;
+                });
+                if (it != appended_.end()) {
                     advancedDuration_ = endedDuration_;
+                    advancedPath_ = it->second;
+                    // Also when this was not the latest entry: App queues the next one anew.
                     queuedNext_.clear();
                     queuedEntry_ = 0;
+                    appended_.clear();
                     ++queueGen_;
                     changes |= kChangeAdvance;
                 }
@@ -307,6 +313,10 @@ unsigned Player::ProcessEvents() {
                 if (ev->reply_userdata == kAppendReply + queueGen_ && ev->error >= 0 && !queuedNext_.empty()) {
                     const auto* cmd = static_cast<const mpv_event_command*>(ev->data);
                     queuedEntry_ = cmd ? NodeInt(MapGet(cmd->result, "playlist_entry_id")) : 0;
+                    if (queuedEntry_ > 0) {
+                        if (appended_.size() >= 8) appended_.erase(appended_.begin());
+                        appended_.emplace_back(queuedEntry_, queuedNext_);
+                    }
                 }
                 break;
             case MPV_EVENT_FILE_LOADED:
@@ -534,6 +544,7 @@ void Player::Open(const std::wstring& path, double start) {
     // "replace" clears mpv's playlist, the queued next file included.
     queuedNext_.clear();
     queuedEntry_ = 0;
+    appended_.clear();
     ++queueGen_;
     const std::string utf8 = WideToUtf8(path);
     if (start > 0) {
@@ -548,6 +559,7 @@ void Player::Stop() {
     if (state_.fileLoaded) SaveWatchLater();
     queuedNext_.clear();
     queuedEntry_ = 0;
+    appended_.clear();
     ++queueGen_;
     Cmd({"stop"});
 }
