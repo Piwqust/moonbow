@@ -50,6 +50,9 @@ function Post([uint32]$m, [int64]$w, [IntPtr]$l) { [LumenIn]::PostMessage($h, $m
 $mk = 0; if ($Ctrl) { $mk = $mk -bor 0x8 }; if ($Shift) { $mk = $mk -bor 0x4 }
 function XY($s) { $p = $s -split ','; return [int]$p[0], [int]$p[1] }
 
+# Held modifiers for this call, posted before any mouse or key message (Lumen reads them only with --automation).
+$mods = ([int][bool]$Ctrl) -bor (2 * [int][bool]$Shift)
+if ($mods) { Post 0x802D $mods ([IntPtr]0) }
 if ($Move) { $x, $y = XY $Move; Post 0x200 $mk (MakeLParam $x $y) }
 if ($Click) {
   $x, $y = XY $Click
@@ -72,9 +75,6 @@ if ($Wheel) {
   [LumenIn]::ClientToScreen($h, [ref]$pt) | Out-Null
   Post 0x20A ([int64](($Delta * 120) -shl 16)) (MakeLParam $pt.X $pt.Y)
 }
-# Held modifiers for this call (Lumen reads them only with --automation).
-$mods = ([int][bool]$Ctrl) -bor (2 * [int][bool]$Shift)
-if ($mods) { Post 0x802D $mods ([IntPtr]0) }
 if ($Key) {
   $vk = [int][System.Windows.Forms.Keys]::$Key
   Post 0x100 $vk ([IntPtr]1); Post 0x101 $vk ([IntPtr]0xC0000001)
