@@ -63,7 +63,7 @@ private:
     bool Align(double until);
     bool Handoff();
     void Fade();
-    void FadeOutHelper(double seconds);
+    void Settle(double seconds);
     void Finish(Outcome outcome);
 
     // Waits up to `seconds` (< 0 = until woken) and applies what the UI asked for meanwhile.
@@ -100,6 +100,7 @@ private:
     double speedApplied_ = 1;
     bool helperReady_ = false, helperEnded_ = false;
     bool mainGainTouched_ = false;
+    double mainGain_ = 1, helperGain_ = 0;  // as last set
 
     std::atomic<bool> finished_{false}, switched_{false};
     std::atomic<Outcome> outcome_{Outcome::Running};

@@ -43,6 +43,10 @@ std::wstring AlbumOf(const std::wstring& path) {
     return out;
 }
 
+// How late a helper starts after its unpause, learned from each crossfade (shared by all).
+std::atomic<double> g_startLatency{0.02};
+constexpr double kHelperBuffer = 0.1;
+
 void TraceXf(const char* fmt, double a = 0, double b = 0, double c = 0) {
     char text[200];
     snprintf(text, sizeof text, fmt, a, b, c);
@@ -141,7 +145,7 @@ void Crossfader::Run() {
         if (cancel_) outcome = Outcome::Cancelled;
     } else {
         outcome = Outcome::Cancelled;
-        if (WaitUntilMainAt(s)) {
+        if (WaitUntilMainAt(s - g_startLatency.load() * speedApplied_)) {
             helperStarted_ = true;
             SetHelperFlag("pause", false);
             pausedApplied_ = false;
@@ -151,7 +155,16 @@ void Crossfader::Run() {
             }
         }
     }
-    if (mainGainTouched_) SetMainGain(1);
+    if (mainGainTouched_) {
+        bool hard;
+        {
+            std::lock_guard lock(mu_);
+            hard = stop_;
+        }
+        // Cancelled in the middle of the handoff: no jump in either instance.
+        if (!hard && (mainGain_ < 1 || helperGain_ > 0)) Settle(0.1);
+        SetMainGain(1);
+    }
     if (helper_) {
         api_.mpv_set_wakeup_callback(helper_, nullptr, nullptr);
         api_.mpv_terminate_destroy(helper_);
@@ -191,6 +204,9 @@ bool Crossfader::PrepareHelper() {
     opt("volume-gain-min", "-150");
     opt("volume-gain", "-150");
     char num[64];
+    // A short buffer: speed corrections (Align) reach the speakers sooner.
+    snprintf(num, sizeof num, "%.3f", kHelperBuffer);
+    opt("audio-buffer", num);
     snprintf(num, sizeof num, "%.6f", HelperStart(plan_.fade, plan_.duration));
     opt("start", num);
     snprintf(num, sizeof num, "%.6f", volume_);
@@ -249,38 +265,42 @@ bool Crossfader::WaitUntilMainAt(double target) {
     }
 }
 
-// The helper has just started a little late or early (the audio device takes a moment to
-// start): play it slightly faster or slower while it is still silent, until it is in step with
-// the main instance.
+// The helper starts a little late or early (its audio device takes a moment to start; the delay
+// learned so far is taken into account). While it is still silent, play it slightly faster or
+// slower until it is in step with the main instance. A speed change reaches the speakers only
+// after the helper's buffer (audio-buffer), so each correction is measured once it has.
 bool Crossfader::Align(double until) {
-    const double started = NowSeconds();
-    double correctUntil = 0;
-    int measured = 0;
-    for (;;) {
+    if (!Wait(0.2)) return false;
+    for (int round = 0; round < 3; ++round) {
         if (mainPaused_) return false;  // a pause right before the fade: no crossfade this time
-        if (!Wait(0.03)) return false;
-        const double m1 = MainPts(), h = HelperPts(), m2 = MainPts();
-        if (!std::isfinite(m1) || !std::isfinite(h) || !std::isfinite(m2)) continue;
-        const double main = (m1 + m2) / 2;
-        if (main >= until) break;
-        const double now = NowSeconds();
-        if (correctUntil > 0 && now >= correctUntil) {
-            SetHelperDouble("speed", speedApplied_);
-            correctUntil = 0;
+        double d[3] = {}, main = NAN;
+        int n = 0;
+        for (int i = 0; i < 3; ++i) {
+            if (i && !Wait(0.01)) return false;
+            const double m1 = MainPts(), h = HelperPts(), m2 = MainPts();
+            if (!std::isfinite(m1) || !std::isfinite(h) || !std::isfinite(m2)) continue;
+            d[n++] = (m1 + m2) / 2 - h;
+            main = m2;
         }
-        if (now - started < 0.12 || correctUntil > 0) continue;
-        const double delta = main - h;  // > 0: the helper is behind
-        if (measured++ < 6) TraceXf("align: helper %+.1f ms behind (main %.3f)", delta * 1000, main);
-        const double window = std::min(0.25, (until - main) / speedApplied_ - 0.05);
-        if (std::fabs(delta) < 0.002 || window < 0.06) continue;
-        const double k = std::clamp(1 + delta / window, 0.9, 1.1);
-        SetHelperDouble("speed", speedApplied_ * k);
-        correctUntil = now + window;
+        if (n == 0) break;
+        std::sort(d, d + n);
+        const double delta = d[n / 2];  // > 0: the helper is behind
+        if (round == 0) g_startLatency = std::clamp(g_startLatency.load() + delta, 0.0, 0.15);
+        TraceXf("align: helper %+.1f ms behind at main %.3f", delta * 1000, main);
+        const double window = std::min(0.4, (until - main) / speedApplied_ - 0.3);
+        if (std::fabs(delta) < 0.0015 || window < 0.12) break;
+        SetHelperDouble("speed", speedApplied_ * std::clamp(1 + delta / window, 0.95, 1.05));
+        const bool ok = Wait(window);
+        SetHelperDouble("speed", speedApplied_);
+        if (!ok || !Wait(kHelperBuffer + 0.05)) return false;
     }
-    if (correctUntil > 0) SetHelperDouble("speed", speedApplied_);
-    const double m1 = MainPts(), h = HelperPts();
-    TraceXf("aligned: helper %+.1f ms behind at %.3f", (m1 - h) * 1000, m1);
-    return true;
+    for (;;) {
+        if (mainPaused_) return false;
+        const double pts = MainPts();
+        const double remain = std::isfinite(pts) ? (until - pts) / speedApplied_ : 0.01;
+        if (remain <= 0) return true;
+        if (!Wait(std::min(remain, 0.05))) return false;
+    }
 }
 
 // Both instances play the same audio for kHandoff seconds: main fades out, the helper in.
@@ -331,8 +351,8 @@ void Crossfader::Fade() {
                 std::lock_guard lock(mu_);
                 hard = stop_;
             }
-            SetMainGain(1);
-            if (!hard) FadeOutHelper(0.12);
+            if (hard) SetMainGain(1);
+            else Settle(0.12);
             return;
         }
         const double u = elapsed / plan_.fade;
@@ -343,18 +363,15 @@ void Crossfader::Fade() {
     SetMainGain(1);
 }
 
-// A quick fade instead of a cut: stopping a waveform mid-swing clicks.
-void Crossfader::FadeOutHelper(double seconds) {
-    double from = 1;
-    char* v = nullptr;
-    if (api_.mpv_get_property(helper_, "volume-gain", MPV_FORMAT_STRING, &v) >= 0 && v) {
-        from = std::pow(10.0, std::atof(v) / 20);
-        api_.mpv_free(v);
-    }
+// A seek or another file during the fade: the old song goes and the playing one comes up to
+// full volume, both quickly rather than at once (a waveform cut mid-swing clicks).
+void Crossfader::Settle(double seconds) {
+    const double mainFrom = mainGain_, helperFrom = helperGain_;
     const double begin = NowSeconds();
     for (;;) {
         const double x = std::clamp((NowSeconds() - begin) / seconds, 0.0, 1.0);
-        SetHelperGain(from * (1 - x));
+        SetMainGain(mainFrom + (1 - mainFrom) * x);
+        SetHelperGain(helperFrom * (1 - x));
         if (x >= 1) break;
         Sleep(5);
     }
@@ -432,11 +449,13 @@ double Crossfader::HelperPts() const {
 // Synchronous on this thread: an async set would post a reply that wakes the UI thread for
 // nothing, 100 times a second during a fade.
 void Crossfader::SetMainGain(double gain) {
+    mainGain_ = gain;
     double db = GainToDb(gain);
     if (setProperty_) setProperty_(main_, "volume-gain", MPV_FORMAT_DOUBLE, &db);
 }
 
 void Crossfader::SetHelperGain(double gain) {
+    helperGain_ = gain;
     SetHelperDouble("volume-gain", GainToDb(gain));
 }
 

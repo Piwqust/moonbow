@@ -21,7 +21,7 @@
 namespace audio {
 
 inline constexpr double kHandoff = 0.25;  // seconds both instances play the same audio
-inline constexpr double kPreroll = 0.9;   // the helper plays this long (silent) before the handoff
+inline constexpr double kPreroll = 1.6;   // the helper plays this long (silent) before the handoff
 inline constexpr double kArmLead = 3.0;   // the helper is started this long before S
 inline constexpr double kMinFade = 1.0;
 inline constexpr double kMaxFade = 12.0;
