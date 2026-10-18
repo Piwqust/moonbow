@@ -1122,7 +1122,8 @@ void BuildMedia(Builder& b) {
     b.Toggle("audio.gapless", L"Gapless playback", L"Воспроизведение без пауз", true)
         .Desc(L"Keep the sound device open between files, so the next song starts without a pause or a click.",
               L"Не закрывать звуковое устройство между файлами, чтобы следующая песня начиналась без паузы и щелчка.")
-        .MpvBool("gapless-audio", "weak", "no");
+        .MpvBool("gapless-audio", "weak", "no")
+        .MpvBool("prefetch-playlist");  // opens the next queued file before this one ends
     b.Toggle("audio.passthrough", L"Send surround sound to the receiver", L"Передавать объёмный звук на ресивер", false)
         .Desc(L"Pass Dolby and DTS tracks undecoded over HDMI or S/PDIF and let the receiver decode them. Volume, the "
               L"equalizer and effects do not apply to these tracks.",
@@ -1473,7 +1474,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"100% puts subtitles at the bottom edge, lower values move them up.",
               L"100% — у нижнего края, меньшие значения поднимают субтитры выше.")
         .Mpv("sub-pos");
-    b.Slider("subtitles.marginBottom", L"Distance from the bottom", L"Отступ снизу", 0, 150, 1, 34)
+    b.Slider("subtitles.marginBottom", L"Distance from the bottom", L"Отступ снизу", 0, 150, 1, 22)
         .Unit(L"px", L"пкс")
         .Desc(L"Gap between subtitles and the bottom edge, in pixels of a 720p picture.",
               L"Расстояние от субтитров до нижнего края в пикселях кадра 720p.")

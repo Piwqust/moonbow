@@ -811,12 +811,13 @@ void TestAudioSubtitleOptions() {
     FindOption(opts, "audio-spdif", &found);
     CHECK(!found);  // passthrough is off by default
     CHECK(FindOption(opts, "gapless-audio") == "weak");
+    CHECK(FindOption(opts, "prefetch-playlist") == "yes");
     CHECK(FindOption(opts, "audio-exclusive") == "no");
     CHECK(FindOption(opts, "audio-file-auto") == "fuzzy");
     CHECK(FindOption(opts, "sub-border-style") == "outline-and-shadow");
     CHECK(FindOption(opts, "sub-back-color") == "#99000000");  // 60% black
     CHECK(FindOption(opts, "sub-use-margins") == "yes" && FindOption(opts, "sub-ass-force-margins") == "yes");
-    CHECK(FindOption(opts, "sub-margin-y") == "34" && FindOption(opts, "secondary-sub-pos") == "0");
+    CHECK(FindOption(opts, "sub-margin-y") == "22" && FindOption(opts, "secondary-sub-pos") == "0");
     FindOption(opts, "demuxer-readahead-secs", &found);
     CHECK(!found);  // mpv's own read-ahead unless buffering is custom
     CHECK(FindOption(opts, "ytdl") == (YtDlpPath().empty() ? "no" : "yes"));
