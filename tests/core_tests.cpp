@@ -1935,6 +1935,42 @@ void TestSubtitleText() {
     CHECK(events.size() == 2 && events[0].align == 8 && events[0].text == L"Sign text");
     CHECK(events.size() == 2 && events[1].align == 2 && events[1].text == L"Привет,\nмир!");
     CHECK(ParseEvents(L"").empty());
+
+    // Native .ass: the header (sub-ass-extradata) and whole event lines (sub-text/ass-full).
+    const AssHeader header = ParseAssHeader(
+        L"[Script Info]\r\nScriptType: v4.00+\r\nPlayResX: 1280\r\nPlayResY: 720\r\n\r\n[V4+ Styles]\r\n"
+        L"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
+        L"Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
+        L"MarginR, MarginV, Encoding\r\n"
+        L"Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,3,1,2,30,30,30,1\r\n"
+        L"Style: Sign,Times New Roman,36.5,&H0000FFFF,&H000000FF,&H00102030,&H40000000,-1,1,0,0,100,100,0,0,3,2,0,8,10,"
+        L"10,40,1\r\n");
+    CHECK(header.playResX == 1280 && header.playResY == 720 && header.styles.size() == 2);
+    if (header.styles.size() == 2) {
+        const AssStyle& d = header.styles[0];
+        CHECK(d.name == L"Default" && d.font == L"Arial" && d.size == 48 && !d.bold && d.primary == 0xFFFFFF &&
+              d.outline == 3 && d.shadow == 1 && d.align == 2 && d.marginV == 30 && d.borderStyle == 1);
+        CHECK(std::abs(d.backAlpha - (1 - 128 / 255.0f)) < 0.01f);
+        const AssStyle& s = header.styles[1];
+        CHECK(s.font == L"Times New Roman" && s.size == 36.5f && s.bold && s.italic && s.primary == 0xFFFF00 &&
+              s.outlineColor == 0x302010 && s.borderStyle == 3 && s.align == 8 && s.marginV == 40);
+    }
+    CHECK(header.Find(L"sign") == &header.styles[1]);
+    CHECK(header.Find(L"Missing") == &header.styles[0]);
+    CHECK(ParseAssHeader(L"[Script Info]\nPlayResX: 1280\n").playResY == 1024);
+    CHECK(ParseAssHeader(L"").playResY == 288 && ParseAssHeader(L"").styles.empty());
+    const auto full = ParseFullEvents(
+        LR"(Dialogue: 0,0:00:00.50,0:00:10.00,Default,,0,0,0,,{\i1}Styled{\i0}, with commas\Nsecond)" L"\n"
+        LR"(Dialogue: 1,0:00:00.50,0:00:10.00,Sign,Actor,5,6,77,,{\an8}A sign)" L"\n"
+        LR"(Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\p1}m 0 0 l 1 1)");
+    CHECK(full.size() == 2);
+    if (full.size() == 2) {
+        CHECK(full[0].text == L"Styled, with commas\nsecond" && full[0].style == L"Default" && full[0].align == 0 &&
+              full[0].marginV == 0 && full[0].marks.size() == full[0].text.size() && full[0].marks[0] == kItalic);
+        CHECK(full[1].text == L"A sign" && full[1].style == L"Sign" && full[1].align == 8 && full[1].marginL == 5 &&
+              full[1].marginR == 6 && full[1].marginV == 77);
+    }
+    CHECK(ParseFullEvents(L"0,0:00:00.00,0:00:01.00,Default,,0,0,0,,No prefix").size() == 1);
     CHECK(PlainText(L"  second\r\n track  ") == L"second\ntrack");
 
     auto words = [](std::wstring_view s) {

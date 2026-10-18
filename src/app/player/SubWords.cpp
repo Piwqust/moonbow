@@ -158,13 +158,17 @@ void SubtitleWords::StartObserving() {
     Player& p = TheApp().player();
     if (!observers_.empty() || !p.Ready()) return;
     textKnown_ = visibilityKnown_ = false;
+    ReadAssHeader();
+    // Whole event lines for a native .ass track (their style and margins), else the text only.
+    textLevel_ = std::min(maxLevel_, assMode_ ? 2 : 1);
+    static const char* const kTextProps[] = {"sub-text", "sub-text/ass", "sub-text/ass-full"};
     // The callbacks only record values: unobserving from inside one would destroy the function
     // that is running, so whatever follows from a value runs after the event batch.
     auto text = [this, &p](const char* name, std::wstring* field, bool primary) {
         observers_.push_back(p.Observe(name, MPV_FORMAT_STRING, [this, field, primary](const mpv_event_property& e) {
-            if (primary && e.format == MPV_FORMAT_NONE && std::strcmp(textProp_, "sub-text") != 0 && !textKnown_) {
-                // An mpv without sub-text/ass: the plain text, already without tags.
-                textProp_ = "sub-text";
+            if (primary && e.format == MPV_FORMAT_NONE && textLevel_ > 0 && !textKnown_) {
+                // An older mpv without this form: the next simpler one (the plain text has no tags).
+                maxLevel_ = textLevel_ - 1;
                 restart_ = true;
                 Schedule();
                 return;
@@ -175,7 +179,7 @@ void SubtitleWords::StartObserving() {
             Schedule();
         }));
     };
-    text(textProp_, &assText_, true);
+    text(kTextProps[textLevel_], &assText_, true);
     text("secondary-sub-text", &secondaryText_, false);
     observers_.push_back(p.Observe("sub-visibility", MPV_FORMAT_FLAG, [this](const mpv_event_property& e) {
         const bool v = e.format == MPV_FORMAT_FLAG && e.data && *static_cast<int*>(e.data) != 0;
@@ -284,9 +288,9 @@ void SubtitleWords::Frame() {
 
 void SubtitleWords::ReleaseKeepHidden() {
     if (hidSecondary_) TheApp().player().SetProperty("secondary-sub-visibility", true);
+    // mpv keeps them hidden: the overlay goes with them, and comes back when they are shown.
     hid_ = hidConfirmed_ = hidSecondary_ = false;
     mpvVisible_ = false;
-    dismissed_ = true;
     Reevaluate();
 }
 
@@ -355,28 +359,52 @@ void SubtitleWords::ReadStyle() {
     s.outline = static_cast<float>(ChoiceNumber("subtitles.outline", 3));
     s.shadow = Cfg().GetBool("subtitles.shadow");
     s.background = Cfg().GetString("subtitles.background");
-    // libass sizes a font by its line (ascent + descent), DirectWrite by the em.
+    style_ = std::move(s);
+    for (Block& b : blocks_) b.scene.Reset();
+}
+
+// A native .ass track is drawn with its own styles (sub-ass-extradata), unless Settings apply
+// the Lumen style to it. Read once per track: a synchronous read, but only on a pause.
+void SubtitleWords::ReadAssHeader() {
+    const Track* sub = SelectedSub();
+    const bool native = sub && (sub->codec == L"ass" || sub->codec == L"ssa") && !Cfg().GetBool("subtitles.assOverride");
+    const uint64_t key = native ? PS().loadSerial * 4096 + static_cast<uint64_t>(sub->id) : 0;
+    if (key == headerKey_) return;
+    headerKey_ = key;
+    header_ = native ? subtext::ParseAssHeader(Utf8ToWide(TheApp().player().GetPropertyString("sub-ass-extradata")))
+                     : subtext::AssHeader{};
+    assMode_ = native && !header_.styles.empty();
+}
+
+// libass sizes a font by its line (ascent + descent), DirectWrite by the em.
+void SubtitleWords::FontRatios(const std::wstring& name, bool bold, float& em, float& ascent) {
+    em = 0.89f, ascent = 0.8f;
+    for (const FontMetrics& f : fontCache_)
+        if (f.bold == bold && f.name == name) {
+            em = f.em, ascent = f.ascent;
+            return;
+        }
     if (IDWriteFactory5* dw = gfx::Gpu::Get().DWrite()) {
         gfx::ComPtr<IDWriteFontCollection> fonts;
         UINT32 index = 0;
         BOOL exists = FALSE;
         gfx::ComPtr<IDWriteFontFamily> family;
         gfx::ComPtr<IDWriteFont> font;
-        if (SUCCEEDED(dw->GetSystemFontCollection(&fonts)) && SUCCEEDED(fonts->FindFamilyName(s.font.c_str(), &index, &exists)) &&
+        if (SUCCEEDED(dw->GetSystemFontCollection(&fonts)) && SUCCEEDED(fonts->FindFamilyName(name.c_str(), &index, &exists)) &&
             exists && SUCCEEDED(fonts->GetFontFamily(index, &family)) &&
-            SUCCEEDED(family->GetFirstMatchingFont(s.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+            SUCCEEDED(family->GetFirstMatchingFont(bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
                                                    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, &font))) {
             DWRITE_FONT_METRICS m{};
             font->GetMetrics(&m);
             const float line = static_cast<float>(m.ascent) + static_cast<float>(m.descent);
             if (line > 0 && m.designUnitsPerEm > 0) {
-                s.emRatio = static_cast<float>(m.designUnitsPerEm) / line;
-                s.ascentRatio = static_cast<float>(m.ascent) / line;
+                em = static_cast<float>(m.designUnitsPerEm) / line;
+                ascent = static_cast<float>(m.ascent) / line;
             }
         }
     }
-    style_ = std::move(s);
-    for (Block& b : blocks_) b.scene.Reset();
+    if (fontCache_.size() > 8) fontCache_.erase(fontCache_.begin());
+    fontCache_.push_back({name, bold, em, ascent});
 }
 
 void SubtitleWords::Place(const Rect& video) {
@@ -389,9 +417,9 @@ void SubtitleWords::Rebuild() {
     Host* host = GetHost();
     const float scale = host ? host->Scale() : 1.0f;
     wchar_t num[160];
-    swprintf_s(num, L"|%g,%g,%g,%g|%g|%g|%g|%lld|%lld|%g|%lld,%lld", video_.x, video_.y, video_.w, video_.h, subPos_,
+    swprintf_s(num, L"|%g,%g,%g,%g|%g|%g|%g|%lld|%lld|%g|%lld,%lld|%d", video_.x, video_.y, video_.w, video_.h, subPos_,
                subScale_, secondaryPos_, static_cast<long long>(marginY_), static_cast<long long>(secondarySid_), scale,
-               static_cast<long long>(PS().videoW), static_cast<long long>(PS().videoH));
+               static_cast<long long>(PS().videoW), static_cast<long long>(PS().videoH), textLevel_);
     std::wstring text = assText_ + L'\x1f' + secondaryText_;
     std::wstring key = text + num;
     if (key == key_) return;
@@ -418,22 +446,23 @@ void SubtitleWords::Rebuild() {
         else pic = video_.Center(video_.w, video_.w / ar);
     }
     const Rect ref = Cfg().GetBool("subtitles.useBlackBars") ? video_ : pic;
-    // mpv's sizes are pixels of a 720-line frame: of the window ("Relative") or of the picture.
-    const float unit = (Cfg().GetString("subtitles.sizeMode") == "pixels" ? pic.h : video_.h) / 720.0f;
-    const float line = style_.size * static_cast<float>(subScale_ > 0 ? subScale_ : 1) * unit;
-    if (line < 4) return;
-    const float margin = static_cast<float>(marginY_) * unit, marginX = 25 * unit;
-    const float wrapW = std::max(80.0f, ref.w - 2 * marginX);
+    const float sizeScale = static_cast<float>(subScale_ > 0 ? subScale_ : 1);
     auto snap = [scale](float v) { return std::round(v * scale) / scale; };
 
-    gfx::ComPtr<IDWriteTextFormat> format;
-    if (FAILED(dw->CreateTextFormat(style_.font.c_str(), nullptr,
-                                    style_.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
-                                    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, line * style_.emRatio, L"",
-                                    &format)))
-        return;
-    format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
-    format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, line, line * style_.ascentRatio);
+    // The Lumen style: mpv's sizes are pixels of a 720-line frame, of the window ("Relative")
+    // or of the picture. The lift over the control bar is in sub-margin-y.
+    const float unit = (Cfg().GetString("subtitles.sizeMode") == "pixels" ? pic.h : video_.h) / 720.0f;
+    Look plain;
+    plain.font = style_.font;
+    plain.line = style_.size * sizeScale * unit;
+    plain.bold = style_.bold;
+    plain.text = style_.text;
+    plain.outlineColor = style_.outlineColor;
+    plain.back = style_.back;
+    plain.outline = style_.outline * unit;
+    plain.shadow = style_.shadow ? 2 * unit : 0;
+    plain.background = style_.background == "lines" ? Look::Lines : style_.background == "box" ? Look::Box : Look::None;
+    const float plainV = static_cast<float>(marginY_) * unit, plainH = 25 * unit;
 
     // Events of one vertical alignment stack into one block, as libass stacks them.
     struct Group {
@@ -441,35 +470,94 @@ void SubtitleWords::Rebuild() {
         int align = 2;
         bool secondary = false;
         std::vector<uint8_t> marks;  // italic / bold per character, empty when none
+        Look look;
+        float marginV = 0, marginL = 0, marginR = 0;
     };
     std::vector<Group> groups;
-    auto add = [&](const std::wstring& text, int where, bool secondary, const std::vector<uint8_t>& marks) {
-        const int row = (where - 1) / 3;  // 0 bottom, 1 middle, 2 top
-        for (Group& g : groups)
-            if (!g.secondary && !secondary && (g.align - 1) / 3 == row) {
-                if (!marks.empty() || !g.marks.empty()) {
-                    g.marks.resize(g.text.size(), 0);
-                    g.marks.push_back(0);
-                    if (marks.empty()) g.marks.resize(g.marks.size() + text.size(), 0);
-                    else g.marks.insert(g.marks.end(), marks.begin(), marks.end());
+    auto add = [&](Group g) {
+        const int row = (g.align - 1) / 3;  // 0 bottom, 1 middle, 2 top
+        for (Group& o : groups)
+            if (!o.secondary && !g.secondary && (o.align - 1) / 3 == row) {
+                if (!g.marks.empty() || !o.marks.empty()) {
+                    o.marks.resize(o.text.size(), 0);
+                    o.marks.push_back(0);
+                    if (g.marks.empty()) o.marks.resize(o.marks.size() + g.text.size(), 0);
+                    else o.marks.insert(o.marks.end(), g.marks.begin(), g.marks.end());
                 }
-                g.text += L'\n' + text;
+                o.text += L'\n' + g.text;
                 return;
             }
-        groups.push_back({text, where, secondary, marks});
+        groups.push_back(std::move(g));
     };
-    for (const subtext::Event& ev : subtext::ParseEvents(assText_)) add(ev.text, ev.align, false, ev.marks);
+    if (assMode_ && textLevel_ == 2) {
+        // libass scales the script's PlayRes to the picture.
+        const float sy = pic.h / static_cast<float>(header_.playResY), sx = pic.w / static_cast<float>(header_.playResX);
+        for (subtext::Event& ev : subtext::ParseFullEvents(assText_)) {
+            const subtext::AssStyle* st = header_.Find(ev.style);
+            Group g;
+            g.align = ev.align ? ev.align : st ? st->align : 2;
+            g.text = std::move(ev.text);
+            g.marks = std::move(ev.marks);
+            g.look = plain;
+            if (st) {
+                g.look.font = st->font;
+                g.look.line = st->size * sy * sizeScale;
+                g.look.bold = st->bold;
+                g.look.italic = st->italic;
+                g.look.text = Color::Hex(st->primary, st->primaryAlpha);
+                g.look.outlineColor = Color::Hex(st->outlineColor);
+                g.look.back = Color::Hex(st->back, st->backAlpha);
+                g.look.outline = st->outline * sy;
+                g.look.shadow = st->shadow * sy;
+                g.look.background = st->borderStyle == 3 ? Look::Lines : Look::None;
+            }
+            g.marginV = static_cast<float>(ev.marginV ? ev.marginV : st ? st->marginV : 10) * sy;
+            g.marginL = static_cast<float>(ev.marginL ? ev.marginL : st ? st->marginL : 10) * sx;
+            g.marginR = static_cast<float>(ev.marginR ? ev.marginR : st ? st->marginR : 10) * sx;
+            add(std::move(g));
+        }
+    } else {
+        for (subtext::Event& ev : subtext::ParseEvents(assText_)) {
+            Group g;
+            g.align = ev.align;
+            g.text = std::move(ev.text);
+            g.marks = std::move(ev.marks);
+            g.look = plain;
+            g.marginV = plainV;
+            g.marginL = g.marginR = plainH;
+            add(std::move(g));
+        }
+    }
     if (secondarySid_ != 0) {
-        const std::wstring sec = subtext::PlainText(secondaryText_);
-        if (!sec.empty()) add(sec, 8, true, {});
+        Group g;
+        g.text = subtext::PlainText(secondaryText_);
+        g.align = 8;
+        g.secondary = true;
+        g.look = plain;
+        g.marginV = plainV;
+        g.marginL = g.marginR = plainH;
+        if (!g.text.empty()) add(std::move(g));
     }
 
-    for (const Group& g : groups) {
+    for (Group& g : groups) {
+        if (g.look.line < 4) continue;  // a tiny picture: nothing to point at
         Block b;
         b.text = g.text;
         b.align = g.align;
         b.secondary = g.secondary;
         b.rtl = subtext::IsRtl(b.text);
+        b.look = g.look;
+        float em = 0.89f, ascent = 0.8f;
+        FontRatios(b.look.font, b.look.bold, em, ascent);
+        gfx::ComPtr<IDWriteTextFormat> format;
+        if (FAILED(dw->CreateTextFormat(b.look.font.c_str(), nullptr,
+                                        b.look.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+                                        b.look.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                                        DWRITE_FONT_STRETCH_NORMAL, b.look.line * em, L"", &format)))
+            continue;
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, b.look.line, b.look.line * ascent);
+        const float wrapW = std::max(80.0f, ref.w - g.marginL - g.marginR);
         if (FAILED(dw->CreateTextLayout(b.text.c_str(), static_cast<UINT32>(b.text.size()), format.Get(), wrapW, 100000,
                                         &b.layout)))
             continue;
@@ -490,24 +578,24 @@ void SubtitleWords::Rebuild() {
         if (b.rtl) b.layout->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
         DWRITE_TEXT_METRICS m{};
         b.layout->GetMetrics(&m);
-        b.ox = col == 0 ? ref.x + marginX : col == 2 ? ref.Right() - marginX - wrapW : ref.Cx() - wrapW / 2;
+        b.ox = ref.x + g.marginL;
         const int row = (g.align - 1) / 3;
         if (g.secondary) {
             // secondary-sub-pos: 0 % is the top edge; past the middle it hangs from below.
             const float at = ref.y + static_cast<float>(std::clamp(secondaryPos_, 0.0, 150.0)) / 100 * ref.h;
-            b.oy = secondaryPos_ <= 50 ? at + margin : at - margin - m.height;
+            b.oy = secondaryPos_ <= 50 ? at + g.marginV : at - g.marginV - m.height;
         } else if (row == 0) {
             const float raised = static_cast<float>(100 - std::clamp(subPos_, 0.0, 150.0)) / 100 * ref.h;
-            b.oy = ref.Bottom() - margin - raised - m.height;
+            b.oy = ref.Bottom() - g.marginV - raised - m.height;
         } else if (row == 2) {
-            b.oy = ref.y + margin;
+            b.oy = ref.y + g.marginV;
         } else {
             b.oy = ref.Cy() - m.height / 2;
         }
         b.ox = snap(b.ox);
         b.oy = snap(b.oy);
         b.box = {b.ox + m.left, b.oy + m.top, m.width, m.height};
-        // Line boxes, for "Box behind each line".
+        // Line boxes, for "Box behind each line" (and BorderStyle 3 of .ass).
         UINT32 count = 0;
         b.layout->HitTestTextRange(0, static_cast<UINT32>(b.text.size()), b.ox, b.oy, nullptr, 0, &count);
         if (count) {
@@ -584,11 +672,11 @@ bool SubtitleWords::Record(ID2D1DeviceContext5* ctx, Block& b) {
     rec->SetTarget(list.Get());
     rec->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     rec->BeginDraw();
-    const float unit = video_.h / 720.0f;
-    const bool lineBoxes = style_.background == "lines";  // outline and shadow become the box
-    const float r = lineBoxes ? 0.0f : style_.outline * unit;
+    const Look& k = b.look;
+    const bool lineBoxes = k.background == Look::Lines;  // outline and shadow become the box
+    const float r = lineBoxes ? 0.0f : k.outline;
     gfx::ComPtr<ID2D1SolidColorBrush> brush;
-    rec->CreateSolidColorBrush(style_.text.D2D(), &brush);
+    rec->CreateSolidColorBrush(k.text.D2D(), &brush);
     auto stamp = [&](float ox, float oy, Color c) {
         brush->SetColor(c.D2D());
         if (r > 0) {
@@ -601,12 +689,12 @@ bool SubtitleWords::Record(ID2D1DeviceContext5* ctx, Block& b) {
         }
         rec->DrawTextLayout({ox, oy}, b.layout.Get(), brush.Get());
     };
-    if (style_.shadow && !lineBoxes) {
-        const float s = std::max(1.0f, 2 * unit);
+    if (k.shadow > 0 && !lineBoxes) {
+        const float s = std::max(1.0f, k.shadow);
         stamp(s, s, Color::Hex(0x000000, 0.5f));
     }
-    if (r > 0) stamp(0, 0, style_.outlineColor);
-    brush->SetColor(style_.text.D2D());
+    if (r > 0) stamp(0, 0, k.outlineColor);
+    brush->SetColor(k.text.D2D());
     rec->DrawTextLayout({0, 0}, b.layout.Get(), brush.Get());
     const HRESULT hr = rec->EndDraw();
     rec->SetTarget(nullptr);
@@ -625,22 +713,21 @@ void SubtitleWords::Paint(Painter& p) {
         builtScale_ = scale;
         for (Block& b : blocks_) b.scene.Reset();
     }
-    const float unit = video_.h / 720.0f;
     const int lo = selA_ < 0 ? -1 : std::min(selA_, selB_), hi = selA_ < 0 ? -1 : std::max(selA_, selB_);
     const Color pick = Color::Hex(0x000000, 0.55f);
     for (size_t bi = 0; bi < blocks_.size(); ++bi) {
         Block& b = blocks_[bi];
-        if (style_.background == "box") {
-            const float o = style_.outline * unit;
-            p.Fill(b.box.Inset(Insets::Sym(-(o + 8 * unit), -(o + 3 * unit))), style_.back, 3);
-        } else if (style_.background == "lines") {
-            const float boxPad = std::max(1.0f, style_.outline * unit);
+        const Look& k = b.look;
+        if (k.background == Look::Box) {
+            p.Fill(b.box.Inset(Insets::Sym(-(k.outline + k.line * 0.2f), -(k.outline + k.line * 0.08f))), k.back, 3);
+        } else if (k.background == Look::Lines) {
+            const float boxPad = std::max(1.0f, k.outline);
             for (const Rect& l : b.lines) {
-                if (style_.shadow) {
-                    const float s = std::max(1.0f, 2 * unit);
+                if (k.shadow > 0) {
+                    const float s = std::max(1.0f, k.shadow);
                     p.Fill(l.Inset(-boxPad).Offset(s, s), Color::Hex(0x000000, 0.5f));
                 }
-                p.Fill(l.Inset(-boxPad), style_.outlineColor);
+                p.Fill(l.Inset(-boxPad), k.outlineColor);
             }
         }
         // The picked words sit on a dark pill, readable over any picture.
@@ -652,14 +739,21 @@ void SubtitleWords::Paint(Painter& p) {
     }
     // Hover: an underline in the text color with an outline, so it shows on light scenes too.
     if (hover_ >= 0 && hover_ < static_cast<int>(words_.size())) {
-        const Rect& r = words_[static_cast<size_t>(hover_)].r;
-        const float t = std::max(2.0f, std::round(unit * 3));
-        const Rect u{r.x, r.Bottom() - t * 0.5f, r.w, t};
-        p.Fill(u.Inset(-1), style_.outlineColor.WithAlpha(0.8f), 1);
-        p.Fill(u, style_.text.WithAlpha(1), 1);
+        const Word& w = words_[static_cast<size_t>(hover_)];
+        const Look& k = blocks_[static_cast<size_t>(w.block)].look;
+        const float t = std::max(2.0f, std::round(k.line * 0.07f));
+        const Rect u{w.r.x, w.r.Bottom() - t * 0.5f, w.r.w, t};
+        p.Fill(u.Inset(-1), k.outlineColor.WithAlpha(0.8f), 1);
+        p.Fill(u, k.text.WithAlpha(1), 1);
     }
-    if (keyboard_ && focus_ >= 0 && focus_ < static_cast<int>(words_.size()) && (IsFocused() || menu_))
-        p.Stroke(words_[static_cast<size_t>(focus_)].r.Inset(Insets::Sym(-6, -2)), P().accentMid, 6, 1.5f);
+    // The keyboard focus: a ring in the text color on a dark one, visible over any picture (the
+    // theme's focus color is made for the panels, not for video).
+    if (keyboard_ && focus_ >= 0 && focus_ < static_cast<int>(words_.size()) && (IsFocused() || menu_)) {
+        const Word& w = words_[static_cast<size_t>(focus_)];
+        const Rect ring = w.r.Inset(Insets::Sym(-6, -2));
+        p.Stroke(ring.Inset(-1), Color::Hex(0x000000, 0.7f), 7, 3);
+        p.Stroke(ring, blocks_[static_cast<size_t>(w.block)].look.text.WithAlpha(1), 6, 1.5f);
+    }
 }
 
 // --- input -----------------------------------------------------------------------------------
@@ -800,7 +894,7 @@ void SubtitleWords::OnFocusChanged(bool focused) {
     Invalidate();
     if (focused || !keyboard_) return;
     Host* host = GetHost();
-    if (menu_ && host && host->IsPopupOpen(menu_)) return;  // the word menu took focus; it gives it back
+    if (openingMenu_ || (menu_ && host && host->IsPopupOpen(menu_))) return;  // the word menu gives it back
     keyboard_ = false;
     focusable = false;
 }
@@ -898,6 +992,9 @@ std::wstring SubtitleWords::SelectedText() const {
 }
 
 std::wstring SubtitleWords::PhraseText() const {
+    // The block the picked words are in: the dialogue, not a sign at the top or the other track.
+    if (selA_ >= 0 && selA_ < static_cast<int>(words_.size()))
+        return subtext::Phrase({blocks_[static_cast<size_t>(words_[static_cast<size_t>(selA_)].block)].text});
     std::vector<std::wstring> parts;
     for (const Block& b : blocks_)
         if (!b.secondary) parts.push_back(b.text);
@@ -944,7 +1041,9 @@ void SubtitleWords::OpenMenu() {
         anchor.h = anchor.Bottom() - (box.y - 2);
         anchor.y = box.y - 2;
     }
+    openingMenu_ = true;  // the menu takes focus before ShowMenu returns it
     menu_ = ShowMenu(host, anchor, std::move(items), Place::Above, 200);
+    openingMenu_ = false;
 }
 
 void SubtitleWords::Copy(const std::wstring& text) {
@@ -973,7 +1072,12 @@ void SubtitleWords::DebugInfo(std::string& out) const {
     if (hover_ >= 0) out += " hover=" + std::to_string(hover_);
     if (selA_ >= 0) out += " sel=" + std::to_string(std::min(selA_, selB_)) + "-" + std::to_string(std::max(selA_, selB_));
     if (selA_ >= 0) out += " picked=" + Quote(SelectedText());
-    if (!words_.empty()) out += " text=" + Quote(PhraseText());
+    if (!words_.empty()) {
+        std::vector<std::wstring> all;
+        for (const Block& b : blocks_) all.push_back(b.text);
+        out += " blocks=" + std::to_string(blocks_.size()) + " text=" + Quote(subtext::Phrase(all));
+        if (assMode_) out += " ass-styles";
+    }
     if (!lastCopy_.empty()) out += " copied=" + Quote(lastCopy_);
     if (!lastUrl_.empty()) out += " opened=" + Quote(lastUrl_);
 }

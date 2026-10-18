@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <cwchar>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,6 +19,9 @@ struct Event {
     std::wstring text;
     int align = 2;
     std::vector<uint8_t> marks;
+    // From sub-text/ass-full only: the event's style and margins (0 = the style's).
+    std::wstring style;
+    int marginL = 0, marginR = 0, marginV = 0;
 };
 
 inline constexpr uint8_t kItalic = 1, kBold = 2;
@@ -170,6 +174,184 @@ inline std::vector<Event> ParseEvents(std::wstring_view ass) {
         std::wstring text = StripAssTags(ass.substr(from, nl - from), &align, &marks);
         if (!text.empty()) events.push_back({std::move(text), align ? align : 2, std::move(marks)});
         from = nl + 1;
+    }
+    return events;
+}
+
+// A style of an .ass script ([V4+ Styles]): what the overlay needs to draw a line about the way
+// libass does. Sizes and margins are in script pixels (PlayResY lines tall).
+struct AssStyle {
+    std::wstring name, font = L"Arial";
+    float size = 20;
+    bool bold = false, italic = false;
+    uint32_t primary = 0xFFFFFF, outlineColor = 0x000000, back = 0x000000;  // 0xRRGGBB
+    float primaryAlpha = 1, backAlpha = 1;
+    int borderStyle = 1;  // 1 outline and shadow, 3 opaque box
+    float outline = 2, shadow = 2;
+    int align = 2;
+    int marginL = 10, marginR = 10, marginV = 10;
+};
+
+struct AssHeader {
+    int playResX = 384, playResY = 288;
+    std::vector<AssStyle> styles;
+    const AssStyle* Find(std::wstring_view name) const {
+        auto same = [](std::wstring_view a, std::wstring_view b) {
+            return a.size() == b.size() && (a.empty() || _wcsnicmp(a.data(), b.data(), a.size()) == 0);
+        };
+        for (const AssStyle& s : styles)
+            if (same(s.name, name)) return &s;
+        // libass falls back to "Default", then to the first style.
+        for (const AssStyle& s : styles)
+            if (same(s.name, L"Default")) return &s;
+        return styles.empty() ? nullptr : &styles.front();
+    }
+};
+
+namespace detail {
+
+inline std::wstring_view Trim(std::wstring_view s) {
+    while (!s.empty() && (IsSpace(s.front()) || s.front() == L'\n')) s.remove_prefix(1);
+    while (!s.empty() && (IsSpace(s.back()) || s.back() == L'\n')) s.remove_suffix(1);
+    return s;
+}
+
+// Splits at the first `n` commas: n + 1 fields, the last one keeps its commas (an event's text).
+inline std::vector<std::wstring_view> SplitFields(std::wstring_view s, size_t n) {
+    std::vector<std::wstring_view> out;
+    while (out.size() < n) {
+        const size_t c = s.find(L',');
+        if (c == std::wstring_view::npos) break;
+        out.push_back(Trim(s.substr(0, c)));
+        s.remove_prefix(c + 1);
+    }
+    out.push_back(out.size() < n ? Trim(s) : s);
+    return out;
+}
+
+inline bool StartsWithNoCase(std::wstring_view s, std::wstring_view p) {
+    return s.size() >= p.size() && _wcsnicmp(s.data(), p.data(), p.size()) == 0;
+}
+
+inline double Number(std::wstring_view s, double fallback) {
+    const std::wstring t(Trim(s));
+    if (t.empty()) return fallback;
+    wchar_t* end = nullptr;
+    const double v = std::wcstod(t.c_str(), &end);
+    return end && end != t.c_str() ? v : fallback;
+}
+
+// &HAABBGGRR (alpha 00 is opaque) or a decimal number of the same layout.
+inline void AssColor(std::wstring_view s, uint32_t& rgb, float& alpha) {
+    s = Trim(s);
+    uint64_t v = 0;
+    if (StartsWithNoCase(s, L"&H")) {
+        for (wchar_t c : s.substr(2)) {
+            int d = c >= L'0' && c <= L'9' ? c - L'0' : c >= L'a' && c <= L'f' ? c - L'a' + 10 : c >= L'A' && c <= L'F' ? c - L'A' + 10 : -1;
+            if (d < 0) break;
+            v = (v << 4) | static_cast<uint64_t>(d);
+        }
+    } else {
+        v = static_cast<uint64_t>(Number(s, 0));
+    }
+    const uint32_t bgr = static_cast<uint32_t>(v & 0xFFFFFF);
+    rgb = ((bgr & 0xFF) << 16) | (bgr & 0xFF00) | ((bgr >> 16) & 0xFF);
+    alpha = 1.0f - static_cast<float>((v >> 24) & 0xFF) / 255.0f;
+}
+
+}  // namespace detail
+
+// The script header mpv gives as sub-ass-extradata: PlayRes and the styles.
+inline AssHeader ParseAssHeader(std::wstring_view s) {
+    using namespace detail;
+    AssHeader h;
+    int resX = 0, resY = 0;
+    enum class Sec { Other, Info, Styles } sec = Sec::Other;
+    std::vector<std::wstring> format;
+    size_t from = 0;
+    while (from < s.size()) {
+        size_t nl = s.find(L'\n', from);
+        if (nl == std::wstring_view::npos) nl = s.size();
+        const std::wstring_view line = Trim(s.substr(from, nl - from));
+        from = nl + 1;
+        if (line.empty() || line[0] == L';') continue;
+        if (line[0] == L'[') {
+            sec = StartsWithNoCase(line, L"[Script Info]") ? Sec::Info
+                  : StartsWithNoCase(line, L"[V4+ Styles]") || StartsWithNoCase(line, L"[V4 Styles]") ? Sec::Styles
+                                                                                                      : Sec::Other;
+            continue;
+        }
+        if (sec == Sec::Info) {
+            if (StartsWithNoCase(line, L"PlayResX:")) resX = static_cast<int>(Number(line.substr(9), 0));
+            if (StartsWithNoCase(line, L"PlayResY:")) resY = static_cast<int>(Number(line.substr(9), 0));
+        } else if (sec == Sec::Styles && StartsWithNoCase(line, L"Format:")) {
+            format.clear();
+            for (std::wstring_view f : SplitFields(line.substr(7), 64)) format.emplace_back(Trim(f));
+        } else if (sec == Sec::Styles && StartsWithNoCase(line, L"Style:")) {
+            if (format.empty())  // SSA / ASS default order
+                format = {L"Name", L"Fontname", L"Fontsize", L"PrimaryColour", L"SecondaryColour", L"OutlineColour",
+                          L"BackColour", L"Bold", L"Italic", L"Underline", L"StrikeOut", L"ScaleX", L"ScaleY",
+                          L"Spacing", L"Angle", L"BorderStyle", L"Outline", L"Shadow", L"Alignment", L"MarginL",
+                          L"MarginR", L"MarginV", L"Encoding"};
+            const std::vector<std::wstring_view> v = SplitFields(line.substr(6), format.size() - 1);
+            AssStyle st;
+            for (size_t i = 0; i < v.size() && i < format.size(); ++i) {
+                const std::wstring& f = format[i];
+                auto is = [&](const wchar_t* k) { return _wcsicmp(f.c_str(), k) == 0; };
+                if (is(L"Name")) st.name = std::wstring(Trim(v[i]));
+                else if (is(L"Fontname")) st.font = std::wstring(Trim(v[i]));
+                else if (is(L"Fontsize")) st.size = static_cast<float>(Number(v[i], 20));
+                else if (is(L"PrimaryColour")) AssColor(v[i], st.primary, st.primaryAlpha);
+                else if (is(L"OutlineColour")) { float a = 1; AssColor(v[i], st.outlineColor, a); }
+                else if (is(L"BackColour")) AssColor(v[i], st.back, st.backAlpha);
+                else if (is(L"Bold")) st.bold = Number(v[i], 0) != 0;
+                else if (is(L"Italic")) st.italic = Number(v[i], 0) != 0;
+                else if (is(L"BorderStyle")) st.borderStyle = static_cast<int>(Number(v[i], 1));
+                else if (is(L"Outline")) st.outline = static_cast<float>(Number(v[i], 2));
+                else if (is(L"Shadow")) st.shadow = static_cast<float>(Number(v[i], 2));
+                else if (is(L"Alignment")) st.align = static_cast<int>(Number(v[i], 2));
+                else if (is(L"MarginL")) st.marginL = static_cast<int>(Number(v[i], 10));
+                else if (is(L"MarginR")) st.marginR = static_cast<int>(Number(v[i], 10));
+                else if (is(L"MarginV")) st.marginV = static_cast<int>(Number(v[i], 10));
+            }
+            if (st.align < 1 || st.align > 9) st.align = 2;
+            h.styles.push_back(std::move(st));
+        }
+    }
+    // libass's defaults for a missing PlayRes.
+    if (resX <= 0 && resY <= 0) resX = 384, resY = 288;
+    else if (resY <= 0) resY = resX == 1280 ? 1024 : resX * 3 / 4;
+    else if (resX <= 0) resX = resY == 1024 ? 1280 : resY * 4 / 3;
+    h.playResX = resX;
+    h.playResY = resY;
+    return h;
+}
+
+// mpv's sub-text/ass-full: whole event lines ("Dialogue: Layer,Start,End,Style,Name,MarginL,
+// MarginR,MarginV,Effect,Text", the prefix optional). Like ParseEvents, plus the style and the
+// margins (0 = the style's) of each event. The event's alignment is its \an, else 0.
+inline std::vector<Event> ParseFullEvents(std::wstring_view full) {
+    using namespace detail;
+    std::vector<Event> events;
+    size_t from = 0;
+    while (from < full.size()) {
+        size_t nl = full.find(L'\n', from);
+        if (nl == std::wstring_view::npos) nl = full.size();
+        std::wstring_view line = full.substr(from, nl - from);
+        from = nl + 1;
+        if (StartsWithNoCase(Trim(line), L"Dialogue:")) line = Trim(line).substr(9);
+        const std::vector<std::wstring_view> f = SplitFields(line, 9);
+        if (f.size() < 10) continue;
+        int align = 0;
+        std::vector<uint8_t> marks;
+        std::wstring text = StripAssTags(f[9], &align, &marks);
+        if (text.empty()) continue;
+        Event e{std::move(text), align, std::move(marks)};
+        e.style = std::wstring(f[3]);
+        e.marginL = static_cast<int>(Number(f[5], 0));
+        e.marginR = static_cast<int>(Number(f[6], 0));
+        e.marginV = static_cast<int>(Number(f[7], 0));
+        events.push_back(std::move(e));
     }
     return events;
 }

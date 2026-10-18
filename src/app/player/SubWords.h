@@ -8,6 +8,7 @@
 //
 // While playing it costs nothing: mpv properties are observed only while paused.
 #include "app/Signal.h"
+#include "app/player/SubText.h"
 #include "core/Config.h"
 #include "gfx/Gpu.h"
 #include "ui/Controls.h"
@@ -72,14 +73,27 @@ private:
         float outline = 3;
         bool shadow = true;
         std::string background;  // none / lines / box
-        float emRatio = 0.89f;   // em size / line height of the font (libass sizes by the line)
-        float ascentRatio = 0.8f;
+    };
+    // How one block is drawn, in window DIPs: from the Lumen style or the .ass script's style.
+    struct Look {
+        std::wstring font;
+        float line = 20;  // line height: libass sizes fonts by it
+        bool bold = false, italic = false;
+        ui::Color text, outlineColor, back;
+        float outline = 0, shadow = 0;
+        enum Background : uint8_t { None, Lines, Box } background = None;
+    };
+    struct FontMetrics {
+        std::wstring name;
+        bool bold = false;
+        float em = 0.89f, ascent = 0.8f;  // em size and ascent per line height
     };
     struct Block {
         std::wstring text;
         int align = 2;
         bool rtl = false;
         bool secondary = false;
+        Look look;
         gfx::ComPtr<IDWriteTextLayout> layout;
         float ox = 0, oy = 0;  // layout origin, window DIPs
         ui::Rect box;
@@ -100,6 +114,8 @@ private:
     void Schedule();  // Reevaluate after the current event batch
     void SetMpvHidden(bool hide);
     void ReadStyle();
+    void ReadAssHeader();
+    void FontRatios(const std::wstring& name, bool bold, float& em, float& ascent);
     void Rebuild();
     bool Record(ID2D1DeviceContext5* ctx, Block& b);
     void ResetInteraction();
@@ -122,7 +138,8 @@ private:
 
     // Observed while paused.
     std::vector<uint64_t> observers_;
-    const char* textProp_ = "sub-text/ass";
+    // What sub-text is read as: 2 whole .ass events, 1 events with tags, 0 plain text.
+    int textLevel_ = 1, maxLevel_ = 2;
     std::wstring assText_, secondaryText_;
     bool textKnown_ = false, visibilityKnown_ = false;
     bool scheduled_ = false, restart_ = false, styleDirty_ = false;
@@ -140,6 +157,10 @@ private:
     UINT_PTR stepTimer_ = 0;
 
     Style style_;
+    subtext::AssHeader header_;
+    uint64_t headerKey_ = 0;  // the file and track header_ was read for
+    bool assMode_ = false;    // a native .ass track drawn with its own styles
+    std::vector<FontMetrics> fontCache_;
     float builtScale_ = 0;
     uint32_t generation_ = 0;
     std::vector<Block> blocks_;
@@ -148,6 +169,7 @@ private:
     int hover_ = -1, anchor_ = -1, selA_ = -1, selB_ = -1, focus_ = -1, pressed_ = -1;
     bool dragging_ = false, clickPending_ = false;
     Widget* menu_ = nullptr;
+    bool openingMenu_ = false;
     // Automation runs never touch the clipboard or the browser: what would have been copied or
     // opened shows in the tree dump instead.
     std::wstring lastCopy_, lastUrl_;
