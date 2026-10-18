@@ -301,13 +301,24 @@ LibraryPane::LibraryPane(bool compact) : compact_(compact) {
     width = Length::Grow();
     height = Length::Grow();
     dir = Dir::Column;
+    Build();
+    routeConn_ = Connect(TheApp().routeChanged, [this] { ShowRoute(TheApp().route()); });
+    // Header and page strings are translated when built: rebuild on a language switch.
+    langConn_ = Connect(TheApp().languageChanged, [this] {
+        headerConn_.Reset();
+        view_ = nullptr;
+        ClearChildren();
+        Build();
+    });
+}
+
+void LibraryPane::Build() {
     BuildHeader();
     body_ = Add<Widget>();
     body_->width = Length::Grow();
     body_->height = Length::Grow();
     body_->dir = Dir::Stack;
     body_->align = Align::Stretch;
-    routeConn_ = Connect(TheApp().routeChanged, [this] { ShowRoute(TheApp().route()); });
     ShowRoute(TheApp().route());
 }
 

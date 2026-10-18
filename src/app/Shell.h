@@ -55,6 +55,7 @@ public:
     void Paint(ui::Painter& p) override;
 
 private:
+    void Build();
     void BuildHeader();
     void RefreshHeader();
     bool compact_;
@@ -71,7 +72,7 @@ private:
     ui::IconButton* more_ = nullptr;
     ui::Widget* body_ = nullptr;
     LibraryView* view_ = nullptr;
-    ScopedConnection headerConn_, routeConn_;
+    ScopedConnection headerConn_, routeConn_, langConn_;
 };
 
 }  // namespace app
