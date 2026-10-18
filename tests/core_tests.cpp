@@ -16,6 +16,7 @@
 #include "../src/library/Playlists.h"
 #include "../src/library/Thumbnails.h"
 #include "../src/app/player/Episodes.h"
+#include "../src/app/player/SubText.h"
 #include "../src/app/PlayQueue.h"
 #include "../src/audio/CrossfadeMath.h"
 #include "../src/audio/LoopbackSupport.h"
@@ -2208,6 +2209,141 @@ void TestMusicSettings() {
     CHECK(c.GetString("audio.visualizer") == "disabled");
 }
 
+// The subtitle word picker: ASS tags out, events split, words found, lookup links built.
+void TestSubtitleText() {
+    using namespace app::subtext;
+    int align = -1;
+    CHECK(StripAssTags(LR"({\i1}Hello{\i0}, {\c&H00FFFF&\b1}world{\r}!)", &align) == L"Hello, world!");
+    CHECK(align == 0);
+    CHECK(StripAssTags(LR"({\an8}Top line)", &align) == L"Top line" && align == 8);
+    CHECK(StripAssTags(LR"({\a6}Legacy top)", &align) == L"Legacy top" && align == 8);
+    CHECK(StripAssTags(LR"({\a10}Legacy middle)", &align) == L"Legacy middle" && align == 5);
+    CHECK(StripAssTags(LR"({\pos(10,20)\an7}Sign)", &align) == L"Sign" && align == 7);
+    CHECK(StripAssTags(LR"(First line\NSecond line)") == L"First line\nSecond line");
+    CHECK(StripAssTags(LR"(soft\nbreak and\hhard)") == std::wstring(L"soft break and hard"));
+    CHECK(StripAssTags(LR"(  padded \N\N  lines  )") == L"padded\nlines");
+    // Vector drawings are not text; \pbo (baseline offset) is not \p.
+    CHECK(StripAssTags(LR"({\p1}m 0 0 l 100 0 100 100{\p0}Caption)") == L"Caption");
+    CHECK(StripAssTags(LR"({\pbo5}Kept)") == L"Kept");
+    CHECK(StripAssTags(LR"({\p1}m 0 0 l 1 1)").empty());
+    CHECK(StripAssTags(L"unclosed {brace") == L"unclosed {brace");
+    CHECK(StripAssTags(L"{comment only}").empty());
+    CHECK(StripAssTags(LR"({\k20}Ka{\k30}ra{\k25}o{\k40}ke)") == L"Karaoke");
+    // Italic and bold per character, through the trimming: SRT's <i> arrives as {\i1}.
+    std::vector<uint8_t> marks{9};
+    CHECK(StripAssTags(LR"(plain {\i1}slanted{\i0} {\b700}heavy{\r} end)", nullptr, &marks) ==
+          L"plain slanted heavy end");
+    CHECK(marks.size() == 23 && marks[0] == 0 && marks[6] == kItalic && marks[12] == kItalic && marks[13] == 0 &&
+          marks[14] == kBold && marks[18] == kBold && marks[20] == 0);
+    CHECK(StripAssTags(LR"(  {\i1}one\N\N two{\i0}  )", nullptr, &marks) == L"one\ntwo");
+    CHECK(marks.size() == 7 && marks[0] == kItalic && marks[3] == 0 && marks[4] == kItalic);
+    CHECK(StripAssTags(LR"({\b1}bold{\b0} {\i1\b1}both)", nullptr, &marks) == L"bold both");
+    CHECK(marks.size() == 9 && marks[0] == kBold && marks[4] == 0 && marks[5] == (kItalic | kBold));
+    CHECK(StripAssTags(L"no styling", nullptr, &marks) == L"no styling" && marks.empty());
+    CHECK(StripAssTags(LR"({\b400}normal weight)", nullptr, &marks) == L"normal weight" && marks.empty());
+
+    // One event per line: a sign at the top, a line with a hard break (\N), a drawing only.
+    const auto events =
+        ParseEvents(LR"({\an8}Sign text)" L"\n" LR"({\i1}Привет,\Nмир!{\i0})" L"\n" LR"({\p1}m 0 0 l 5 5{\p0})");
+    CHECK(events.size() == 2);
+    CHECK(events.size() == 2 && events[0].align == 8 && events[0].text == L"Sign text");
+    CHECK(events.size() == 2 && events[1].align == 2 && events[1].text == L"Привет,\nмир!");
+    CHECK(ParseEvents(L"").empty());
+
+    // Native .ass: the header (sub-ass-extradata) and whole event lines (sub-text/ass-full).
+    const AssHeader header = ParseAssHeader(
+        L"[Script Info]\r\nScriptType: v4.00+\r\nPlayResX: 1280\r\nPlayResY: 720\r\n\r\n[V4+ Styles]\r\n"
+        L"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
+        L"Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
+        L"MarginR, MarginV, Encoding\r\n"
+        L"Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,3,1,2,30,30,30,1\r\n"
+        L"Style: Sign,Times New Roman,36.5,&H0000FFFF,&H000000FF,&H00102030,&H40000000,-1,1,0,0,100,100,0,0,3,2,0,8,10,"
+        L"10,40,1\r\n");
+    CHECK(header.playResX == 1280 && header.playResY == 720 && header.styles.size() == 2);
+    if (header.styles.size() == 2) {
+        const AssStyle& d = header.styles[0];
+        CHECK(d.name == L"Default" && d.font == L"Arial" && d.size == 48 && !d.bold && d.primary == 0xFFFFFF &&
+              d.outline == 3 && d.shadow == 1 && d.align == 2 && d.marginV == 30 && d.borderStyle == 1);
+        CHECK(std::abs(d.backAlpha - (1 - 128 / 255.0f)) < 0.01f);
+        const AssStyle& s = header.styles[1];
+        CHECK(s.font == L"Times New Roman" && s.size == 36.5f && s.bold && s.italic && s.primary == 0xFFFF00 &&
+              s.outlineColor == 0x302010 && s.borderStyle == 3 && s.align == 8 && s.marginV == 40);
+    }
+    CHECK(header.Find(L"sign") == &header.styles[1]);
+    CHECK(header.Find(L"Missing") == &header.styles[0]);
+    CHECK(ParseAssHeader(L"[Script Info]\nPlayResX: 1280\n").playResY == 1024);
+    CHECK(ParseAssHeader(L"").playResY == 288 && ParseAssHeader(L"").styles.empty());
+    const auto full = ParseFullEvents(
+        LR"(Dialogue: 0,0:00:00.50,0:00:10.00,Default,,0,0,0,,{\i1}Styled{\i0}, with commas\Nsecond)" L"\n"
+        LR"(Dialogue: 1,0:00:00.50,0:00:10.00,Sign,Actor,5,6,77,,{\an8}A sign)" L"\n"
+        LR"(Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\p1}m 0 0 l 1 1)");
+    CHECK(full.size() == 2);
+    if (full.size() == 2) {
+        CHECK(full[0].text == L"Styled, with commas\nsecond" && full[0].style == L"Default" && full[0].align == 0 &&
+              full[0].marginV == 0 && full[0].marks.size() == full[0].text.size() && full[0].marks[0] == kItalic);
+        CHECK(full[1].text == L"A sign" && full[1].style == L"Sign" && full[1].align == 8 && full[1].marginL == 5 &&
+              full[1].marginR == 6 && full[1].marginV == 77);
+    }
+    CHECK(ParseFullEvents(L"0,0:00:00.00,0:00:01.00,Default,,0,0,0,,No prefix").size() == 1);
+    CHECK(PlainText(L"  second\r\n track  ") == L"second\ntrack");
+
+    auto words = [](std::wstring_view s) {
+        std::vector<std::wstring> out;
+        for (const Span& w : SegmentWords(s)) out.emplace_back(s.substr(w.start, w.length));
+        return out;
+    };
+    using V = std::vector<std::wstring>;
+    CHECK(words(L"Hello, world!") == V({L"Hello", L"world"}));
+    CHECK(words(L"Don't stop — it's 1984.") == V({L"Don't", L"stop", L"it's", L"1984"}));
+    CHECK(words(L"don\u2019t") == V({L"don\u2019t"}));
+    CHECK(words(L"Кое-как, ёжик... «Вперёд»!") == V({L"Кое-как", L"ёжик", L"Вперёд"}));
+    CHECK(words(L"- Dash at start -") == V({L"Dash", L"at", L"start"}));
+    CHECK(words(L"line one\nline two") == V({L"line", L"one", L"line", L"two"}));
+    CHECK(words(L"Cafe\u0301 naïve") == V({L"Cafe\u0301", L"naïve"}));  // combining accent stays inside
+    CHECK(words(L"l\u00B7lengua") == V({L"l\u00B7lengua"}));
+    CHECK(words(L"Wow 😀 ok") == V({L"Wow", L"ok"}));
+    CHECK(words(L"").empty());
+    CHECK(words(L" ,.!? ").empty());
+    // CJK: one character per Chinese word, kana runs together, CJK punctuation separates.
+    CHECK(words(L"我爱你。") == V({L"我", L"爱", L"你"}));
+    CHECK(words(L"日本語のテキスト") == V({L"日", L"本", L"語", L"の", L"テキスト"}));
+    CHECK(words(L"コーヒーをください") == V({L"コーヒー", L"をください"}));
+    CHECK(words(L"𠀋字") == V({L"𠀋", L"字"}));  // a surrogate pair is one character
+    CHECK(words(L"안녕하세요 세계") == V({L"안녕하세요", L"세계"}));
+    // RTL: logical order, punctuation separates.
+    CHECK(words(L"שלום, עולם") == V({L"שלום", L"עולם"}));
+    CHECK(words(L"مرحبا بالعالم!") == V({L"مرحبا", L"بالعالم"}));
+    CHECK(IsRtl(L"«שלום»") && IsRtl(L"مرحبا") && !IsRtl(L"Hello שלום") && !IsRtl(L"123"));
+
+    const std::wstring t = L"New York,\nNew York";
+    const auto spans = SegmentWords(t);
+    CHECK(spans.size() == 4);
+    CHECK(WordRange(t, spans, 0, 1) == L"New York");
+    CHECK(WordRange(t, spans, 1, 2) == L"York, New");  // across the line break
+    CHECK(WordRange(t, spans, 3, 0) == L"New York, New York");  // reversed range, the break as a space
+    CHECK(WordRange(t, spans, 9, 9).empty());
+    CHECK(Phrase({L"Sign text", L"Привет,\nмир!"}) == L"Sign text Привет, мир!");
+    CHECK(Phrase({}).empty());
+
+    CHECK(IsBitmapCodec(L"hdmv_pgs_subtitle") && IsBitmapCodec(L"DVD_SUBTITLE") && IsBitmapCodec(L"dvb_subtitle"));
+    CHECK(!IsBitmapCodec(L"subrip") && !IsBitmapCodec(L"ass") && !IsBitmapCodec(L"mov_text") && !IsBitmapCodec(L""));
+
+    CHECK(UrlEncode(L"a b&c=d/é") == L"a%20b%26c%3Dd%2F%C3%A9");
+    CHECK(UrlEncode(L"ёж") == L"%D1%91%D0%B6");
+    CHECK(UrlEncode(L"-_.~AZaz09") == L"-_.~AZaz09");
+    CHECK(LookupUrl(L"https://{lang}.wiktionary.org/w/index.php?search={text}", L"don't", L"ru") ==
+          L"https://ru.wiktionary.org/w/index.php?search=don%27t");
+    CHECK(LookupUrl(L"  https://translate.google.com/?sl=auto&tl={lang}&text={text}&op=translate ", L"Привет мир", L"en") ==
+          L"https://translate.google.com/?sl=auto&tl=en&text=%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80&op=translate");
+    CHECK(LookupUrl(L"HTTP://example.com/?q=", L"x", L"en") == L"HTTP://example.com/?q=x");  // no {text}: appended
+    CHECK(LookupUrl(L"calc.exe", L"x", L"en").empty());
+    CHECK(LookupUrl(L"file:///C:/Windows/System32/calc.exe?{text}", L"x", L"en").empty());
+    CHECK(LookupUrl(L"javascript:alert({text})", L"x", L"en").empty());
+    CHECK(LookupUrl(L"https://", L"x", L"en").empty());
+    CHECK(LookupUrl(L"https://a.b/{text} \" -x", L"x", L"en").empty());
+    CHECK(LookupUrl(L"", L"x", L"en").empty());
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -2245,6 +2381,7 @@ const TestCase kTests[] = {
     {"crossfade_math", TestCrossfadeMath},
     {"spectrum", TestSpectrum},
     {"music_settings", TestMusicSettings},
+    {"subtitle_text", TestSubtitleText},
 };
 
 }  // namespace
