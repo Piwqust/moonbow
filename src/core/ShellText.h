@@ -10,7 +10,7 @@
 // doesn't fit is cut at a character boundary, without trailing spaces, and ends with "…" before
 // the suffix, so " — Lumen" stays visible.
 inline std::wstring FitShellText(std::wstring_view text, std::wstring_view suffix, size_t capacity) {
-    if (capacity == 0) return {};
+    if (capacity <= 1) return {};  // room for the terminator only
     const size_t max = capacity - 1;
     if (text.size() + suffix.size() <= max) return std::wstring(text) + std::wstring(suffix);
     if (suffix.size() + 1 >= max) {  // no room for any text: the text alone, cut

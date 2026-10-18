@@ -95,7 +95,7 @@ private:
         const Entry& e = v[static_cast<size_t>(i)];
         std::vector<MenuItem> m;
         if (e.kind == EntryKind::Media) {
-            m = MediaMenu(e.path, queue_, e.ref, queueName_);
+            m = MediaMenu(e.path, ShareQueue(queue_), e.ref, queueName_);
             if (more_.section == Section::Recent) {
                 const std::wstring path = e.path;
                 m.push_back(MenuItem::Separator());
@@ -198,6 +198,7 @@ public:
         });
         screenConn_ = Connect(TheApp().screenChanged, [this] {
             if (stale_ && !TheApp().PlayerShown()) Rebuild();
+            else MarkSeenIfShown(Section::Home, compact_);
         });
         Rebuild();
     }
@@ -229,7 +230,7 @@ public:
     }
     ViewState SaveState() const override {
         ViewState st;
-        st.scroll = scroll_->Offset();
+        if (filter_.empty()) st.scroll = scroll_->Offset();  // search results are laid out differently (see Page)
         // The selection of the focused row, else of the first row that has one.
         const Widget* focus = GetHost() ? GetHost()->Focus() : nullptr;
         const ItemGrid* chosen = nullptr;
@@ -273,7 +274,7 @@ private:
     }
 
     // A card for a file or stream that may or may not be in the library.
-    static Entry MediaCard(const std::wstring& path, const library::MediaItem* m, const library::HistoryEntry* h) {
+    Entry MediaCard(const std::wstring& path, const library::MediaItem* m, const library::HistoryEntry* h) const {
         Entry e;
         e.kind = EntryKind::Media;
         e.path = path;
@@ -289,7 +290,7 @@ private:
         e.duration = m && m->duration > 0 ? m->duration : h ? h->duration : 0;
         e.favorite = TheApp().favorites().Contains(path);
         e.damaged = m && m->damaged;
-        e.isNew = m && !h && TheApp().library().IsNew(*m);  // a file played already is not news
+        e.isNew = m && ShowsNew(*m, h || played_.count(library::PathKey(path)));
         return e;
     }
 
@@ -322,6 +323,8 @@ private:
         auto snap = app.library().Current();
         library::History& hist = app.history();
         count_ = -1;  // Home is a mix of sections: no single count describes it
+        played_.clear();
+        for (const library::HistoryEntry& h : hist.Entries()) played_.insert(library::PathKey(h.path));
 
         const bool searching = !filter_.empty();
         for (HomeSection* s : All()) s->Clear();
@@ -458,8 +461,7 @@ private:
 
         // Frequently visited folders.
         for (const library::FolderStat& f : hist.FrequentFolders(10)) {
-            if (f.folder.size() < 3 || IsUrl(f.folder) || !(f.folder[1] == L':' || (f.folder[0] == L'\\' && f.folder[1] == L'\\')))
-                continue;  // URLs report their host as a "folder"
+            if (!LooksLikeFolder(f.folder)) continue;  // URLs report their host as a "folder"
             Entry e;
             e.kind = EntryKind::Folder;
             e.path = f.folder;
@@ -550,7 +552,7 @@ private:
         for (HomeSection* s : Sections()) any |= s->visible;
         const bool scanning = app.library().Scanning();
         scan_->Update(!any);  // without sections the empty state says it already
-        if (!compact_) app.library().MarkSeen();
+        MarkSeenIfShown(Section::Home, compact_);
         empty_->visible = !any;
         if (!any) {
             const bool noRoots = app.library().Roots().empty();
@@ -651,6 +653,7 @@ private:
     ScopedConnection libConn_, playerConn_, screenConn_;
     bool focusTaken_ = false;
     bool stale_ = false;  // a file started or stopped while the player screen hid Home
+    std::unordered_set<std::wstring> played_;  // PathKey of every history entry (the "New" chip)
     SearchDebounce searchDebounce_;
     ViewState pendingState_;  // Back/Forward: applied after the first layout
     bool restorePending_ = false;

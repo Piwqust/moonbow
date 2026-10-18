@@ -8,6 +8,7 @@
 //
 // While playing it costs nothing: mpv properties are observed only while paused.
 #include "app/Signal.h"
+#include "app/player/SubStyle.h"
 #include "app/player/SubText.h"
 #include "core/Config.h"
 #include "gfx/Gpu.h"
@@ -65,15 +66,6 @@ public:
     void DebugInfo(std::string& out) const override;
 
 private:
-    struct Style {
-        std::wstring font;
-        float size = 38;  // mpv's sub-font-size: line height in pixels of a 720-line frame
-        bool bold = false;
-        ui::Color text, outlineColor, back;
-        float outline = 3;
-        bool shadow = true;
-        std::string background;  // none / lines / box
-    };
     // How one block is drawn, in window DIPs: from the Lumen style or the .ass script's style.
     struct Look {
         std::wstring font;
@@ -118,6 +110,7 @@ private:
     void FontRatios(const std::wstring& name, bool bold, float& em, float& ascent);
     void Rebuild();
     bool Record(ID2D1DeviceContext5* ctx, Block& b);
+    void DropPick();  // hover, selection, focus and the word menu
     void ResetInteraction();
     void EnterKeyboard();
     int WordAt(float x, float y, int block = -1) const;
@@ -138,11 +131,9 @@ private:
 
     // Observed while paused.
     std::vector<uint64_t> observers_;
-    // What sub-text is read as: 2 whole .ass events, 1 events with tags, 0 plain text.
-    int textLevel_ = 1, maxLevel_ = 2;
     std::wstring assText_, secondaryText_;
     bool textKnown_ = false, visibilityKnown_ = false;
-    bool scheduled_ = false, restart_ = false, styleDirty_ = false;
+    bool scheduled_ = false, styleDirty_ = false;
     std::wstring textKey_;  // the lines the selection belongs to
     bool mpvVisible_ = true;  // sub-visibility as mpv reports it
     double subPos_ = 100, subScale_ = 1, secondaryPos_ = 0;
@@ -157,7 +148,7 @@ private:
     double stepUntil_ = 0;
     UINT_PTR stepTimer_ = 0;
 
-    Style style_;
+    SubtitleStyle style_;
     subtext::AssHeader header_;
     uint64_t headerKey_ = 0;  // the file and track header_ was read for
     bool assMode_ = false;    // a native .ass track drawn with its own styles

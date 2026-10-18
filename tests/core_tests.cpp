@@ -29,6 +29,7 @@
 #include "../src/net/Secret.h"
 
 #include <windows.h>
+#include <winsock2.h>
 #include <objbase.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -41,7 +42,10 @@
 #include <map>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
+
+#pragma comment(lib, "ws2_32.lib")  // the local HTTP server of the client test
 
 namespace {
 
@@ -177,6 +181,25 @@ void TestJsonBasics() {
     CHECK(o->AsObject()[1].key == "a");
     CHECK(o->GetNumber("a") == 4);
     CHECK(json::Serialize(*o) == R"({"z":1,"a":4,"m":3})");
+
+    // The same in a large object, without the O(n^2) key check: 200 000 keys parse in well under
+    // a second (the old scan took minutes).
+    {
+        std::string big = "{";
+        for (int i = 0; i < 200000; ++i) big += "\"k" + std::to_string(i) + "\":" + std::to_string(i) + ",";
+        big += "\"k5\":-5,\"k199999\":-1,\"k3\":-3}";
+        const auto t0 = std::chrono::steady_clock::now();
+        auto b = json::Parse(big);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        CHECK_MSG(ms < 1500, "%.0f ms", ms);
+        CHECK(b && b->size() == 200000);
+        CHECK(b && b->AsObject()[5].key == "k5" && b->GetInt("k5") == -5 && b->GetInt("k3") == -3);
+        CHECK(b && b->AsObject()[199999].key == "k199999" && b->GetInt("k199999") == -1 && b->GetInt("k7") == 7);
+        auto mid = json::Parse(R"({"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10,"k":11,"l":12,)"
+                               R"("m":13,"n":14,"o":15,"p":16,"q":17,"a":0,"q":0,"r":18})");
+        CHECK(mid && mid->size() == 18 && mid->GetInt("a") == 0 && mid->GetInt("q") == 0 &&
+              mid->AsObject()[0].key == "a" && mid->AsObject()[16].key == "q" && mid->AsObject()[17].key == "r");
+    }
 
     json::Value built;
     built["x"] = 1;
@@ -546,6 +569,11 @@ void TestConfigValues() {
     CHECK(c.GetDouble("audio.eq60") == 8);
     CHECK(c.GetDouble("audio.eqPreamp") == -7);
     CHECK(!c.ApplyEqPreset("nope"));
+    // "none" flattens the bands (the player panel relies on it; it used to do nothing).
+    CHECK(c.ApplyEqPreset("none"));
+    CHECK(c.GetString("audio.eqPreset") == "none");
+    CHECK(c.GetDouble("audio.eq60") == 0);
+    CHECK(c.GetDouble("audio.eqPreamp") == 0);
 
     c.ResetAll();
     CHECK(c.GetString("general.theme") == "dark");
@@ -783,6 +811,38 @@ void TestCorruptBackup() {
     CHECK(json::ReadFileUtf8(dir + L"\\playlists.json", &after) && after.find("Keep") != std::string::npos);
     CHECK(TakeCorruptFileNotices().empty());
 
+    // The same for settings.json and library.json: a change made after they were locked at load
+    // never writes defaults (or an empty folder list) over them.
+    const std::string lockedSettings = R"({"version":1,"values":{"audio.startupVolume":42}})";
+    const std::string lockedLibrary = R"({"version":1,"roots":["C:\\Keep"]})";
+    WriteFile(dir + L"\\settings.json", lockedSettings);
+    WriteFile(dir + L"\\library.json", lockedLibrary);
+    {
+        Config c;
+        library::MediaLibrary lib;
+        HANDLE lockS = CreateFileW((dir + L"\\settings.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        HANDLE lockL = CreateFileW((dir + L"\\library.json").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        CHECK(lockS != INVALID_HANDLE_VALUE && lockL != INVALID_HANDLE_VALUE);
+        CHECK(!c.Load() && !lib.Load() && lib.Roots().empty());
+        CloseHandle(lockS);
+        CloseHandle(lockL);
+        CHECK(c.SetDouble("audio.startupVolume", 10));
+        CHECK(!c.Flush() && !c.Save());
+        CHECK(lib.AddRoot(dir));
+        CHECK(!lib.Save());
+    }  // the Config destructor flushes too
+    CHECK(json::ReadFileUtf8(dir + L"\\settings.json", &after) && after == lockedSettings);
+    CHECK(json::ReadFileUtf8(dir + L"\\library.json", &after) && after == lockedLibrary);
+    {
+        Config c;  // unlocked again: it loads and saves as usual
+        CHECK(c.Load() && c.GetDouble("audio.startupVolume") == 42);
+        CHECK(c.SetDouble("audio.startupVolume", 11) && c.Save());
+    }
+    CHECK(json::ReadFileUtf8(dir + L"\\settings.json", &after) && after.find("11") != std::string::npos);
+    DeleteFileW((dir + L"\\settings.json").c_str());
+    DeleteFileW((dir + L"\\library.json").c_str());
+    CHECK(TakeCorruptFileNotices().empty());
+
     // The log path hint follows a moved data folder.
     CHECK(DataDirOverridden());
     const std::wstring shown = DataFileDisplayPath(L"lumen.log");
@@ -936,6 +996,9 @@ void TestConfigMpv() {
     c.SetString("network.httpProxy", "http://me@proxy:3128");
     c.SetString("network.httpProxyPassword", "p4ss");
     CHECK(FindOption(MpvOptions(c), "http-proxy") == "http://me:p4ss@proxy:3128");
+    c.SetString("network.httpProxyPassword", "p@ss:w/rd %");  // encoded, or "@" ends the user part
+    CHECK(FindOption(MpvOptions(c), "http-proxy") == "http://me:p%40ss%3Aw%2Frd%20%25@proxy:3128");
+    c.SetString("network.httpProxyPassword", "p4ss");
 
     // Startup-only settings are not pushed live.
     c.SetDouble("playback.speed", 1.5);
@@ -1267,6 +1330,25 @@ void TestFileSettings() {
         std::printf("  5000 files: %u KB, put x5100 %.1f ms, lookup %.2f us, save %.1f ms, load %.1f ms\n",
                     static_cast<unsigned>(fa.nFileSizeLow / 1024), putMs, findUs, saveMs, loadMs);
     }
+    // A hand-edited file far over the cap keeps the newest 5000 in one pass (the old eviction
+    // scanned the whole store once per extra entry).
+    {
+        std::string text = R"({"version":1,"files":[)";
+        for (int i = 0; i < 30000; ++i)
+            text += (i ? "," : "") + std::string(R"({"path":"F:\\hand\\)") + std::to_string(i) + R"(.mkv","used":)" +
+                    std::to_string(i + 1) + R"(,"aid":2})";
+        text += "]}";
+        WriteFile(file, text);
+        library::FileSettings fs;
+        const auto t0 = std::chrono::steady_clock::now();
+        CHECK(fs.Load());
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        CHECK(fs.size() == library::FileSettings::kMaxEntries);
+        CHECK(fs.Find(L"F:\\hand\\29999.mkv") && fs.Find(L"F:\\hand\\25000.mkv"));
+        CHECK(!fs.Find(L"F:\\hand\\24999.mkv") && !fs.Find(L"F:\\hand\\0.mkv"));
+        CHECK_MSG(ms < 1000, "%.0f ms", ms);
+        std::printf("  hand-edited 30000 files: load + evict %.1f ms\n", ms);
+    }
 
     // History > Clear clears this store too (LiveState sets History::onCleared), even with no history.
     {
@@ -1410,6 +1492,10 @@ void TestMediaTypes() {
     CHECK(KindOf(L"a.MKV") == MediaKind::Video);
     CHECK(KindOf(L"C:\\x.y\\song.Flac") == MediaKind::Audio);
     CHECK(KindOf(L"C:\\x.mkv\\readme") == MediaKind::Other);
+    // One release-tag list for episode titles and online lookups: case and dashes don't matter.
+    CHECK(library::IsReleaseTag(L"WEB-DL") && library::IsReleaseTag(L"webdl") && library::IsReleaseTag(L"Remastered"));
+    CHECK(library::IsReleaseTag(L"INTERNAL") && library::IsReleaseTag(L"x-264") && library::IsReleaseTag(L"DDP5"));
+    CHECK(!library::IsReleaseTag(L"Pilot") && !library::IsReleaseTag(L"") && !library::IsReleaseTag(L"-"));
     CHECK(KindOf(L"notes.txt") == MediaKind::Other);
     CHECK(KindOf(L"noext") == MediaKind::Other);
     CHECK(library::IsSubtitlePath(L"a.ru.srt") && library::IsPlaylistPath(L"a.m3u8"));
@@ -1550,6 +1636,12 @@ void TestPlayerEpisodes() {
     CHECK(ep::KindOf(L"Operation") == ep::ChapterKind::Other);
     CHECK(ep::KindOf(L"Chapter 2") == ep::ChapterKind::Other);
     CHECK(ep::KindOf(L"Edward") == ep::ChapterKind::Other);
+    // "OP" and "ED" are whole titles, maybe numbered; inside other words they mean something else.
+    CHECK(ep::KindOf(L"OP 2") == ep::ChapterKind::Intro && ep::KindOf(L"02 - OP") == ep::ChapterKind::Intro);
+    CHECK(ep::KindOf(L"[ED]") == ep::ChapterKind::Credits);
+    CHECK(ep::KindOf(L"Sonata Op. 27") == ep::ChapterKind::Other);
+    CHECK(ep::KindOf(L"Ed's Story") == ep::ChapterKind::Other);
+    CHECK(ep::KindOf(L"Ed Sheeran") == ep::ChapterKind::Other);
 }
 
 void TestLibraryScan() {
@@ -1730,6 +1822,52 @@ void TestLibraryCacheTags() {
     snap = ScanAndWait(lib);
     m = snap ? snap->FindItem(usbSong) : nullptr;
     CHECK(m && m->title == L"Away");  // from the cache, not the untagged file
+
+    // Cloud-only files (OneDrive "free up space") are never read; they keep their cached tags and
+    // their first-seen time across scans that save the cache.
+    const std::wstring cloud = MakeDir(L"lib-cache-cloud");
+    const std::wstring tagged = cloud + L"\\Tagged.mp3", fresh = cloud + L"\\Fresh.mp3";
+    WriteFile(tagged, std::string(64, 'c'));
+    WriteFile(fresh, std::string(64, 'f'));
+    WIN32_FILE_ATTRIBUTE_DATA ca{};
+    CHECK(GetFileAttributesExW(tagged.c_str(), GetFileExInfoStandard, &ca));
+    {
+        json::Value e = json::Value::MakeObject();
+        e.Set("p", json::ToUtf8(tagged));
+        e.Set("s", 64);
+        e.Set("m", library::FileTimeToUnixMs((static_cast<uint64_t>(ca.ftLastWriteTime.dwHighDateTime) << 32) |
+                                             ca.ftLastWriteTime.dwLowDateTime));
+        e.Set("t", "Cloud");
+        e.Set("f", 1000);
+        json::Value items = json::Value::MakeArray();
+        items.Push(std::move(e));
+        json::Value doc = json::Value::MakeObject();
+        doc.Set("version", 5);
+        doc.Set("items", std::move(items));
+        CHECK(json::WriteFileAtomic(dir + L"\\library-cache.json", json::Serialize(doc)));
+    }
+    CHECK(SetFileAttributesW(tagged.c_str(), FILE_ATTRIBUTE_OFFLINE));
+    CHECK(SetFileAttributesW(fresh.c_str(), FILE_ATTRIBUTE_OFFLINE));
+    lib.SetRoots({cloud});
+    WriteFile(cloud + L"\\Local.mp3", std::string(64, 'l'));  // read now, so the cache is saved
+    snap = ScanAndWait(lib);
+    m = snap ? snap->FindItem(tagged) : nullptr;
+    CHECK(m && m->offline && m->title == L"Cloud" && m->firstSeen == 1000);
+    const library::MediaItem* f = snap ? snap->FindItem(fresh) : nullptr;
+    const int64_t freshSeen = f ? f->firstSeen : -1;
+    CHECK(f && f->offline && freshSeen > 1000);  // found now in a known folder: new
+    Sleep(20);
+    snap = ScanAndWait(lib);
+    m = snap ? snap->FindItem(tagged) : nullptr;
+    CHECK(m && m->title == L"Cloud" && m->firstSeen == 1000);
+    f = snap ? snap->FindItem(fresh) : nullptr;
+    CHECK(f && f->firstSeen == freshSeen);  // not "new" again on every scan
+    // Back on the disk: the file is read then.
+    CHECK(SetFileAttributesW(fresh.c_str(), FILE_ATTRIBUTE_NORMAL));
+    snap = ScanAndWait(lib);
+    f = snap ? snap->FindItem(fresh) : nullptr;
+    CHECK(f && !f->offline && f->firstSeen == freshSeen && f->damaged);  // 64 bytes of "f": read, no MP3
+    SetFileAttributesW(tagged.c_str(), FILE_ATTRIBUTE_NORMAL);
 }
 
 // Real media from the Windows install, to measure property-store cost and check durations.
@@ -2607,6 +2745,8 @@ void TestShellText() {
     CHECK(FitShellText(L"abcdef", L"0123456789", 8).size() <= 7);
     CHECK(FitShellText(L"abc", L"0123456789", 8) == L"abc");
     CHECK(FitShellText(L"abc", L"x", 0).empty());
+    CHECK(FitShellText(L"abc", L"x", 1).empty());  // room for the terminator only
+    CHECK(FitShellText(L"abc", L"x", 2) == L"…");
 }
 
 void TestCrossfadeMath() {
@@ -2831,6 +2971,7 @@ void TestSubtitleText() {
     CHECK(words(L"שלום, עולם") == V({L"שלום", L"עולם"}));
     CHECK(words(L"مرحبا بالعالم!") == V({L"مرحبا", L"بالعالم"}));
     CHECK(IsRtl(L"«שלום»") && IsRtl(L"مرحبا") && !IsRtl(L"Hello שלום") && !IsRtl(L"123"));
+    CHECK(!IsRtl(L"\xFEFFHello") && IsRtl(L"\xFEFC"));  // a BOM is no letter; U+FEFC is Arabic
 
     const std::wstring t = L"New York,\nNew York";
     const auto spans = SegmentWords(t);
@@ -3222,6 +3363,25 @@ void TestOnlineJson() {
     CHECK(net::ParseSubtitleQuota(*json::Parse(R"({"data":{}})")) == -1);
     CHECK(net::SubtitleFileName(L"D:\\TV\\Show.S02E05.mkv", L"en", L"Whatever.SRT") == L"Show.S02E05.en.srt");
     CHECK(net::SubtitleFileName(L"D:\\TV\\a.mkv", L"pt-BR", L"noext") == L"a.pt-br.srt");
+    CHECK(net::SubtitleFileName(L"D:\\TV\\a.mkv", L"en", L"x.ass") == L"a.en.ass");
+    // The server's extension is kept only when it is a subtitle one.
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"Movie.en.lnk") == L"Movie.en.srt");
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"run.hta") == L"Movie.en.srt");
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"x.url") == L"Movie.en.srt");
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"x.a\\b") == L"Movie.en.srt");   // no subfolders
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"x.s/rt") == L"Movie.en.srt");
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"x.:abc") == L"Movie.en.srt");   // no NTFS stream
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"en", L"x.srt:s") == L"Movie.en.srt");
+    CHECK(net::SubtitleFileName(L"D:\\M\\Movie.mkv", L"e\\n:", L"x.srt") == L"Movie.en.srt");
+    // Stream URLs: characters a file name can't hold become "_".
+    CHECK(net::SubtitleFileName(L"https://host/watch?v=a:b", L"en", L"x.srt") == L"watch_v=a_b.en.srt");
+    CHECK(net::SubtitleFileName(L"rtsp://cam:554", L"en", L"x.srt") == L"cam_554.en.srt");
+    CHECK(net::SubtitleFileName(L"https://host/a*b|c\"d<e>f", L"", L"x.vtt") == L"a_b_c_d_e_f.vtt");
+    for (const wchar_t* hostile : {L"x.a\\b", L"x.:abc", L"..\\..\\evil.srt", L"a/b.lnk", L"x.srt\\..\\y.exe"}) {
+        const std::wstring n = net::SubtitleFileName(L"https://h/v?x=1", L"en", hostile);
+        CHECK_MSG(n.find_first_of(L"\\/:*?\"<>|") == std::wstring::npos && library::IsSubtitlePath(n), "%ls -> %ls",
+                  hostile, n.c_str());
+    }
 
     // TMDB
     doc = json::Parse(R"({"results":[
@@ -3286,12 +3446,24 @@ void TestSecretSettings() {
         CHECK(c.GetString("privacy.tmdbKey") == "tmdb-key-123");
         CHECK(c.GetString("privacy.opensubtitlesPassword") == "pa55word");
     }
-    // A blob from another account reads as empty, not as the blob.
+    // A blob from another account reads as empty, not as the blob, and is written back as it was
+    // (the file may go back to that account) until a new key replaces it.
     WriteFile(file, R"({"version":1,"values":{"privacy.tmdbKey":"dpapi:bm90IGEgYmxvYg=="}})");
     {
         Config c;
         CHECK(c.Load());
         CHECK(c.GetString("privacy.tmdbKey").empty());
+        CHECK(c.SetString("privacy.opensubtitlesUser", "other") && c.Save());
+    }
+    CHECK(json::ReadFileUtf8(file, &text) && text.find("dpapi:bm90IGEgYmxvYg==") != std::string::npos);
+    {
+        Config c;
+        CHECK(c.Load() && c.SetString("privacy.tmdbKey", "new-key") && c.Save());
+    }
+    CHECK(json::ReadFileUtf8(file, &text) && text.find("bm90IGEgYmxvYg==") == std::string::npos);
+    {
+        Config c;
+        CHECK(c.Load() && c.GetString("privacy.tmdbKey") == "new-key");
     }
     // Every online feature is off by default.
     {
@@ -3380,6 +3552,61 @@ void TestHttpClient() {
                });
     CHECK(wait(done));
     CHECK(!called && workThread != mainThread && doneThread == mainThread);
+
+    // A 200 answer that isn't JSON (a captive portal's page) is not cached; a JSON one is.
+    SOCKET srv = INVALID_SOCKET;
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) == 0) srv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    int addrLen = sizeof(addr);
+    const bool listening = srv != INVALID_SOCKET && bind(srv, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0 &&
+                           listen(srv, 4) == 0 && getsockname(srv, reinterpret_cast<sockaddr*>(&addr), &addrLen) == 0;
+    CHECK(listening);
+    if (!listening) return;
+    std::thread server([srv] {
+        for (int served = 0; served < 3; ++served) {
+            SOCKET c = accept(srv, nullptr, nullptr);
+            if (c == INVALID_SOCKET) return;
+            std::string req;
+            char buf[1024];
+            int n = 0;
+            while (req.find("\r\n\r\n") == std::string::npos && (n = recv(c, buf, sizeof(buf), 0)) > 0) req.append(buf, n);
+            const std::string body = req.find("/json") != std::string::npos ? "{\"ok\":1}" : "<html>Sign in</html>";
+            const std::string out = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(body.size()) +
+                                    "\r\nConnection: close\r\n\r\n" + body;
+            send(c, out.data(), static_cast<int>(out.size()), 0);
+            shutdown(c, SD_SEND);
+            closesocket(c);
+        }
+    });
+    const std::wstring base = L"http://127.0.0.1:" + std::to_wstring(ntohs(addr.sin_port));
+    auto fetch = [&](const std::wstring& path, const std::string& key) {
+        net::Request q;
+        q.url = base + path;
+        q.allowLoopbackHttp = true;
+        q.user = true;  // the refused port above left the client offline
+        q.cacheKey = key;
+        q.cacheTtl = 600;
+        *done = false;
+        net::Send(q, [&, done](const net::Response& resp) {
+            got = resp;
+            *done = true;
+        });
+        return wait(done);
+    };
+    const uint64_t sent = net::NetworkRequests();
+    net::CacheEntry e;
+    CHECK(fetch(L"/html", "test:html") && got.Ok() && !got.fromCache && got.body == "<html>Sign in</html>");
+    CHECK(!net::SharedDisk().Get("test:html", &e));
+    CHECK(fetch(L"/html", "test:html") && got.Ok() && !got.fromCache);  // asked again, not from a cache
+    CHECK(fetch(L"/json", "test:json") && got.Ok() && !got.fromCache);
+    CHECK(net::SharedDisk().Get("test:json", &e) && e.body == "{\"ok\":1}");
+    CHECK(net::NetworkRequests() == sent + 3);
+    closesocket(srv);  // ends the server's accept() even when a fetch above never arrived
+    server.join();
+    WSACleanup();
 }
 
 struct TestCase {

@@ -11,6 +11,8 @@ namespace {
 // its own on disk), the GPU copies are what painting uses.
 constexpr size_t kGpuBytes = 128u << 20;
 constexpr size_t kServiceBytes = 48u << 20;
+// Files known to have no picture; forgotten in one go past this (they are then asked again).
+constexpr size_t kMaxMissing = 20000;
 
 }  // namespace
 
@@ -31,6 +33,11 @@ std::wstring ImageCache::Key(const std::wstring& path, int bucket) {
 
 bool ImageCache::Missing(const std::wstring& path, int sizePx) const {
     return missing_.count(Key(path, Bucket(sizePx))) > 0;
+}
+
+void ImageCache::NoteMissing(const std::wstring& key) {
+    if (missing_.size() >= kMaxMissing) missing_.clear();
+    missing_.insert(key);
 }
 
 ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
@@ -77,7 +84,7 @@ ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
         }
     }
     if (thumbs_.KnownMissing(path, bucket)) {
-        missing_[key] = true;
+        NoteMissing(key);
         return nullptr;
     }
     auto p = pending_.find(key);
@@ -116,7 +123,7 @@ void ImageCache::OnCompleted() {
         const std::wstring key = c->second;
         cookies_.erase(c);
         pending_.erase(key);
-        if (!r.bitmap) missing_[key] = true;
+        if (!r.bitmap) NoteMissing(key);
         any = true;
     }
     if (any) ready.Emit();

@@ -154,11 +154,13 @@ public:
     void OnLibraryScanned();
     void OnThumbnails();
     void FlushStores();
+    // general.theme / accent to the palette and every window; also when Windows switches
+    // light/dark (WM_SETTINGCHANGE) under the System theme.
+    void ApplyTheme();
 
 private:
     App();
     void BuildFolderQueue(const std::wstring& file);
-    void ApplyTheme();
     void OnConfigChanged(const std::string& key);
     void SaveHistoryPosition();
     void SaveWindowPlacement();

@@ -130,9 +130,17 @@ inline ChapterKind KindOf(const std::wstring& title) {
                 if (word == s) return true;
         return false;
     };
-    if (has({L"opening", L"intro", L"introduction", L"op", L"заставка", L"опенинг", L"вступление"}))
+    // "OP" and "ED" only as the whole title, maybe numbered: "Sonata Op. 27" and "Ed's Story" are
+    // neither.
+    auto alone = [&words](const wchar_t* s) {
+        int named = 0;
+        for (const std::wstring& word : words)
+            if (!std::iswdigit(word[0])) named += word == s ? 1 : 2;
+        return named == 1;
+    };
+    if (alone(L"op") || has({L"opening", L"intro", L"introduction", L"заставка", L"опенинг", L"вступление"}))
         return ChapterKind::Intro;
-    if (has({L"credits", L"ed", L"ending", L"outro", L"титры", L"эндинг"})) return ChapterKind::Credits;
+    if (alone(L"ed") || has({L"credits", L"ending", L"outro", L"титры", L"эндинг"})) return ChapterKind::Credits;
     return ChapterKind::Other;
 }
 

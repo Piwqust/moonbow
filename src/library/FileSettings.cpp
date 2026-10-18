@@ -178,14 +178,17 @@ int64_t FileSettings::NextStamp() {
 }
 
 void FileSettings::Evict() {
-    // Over the cap only by one at a time in use (Put), by any amount after a hand-edited file.
-    while (entries_.size() > kMaxEntries) {
-        auto oldest = entries_.begin();
-        for (auto it = entries_.begin(); it != entries_.end(); ++it)
-            if (it->second.used < oldest->second.used) oldest = it;
-        entries_.erase(oldest);
-        dirty_ = true;
-    }
+    // Over the cap only by one at a time in use (Put), by any amount after a hand-edited file:
+    // one partial sort, not a scan per entry.
+    if (entries_.size() <= kMaxEntries) return;
+    std::vector<decltype(entries_)::iterator> all;
+    all.reserve(entries_.size());
+    for (auto it = entries_.begin(); it != entries_.end(); ++it) all.push_back(it);
+    const size_t excess = entries_.size() - kMaxEntries;
+    std::nth_element(all.begin(), all.begin() + static_cast<ptrdiff_t>(excess - 1), all.end(),
+                     [](const auto& a, const auto& b) { return a->second.used < b->second.used; });
+    for (size_t i = 0; i < excess; ++i) entries_.erase(all[i]);
+    dirty_ = true;
 }
 
 const FileOptions* FileSettings::Find(const std::wstring& path) const {

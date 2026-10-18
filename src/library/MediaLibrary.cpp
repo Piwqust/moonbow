@@ -346,10 +346,11 @@ void ReadMetadataParallel(Snapshot& snap, const std::vector<size_t>& pending, si
 
 using KeptCache = std::vector<std::pair<std::wstring, CacheEntry>>;  // PathKey -> entry
 
-// `unread` (optional, by item index): files whose metadata is not read yet stay out of the
-// cache, so an interrupted scan resumes with them next time. `kept`: entries of library roots
-// that were not reachable (a USB disk unplugged), written back unchanged.
-void SaveCache(const Snapshot& s, const std::vector<char>* unread, const KeptCache& kept) {
+// `unread` (by item index): files whose metadata is not read yet (still queued, or cloud-only)
+// are written as stale entries: only their first-seen time is kept, so they don't turn "new"
+// again, and the tags are read on a later scan. `kept`: entries of library roots that were not
+// reachable (a USB disk unplugged), written back unchanged.
+void SaveCache(const Snapshot& s, const std::vector<char>& unread, const KeptCache& kept) {
     json::Value items = json::Value::MakeArray();
     items.MutArray().reserve(s.items.size() + kept.size());
     auto add = [&](const std::wstring& path, const CacheEntry& c) {
@@ -368,12 +369,20 @@ void SaveCache(const Snapshot& s, const std::vector<char>* unread, const KeptCac
         if (c.disc > 0) e.Set("k", c.disc);
         if (c.damaged) e.Set("b", true);
         if (c.firstSeen > 0) e.Set("f", c.firstSeen);
-        if (c.stale) e.Set("o", true);  // an unplugged drive's entry from an older format
+        if (c.stale) e.Set("o", true);  // tags not read yet (or from an older format)
         items.Push(std::move(e));
     };
     for (size_t i = 0; i < s.items.size(); ++i) {
         const MediaItem& it = s.items[i];
-        if (it.offline || (unread && (*unread)[i])) continue;
+        if (unread[i]) {
+            CacheEntry stale;
+            stale.size = it.size;
+            stale.mtime = it.mtime;
+            stale.firstSeen = it.firstSeen;
+            stale.stale = true;
+            add(it.path, stale);
+            continue;
+        }
         add(it.path, {it.size, it.mtime, it.duration, it.title, it.artist, it.album, it.albumArtist, it.genre, it.track,
                       it.year, it.disc, it.damaged, it.firstSeen});
     }
@@ -513,10 +522,13 @@ MediaLibrary::~MediaLibrary() {
 
 bool MediaLibrary::Load() {
     newSince_ = UnixMsNow();  // no record yet: only files found from now on are new
+    readOnly_ = false;
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"library.json"), &text)) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+        readOnly_ = true;  // locked by a backup or sync tool: saving now would drop the folder list
+        return false;
     }
     std::optional<json::Value> doc = json::Parse(text);
     // Valid JSON of the wrong shape ("roots": "x") is as unreadable as broken JSON.
@@ -535,6 +547,7 @@ bool MediaLibrary::Load() {
 }
 
 bool MediaLibrary::Save() const {
+    if (readOnly_) return false;
     json::Value doc = json::Value::MakeObject();
     doc.Set("version", 1);
     json::Value& roots = doc["roots"];
@@ -694,6 +707,8 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     // 2. Metadata: cached values first, then probe the cost of reading the rest.
     std::vector<size_t> pending;
+    std::vector<char> unread(snap->items.size(), 0);  // see SaveCache
+    bool uncached = false;                             // a file the cache doesn't know yet
     KeptCache kept;  // a drive that is off keeps its tags for when it comes back
     if (options.readMetadata && !cancel) {
         auto cache = LoadCache();
@@ -726,6 +741,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
             if (c != cache.end()) {
                 it.firstSeen = c->second.firstSeen;
             } else {
+                uncached = true;
                 if (it.folder != lastFolder) {  // items come folder by folder
                     lastFolder = it.folder;
                     lastRoot = -1;
@@ -750,6 +766,8 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
                 it.damaged = c->second.damaged;
             } else if (!it.offline) {
                 pending.push_back(i);
+            } else {
+                unread[i] = 1;  // reading would download it from the cloud
             }
         }
     }
@@ -793,7 +811,6 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     // every few seconds.
     auto lastPublish = Clock::now();
     const int threads = MetadataThreads();
-    std::vector<char> unread(snap->items.size(), 0);
     for (size_t i = done; i < pending.size(); ++i) unread[pending[i]] = 1;
     while (done < pending.size() && !cancel) {
         const size_t last = std::min(pending.size(), done + kMetadataChunk);
@@ -808,13 +825,13 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
             snap->stats.metadataSecondPass = true;
             snap->complete = false;
             snap->stats.metadataFiles = done;
-            if (options.readMetadata) SaveCache(*snap, &unread, kept);
+            if (options.readMetadata) SaveCache(*snap, unread, kept);
             Publish(std::make_shared<Snapshot>(*snap));
             lastPublish = Clock::now();
         }
         if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
             snap->stats.metadataFiles = done;
-            if (options.readMetadata) SaveCache(*snap, &unread, kept);
+            if (options.readMetadata) SaveCache(*snap, unread, kept);
             Publish(std::make_shared<Snapshot>(*snap));
             lastPublish = Clock::now();
         }
@@ -823,9 +840,10 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     snap->stats.metadataFiles = done;
     snap->stats.metadataMsPerFile = done ? snap->stats.metadataMs / static_cast<double>(done) : 0;
 
+    // Files only found (cloud-only ones are never read) are saved too, or they'd be new every scan.
+    if (!cancel && options.readMetadata && (done > 0 || uncached)) SaveCache(*snap, unread, kept);
     if (!cancel && (!snap->complete || done > 0)) {
         snap->complete = true;
-        if (options.readMetadata && done > 0) SaveCache(*snap, nullptr, kept);
         Publish(std::make_shared<const Snapshot>(std::move(*snap)));
     }
     if (SUCCEEDED(com)) CoUninitialize();

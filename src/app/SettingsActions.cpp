@@ -5,6 +5,8 @@
 #include "app/FileAssociations.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/library/LibraryCommon.h"
+#include "app/player/LiveState.h"
 #include "core/Paths.h"
 #include "net/Online.h"
 #include "ui/Controls.h"
@@ -24,9 +26,7 @@ bool RunSettingsAction(const std::string& action) {
         if (app.main()) ui::ShowToast(app.main(), Tr(text), icon);
     };
     if (action == "clear-history") {
-        app.history().Clear();
-        app.history().Flush();
-        net::online::ClearAll();  // what the online services sent goes with the history
+        lib::ClearHistory();
         toast(L"History cleared", "recent");
         return true;
     }
@@ -37,12 +37,16 @@ bool RunSettingsAction(const std::string& action) {
     }
     if (action == "reset-picture") {
         Player& p = app.player();
-        for (const char* prop : {"brightness", "contrast", "saturation", "gamma", "hue"}) p.SetProperty(prop, 0.0);
-        p.SetProperty("video-zoom", 0.0);
         p.SetProperty("video-pan-x", 0.0);
         p.SetProperty("video-pan-y", 0.0);
         p.SetProperty("video-rotate", std::string("0"));
-        p.SetProperty("video-aspect-override", std::string("no"));
+        // Through LiveState: it owns zoom, aspect, flip and the colour effects, and remembers
+        // them per file, so setting mpv directly left its copies stale.
+        LiveState& live = Live();
+        live.flip = 0;          // applied with the colour effects below
+        live.ResetPicture();    // brightness... hue, negate, grayscale
+        live.SetZoomMode("fit");  // video-zoom 0, video-unscaled no
+        live.SetAspect("auto");
         toast(L"Picture reset", "video");
         return true;
     }
@@ -70,7 +74,7 @@ bool RunSettingsAction(const std::string& action) {
         return true;
     }
     if (action == "rescan-library") {
-        app.library().Rescan();
+        lib::RescanLibrary();
         toast(L"Rescanning the library…", "refresh");
         return true;
     }

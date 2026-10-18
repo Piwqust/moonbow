@@ -246,7 +246,9 @@ std::shared_ptr<ThumbnailBitmap> FrameAt(const std::wstring& path, double second
         UINT32 stride = 0;
         pitch = SUCCEEDED(got->GetUINT32(MF_MT_DEFAULT_STRIDE, &stride)) ? static_cast<LONG>(stride) : static_cast<LONG>(w * 4);
         scan0 = pitch < 0 ? data + static_cast<size_t>(-pitch) * (h - 1) : data;
-        if (static_cast<size_t>(std::abs(pitch)) * h > length) {
+        // A stride shorter than a row would read past the buffer on the last row.
+        if (static_cast<size_t>(std::abs(pitch)) < static_cast<size_t>(w) * 4 ||
+            static_cast<size_t>(std::abs(pitch)) * h > length) {
             buffer->Unlock();
             return nullptr;
         }

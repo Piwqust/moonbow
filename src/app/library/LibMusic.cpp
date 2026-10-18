@@ -21,24 +21,12 @@ namespace {
 
 // --- helpers --------------------------------------------------------------------------------
 
-// Tags only, empty = unknown. Albums aren't guessed from folder names: the Songs list, the
-// album page and Artists then agree on what's untagged.
-std::wstring AlbumOf(const library::MediaItem& m) {
-    return m.album;
-}
-
-std::wstring ArtistOf(const library::MediaItem& m) {
-    return m.artist;
-}
-
+// Albums, artists and genres are the tags only, empty = unknown. Albums aren't guessed from
+// folder names: the Songs list, the album page and Artists then agree on what's untagged.
 // Who an album is by: its album artist tag ("Various Artists" on a compilation), else the
 // track's artist.
 const std::wstring& AlbumArtistOf(const library::MediaItem& m) {
     return m.albumArtist.empty() ? m.artist : m.albumArtist;
-}
-
-std::wstring GenreOf(const library::MediaItem& m) {
-    return m.genre;
 }
 
 std::wstring GenreLabel(const std::wstring& g) {
@@ -269,11 +257,11 @@ public:
     std::vector<MenuItem> MoreMenu() override {
         std::vector<MenuItem> m;
         if (!queue_.empty() && mode_ != MusicMode::Root) {
-            auto q = queue_;
+            const SharedQueue q = ShareQueue(queue_);
             const std::wstring name = queueName_;
-            m.push_back(Item(L"Play All", "playback", [q, name] { PlayInOrder(q, name); }));
-            m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
-            m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
+            m.push_back(Item(L"Play All", "playback", [q, name] { PlayInOrder(*q, name); }));
+            m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(*q, name); }));
+            m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(*q); }));
             MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
             pl.submenu = AddToPlaylistMenu(q);
             m.push_back(std::move(pl));
@@ -315,9 +303,9 @@ protected:
                 std::vector<const library::MediaItem*> v;
                 for (const library::MediaItem* m : songs) {
                     const bool in = mode_ == MusicMode::Album
-                                        ? SameText(AlbumOf(*m), arg_) && (albumFolder_.empty() || AlbumFolderKey(*m) == albumFolder_)
-                                    : mode_ == MusicMode::Artist ? SameText(ArtistOf(*m), arg_)
-                                                                 : SameText(GenreOf(*m), arg_);
+                                        ? SameText(m->album, arg_) && (albumFolder_.empty() || AlbumFolderKey(*m) == albumFolder_)
+                                    : mode_ == MusicMode::Artist ? SameText(m->artist, arg_)
+                                                                 : SameText(m->genre, arg_);
                     if (in) v.push_back(m);
                 }
                 mixedArtists_ = false;
@@ -430,15 +418,16 @@ protected:
     }
 
 private:
-    void GroupMenu(EntryKind kind, Route target, std::vector<QueueItem> q, const std::wstring& name, Point at) {
+    void GroupMenu(EntryKind kind, Route target, std::vector<QueueItem> items, const std::wstring& name, Point at) {
         if (!GetHost()) return;
+        const SharedQueue q = ShareQueue(std::move(items));
         std::vector<MenuItem> m;
         m.push_back(Item(L"Open", kind == EntryKind::Album ? "album" : kind == EntryKind::Artist ? "artist" : "genre",
                          [target] { TheApp().Navigate(target); }));
-        m.push_back(Item(L"Play", "playback", [q, name] { PlayInOrder(q, name); }));
-        m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(q, name); }));
-        m.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(q); }));
-        m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(q); }));
+        m.push_back(Item(L"Play", "playback", [q, name] { PlayInOrder(*q, name); }));
+        m.push_back(Item(L"Shuffle", "shuffle_right", [q, name] { PlayShuffled(*q, name); }));
+        m.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(*q); }));
+        m.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(*q); }));
         MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
         pl.submenu = AddToPlaylistMenu(q);
         m.push_back(std::move(pl));
@@ -543,9 +532,9 @@ private:
         std::map<std::wstring, size_t> index;  // upper-cased name -> group
         std::vector<Group> groups;
         for (const library::MediaItem* m : songs) {
-            std::wstring name = kind == MusicMode::Albums    ? AlbumOf(*m)
-                                : kind == MusicMode::Artists ? ArtistOf(*m)
-                                                             : GenreOf(*m);
+            const std::wstring& name = kind == MusicMode::Albums    ? m->album
+                                       : kind == MusicMode::Artists ? m->artist
+                                                                    : m->genre;
             // Albums: same name and folder (AlbumFolderKey), so two artists' "Greatest Hits" stay apart.
             const bool album = kind == MusicMode::Albums && !name.empty();
             const std::wstring key = album ? Upper(name) + L"\n" + AlbumFolderKey(*m) : Upper(name);
@@ -711,10 +700,6 @@ private:
     std::vector<Route> albumRoutes_;
     std::vector<std::vector<const library::MediaItem*>> albumSongs_;
 };
-
-bool LooksLikeFolder(const std::wstring& p) {
-    return p.size() >= 2 && (p[1] == L':' || (p[0] == L'\\' && p[1] == L'\\'));
-}
 
 }  // namespace
 

@@ -5,6 +5,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "gfx/Text.h"
@@ -180,7 +181,7 @@ IconButton* HeaderButton(Widget* parent, const char* icon, const wchar_t* tip, s
 // Summary line + buttons, 68 DIP tall in the design (40 in the mini player).
 class ListHeader : public Widget {
 public:
-    ListHeader(std::function<std::wstring()> text, bool compact) : text_(std::move(text)), compact_(compact) {
+    ListHeader(std::function<std::wstring()> text, bool compact) : text_(std::move(text)) {
         dir = Dir::Row;
         align = Align::Center;
         width = Length::Grow();
@@ -197,7 +198,6 @@ public:
 
 private:
     std::function<std::wstring()> text_;
-    bool compact_;
     Label* label_;
 };
 
@@ -325,7 +325,7 @@ public:
 
     // Artist of an audio item when its tags (or the playing file) know it.
     std::wstring ArtistOf(int i) const {
-        if (Playing(i) && !PS().hasVideo) return PS().artist;
+        if (Playing(i) && !PS().hasVideo) return CurrentTags().artist;
         if (const library::MediaItem* m = LibraryItem(i); m && m->kind == library::MediaKind::Audio) return m->artist;
         return {};
     }
@@ -364,7 +364,7 @@ public:
         const float avail = std::max(0.0f, right - textX - dw - 10);
         const RowInfo& info = Info(i);
         const std::wstring& title = info.title;
-        const std::wstring& artist = Playing(i) && !PS().hasVideo ? PS().artist : info.artist;
+        const std::wstring& artist = Playing(i) && !PS().hasVideo ? CurrentTags().artist : info.artist;
         const float natural = gfx::Text::Get().Measure(title, ts).width + 2;
         const float tw = std::min(avail, natural);
         p.Text(title, {textX, r.y, artist.empty() ? avail : tw, r.h}, ts, fg);
@@ -733,10 +733,11 @@ public:
                 list_->Remove(sel);
                 return;
             }
-            // Nothing selected: clear everything except what is playing.
+            // Nothing selected: clear everything except what is playing, in one change (one
+            // Remove per row was O(n²) and froze a 5000-item queue for seconds).
             PlayQueue& q = TheApp().queue();
-            for (int i = static_cast<int>(q.Items().size()) - 1; i >= 0; --i)
-                if (i != q.Current()) q.Remove(i);
+            if (const QueueItem* cur = q.CurrentItem()) q.Set({*cur}, 0, q.Name());
+            else q.Clear();
         });
         HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
         auto* sv = Add<ScrollView>();

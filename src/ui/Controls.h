@@ -222,6 +222,7 @@ public:
 private:
     void SetFromX(float x);
     float value_;
+    float dragFrom_ = 0;  // value_ when the drag began (a cancelled drag goes back to it)
     bool dragging_ = false;
 };
 

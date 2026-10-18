@@ -184,6 +184,13 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     });
     routeConn_ = Connect(TheApp().routeChanged, [this] { Refresh(); });
     screenConn_ = Connect(TheApp().screenChanged, [this] { Refresh(); });
+    // Tooltips are translated when set: again on a language switch (maximize's in Refresh).
+    tips_ = {{moreBtn_, L"Menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
+             {min, L"Minimize"}, {fullBtn_, L"Fullscreen"}, {close, L"Close"}};
+    langConn_ = Connect(TheApp().languageChanged, [this] {
+        for (const auto& [w, english] : tips_) w->tooltip = Tr(english);
+        Refresh();
+    });
     Refresh();
 }
 
@@ -282,6 +289,7 @@ NavSidebar::NavSidebar() {
     Add<AddItem>(this);
     width = Length::Px(200);
     routeConn_ = Connect(TheApp().routeChanged, [this] { Invalidate(); });
+    langConn_ = Connect(TheApp().languageChanged, [this] { SetCollapsed(collapsed_); });  // the rail's tooltips
 }
 
 NavSidebar::~NavSidebar() = default;
@@ -463,8 +471,11 @@ LibraryPane::LibraryPane(bool compact) : compact_(compact) {
     leaveConn_ = Connect(TheApp().routeLeaving, [this] {
         if (view_ && route_ == TheApp().route()) TheApp().CurrentViewState(compact_) = view_->SaveState();
     });
-    // Header and page strings are translated when built: rebuild on a language switch.
+    // Header and page strings are translated when built: rebuild on a language switch, keeping the
+    // scroll offset and selection as Back/Forward do (ShowRoute restores the saved state).
     langConn_ = Connect(TheApp().languageChanged, [this] {
+        if (view_ && route_ == TheApp().route()) TheApp().CurrentViewState(compact_) = view_->SaveState();
+        ClosePagePopups();
         headerConn_.Reset();
         view_ = nullptr;
         ClearChildren();
@@ -483,6 +494,12 @@ void LibraryPane::Build() {
 }
 
 LibraryPane::~LibraryPane() = default;
+
+// Menus opened from the page (sort, "⋯", a row's) call back into it, and Alt+Left, the Back
+// key or a language switch can rebuild it while one is open: they go first.
+void LibraryPane::ClosePagePopups() {
+    if (Host* host = GetHost()) host->CloseAllPopups();
+}
 
 void LibraryPane::BuildHeader() {
     header_ = Add<Widget>();
@@ -547,6 +564,7 @@ void LibraryPane::ShowRoute(const Route& route) {
     const Route from = route_;
     const bool hadView = view_ != nullptr;
     route_ = route;
+    if (hadView) ClosePagePopups();
     headerConn_.Reset();
     body_->ClearChildren();
     auto view = CreateLibraryView(route, compact_);
@@ -561,7 +579,7 @@ void LibraryPane::ShowRoute(const Route& route) {
     if (view_) {
         ViewState st = TheApp().CurrentViewState(compact_);
         // Up a level (a crumb, the "…" menu) to a page not seen before: select the folder we came from.
-        const bool folder = from.path.size() >= 2 && (from.path[1] == L':' || from.path.compare(0, 2, L"\\\\") == 0);
+        const bool folder = lib::LooksLikeFolder(from.path);
         if (st.Empty() && hadView && folder && from.section == route.section && from.path.size() > route.path.size()) {
             st.selPath = from.path;
             st.within = true;

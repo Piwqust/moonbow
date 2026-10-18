@@ -3,6 +3,7 @@
 // around a circle, the shadow an offset copy, the blur a Gaussian blur effect. The text is recorded
 // into a command list once per style change, so repaints (hover, scrolling) only replay it.
 #include "app/I18n.h"
+#include "app/player/SubStyle.h"
 #include "app/settings/SettingsUi.h"
 #include "core/Config.h"
 #include "gfx/Gpu.h"
@@ -30,62 +31,14 @@ constexpr float kHeight = 128;
 // for video content, not UI, so they are not theme tokens.
 constexpr uint32_t kSceneDark = 0x2B3138, kSceneBright = 0xCBD5DD;
 
-Color HexColor(const std::string& s, uint32_t fallback, float alpha) {
-    uint32_t v = fallback;
-    if (s.size() == 7 && s[0] == '#') {
-        uint32_t parsed = 0;
-        bool ok = true;
-        for (size_t i = 1; i < 7 && ok; ++i) {
-            const char c = s[i];
-            parsed <<= 4;
-            if (c >= '0' && c <= '9') parsed |= static_cast<uint32_t>(c - '0');
-            else if (c >= 'a' && c <= 'f') parsed |= static_cast<uint32_t>(c - 'a' + 10);
-            else if (c >= 'A' && c <= 'F') parsed |= static_cast<uint32_t>(c - 'A' + 10);
-            else ok = false;
-        }
-        if (ok) v = parsed;
-    }
-    return Color::Hex(v, std::clamp(alpha, 0.0f, 1.0f));
-}
-
-// The mpv value of a choice setting ("3" for outline "normal").
-double ChoiceNumber(const char* key, double fallback) {
-    const Item* it = settings::FindItem(key);
-    if (!it) return fallback;
-    const settings::Choice* c = it->FindChoice(Cfg().GetString(key));
-    if (!c || c->mpv.empty()) return fallback;
-    return std::atof(c->mpv.c_str());
-}
-
-struct Style {
-    std::wstring font;
-    float size = 38;
-    bool bold = false;
-    Color text, outlineColor, back;
-    float outline = 3;
-    bool shadow = true;
-    std::string background;  // none / lines / box
+// The player's style (app/player/SubStyle.h) plus what only the preview draws itself.
+struct Style : SubtitleStyle {
     float blur = 0;
     float position = 100;  // % of the frame height
 
     static Style Read() {
         Style s;
-        s.font = Cfg().GetWString("subtitles.font");
-        // mpv's generic families; libass resolves them like this on Windows.
-        if (s.font.empty() || _wcsicmp(s.font.c_str(), L"sans-serif") == 0) s.font = L"Arial";
-        else if (_wcsicmp(s.font.c_str(), L"serif") == 0) s.font = L"Times New Roman";
-        else if (_wcsicmp(s.font.c_str(), L"monospace") == 0) s.font = L"Consolas";
-        s.size = static_cast<float>(ChoiceNumber("subtitles.size", 38));
-        if (s.size <= 0) s.size = 38;  // "Automatic" has no mpv value: mpv's default size
-        s.bold = Cfg().GetBool("subtitles.bold");
-        s.text = HexColor(Cfg().GetString("subtitles.color"), 0xFFFFFF,
-                          static_cast<float>(Cfg().GetDouble("subtitles.opacity") / 100.0));
-        s.outlineColor = HexColor(Cfg().GetString("subtitles.outlineColor"), 0x000000, 1);
-        s.back = HexColor(Cfg().GetString("subtitles.backColor"), 0x000000,
-                          static_cast<float>(Cfg().GetDouble("subtitles.backOpacity") / 100.0));
-        s.outline = static_cast<float>(ChoiceNumber("subtitles.outline", 3));
-        s.shadow = Cfg().GetBool("subtitles.shadow");
-        s.background = Cfg().GetString("subtitles.background");
+        static_cast<SubtitleStyle&>(s) = ReadSubtitleStyle(Cfg());
         s.blur = static_cast<float>(Cfg().GetDouble("subtitles.blur"));
         s.position = static_cast<float>(Cfg().GetDouble("subtitles.position"));
         return s;

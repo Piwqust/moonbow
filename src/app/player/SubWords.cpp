@@ -7,8 +7,8 @@
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
 #include "app/player/ControlBar.h"
+#include "app/player/SubStyle.h"
 #include "app/player/SubText.h"
-#include "core/SettingsSchema.h"
 #include "ui/Host.h"
 
 #include <algorithm>
@@ -29,33 +29,6 @@ const PlayerState& PS() {
 
 const Config& Cfg() {
     return TheApp().config();
-}
-
-Color HexColor(const std::string& s, uint32_t fallback, float alpha) {
-    uint32_t v = fallback;
-    if (s.size() == 7 && s[0] == '#') {
-        uint32_t parsed = 0;
-        bool ok = true;
-        for (size_t i = 1; i < 7 && ok; ++i) {
-            const char c = s[i];
-            parsed <<= 4;
-            if (c >= '0' && c <= '9') parsed |= static_cast<uint32_t>(c - '0');
-            else if (c >= 'a' && c <= 'f') parsed |= static_cast<uint32_t>(c - 'a' + 10);
-            else if (c >= 'A' && c <= 'F') parsed |= static_cast<uint32_t>(c - 'A' + 10);
-            else ok = false;
-        }
-        if (ok) v = parsed;
-    }
-    return Color::Hex(v, std::clamp(alpha, 0.0f, 1.0f));
-}
-
-// The mpv value of a choice setting ("3" for outline "normal").
-double ChoiceNumber(const char* key, double fallback) {
-    const settings::Item* it = settings::FindItem(key);
-    if (!it) return fallback;
-    const settings::Choice* c = it->FindChoice(Cfg().GetString(key));
-    if (!c || c->mpv.empty()) return fallback;
-    return std::atof(c->mpv.c_str());
 }
 
 const Track* SelectedSub() {
@@ -143,7 +116,14 @@ void SubtitleWords::Reevaluate(bool inLayout) {
     // Shown while mpv would show the line (the user didn't hide subtitles) and it has words.
     const bool userVisible = mpvVisible_ || hid_;
     const bool known = textKnown_ && visibilityKnown_;
-    if (armed && known && !inLayout) Rebuild();
+    if (armed && known && !inLayout) {
+        const Rect before = bounds_;
+        Rebuild();
+        // PlayerView arranges the overlay at Bounds() in its layout: bigger words, a lift over
+        // the bar or a new line while paused need one, or clicks keep the old area.
+        if (bounds_.x != before.x || bounds_.y != before.y || bounds_.w != before.w || bounds_.h != before.h)
+            InvalidateLayout();
+    }
     const bool show = armed && known && userVisible && !words_.empty();
     if (!(stepping && !PS().paused)) SetMpvHidden(show);
 
@@ -166,27 +146,19 @@ void SubtitleWords::StartObserving() {
     const Track* sub = SelectedSub();
     observedSid_ = sub ? sub->id : 0;
     ReadAssHeader();
-    // Whole event lines for a native .ass track (their style and margins), else the text only.
-    textLevel_ = std::min(maxLevel_, assMode_ ? 2 : 1);
-    static const char* const kTextProps[] = {"sub-text", "sub-text/ass", "sub-text/ass-full"};
     // The callbacks only record values: unobserving from inside one would destroy the function
     // that is running, so whatever follows from a value runs after the event batch.
     auto text = [this, &p](const char* name, std::wstring* field, bool primary) {
         observers_.push_back(p.Observe(name, MPV_FORMAT_STRING, [this, field, primary](const mpv_event_property& e) {
-            if (primary && e.format == MPV_FORMAT_NONE && textLevel_ > 0 && !textKnown_) {
-                // An older mpv without this form: the next simpler one (the plain text has no tags).
-                maxLevel_ = textLevel_ - 1;
-                restart_ = true;
-                Schedule();
-                return;
-            }
             const char* s = e.format == MPV_FORMAT_STRING && e.data ? *static_cast<char**>(e.data) : nullptr;
             *field = s ? Utf8ToWide(s) : std::wstring();
             if (primary) textKnown_ = true;
             Schedule();
         }));
     };
-    text(kTextProps[textLevel_], &assText_, true);
+    // Whole event lines for a native .ass track (their style and margins), else the text with
+    // tags. mpv answers "none" while it has no playback time (paused during a seek): no line yet.
+    text(assMode_ ? "sub-text/ass-full" : "sub-text/ass", &assText_, true);
     text("secondary-sub-text", &secondaryText_, false);
     observers_.push_back(p.Observe("sub-visibility", MPV_FORMAT_FLAG, [this](const mpv_event_property& e) {
         const bool v = e.format == MPV_FORMAT_FLAG && e.data && *static_cast<int*>(e.data) != 0;
@@ -235,10 +207,6 @@ void SubtitleWords::Schedule() {
     scheduled_ = true;
     window_->Post([this] {
         scheduled_ = false;
-        if (restart_) {
-            restart_ = false;
-            StopObserving();
-        }
         if (styleDirty_ && !observers_.empty()) {
             styleDirty_ = false;
             ReadStyle();
@@ -349,24 +317,7 @@ void SubtitleWords::StartKeyboard() {
 // --- layout ----------------------------------------------------------------------------------
 
 void SubtitleWords::ReadStyle() {
-    Style s;
-    s.font = Cfg().GetWString("subtitles.font");
-    // mpv's generic families as libass resolves them on Windows.
-    if (s.font.empty() || _wcsicmp(s.font.c_str(), L"sans-serif") == 0) s.font = L"Arial";
-    else if (_wcsicmp(s.font.c_str(), L"serif") == 0) s.font = L"Times New Roman";
-    else if (_wcsicmp(s.font.c_str(), L"monospace") == 0) s.font = L"Consolas";
-    s.size = static_cast<float>(ChoiceNumber("subtitles.size", 38));
-    if (s.size <= 0) s.size = 38;
-    s.bold = Cfg().GetBool("subtitles.bold");
-    s.text = HexColor(Cfg().GetString("subtitles.color"), 0xFFFFFF,
-                      static_cast<float>(Cfg().GetDouble("subtitles.opacity") / 100.0));
-    s.outlineColor = HexColor(Cfg().GetString("subtitles.outlineColor"), 0x000000, 1);
-    s.back = HexColor(Cfg().GetString("subtitles.backColor"), 0x000000,
-                      static_cast<float>(Cfg().GetDouble("subtitles.backOpacity") / 100.0));
-    s.outline = static_cast<float>(ChoiceNumber("subtitles.outline", 3));
-    s.shadow = Cfg().GetBool("subtitles.shadow");
-    s.background = Cfg().GetString("subtitles.background");
-    style_ = std::move(s);
+    style_ = ReadSubtitleStyle(Cfg());
     for (Block& b : blocks_) b.scene.Reset();
 }
 
@@ -426,24 +377,27 @@ void SubtitleWords::Rebuild() {
     wchar_t num[160];
     swprintf_s(num, L"|%g,%g,%g,%g|%g|%g|%g|%lld|%lld|%g|%lld,%lld|%d", video_.x, video_.y, video_.w, video_.h, subPos_,
                subScale_, secondaryPos_, static_cast<long long>(marginY_), static_cast<long long>(secondarySid_), scale,
-               static_cast<long long>(PS().videoW), static_cast<long long>(PS().videoH), textLevel_);
+               static_cast<long long>(PS().videoW), static_cast<long long>(PS().videoH), assMode_ ? 1 : 0);
     std::wstring text = assText_ + L'\x1f' + secondaryText_;
     std::wstring key = text + num;
     if (key == key_) return;
     key_ = std::move(key);
-    if (text != textKey_) {
-        // The line changed: what was picked in the old one means nothing now.
-        textKey_ = std::move(text);
-        hover_ = anchor_ = selA_ = selB_ = pressed_ = focus_ = -1;
-        dragging_ = clickPending_ = false;
-        if (menu_ && host && host->IsPopupOpen(menu_)) host->ClosePopup(menu_);
-        menu_ = nullptr;
-    }
+    // The picked words are indices into words_: they mean nothing once the line changed, or when
+    // the same line has other words now (a block too small to point at is left out).
+    const bool newText = text != textKey_;
+    const size_t oldWords = words_.size();
+    auto dropStalePick = [&] {
+        if (newText || words_.size() != oldWords) DropPick();
+    };
+    textKey_ = std::move(text);
     blocks_.clear();
     words_.clear();
     bounds_ = {};
     IDWriteFactory5* dw = gfx::Gpu::Get().DWrite();
-    if (!dw || video_.Empty()) return;
+    if (!dw || video_.Empty()) {
+        dropStalePick();
+        return;
+    }
     LARGE_INTEGER t0{}, t1{}, freq{};
     QueryPerformanceCounter(&t0);
 
@@ -498,7 +452,7 @@ void SubtitleWords::Rebuild() {
             }
         groups.push_back(std::move(g));
     };
-    if (assMode_ && textLevel_ == 2) {
+    if (assMode_) {
         // libass scales the script's PlayRes to the picture.
         const float sy = pic.h / static_cast<float>(header_.playResY), sx = pic.w / static_cast<float>(header_.playResX);
         for (subtext::Event& ev : subtext::ParseFullEvents(assText_)) {
@@ -581,9 +535,11 @@ void SubtitleWords::Rebuild() {
             i = e;
         }
         const int col = (g.align - 1) % 3;  // 0 left, 1 center, 2 right
-        b.layout->SetTextAlignment(col == 0 ? DWRITE_TEXT_ALIGNMENT_LEADING
-                                   : col == 2 ? DWRITE_TEXT_ALIGNMENT_TRAILING
-                                              : DWRITE_TEXT_ALIGNMENT_CENTER);
+        // Leading is the right edge of a right-to-left layout.
+        const int leading = b.rtl ? 2 : 0;
+        b.layout->SetTextAlignment(col == 1          ? DWRITE_TEXT_ALIGNMENT_CENTER
+                                   : col == leading ? DWRITE_TEXT_ALIGNMENT_LEADING
+                                                    : DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (b.rtl) b.layout->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
         DWRITE_TEXT_METRICS m{};
         b.layout->GetMetrics(&m);
@@ -657,6 +613,7 @@ void SubtitleWords::Rebuild() {
         }
     }
     bounds_ = bounds_.Intersect(video_);
+    dropStalePick();
     // Stepping frames from the keyboard: the focus lands on the new line's first word.
     if (keyboard_ && focus_ < 0 && !words_.empty()) {
         focus_ = anchor_ = FirstWord();
@@ -874,13 +831,18 @@ void SubtitleWords::OnMouseLeave() {
     Invalidate();
 }
 
-void SubtitleWords::ResetInteraction() {
+void SubtitleWords::DropPick() {
     Host* host = GetHost();
     if (menu_ && host && host->IsPopupOpen(menu_)) host->ClosePopup(menu_);
     menu_ = nullptr;
     hover_ = anchor_ = selA_ = selB_ = focus_ = pressed_ = -1;
     dragging_ = clickPending_ = false;
+}
+
+void SubtitleWords::ResetInteraction() {
+    DropPick();
     cursor = IDC_ARROW;
+    Host* host = GetHost();
     if (keyboard_) {
         keyboard_ = false;
         focusable = false;
@@ -1075,12 +1037,16 @@ void SubtitleWords::Lookup(const char* key, const std::wstring& text) {
     const std::wstring lang = CurrentLanguage() == Language::Russian ? L"ru" : L"en";
     const std::wstring url = subtext::LookupUrl(Cfg().GetWString(key), text, lang);
     if (url.empty()) {
-        ShowToast(window_, Tr(L"The link in Settings > Subtitles must start with https://"), "warning", 3000);
+        ShowToast(window_, Tr(L"The link in Settings > Subtitles must start with http:// or https:// and have no spaces"),
+                  "warning", 3000);
         return;
     }
     lastUrl_ = url;
     // The browser is a native window: background test runs record the link instead (ShellOpen).
-    Host::ShellOpen(window_->Hwnd(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    // A failure (a link too long for the browser's handler, no browser) says so.
+    const HINSTANCE r = Host::ShellOpen(window_->Hwnd(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (!Host::Automation() && reinterpret_cast<INT_PTR>(r) <= 32)
+        ShowToast(window_, Tr(L"Couldn't open the link in the browser"), "warning", 3000);
 }
 
 void SubtitleWords::DebugInfo(std::string& out) const {

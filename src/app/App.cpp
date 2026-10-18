@@ -281,7 +281,15 @@ void App::RestoreWindowPlacement() {
 
 void App::FlushStores() {
     if (RetryClaimDataDir()) {
-        // The first instance has exited: start saving, from what it left on disk.
+        // The first instance has exited: start saving, from what it left on disk. Settings,
+        // folders and ui.json (presets, layout) too, or this one's stale copies would replace them.
+        config_.Load();
+        ui_.clear();
+        uiDirty_ = false;
+        LoadUiState();
+        const std::vector<std::wstring> roots = library_.Roots();
+        library_.Load();
+        if (library_.Roots() != roots) library_.Rescan();
         history_.Load();
         playlists_.Load();
         bookmarks_.Load();

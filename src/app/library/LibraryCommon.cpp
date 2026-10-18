@@ -233,6 +233,21 @@ bool IsUrl(const std::wstring& path) {
     return path.find(L"://") != std::wstring::npos;
 }
 
+bool LooksLikeFolder(const std::wstring& p) {
+    return p.size() >= 2 && (p[1] == L':' || (p[0] == L'\\' && p[1] == L'\\'));
+}
+
+std::wstring Grouped(long long n) {
+    const std::wstring digits = std::to_wstring(n < 0 ? 0 : n);
+    const wchar_t sep = CurrentLanguage() == Language::Russian ? L' ' : L',';
+    std::wstring out;
+    for (size_t i = 0; i < digits.size(); ++i) {
+        if (i > 0 && (digits.size() - i) % 3 == 0) out += sep;
+        out += digits[i];
+    }
+    return out;
+}
+
 bool SamePath(const std::wstring& a, const std::wstring& b) {
     return a.size() == b.size() && _wcsicmp(a.c_str(), b.c_str()) == 0;
 }
@@ -242,6 +257,10 @@ std::wstring NowPlayingPath() {
     if (!app.player().State().fileLoaded) return {};
     const QueueItem* item = app.queue().CurrentItem();
     return item ? item->path : std::wstring();
+}
+
+bool ShowsNew(const library::MediaItem& m, bool played) {
+    return !played && TheApp().library().IsNew(m);
 }
 
 // --- queue / playback -------------------------------------------------------------------
@@ -375,6 +394,14 @@ void RescanLibrary() {
     TheApp().libraryChanged.Emit();  // pages show the scanning indicator right away
 }
 
+void ClearHistory() {
+    App& app = TheApp();
+    app.history().Clear();  // per-file settings go with it (History::onCleared)
+    app.history().Flush();
+    net::online::ClearAll();  // what the online services sent goes with the history
+    app.libraryChanged.Emit();  // Home's Continue Watching and the progress bars
+}
+
 void AddFolderToLibrary() {
     const std::wstring folder = PickFolder();
     if (folder.empty()) return;
@@ -420,7 +447,11 @@ MenuItem Item(const wchar_t* label, const char* icon, std::function<void()> acti
     return m;
 }
 
-std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
+SharedQueue ShareQueue(std::vector<QueueItem> items) {
+    return std::make_shared<const std::vector<QueueItem>>(std::move(items));
+}
+
+std::vector<MenuItem> AddToPlaylistMenu(SharedQueue items) {
     std::vector<MenuItem> out;
     auto toPlaylist = [](const std::vector<QueueItem>& src) {
         std::vector<library::PlaylistItem> v;
@@ -441,14 +472,14 @@ std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
             std::unordered_set<std::wstring> have;
             for (const auto& it : p->items) have.insert(library::PathKey(it.path));
             std::vector<QueueItem> fresh;
-            for (const QueueItem& q : items)
+            for (const QueueItem& q : *items)
                 if (have.insert(library::PathKey(q.path)).second) fresh.push_back(q);
             if (fresh.empty()) {
                 Toast(Fmt(Tr(L"Already in “{0}”"), {name}), "playlist");
                 return;
             }
             if (TheApp().playlists().Add(id, toPlaylist(fresh))) {
-                const size_t skipped = items.size() - fresh.size();
+                const size_t skipped = items->size() - fresh.size();
                 Toast(skipped ? Fmt(Tr(L"Added to “{0}”, {1} already there"), {name, std::to_wstring(skipped)})
                               : Fmt(Tr(L"Added to “{0}”"), {name}),
                       "playlist");
@@ -460,8 +491,8 @@ std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
     if (!out.empty()) out.push_back(MenuItem::Separator());
     out.push_back(Item(L"New Playlist…", "add", [items] {
         std::vector<NewPlaylistFile> files;
-        files.reserve(items.size());
-        for (const QueueItem& q : items) files.push_back({q.path, q.title, q.duration});
+        files.reserve(items->size());
+        for (const QueueItem& q : *items) files.push_back({q.path, q.title, q.duration});
         // The dialog lists the files and adds the ones left on Create.
         ShowNewPlaylistDialog(
             [](const std::string& id) {
@@ -472,16 +503,16 @@ std::vector<MenuItem> AddToPlaylistMenu(std::vector<QueueItem> items) {
     return out;
 }
 
-std::vector<MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem> queue, int index,
+std::vector<MenuItem> MediaMenu(const std::wstring& path, SharedQueue queue, int index,
                                 const std::wstring& queueName, bool goToFolder) {
     std::vector<MenuItem> m;
-    QueueItem self = index >= 0 && index < static_cast<int>(queue.size()) ? queue[static_cast<size_t>(index)]
-                                                                          : MakeQueueItem(path);
-    m.push_back(Item(L"Play", "playback", [queue, index, queueName] { PlayQueue(queue, index, queueName); }));
+    QueueItem self = index >= 0 && index < static_cast<int>(queue->size()) ? (*queue)[static_cast<size_t>(index)]
+                                                                           : MakeQueueItem(path);
+    m.push_back(Item(L"Play", "playback", [queue, index, queueName] { PlayQueue(*queue, index, queueName); }));
     m.push_back(Item(L"Play Next", "next_twotone", [self] { PlayNext({self}); }));
     m.push_back(Item(L"Add to Queue", "queue", [self] { AddToQueue({self}); }));
     MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
-    pl.submenu = AddToPlaylistMenu({self});
+    pl.submenu = AddToPlaylistMenu(ShareQueue({self}));
     m.push_back(std::move(pl));
     m.push_back(MenuItem::Separator());
 
@@ -504,7 +535,8 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem>
             }));
         }
         // TMDB posters (Settings › Privacy): fix a wrong match or go back to the file's thumbnail.
-        if (net::online::MetadataToggle() && !IsUrl(path)) {
+        const library::MediaItem* item = TheApp().library().Current()->FindItem(path);
+        if (net::online::MetadataToggle() && !IsUrl(path) && !(item && item->damaged)) {  // a damaged file is no film
             m.push_back(Item(L"Find Another Match…", "search", [path] { ShowMetadataMatchDialog(path); }));
             const net::online::MediaMeta* meta = net::online::Meta(path);
             if (meta && meta->state == net::online::MediaMeta::State::Matched)
@@ -598,14 +630,18 @@ void Toast(const std::wstring& text, const char* icon) {
 
 namespace {
 
-// Entries are "<url>\t<title>" joined by "\n" (URLs and titles never contain either).
+// Entries are "<url>\t<title>" joined by "\n"; a tab or line break typed or pasted into a name
+// (Rename) becomes a space, or it would split the entry.
 std::string Encode(const std::vector<SavedStream>& list) {
     std::wstring s;
+    auto add = [&s](const std::wstring& text) {
+        for (wchar_t c : text) s += c == L'\t' || c == L'\n' || c == L'\r' ? L' ' : c;
+    };
     for (const auto& e : list) {
         if (!s.empty()) s += L'\n';
-        s += e.url;
+        add(e.url);
         s += L'\t';
-        s += e.title;
+        add(e.title);
     }
     return WideToUtf8(s);
 }

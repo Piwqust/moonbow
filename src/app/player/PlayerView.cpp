@@ -6,11 +6,14 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/Shell.h"
+#include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerOverlays.h"
+#include "app/player/SubStyle.h"
 #include "app/player/SubWords.h"
 #include "gfx/Text.h"
 
@@ -37,7 +40,11 @@ const PlayerState& PS() {
 Host* g_menuHost = nullptr;
 Widget* g_menu = nullptr;
 
+// The pointer outlives the menu: the id tells it from another popup made later at the address.
+constexpr const char* kStaleMenuId = "player-menu";
+
 void KeepMenu(Host* host, Widget* menu) {
+    if (menu) menu->id = kStaleMenuId;
     g_menuHost = host;
     g_menu = menu;
 }
@@ -50,7 +57,7 @@ void CloseStaleMenu() {
     g_menuHost = nullptr;
     g_menu = nullptr;
     host->Post([host, menu] {
-        if (host->IsPopupOpen(menu)) host->ClosePopup(menu);
+        if (host->IsPopupOpen(menu) && menu->id == kStaleMenuId) host->ClosePopup(menu);
     });
 }
 
@@ -391,8 +398,7 @@ public:
         App& app = TheApp();
         title_->SetText(Fmt(Tr(L"Can't open “{0}”"), {FileNameOf(app.FailedPath())}));
         const std::wstring& err = app.FailedError();
-        const bool missing = GetFileAttributesW(app.FailedPath().c_str()) == INVALID_FILE_ATTRIBUTES &&
-                             app.FailedPath().find(L"://") == std::wstring::npos;
+        const bool missing = app.FailedPath().find(L"://") == std::wstring::npos && !lib::MaybeExists(app.FailedPath());
         body_->SetText(missing ? Tr(L"The file was moved or deleted.")
                        : app.FailedPath().find(L"://") != std::wstring::npos
                            ? Tr(L"The stream is unavailable. Check the link and your connection.")
@@ -511,13 +517,7 @@ float PlayerView::SubtitleBand(float h) const {
     });
     if (!shown || h <= 0) return 0;
     const Config& c = TheApp().config();
-    static const std::pair<const char*, double> kSizes[] = {
-        {"smaller", 28}, {"small", 33}, {"large", 46}, {"larger", 54}, {"huge", 64}};
-    double size = 38;  // mpv's default sub-font-size ("auto")
-    const std::string pick = c.GetString("subtitles.size");
-    for (const auto& [name, px] : kSizes)
-        if (pick == name) size = px;
-    const double lines = 2.5 * size * (lv.subScale > 0 ? lv.subScale : 1);
+    const double lines = 2.5 * SubtitleFontSize(c) * (lv.subScale > 0 ? lv.subScale : 1);
     const double margin = c.GetDouble("subtitles.marginBottom");
     const double raised = std::clamp(100 - lv.subPos, 0.0, 100.0) / 100 * h;
     if (c.GetString("subtitles.sizeMode") == "pixels") {
@@ -611,9 +611,10 @@ void PlayerView::OnLayout() {
 
     // Bottom-right of the picture, above a floating bar and above the subtitle lines; top-right
     // when that would put them in the upper half of a small picture.
+    // A floating bar lifts the subtitles above it too (MainWindow::UpdateSubtitleLift).
     const Rect v = video_->Inner(immersive);
-    const float bottom = std::min(v.Bottom() - 20 - ((immersive || overlay) && bar_->visible ? barSpace : 0.0f),
-                                  v.Bottom() - SubtitleBand(v.h) - 12);
+    const float lift = (immersive || overlay) && bar_->visible ? barSpace : 0.0f;
+    const float bottom = v.Bottom() - lift - std::max(20.0f, SubtitleBand(v.h) + 12);
     auto place = [&](Widget* w, Size sz) {
         const float top = bottom - sz.h < v.y + v.h * 0.5f ? v.y + (immersive ? 64.0f : 20.0f) : bottom - sz.h;
         w->Arrange({v.Right() - 24 - sz.w, top, sz.w, sz.h});
@@ -649,7 +650,8 @@ float PlayerView::PaintTopInfo(Painter& p) {
     if (!window_->IsFullscreen() || window_->PictureInPicture() || !s.fileLoaded || !bar_->visible || k <= 0.01f)
         return none();
     const QueueItem* item = TheApp().queue().CurrentItem();
-    std::wstring title = !s.title.empty() ? s.title : item ? FileNameOf(item->path) : std::wstring();
+    const std::wstring& tagTitle = CurrentTags().title;
+    std::wstring title = !tagTitle.empty() ? tagTitle : item ? FileNameOf(item->path) : std::wstring();
     // Untagged, mpv's media-title is the file name: shown without its extension, as the title
     // bar and the queue show it (VF-06).
     if (item && item->path.find(L"://") == std::wstring::npos && _wcsicmp(title.c_str(), FileNameOf(item->path).c_str()) == 0) {
@@ -904,7 +906,8 @@ void MiniPlayer::Paint(Painter& p) {
         }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
-    const std::wstring name = item ? (PS().title.empty() ? FileNameOf(item->path) : PS().title) : L"";
+    const PlayingTags& tags = CurrentTags();
+    const std::wstring name = item ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : L"";
     // A cut title stays readable in the card's tooltip.
     const float titleW = compact_ ? std::max(0.0f, rect.Right() - 60 - v.Right() - 12) : rect.w - 24;
     tooltip = gfx::Text::Get().Measure(name, TextStyle::Body).width > titleW ? name : std::wstring();
@@ -912,7 +915,7 @@ void MiniPlayer::Paint(Painter& p) {
         // Title and folder/artist between the thumbnail and the play button; seek bar below.
         const float x = v.Right() + 12, w = std::max(0.0f, rect.Right() - 60 - x);
         p.Text(name, {x, rect.y + 10, w, 20}, TextStyle::Body, P().textPrimary);
-        std::wstring sub = PS().artist;
+        std::wstring sub = tags.artist;
         if (sub.empty() && item) {
             const size_t slash = item->path.find_last_of(L"\\/");
             if (slash != std::wstring::npos && item->path.find(L"://") == std::wstring::npos)
@@ -928,8 +931,8 @@ void MiniPlayer::Paint(Painter& p) {
         if (slash != std::wstring::npos && item->path.find(L"://") == std::wstring::npos)
             folder = FileNameOf(item->path.substr(0, slash));
     }
-    if (!PS().artist.empty()) folder = PS().artist;
-    p.Icon(PS().artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
+    if (!tags.artist.empty()) folder = tags.artist;
+    p.Icon(tags.artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
     p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
     // overlay buttons are children, so they paint on top of it. They get solid backings of
