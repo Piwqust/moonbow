@@ -337,10 +337,18 @@ protected:
 
     void Delete(int index) override {
         if (index < 0 || index >= static_cast<int>(plIndex_.size())) return;
-        TheApp().playlists().RemoveAt(id_, plIndex_[static_cast<size_t>(index)]);
-        TheApp().libraryChanged.Emit();
-        const int n = static_cast<int>(grid_->Entries().size());
-        if (n > 0) grid_->Select(std::min(index, n - 1), true);
+        // The Delete key: confirm (there is no undo); the "Remove from Playlist" menu item doesn't.
+        const std::string plId = id_;
+        const size_t pi = plIndex_[static_cast<size_t>(index)];
+        const auto& entries = grid_->Entries();
+        const std::wstring title = index < static_cast<int>(entries.size()) ? entries[static_cast<size_t>(index)].title : L"";
+        ShowConfirm(Tr(L"Remove from Playlist"),
+                    Fmt(Tr(L"“{0}” will be removed from this playlist. The file stays on your disk."), {title}),
+                    Tr(L"Remove"), [plId, pi] {
+                        // No `this`: the page may be gone by the time the dialog is answered.
+                        TheApp().playlists().RemoveAt(plId, pi);
+                        TheApp().libraryChanged.Emit();
+                    });
     }
 
     void Move(int from, int to) override {

@@ -170,7 +170,12 @@ protected:
             TheApp().history().Remove(e->path);
             TheApp().libraryChanged.Emit();
         } else {
-            RemoveStream(e->key, e->path);
+            // A saved station or link is gone for good (no undo): ask, as for playlists.
+            const std::string group = e->key;
+            const std::wstring url = e->path;
+            ShowConfirm(Tr(group == "radio" ? L"Remove station" : L"Remove link"),
+                        Fmt(Tr(L"“{0}” will be removed from the list."), {e->title.empty() ? url : e->title}),
+                        Tr(L"Remove"), [group, url] { RemoveStream(group, url); });
         }
     }
 

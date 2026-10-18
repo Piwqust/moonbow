@@ -179,6 +179,11 @@
 {L"Right-click videos or songs anywhere in the library and choose “Add to Playlist”.",
  L"Щёлкните правой кнопкой видео или песню в медиатеке и выберите «Добавить в плейлист»."},
 {L"Remove from Playlist", L"Убрать из плейлиста"},
+{L"“{0}” will be removed from this playlist. The file stays on your disk.",
+ L"«{0}» будет убран из плейлиста. Сам файл останется на диске."},
+{L"Remove station", L"Убрать станцию"},
+{L"Remove link", L"Убрать ссылку"},
+{L"“{0}” will be removed from the list.", L"«{0}» пропадёт из списка."},
 
 // Recent
 {L"Today", L"Сегодня"},
