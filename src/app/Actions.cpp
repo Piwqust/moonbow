@@ -91,6 +91,16 @@ const std::vector<ActionInfo>& Table() {
         {Action::KeyboardShortcuts, "app.shortcuts", L"Keyboard shortcuts", L"App", {{VK_F1, kNone}, {VK_OEM_2, kCtrl}}},
         {Action::CustomizePlayer, "app.customize", L"Customize player", L"App", {}},
         {Action::Quit, "app.quit", L"Quit", L"App", {{'Q', kCtrl}}},
+        {Action::JumpTo0, "playback.jump_0", L"Jump to 0%", L"Jump to position", {}},
+        {Action::JumpTo10, "playback.jump_10", L"Jump to 10%", L"Jump to position", {}},
+        {Action::JumpTo20, "playback.jump_20", L"Jump to 20%", L"Jump to position", {}},
+        {Action::JumpTo30, "playback.jump_30", L"Jump to 30%", L"Jump to position", {}},
+        {Action::JumpTo40, "playback.jump_40", L"Jump to 40%", L"Jump to position", {}},
+        {Action::JumpTo50, "playback.jump_50", L"Jump to 50%", L"Jump to position", {}},
+        {Action::JumpTo60, "playback.jump_60", L"Jump to 60%", L"Jump to position", {}},
+        {Action::JumpTo70, "playback.jump_70", L"Jump to 70%", L"Jump to position", {}},
+        {Action::JumpTo80, "playback.jump_80", L"Jump to 80%", L"Jump to position", {}},
+        {Action::JumpTo90, "playback.jump_90", L"Jump to 90%", L"Jump to position", {}},
     };
     return table;
 }
@@ -293,6 +303,9 @@ bool Enabled(Action a) {
         case Action::Next: return TheApp().queue().NextIndex(true) >= 0;
         case Action::NextChapter:
         case Action::PreviousChapter: return !s.chapters.empty();
+        case Action::JumpTo0: case Action::JumpTo10: case Action::JumpTo20: case Action::JumpTo30:
+        case Action::JumpTo40: case Action::JumpTo50: case Action::JumpTo60: case Action::JumpTo70:
+        case Action::JumpTo80: case Action::JumpTo90: return s.fileLoaded && s.seekable && s.duration > 0;
         default: return true;
     }
 }
@@ -539,6 +552,16 @@ void Run(Action a) {
         case Action::KeyboardShortcuts: ShowKeyboardShortcutsDialog(); break;
         case Action::CustomizePlayer: ShowCustomizePlayerDialog(); break;
         case Action::Quit: app.Quit(); break;
+        case Action::JumpTo0: case Action::JumpTo10: case Action::JumpTo20: case Action::JumpTo30:
+        case Action::JumpTo40: case Action::JumpTo50: case Action::JumpTo60: case Action::JumpTo70:
+        case Action::JumpTo80: case Action::JumpTo90: {
+            if (!Enabled(a)) break;
+            const double target = s.duration * (static_cast<int>(a) - static_cast<int>(Action::JumpTo0)) / 10.0;
+            const bool back = target < s.position;
+            p.SeekAbsolute(target, true);
+            Toast(Clock(target) + L" / " + Clock(s.duration), back ? "backward-10-sec" : "forward-10-sec");
+            break;
+        }
     }
 }
 
