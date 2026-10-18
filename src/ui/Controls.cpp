@@ -1065,8 +1065,9 @@ void ScrollView::PaintOver(Painter& p) {
     Color bg;
     for (const Widget* w = Parent(); w; w = w->Parent())
         if (w->Backdrop(bg)) {
-            // Stacked bands, no gradient brush: 10 fills of 2.8 DIP, densest at the cut edge.
-            constexpr int kSteps = 10;
+            // Stacked bands, no gradient brush: 7 fills of 4 DIP per edge (as the menu's fade),
+            // densest at the cut edge.
+            constexpr int kSteps = 7;
             constexpr float kCueH = 28, kBand = kCueH / kSteps;
             for (int i = 0; i < kSteps; ++i) {
                 const float t = static_cast<float>(i + 1) / kSteps;
