@@ -204,6 +204,9 @@ bool Player::InitOnWorker(int64_t wid) {
         error_ = L"mpv_initialize: " + Utf8ToWide(api_.mpv_error_string(err));
         return false;
     }
+    // A .lrc next to a song is its lyrics (the music view shows them), not a subtitle track.
+    const char* noLrc[] = {"change-list", "sub-auto-exts", "remove", "lrc", nullptr};
+    api_.mpv_command(mpv_, noLrc);
     return true;
 }
 
@@ -698,8 +701,10 @@ void Player::Shutdown() {
             else if (rememberPosition)
                 Cmd({"write-watch-later-config"}, false);
         }
+        Trace("close: watch-later written");
         api_.mpv_set_wakeup_callback(mpv_, nullptr, nullptr);
         api_.mpv_terminate_destroy(mpv_);
+        Trace("close: mpv destroyed");
         mpv_ = nullptr;
     }
     state_.ready = false;

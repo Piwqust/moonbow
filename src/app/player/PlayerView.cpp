@@ -699,8 +699,19 @@ void MiniPlayer::Paint(Painter& p) {
     p.Icon(PS().artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
     p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
-    // overlay buttons are children, so they paint on top of it.
-    if (k > 0.01f) p.Fill(v, Color::Hex(0x000000, 0.72f * k), 4);
+    // overlay buttons are children, so they paint on top of it. They get solid backings of
+    // their own: through the scrim alone, light cover art (its title text) reads through the icons.
+    if (k > 0.01f) {
+        p.Fill(v, Color::Hex(0x000000, 0.72f * k), 4);
+        const Color back = P().bgPanel.Fade(0.92f * k), edge = P().line.Fade(k);
+        const Rect pill{v.Cx() - 20 - 36 - 8 - 6, v.Cy() - 26, 6 + 36 + 8 + 40 + 8 + 36 + 6, 52};
+        p.Fill(pill, back, 26);
+        p.Stroke(pill, edge, 26);
+        for (const Rect& r : {Rect{v.x + 6, v.y + 6, 28, 28}, Rect{v.Right() - 34, v.y + 6, 28, 28}}) {
+            p.Fill(r, back, 14);
+            p.Stroke(r, edge, 14);
+        }
+    }
 }
 
 void MiniPlayer::PaintOver(Painter&) {}
