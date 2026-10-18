@@ -13,7 +13,10 @@
 #include "ui/Theme.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/Shell.h"
+#include "app/player/PlayerView.h"
 #include "app/settings/ShortcutStore.h"
+#include "core/SettingsSchema.h"
 #include "gfx/Gpu.h"
 #include "ui/Controls.h"
 
@@ -21,9 +24,11 @@
 #include <shobjidl.h>
 
 #include <algorithm>
+#include <cstring>
 #include <numeric>
 #include <random>
 #include <sstream>
+#include <typeinfo>
 
 namespace app {
 
@@ -838,6 +843,303 @@ void App::OnCopyData(const std::wstring& payload) {
 
 void App::OnMainDestroyed() {
     PostQuitMessage(0);
+}
+
+// --- automation commands ---------------------------------------------------------------------
+
+namespace {
+
+// First visible widget under `w` (depth first) that matches; hidden subtrees are skipped.
+Widget* FindVisible(Widget* w, const std::function<bool(Widget*)>& match) {
+    if (!w || !w->visible) return nullptr;
+    if (match(w)) return w;
+    for (auto& c : w->Children())
+        if (Widget* hit = FindVisible(c.get(), match)) return hit;
+    return nullptr;
+}
+
+bool TypeContains(const Widget* w, const char* part) {
+    return strstr(typeid(*w).name(), part) != nullptr;
+}
+
+std::string IconOf(Widget* w) {
+    if (auto* b = dynamic_cast<IconButton*>(w)) return b->icon;
+    if (auto* v = dynamic_cast<IconView*>(w)) return v->icon;
+    if (auto* b = dynamic_cast<Button*>(w)) return b->icon;
+    return {};
+}
+
+bool HasIcon(Widget* w, const char* icon) {
+    return dynamic_cast<IconButton*>(w) && IconOf(w) == icon;
+}
+
+// "#id", "icon=<name>", "type=<part of the C++ type name>" or "tip=<tooltip>".
+std::function<bool(Widget*)> Selector(const std::string& s) {
+    if (s.size() > 1 && s[0] == '#') return [id = s.substr(1)](Widget* w) { return w->id == id; };
+    if (s.rfind("icon=", 0) == 0) return [icon = s.substr(5)](Widget* w) { return IconOf(w) == icon; };
+    if (s.rfind("type=", 0) == 0) return [part = s.substr(5)](Widget* w) { return TypeContains(w, part.c_str()); };
+    if (s.rfind("tip=", 0) == 0) return [tip = Utf8ToWide(s.substr(4))](Widget* w) { return w->tooltip == tip; };
+    return nullptr;
+}
+
+Widget* FindInHost(Host* host, const std::function<bool(Widget*)>& match) {
+    // Topmost popup first: that is what a click would reach.
+    for (size_t i = host->PopupCount(); i-- > 0;)
+        if (Widget* hit = FindVisible(host->PopupAt(i), match)) return hit;
+    return FindVisible(host->Root(), match);
+}
+
+bool ParseSection(const std::string& name, Section* out) {
+    static const std::pair<const char*, Section> kSections[] = {
+        {"home", Section::Home},           {"videos", Section::Videos},     {"music", Section::Music},
+        {"network", Section::Network},     {"playlists", Section::Playlists}, {"recent", Section::Recent},
+    };
+    for (const auto& [n, s] : kSections)
+        if (name == n) {
+            *out = s;
+            return true;
+        }
+    return false;
+}
+
+bool ParsePanel(const std::string& name, PanelKind* out) {
+    static const std::pair<const char*, PanelKind> kPanels[] = {
+        {"tracks", PanelKind::Tracks},     {"audio", PanelKind::Tracks},       {"subtitles", PanelKind::Subtitles},
+        {"settings", PanelKind::Settings}, {"queue", PanelKind::Queue},        {"chapters", PanelKind::Chapters},
+        {"bookmarks", PanelKind::Bookmarks}, {"speed", PanelKind::Speed},
+    };
+    for (const auto& [n, k] : kPanels)
+        if (name == n) {
+            *out = k;
+            return true;
+        }
+    return false;
+}
+
+}  // namespace
+
+bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
+    std::string& r = *reply;
+    MainWindow* w = main_.get();
+    if (!w || !Host::Automation()) {
+        r = "automation off";
+        return false;
+    }
+    const std::string text = WideToUtf8(command);
+    const size_t sp = text.find(' ');
+    const std::string verb = text.substr(0, sp);
+    std::string arg = sp == std::string::npos ? std::string() : text.substr(sp + 1);
+    while (!arg.empty() && (arg.back() == ' ' || arg.back() == '\r' || arg.back() == '\n')) arg.pop_back();
+    while (!arg.empty() && arg.front() == ' ') arg.erase(arg.begin());
+    const std::wstring warg = Utf8ToWide(arg);
+
+    if (verb == "action") {
+        for (const ActionInfo& info : AllActions()) {
+            if (arg != info.id || info.action == Action::None) continue;
+            if (!Enabled(info.action)) {
+                r = "disabled: " + arg;
+                return false;
+            }
+            app::Run(info.action);
+            r = "ran " + arg;
+            return true;
+        }
+        r = "unknown action: " + arg;
+        return false;
+    }
+
+    if (verb == "nav") {
+        const size_t s2 = arg.find(' ');
+        const std::string where = arg.substr(0, s2);
+        const std::wstring path = s2 == std::string::npos ? std::wstring() : Utf8ToWide(arg.substr(s2 + 1));
+        if (where == "settings") {
+            const std::string page = WideToUtf8(path);
+            if (!page.empty() && !settings::FindCategory(page)) {
+                r = "unknown settings page: " + page;
+                return false;
+            }
+            OpenSettings(page);
+            r = "settings " + (page.empty() ? std::string("(last page)") : page);
+            return true;
+        }
+        if (where == "player" || where == "library") {
+            ShowPlayer(where == "player");
+            r = where;
+            return true;
+        }
+        if (where == "back" || where == "forward") {
+            if (where == "back" ? !CanGoBack() : !CanGoForward()) {
+                r = "no " + where + " history";
+                return false;
+            }
+            ShowPlayer(false);
+            where == "back" ? GoBack() : GoForward();
+            r = where;
+            return true;
+        }
+        Section section;
+        if (!ParseSection(where, &section)) {
+            r = "unknown route: " + where;
+            return false;
+        }
+        ShowPlayer(false);
+        Navigate(Route{section, path});
+        r = "route " + arg;
+        return true;
+    }
+
+    if (verb == "panel") {
+        if (arg == "close") {
+            ClosePlayerPanels();
+            r = "panels closed";
+            return true;
+        }
+        PanelKind kind;
+        if (!ParsePanel(arg, &kind)) {
+            r = "unknown panel: " + arg;
+            return false;
+        }
+        if (!playerShown_) ShowPlayer(true);
+        // The second toggle covers the "this click just closed it" guard (Panels.cpp).
+        if (!PlayerPanelOpen(kind)) TogglePlayerPanel(kind, {});
+        if (!PlayerPanelOpen(kind)) TogglePlayerPanel(kind, {});
+        if (!PlayerPanelOpen(kind)) {
+            r = "panel did not open: " + arg;
+            return false;
+        }
+        r = "panel " + arg;
+        return true;
+    }
+
+    if (verb == "open" || verb == "queue") {
+        if (warg.empty() || (!IsUrl(warg) && GetFileAttributesW(warg.c_str()) == INVALID_FILE_ATTRIBUTES)) {
+            r = "not found: " + arg;
+            return false;
+        }
+        if (verb == "open") {
+            Open({warg});
+        } else {
+            queue_.Add({ItemFor(warg)});
+        }
+        r = verb + " " + arg;
+        return true;
+    }
+
+    if (verb == "set") {
+        const size_t s2 = arg.find(' ');
+        const std::string key = arg.substr(0, s2);
+        const std::string value = s2 == std::string::npos ? std::string() : arg.substr(s2 + 1);
+        if (!settings::FindItem(key)) {
+            r = "unknown setting: " + key;
+            return false;
+        }
+        // JSON first (true, 42, "text"); anything that doesn't parse or fit is tried as a string.
+        bool ok = false;
+        if (auto parsed = json::Parse(value)) ok = config_.Set(key, *parsed);
+        if (!ok) ok = config_.Set(key, json::Value(value));
+        r = ok ? "set " + key : "rejected value for " + key + ": " + value;
+        return ok;
+    }
+
+    if (verb == "menu") {
+        Widget* target = nullptr;
+        bool context = false;  // open with onContextMenu instead of a click
+        if (arg == "close") {
+            w->CloseAllPopups();
+            r = "menus closed";
+            return true;
+        } else if (arg == "app") {
+            target = FindVisible(w->titleBar(), [](Widget* x) { return HasIcon(x, "more"); });
+        } else if (arg == "more" || arg == "sort") {
+            target = FindVisible(w->library(), [&](Widget* x) { return HasIcon(x, arg.c_str()); });
+        } else if (arg == "add") {
+            target = FindVisible(w->sidebar(), [](Widget* x) { return TypeContains(x, "AddItem"); });
+        } else if (arg == "player") {
+            target = FindVisible(w->Root(), [](Widget* x) { return TypeContains(x, "VideoArea") && x->onContextMenu; });
+            context = true;
+        } else if (arg == "pip") {
+            if (!w->PictureInPicture()) {
+                r = "not in picture in picture";
+                return false;
+            }
+            const Size c = w->ClientSize();
+            ShowPipContextMenu(w, {c.w / 2, c.h / 2});
+            r = "menu pip";
+            return true;
+        } else {
+            r = "unknown menu: " + arg;
+            return false;
+        }
+        if (!target || !target->IsEnabled()) {
+            r = "menu not available here: " + arg;
+            return false;
+        }
+        w->CloseAllPopups();
+        if (context) {
+            MouseEvent e{target->rect.Cx(), target->rect.Cy(), MouseButton::Right, {}};
+            target->onContextMenu(e);
+        } else {
+            target->OnClick();
+        }
+        r = w->HasPopup() ? "menu " + arg : "menu did not open: " + arg;
+        return w->HasPopup();
+    }
+
+    if (verb == "click") {
+        auto match = Selector(arg);
+        if (!match) {
+            r = "bad selector (#id, icon=, type=, tip=): " + arg;
+            return false;
+        }
+        Widget* target = FindInHost(w, match);
+        while (target && !target->interactive) target = target->Parent();
+        if (!target || !target->IsEnabled()) {
+            r = "no enabled interactive widget for " + arg;
+            return false;
+        }
+        target->OnClick();
+        r = std::string("clicked ") + typeid(*target).name();
+        return true;
+    }
+
+    if (verb == "wait-idle") {
+        std::string busy;
+        for (Host* h : Host::All())
+            if (h->Hwnd() && IsWindowVisible(h->Hwnd()) && !h->Idle()) busy += h->IsMainWindow() ? " main-window" : " window";
+        if (!engineReady_ || !pendingOpen_.empty()) busy += " player-starting";
+        const PlayerState& s = player_.State();
+        if (engineReady_ && !s.idle && !s.fileLoaded) busy += " file-loading";
+        if (library_.Scanning()) busy += " library-scan";
+        if (const size_t n = thumbnails_.PendingCount()) busy += " thumbnails=" + std::to_string(n);
+        r = busy.empty() ? "idle" : "busy:" + busy;
+        return busy.empty();
+    }
+
+    if (verb == "dump") {
+        if (arg == "all") {
+            for (Host* h : Host::All())
+                if (h->Hwnd() && IsWindowVisible(h->Hwnd())) r += WideToUtf8(h->WriteTreeDump()) + "\n";
+        } else {
+            r = WideToUtf8(w->WriteTreeDump());
+        }
+        return true;
+    }
+
+    if (verb == "state") {
+        static const char* const kSectionNames[] = {"home", "videos", "music", "network", "playlists", "recent"};
+        const Route& rt = route();
+        const PlayerState& s = player_.State();
+        r = std::string("route=") + kSectionNames[static_cast<int>(rt.section)] +
+            (rt.path.empty() ? "" : " " + WideToUtf8(rt.path)) + "\nplayer=" + (playerShown_ ? "1" : "0") +
+            "\nfile=" + (s.fileLoaded ? "1" : "0") + "\npaused=" + (s.paused ? "1" : "0") +
+            "\nqueue=" + std::to_string(queue_.Items().size()) + "\ncurrent=" + std::to_string(queue_.Current()) +
+            "\nfullscreen=" + (w->IsFullscreen() ? "1" : "0") + "\npip=" + (w->PictureInPicture() ? "1" : "0") +
+            "\npopups=" + std::to_string(w->PopupCount()) + "\n";
+        return true;
+    }
+
+    r = "unknown command: " + verb;
+    return false;
 }
 
 }  // namespace app

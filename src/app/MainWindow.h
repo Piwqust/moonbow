@@ -12,6 +12,9 @@ class MiniPlayer;
 
 inline constexpr wchar_t kMainWindowTitle[] = L"Lumen";
 inline constexpr ULONG_PTR kCopyDataOpen = 0x4C554D31;  // 'LUM1'
+// --automation only: WM_COPYDATA with a UTF-16 test command (App::AutomationCommand). The
+// message returns TRUE on success; the reply text goes to %TEMP%\lumen-cmd-<pid>.txt.
+inline constexpr ULONG_PTR kCopyDataCommand = 0x4C554D;  // 'LUM'
 
 // The main window: title bar, library (sidebar + content) or player, and the
 // mini player. Owns the child HWND mpv renders into; widgets tell it where the

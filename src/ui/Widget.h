@@ -144,6 +144,12 @@ public:
     std::function<void(const MouseEvent&)> onContextMenu;
     std::function<void()> onDoubleClick;
 
+    // --- debugging --------------------------------------------------------------
+    // Tree dumps (Host::DumpTree) only, never per frame: appends state flags such as " scroll",
+    // " on" or " icon=play" (UTF-8, each with a leading space) to the widget's dump line. The
+    // text a widget shows is recorded from its Paint calls, so overrides don't repeat it.
+    virtual void DebugInfo(std::string& out) const;
+
     // --- helpers ----------------------------------------------------------------
     void Invalidate() const;
     void InvalidateLayout() const;

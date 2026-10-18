@@ -125,6 +125,9 @@ public:
     void OnPlayerReady(bool ok);
     void OnPlayerEvents();
     void OnCopyData(const std::wstring& payload);
+    // --automation only: one test command (tools/dev/command.ps1 lists them). Returns false when
+    // the command is unknown or could not be done; `reply` says what happened.
+    bool AutomationCommand(const std::wstring& command, std::string* reply);
     void OnMainDestroyed();
     void OnLibraryScanned();
     void OnThumbnails();

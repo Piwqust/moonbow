@@ -93,6 +93,8 @@ void Widget::OnClick() {
     if (onClick) onClick();
 }
 
+void Widget::DebugInfo(std::string&) const {}
+
 // --- layout ---------------------------------------------------------------------
 
 Size Widget::Measure(float availW, float availH) {
@@ -242,10 +244,13 @@ void Widget::PaintChildren(Painter& p) {
 
 void Widget::PaintTree(Painter& p) {
     if (!visible) return;
+    const bool recording = p.RecordingText();  // tree dumps only
+    if (recording) p.SetTextOwner(this);
     Paint(p);
     if (clipChildren) p.PushClip(rect);
     PaintChildren(p);
     if (clipChildren) p.PopClip();
+    if (recording) p.SetTextOwner(this);
     PaintOver(p);
 }
 
