@@ -439,6 +439,16 @@ void TestSchema() {
         CHECK(FindKeyAction(a.id) == &a);
     }
 
+    // A section heading is never repeated as the label of its first visible row (R3-09).
+    for (const Category& c : cats)
+        for (const Section& s : c.sections)
+            for (const Item& it : s.items) {
+                if (it.hidden || it.advanced) continue;
+                if (it.type != ItemType::Info)  // Info widgets draw no row label
+                    CHECK_MSG(it.label != s.title && it.labelRu != s.titleRu, "%s repeats its heading", it.key.c_str());
+                break;
+            }
+
     // Settings search works in both languages, case-insensitively.
     auto hits = Search(L"ГРОМКОСТЬ");
     CHECK(!hits.empty());
