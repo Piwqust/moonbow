@@ -218,10 +218,7 @@ std::vector<ui::Choice> TrackChoices(const wchar_t* type) {
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
         ++n;
-        std::wstring label = t.title.empty() && t.lang.empty() ? Fmt(Tr(L"Track {0}"), static_cast<long long>(n))
-                                                                : (t.title.empty() ? t.lang : t.title);
-        if (!t.title.empty() && !t.lang.empty()) label += L" (" + t.lang + L")";
-        out.push_back({label, std::to_string(t.id), ""});
+        out.push_back({TrackName(t, n), std::to_string(t.id), ""});
     }
     return out;
 }
@@ -369,7 +366,7 @@ void SetShaderEnabled(const std::string& name, bool on) {
 }
 
 std::unique_ptr<Widget> Page(SyncPage** out) {
-    auto sv = std::make_unique<ScrollView>();
+    auto sv = std::make_unique<PanelScroll>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     *out = sv->SetContent<SyncPage>();

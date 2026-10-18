@@ -24,7 +24,7 @@ namespace app {
 
 namespace {
 
-constexpr int kW = 192, kH = 108;
+constexpr int kW = 192, kH = 108;  // the preview box in DIPs; frames are this times the UI scale
 constexpr size_t kMaxFrames = 128;     // grid cache of one file, ~10 MB
 constexpr double kRestMs = 150;        // the cursor rests: decode the exact frame
 constexpr double kPrefetchMs = 1500;   // neighbours only while the cursor moved recently
@@ -50,7 +50,8 @@ void PreviewTrace(double ms, const char* what) {
 }
 
 struct Frame {
-    std::vector<uint8_t> bgra;  // kW * kH * 4, opaque
+    std::vector<uint8_t> bgra;  // w * h * 4, opaque
+    int w = kW, h = kH;
 };
 
 // The render API is not in MpvApi (the main player draws through its own window), so the few
@@ -81,6 +82,7 @@ struct Request {
     long long bucket = 0;
     bool hw = false;      // decode on the GPU with copy-back (above 4K)
     double changedAt = 0; // when the cursor last moved to another time
+    int w = kW, h = kH;   // frame size in pixels: the box at the window's scale, not stretched
 };
 
 // Like mpv's thumbfast: one persistent, paused libmpv instance that seeks to the hovered time and
@@ -94,8 +96,10 @@ public:
     // UI thread. The frame to show for `r`, or null; queues the work.
     std::shared_ptr<const Frame> Get(const Request& r) {
         std::lock_guard lock(mu_);
-        if (path_ != r.path) {
+        if (path_ != r.path || sizeW_ != r.w || sizeH_ != r.h) {
             path_ = r.path;
+            sizeW_ = r.w;
+            sizeH_ = r.h;
             grid_.clear();
             lru_.clear();
             failed_.clear();
@@ -104,7 +108,7 @@ public:
         }
         const double now = NowMs();
         lastGet_ = now;
-        if (!(want_.path == r.path) || std::abs(want_.seconds - r.seconds) > 1e-6) {
+        if (!(want_.path == r.path) || want_.w != r.w || want_.h != r.h || std::abs(want_.seconds - r.seconds) > 1e-6) {
             if (want_.path == r.path && r.bucket != want_.bucket) dir_ = r.bucket > want_.bucket ? 1 : -1;
             want_ = r;
             want_.changedAt = now;
@@ -162,6 +166,7 @@ private:
         double time = 0;
         long long bucket = 0;
         bool hw = false;
+        int w = kW, h = kH;
     };
 
     // Chooses the next job (caller holds mu_): the hovered bucket, then the exact frame after
@@ -176,6 +181,8 @@ private:
         };
         j.path = want_.path;
         j.hw = want_.hw;
+        j.w = want_.w;
+        j.h = want_.h;
         if (missing(want_.bucket)) {
             j.kind = Job::Keyframe;
             j.bucket = want_.bucket;
@@ -263,14 +270,17 @@ private:
             const double done = NowMs();
             {
                 std::lock_guard lock(mu_);
-                if (job.path == path_) {
+                if (job.path == path_ && job.w == sizeW_ && job.h == sizeH_) {
                     if (job.kind == Job::Exact) {
                         rest_ = frame;
                         restTime_ = job.time;
                     } else if (frame) {
                         lru_.push_front(job.bucket);
                         grid_[job.bucket] = {frame, lru_.begin()};
-                        while (grid_.size() > kMaxFrames) {
+                        // The same ~10 MB at any scale: fewer frames when they are bigger.
+                        const size_t cap = std::max<size_t>(
+                            32, kMaxFrames * kW * kH / (static_cast<size_t>(job.w) * static_cast<size_t>(job.h)));
+                        while (grid_.size() > cap) {
                             grid_.erase(lru_.back());
                             lru_.pop_back();
                         }
@@ -315,8 +325,7 @@ private:
             // Decode fast rather than pretty: no loop filter, no bit-exact tricks, one frame early.
             {"vd-lavc-skiploopfilter", "all"}, {"vd-lavc-fast", "yes"}, {"vd-lavc-threads", "2"},
             {"video-latency-hacks", "yes"}, {"hr-seek-framedrop", "yes"}, {"hwdec-extra-frames", "0"},
-            // Scale to the thumbnail size right after decoding; the renderer then only converts.
-            {"vf", "scale=w=192:h=108:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear"},
+            // The thumbnail scale filter (vf) is set per frame size in Decode.
             {"sws-scaler", "fast-bilinear"}, {"sws-allow-zimg", "no"}, {"hwdec", "no"},
         };
         for (auto& kv : opts) api.mpv_set_option_string(h_, kv[0], kv[1]);
@@ -326,8 +335,23 @@ private:
         if (render_.create(&ctx_, h_, params) < 0) return Close(), false;
         render_.setUpdate(ctx_, &Previewer::OnRenderUpdate, this);
         api.mpv_set_wakeup_callback(h_, &Previewer::OnMpvWakeup, this);
-        pixels_ = static_cast<uint8_t*>(_aligned_malloc(static_cast<size_t>(kW) * kH * 4, 64));
-        return pixels_ != nullptr || (Close(), false);
+        return true;
+    }
+
+    // Scale to the thumbnail size right after decoding; the renderer then only converts.
+    bool SetSize(int w, int h) {
+        if (pixels_ && w == pixW_ && h == pixH_) return true;
+        if (pixels_) _aligned_free(pixels_);
+        pixels_ = static_cast<uint8_t*>(_aligned_malloc(static_cast<size_t>(w) * h * 4, 64));
+        if (!pixels_) return false;
+        pixW_ = w;
+        pixH_ = h;
+        char vf[160];
+        snprintf(vf, sizeof(vf),
+                 "scale=w=%d:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear", w, h);
+        TheApp().player().Api().mpv_set_option_string(h_, "vf", vf);
+        loaded_.clear();  // the filter applies from the next load
+        return true;
     }
 
     void Close() {
@@ -338,6 +362,7 @@ private:
         h_ = nullptr;
         if (pixels_) _aligned_free(pixels_);
         pixels_ = nullptr;
+        pixW_ = pixH_ = 0;
         loaded_.clear();
     }
 
@@ -345,15 +370,19 @@ private:
     struct Seen {
         bool restart = false, loaded = false, ended = false;
     };
+    // "loadfile replace" first ends the file that was open: that END_FILE (before the new file's
+    // START_FILE) is no failure of the new one. Taken as one, it failed every first frame of the
+    // next file and marked its buckets as undecodable for good (the 160x90 clip after another).
     Seen DrainEvents() {
         Seen seen;
         const MpvApi& api = TheApp().player().Api();
         for (;;) {
             mpv_event* ev = api.mpv_wait_event(h_, 0);
             if (ev->event_id == MPV_EVENT_NONE) break;
+            if (ev->event_id == MPV_EVENT_START_FILE) started_ = true;
             if (ev->event_id == MPV_EVENT_PLAYBACK_RESTART) seen.restart = true;
             if (ev->event_id == MPV_EVENT_FILE_LOADED) seen.loaded = true;
-            if (ev->event_id == MPV_EVENT_END_FILE || ev->event_id == MPV_EVENT_SHUTDOWN) seen.ended = true;
+            if ((ev->event_id == MPV_EVENT_END_FILE && started_) || ev->event_id == MPV_EVENT_SHUTDOWN) seen.ended = true;
         }
         return seen;
     }
@@ -361,9 +390,9 @@ private:
     // Renders the pending frame into pixels_; true when there was a new video frame. Rendering
     // promptly also releases mpv's VO thread, which waits for each frame to be presented.
     bool RenderIfNew() {
-        if (!(render_.update(ctx_) & MPV_RENDER_UPDATE_FRAME)) return false;
-        int size[2] = {kW, kH};
-        size_t stride = kW * 4;
+        if (!(render_.update(ctx_) & MPV_RENDER_UPDATE_FRAME) || !pixels_) return false;
+        int size[2] = {pixW_, pixH_};
+        size_t stride = static_cast<size_t>(pixW_) * 4;
         mpv_render_param params[] = {{MPV_RENDER_PARAM_SW_SIZE, size},
                                      {MPV_RENDER_PARAM_SW_FORMAT, const_cast<char*>("bgr0")},
                                      {MPV_RENDER_PARAM_SW_STRIDE, &stride},
@@ -374,6 +403,7 @@ private:
 
     std::shared_ptr<Frame> Decode(const Job& job) {
         if (!h_ && !Open()) return nullptr;
+        if (!SetSize(job.w, job.h)) return nullptr;
         const MpvApi& api = TheApp().player().Api();
         // Copy-back hardware decoding only where software decoding of a keyframe is slow.
         const char* hw = job.hw ? "d3d11va-copy" : "no";
@@ -390,6 +420,7 @@ private:
             const std::string p = WideToUtf8(job.path);
             const std::string start = "start=" + t + (job.kind == Job::Exact ? ",hr-seek=yes" : ",hr-seek=no");
             const char* cmd[] = {"loadfile", p.c_str(), "replace", "-1", start.c_str(), nullptr};
+            started_ = false;
             if (api.mpv_command(h_, cmd) < 0) return nullptr;
             loaded_ = job.path;
         } else {
@@ -418,7 +449,9 @@ private:
             WaitForSingleObject(wake_, static_cast<DWORD>(std::min(50.0, deadline - now)));
         }
         auto frame = std::make_shared<Frame>();
-        frame->bgra.assign(pixels_, pixels_ + static_cast<size_t>(kW) * kH * 4);
+        frame->w = pixW_;
+        frame->h = pixH_;
+        frame->bgra.assign(pixels_, pixels_ + static_cast<size_t>(pixW_) * pixH_ * 4);
         for (size_t i = 3; i < frame->bgra.size(); i += 4) frame->bgra[i] = 0xFF;  // "bgr0" padding
         return frame;
     }
@@ -444,6 +477,9 @@ private:
     mpv_handle* h_ = nullptr;
     mpv_render_context* ctx_ = nullptr;
     uint8_t* pixels_ = nullptr;
+    int pixW_ = 0, pixH_ = 0;  // pixels_ and the vf scale
+    int sizeW_ = kW, sizeH_ = kH;  // UI side (under mu_): the frame size the cache holds
+    bool started_ = false;     // START_FILE seen since the last loadfile
     std::wstring loaded_;
     bool hw_ = false;
     std::atomic<unsigned> updates_{0};
@@ -468,6 +504,13 @@ struct ShownBitmap {
 // 4K goes to the GPU.
 bool HeavyVideo(const PlayerState& s) {
     return s.videoW > 4096 || s.videoH > 2304;
+}
+
+// Pixels per DIP of the context being painted (its DPI over 96).
+float DeviceScale(ui::Painter& p) {
+    float dx = 96, dy = 96;
+    p.Ctx()->GetDpi(&dx, &dy);
+    return dx / 96.0f;
 }
 
 }  // namespace
@@ -497,6 +540,10 @@ float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double se
     r.duration = s.duration;
     r.bucket = static_cast<long long>(seconds / r.step);
     r.hw = app.config().GetString("performance.hwdec") != "off" && HeavyVideo(s);
+    // At 125-200 % a 192x108 pixel frame was stretched over 240x135 to 384x216 pixels.
+    const float scale = std::clamp(p.Ctx() ? DeviceScale(p) : 1.0f, 1.0f, 3.0f);
+    r.w = static_cast<int>(std::lround(kW * scale / 2)) * 2;
+    r.h = static_cast<int>(std::lround(kH * scale / 2)) * 2;
     auto frame = Instance().Get(r);
 
     const float w = kW, h = kH;
@@ -509,7 +556,9 @@ float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double se
             g_shown = {};
             D2D1_BITMAP_PROPERTIES props =
                 D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-            if (SUCCEEDED(gpu.Ctx()->CreateBitmap(D2D1::SizeU(kW, kH), frame->bgra.data(), kW * 4, &props, &g_shown.bitmap))) {
+            if (SUCCEEDED(gpu.Ctx()->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(frame->w), static_cast<UINT32>(frame->h)),
+                                                  frame->bgra.data(), static_cast<UINT32>(frame->w) * 4, &props,
+                                                  &g_shown.bitmap))) {
                 g_shown.frame = frame;
                 g_shown.generation = gpu.Generation();
             }

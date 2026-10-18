@@ -209,13 +209,6 @@ const char* TrackProp(const wchar_t* type) {
     return "sid";
 }
 
-std::wstring TrackLabel(const Track& t, int ordinal) {
-    if (t.title.empty() && t.lang.empty()) return Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal));
-    std::wstring label = t.title.empty() ? t.lang : t.title;
-    if (!t.title.empty() && !t.lang.empty()) label += L" (" + t.lang + L")";
-    return label;
-}
-
 // Embedded or external tracks of one type.
 std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
     std::vector<ChoiceRow> rows;
@@ -226,10 +219,10 @@ std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
         ++ordinal;
         if (t.external != external) continue;
         ChoiceRow r;
-        r.label = t.TitleFromFileName() ? t.Name()
-                  : external && t.title.empty() ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
-                                                 : TrackLabel(t, ordinal);
-        r.detail = t.codec;
+        r.label = external && t.title.empty() && !t.TitleFromFileName() && t.lang.empty()
+                      ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
+                      : TrackName(t, ordinal);
+        r.detail = TrackDetail(t);
         r.checked = t.selected;
         const int64_t id = t.id;
         r.select = [prop, id] { TheApp().player().SetTrack(prop, id); };
@@ -301,7 +294,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
 }  // namespace
 
 std::unique_ptr<Widget> BuildTracksTab(int tab) {
-    auto sv = std::make_unique<ScrollView>();
+    auto sv = std::make_unique<PanelScroll>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     auto* page = sv->SetContent<Widget>();
@@ -322,13 +315,21 @@ std::unique_ptr<Widget> BuildTracksTab(int tab) {
     return sv;
 }
 
+// The same footer button as quick settings (a hairline, then "Open Advanced Settings" with the
+// gear), so the two popovers that both have Audio and Subtitles tabs end the same way.
+class TracksFooter : public Widget {
+public:
+    void Paint(Painter& p) override { p.Fill({rect.x, rect.y, rect.w, 1}, SectionLine()); }
+};
+
 std::unique_ptr<Widget> BuildTracksFooter(Popover* owner) {
-    auto footer = std::make_unique<Widget>();
+    auto footer = std::make_unique<TracksFooter>();
     footer->dir = Dir::Column;
     footer->width = Length::Grow();
     footer->height = Length::Px(72);
     footer->pad = {20, 20, 20, 20};
-    auto* b = footer->Add<FlatButton>(Tr(L"Show Preferences"));
+    auto* b = footer->Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
+    b->width = Length::Grow();
     b->onClick = [owner] {
         const int t = owner->CurrentTab();
         const std::string cat = t == 0 ? "video" : t == 1 ? "audio" : "subtitles";

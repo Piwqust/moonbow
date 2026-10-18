@@ -1,11 +1,15 @@
 #include "app/player/PanelKit.h"
 
+#include "Util.h"
+#include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "library/MediaTypes.h"
 #include "app/player/LiveState.h"
 #include "gfx/Text.h"
 
 #include <cwchar>
+#include <cwctype>
 #include <map>
 
 namespace app::panel {
@@ -43,6 +47,48 @@ std::wstring FormatNumber(double v, int maxDecimals) {
     }
     if (s == L"-0") s = L"0";
     return LocalDecimal(std::move(s));
+}
+
+std::wstring TrackName(const Track& t, int ordinal) {
+    if (t.TitleFromFileName())
+        return t.lang.empty() ? FileNameOf(t.file) : FileNameOf(t.file) + L" (" + LanguageName(t.lang) + L")";
+    if (t.title.empty() && t.lang.empty()) return Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal));
+    if (t.title.empty()) return LanguageName(t.lang);
+    if (t.lang.empty()) return t.title;
+    const std::wstring lang = LanguageName(t.lang);
+    // "English 440 Hz" or "Русский (дубляж)" already says it.
+    if (library::SearchFold(t.title).find(library::SearchFold(lang)) != std::wstring::npos) return t.title;
+    return t.title + L" (" + lang + L")";
+}
+
+std::wstring TrackDetail(const Track& t) {
+    // mpv's (FFmpeg's) codec ids, by the names players and release notes use.
+    static const std::pair<const wchar_t*, const wchar_t*> kCodecs[] = {
+        {L"subrip", L"SubRip"}, {L"srt", L"SubRip"}, {L"ass", L"ASS"}, {L"ssa", L"SSA"}, {L"webvtt", L"WebVTT"},
+        {L"mov_text", L"Timed Text"}, {L"hdmv_pgs_subtitle", L"PGS"}, {L"dvd_subtitle", L"VobSub"},
+        {L"dvb_subtitle", L"DVB"}, {L"dvb_teletext", L"Teletext"}, {L"microdvd", L"MicroDVD"},
+        {L"text", L"Text"}, {L"aac", L"AAC"}, {L"aac_latm", L"AAC"}, {L"ac3", L"AC-3"}, {L"eac3", L"E-AC-3"},
+        {L"dts", L"DTS"}, {L"truehd", L"TrueHD"}, {L"mlp", L"MLP"}, {L"flac", L"FLAC"}, {L"alac", L"ALAC"},
+        {L"opus", L"Opus"}, {L"vorbis", L"Vorbis"}, {L"mp3", L"MP3"}, {L"mp2", L"MP2"}, {L"wmav2", L"WMA"},
+        {L"wmapro", L"WMA Pro"}, {L"h264", L"H.264"}, {L"hevc", L"HEVC"}, {L"av1", L"AV1"}, {L"vp9", L"VP9"},
+        {L"vp8", L"VP8"}, {L"mpeg2video", L"MPEG-2"}, {L"mpeg4", L"MPEG-4"}, {L"vc1", L"VC-1"},
+        {L"mjpeg", L"MJPEG"}, {L"png", L"PNG"},
+    };
+    std::wstring codec;
+    if (t.codec.rfind(L"pcm_", 0) == 0) codec = L"PCM";
+    for (const auto& [id, name] : kCodecs)
+        if (codec.empty() && t.codec == id) codec = name;
+    if (codec.empty() && !t.codec.empty()) {
+        codec = t.codec;
+        for (wchar_t& ch : codec) ch = static_cast<wchar_t>(std::towupper(ch));
+    }
+    if (t.type != L"audio" || t.channels <= 0) return codec;
+    const std::wstring layout = t.channels == 1   ? Tr(L"Mono")
+                                : t.channels == 2 ? Tr(L"Stereo")
+                                : t.channels == 6 ? L"5.1"
+                                : t.channels == 8 ? L"7.1"
+                                                  : Fmt(Tr(L"{0} channels"), static_cast<long long>(t.channels));
+    return codec.empty() ? layout : codec + L" · " + layout;
 }
 
 // --- TabBar ------------------------------------------------------------------------------
@@ -264,6 +310,51 @@ void Popover::Paint(Painter& p) {
 
 void Popover::PaintOver(Painter& p) {
     p.Stroke(rect, P().line, radius);
+}
+
+// --- PanelScroll ---------------------------------------------------------------------------
+
+namespace {
+constexpr float kNoScroll = 4;  // overflow up to this much is no reason to scroll
+constexpr float kCueH = 28;
+}  // namespace
+
+void PanelScroll::PaintOver(Painter& p) {
+    const float max = MaxOffset();
+    if (max <= kNoScroll) {
+        ScrollView::PaintOver(p);
+        return;
+    }
+    Color bg = P().bgBase;
+    for (Widget* w = Parent(); w; w = w->Parent())
+        if (auto* pop = dynamic_cast<Popover*>(w)) {
+            if (pop->fill) bg = pop->fill();
+            break;
+        }
+    // Stacked bands, no gradient brush: 10 fills of 2 DIP each.
+    auto cue = [&](float y0, bool down) {
+        constexpr int kSteps = 10;
+        for (int i = 0; i < kSteps; ++i) {
+            const float t = static_cast<float>(i + 1) / kSteps;  // 0.1 inside, 1 at the cut edge
+            const float band = kCueH / kSteps;
+            const float y = down ? y0 + band * static_cast<float>(i) : y0 + band * static_cast<float>(kSteps - 1 - i);
+            p.Fill({rect.x, y, rect.w, band}, bg.Fade(0.92f * t * t));
+        }
+    };
+    if (Offset() < max - 1) cue(rect.Bottom() - kCueH, true);
+    if (Offset() > 1) cue(rect.y, false);
+    // A resting thumb, half as wide as the scroll view's own (which covers it while scrolling):
+    // how much there is and where this is in it, at a glance (as the context menu shows, P-13).
+    const float contentH = rect.h + max;
+    const float th = std::max(32.0f, rect.h * rect.h / contentH);
+    p.Fill({rect.Right() - 5, rect.y + 2 + (rect.h - 4 - th) * std::clamp(Offset() / max, 0.0f, 1.0f), 2, th},
+           P().lineStrong, 1);
+    ScrollView::PaintOver(p);
+}
+
+bool PanelScroll::OnWheel(const WheelEvent& e) {
+    if (MaxOffset() <= kNoScroll) return false;
+    return ScrollView::OnWheel(e);
 }
 
 bool Popover::OnKeyDown(const KeyEvent& e) {

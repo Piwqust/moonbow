@@ -60,7 +60,12 @@ public:
             if (m & (kChangeMeta | kChangeFile | kChangeState)) Invalidate();
         });
         imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
+        // Hover target for the full title when it is cut (placed by Paint, where the text goes).
+        titleTip_ = Add<Widget>();
+        titleTip_->interactive = true;
+        titleTip_->visible = false;
     }
+    void OnLayout() override {}  // titleTip_ is placed by Paint
 
     void Paint(Painter& p) override {
         TakeLoadedLyrics();
@@ -104,16 +109,26 @@ public:
         if (bmp) p.Image(bmp, cover, 16, true);
         else PaintGeneratedArt(p, cover, Hash(path));
 
-        std::wstring title = s.title.empty() ? (item ? FileNameOf(item->path) : L"") : s.title;
-        if (!s.artist.empty()) title += L" · " + s.artist;
+        // Two lines, as in the design: the title, then the artist and the album. A long title is
+        // cut on its own line and never hides the artist; the full text is in a tooltip.
+        const std::wstring title = s.title.empty() ? (item ? FileNameOf(item->path) : L"") : s.title;
+        std::wstring second = s.artist;
+        if (!s.album.empty()) second += (second.empty() ? L"" : L" · ") + s.album;
         // The view is always on the (dark) video background, also in the light theme, so the
         // text is light rather than the palette's text colors.
         const Color white = Color::Hex(0xFFFFFF);
-        p.Text(title, {left.x + 48, cover.Bottom() + 70, left.w - 96, 36}, TextStyle::Title,
-               Color::Mix(c.videoBg, white, 0.8f), HAlign::Center);
-        if (!s.album.empty())
-            p.Text(s.album, {left.x + 48, cover.Bottom() + 106, left.w - 96, 22}, TextStyle::Body,
-                   Color::Mix(c.videoBg, white, 0.5f), HAlign::Center);
+        const Rect titleBox{left.x + 48, cover.Bottom() + 70, left.w - 96, 36};
+        const Rect secondBox{left.x + 48, cover.Bottom() + 106, left.w - 96, 22};
+        p.Text(title, titleBox, TextStyle::Title, Color::Mix(c.videoBg, white, 0.8f), HAlign::Center);
+        if (!second.empty())
+            p.Text(second, secondBox, TextStyle::Body, Color::Mix(c.videoBg, white, 0.55f), HAlign::Center);
+        const bool cut = p.Measure(title, TextStyle::Title).width > titleBox.w ||
+                         (!second.empty() && p.Measure(second, TextStyle::Body).width > secondBox.w);
+        titleTip_->visible = cut;
+        if (cut) {
+            titleTip_->rect = {titleBox.x, titleBox.y, titleBox.w, second.empty() ? titleBox.h : secondBox.Bottom() - titleBox.y};
+            titleTip_->tooltip = second.empty() ? title : title + L"\n" + second;
+        }
 
         if (wide) {
             const float x = left.Right() + 16;
@@ -124,7 +139,7 @@ public:
             std::fill(lineRects_.begin(), lineRects_.end(), Rect{});
             if (oneLine && current_ >= 0)
                 p.Text(lyrics_.lines[static_cast<size_t>(current_)].text,
-                       {left.x + 48, cover.Bottom() + (s.album.empty() ? 106.0f : 138.0f), left.w - 96, 24},
+                       {left.x + 48, cover.Bottom() + (second.empty() ? 106.0f : 138.0f), left.w - 96, 24},
                        TextStyle::Large, Color::Mix(c.videoBg, white, 0.9f), HAlign::Center);
         }
     }
@@ -373,20 +388,24 @@ private:
                 blur_->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, D2D1_GAUSSIANBLUR_OPTIMIZATION_SPEED);
             }
         }
-        const D2D1_SIZE_F bs = bmp->GetSize();
-        if (blur_ && bs.width > 0 && bs.height > 0) {
+        gfx::ComPtr<ID2D1Image> out;
+        if (blur_) blur_->GetOutput(&out);
+        // The size of what the effect draws, in DIPs of this context: an effect works in pixels,
+        // so at 125-200 % the output is 1/scale of the bitmap's 96-dpi GetSize().
+        D2D1_RECT_F b{};
+        if (out && FAILED(ctx->GetImageLocalBounds(out.Get(), &b))) b = {};
+        const float bw = b.right - b.left, bh = b.bottom - b.top;
+        if (out && bw > 0 && bh > 0) {
             // Cover the view with the image, centered on the cover (slightly larger, like the design);
             // with lyrics the cover sits left of center, so the image must reach the far edge too.
             const float halfW = std::max(cover.Cx() - rect.x, rect.Right() - cover.Cx());
             const float halfH = std::max(cover.Cy() - rect.y, rect.Bottom() - cover.Cy());
-            const float k = std::max(2 * halfW / bs.width, 2 * halfH / bs.height) * 1.15f;
-            const float w = bs.width * k, h = bs.height * k;
+            const float k = std::max(2 * halfW / bw, 2 * halfH / bh) * 1.15f;
+            const float w = bw * k, h = bh * k;
             D2D1_MATRIX_3X2_F old;
             ctx->GetTransform(&old);
-            ctx->SetTransform(D2D1::Matrix3x2F::Scale(k, k) *
+            ctx->SetTransform(D2D1::Matrix3x2F::Translation(-b.left, -b.top) * D2D1::Matrix3x2F::Scale(k, k) *
                               D2D1::Matrix3x2F::Translation(cover.Cx() - w / 2, cover.Cy() - h / 2) * old);
-            gfx::ComPtr<ID2D1Image> out;
-            blur_->GetOutput(&out);
             ctx->DrawImage(out.Get(), D2D1_INTERPOLATION_MODE_LINEAR);
             ctx->SetTransform(old);
         }
@@ -477,6 +496,7 @@ private:
         p.Stroke(r, c.line, 16);
     }
 
+    Widget* titleTip_ = nullptr;
     Lyrics lyrics_;
     uint64_t serial_ = 0;
     std::shared_ptr<LyricsLoad> pending_;

@@ -157,6 +157,101 @@ private:
     bool remaining_ = false;
 };
 
+// The volume as a vertical slider above the speaker, for a bar that has no room for the wedge
+// (the minimal bar, windows under 900 DIP): the level shows and can be set, not only stepped by
+// the wheel (VLC, PotPlayer, IINA). Opened by hovering or clicking the speaker; it closes when
+// the pointer has left both, on Esc or on a click elsewhere.
+class VolumePopup : public Widget, PlayerBound {
+public:
+    explicit VolumePopup(Rect anchor) : anchor_(anchor) {
+        interactive = true;
+        width = Length::Px(kW);
+        height = Length::Px(kH);
+        Bind(this, kChangeVolume);
+    }
+    ~VolumePopup() override {
+        if (Host* h = GetHost(); h && timer_) h->CancelTimer(timer_);
+    }
+    static constexpr float kW = 44, kH = 176;
+    void Paint(Painter& p) override {
+        const PlayerState& s = PS();
+        p.Shadow(rect, 8, 12, 4, 0.35f);
+        p.Fill(rect, P().bgMenu, 8);
+        p.Stroke(rect, P().line, 8);
+        p.Text(std::to_wstring(static_cast<int>(std::lround(s.volume))) + L"%", {rect.x, rect.y + 6, rect.w, 22},
+               TextStyle::Small, P().textPrimary, HAlign::Center);
+        const Rect t = Track();
+        const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
+        p.Fill(t, empty, 2);
+        const float k = static_cast<float>(std::clamp(s.volume / 100.0, 0.0, 1.0));
+        const Color fill = s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid;
+        if (k > 0) p.Fill({t.x, t.Bottom() - t.h * k, t.w, t.h * k}, fill, 2);
+        p.FillCircle({t.Cx(), t.Bottom() - t.h * k}, dragging_ || hotTrack_ ? 7.0f : 6.0f, P().accent);
+        const Rect m = MuteRect();
+        if (hotMute_) p.Fill(m, P().hover, 4);
+        p.Icon(VolumeIcon(s.volume, s.mute), m.Center(22, 22), hotMute_ ? P().textPrimary : P().textSecondary);
+    }
+    bool OnMouseMove(const MouseEvent& e) override {
+        const bool m = MuteRect().Contains(e.x, e.y), t = !m && e.y < MuteRect().y;
+        if (m != hotMute_ || t != hotTrack_) {
+            hotMute_ = m;
+            hotTrack_ = t;
+            Invalidate();
+        }
+        if (dragging_) SetFromY(e.y);
+        return true;
+    }
+    void OnMouseLeave() override {
+        hotMute_ = hotTrack_ = false;
+        Invalidate();
+        CloseWhenLeft();
+    }
+    bool OnMouseDown(const MouseEvent& e) override {
+        if (MuteRect().Contains(e.x, e.y)) {
+            Run(Action::Mute);
+            return true;
+        }
+        dragging_ = true;
+        SetFromY(e.y);
+        return true;
+    }
+    bool OnMouseUp(const MouseEvent&) override {
+        dragging_ = false;
+        Invalidate();
+        return true;
+    }
+    bool OnWheel(const WheelEvent& e) override {
+        WheelVolume(e.delta, false);
+        return true;
+    }
+    // After the pointer left the speaker or the popup: closes unless it is back on one of them.
+    void CloseWhenLeft() {
+        Host* h = GetHost();
+        if (!h || timer_) return;
+        timer_ = h->StartTimer(350, [this, h] {
+            timer_ = 0;
+            const Point m = h->MousePos();
+            if (dragging_ || (h->MouseInside() && (rect.Contains(m.x, m.y) || anchor_.Inset(-4).Contains(m.x, m.y))))
+                return;
+            h->ClosePopup(this);
+        });
+    }
+
+private:
+    Rect Track() const { return {rect.Cx() - 2, rect.y + 36, 4, rect.h - 36 - 50}; }
+    Rect MuteRect() const { return {rect.Cx() - 16, rect.Bottom() - 40, 32, 32}; }
+    void SetFromY(float y) {
+        const Rect t = Track();
+        const double v = std::clamp((t.Bottom() - y) / std::max(1.0f, t.h), 0.0f, 1.0f) * 100.0;
+        if (PS().mute) TheApp().player().SetMute(false);
+        TheApp().player().SetVolume(std::round(v));
+        Invalidate();
+    }
+    Rect anchor_;
+    bool hotMute_ = false, hotTrack_ = false, dragging_ = false;
+    UINT_PTR timer_ = 0;
+};
+
 // Speaker button + wedge slider, as in the design.
 class VolumeControl : public Widget, PlayerBound {
 public:
@@ -168,6 +263,12 @@ public:
         Bind(this, kChangeVolume);
         onContextMenu = [](const MouseEvent&) { Run(Action::Mute); };
     }
+    ~VolumeControl() override {
+        if (Host* h = GetHost()) {
+            if (hoverTimer_) h->CancelTimer(hoverTimer_);
+            if (popup_ && h->IsPopupOpen(popup_)) h->ClosePopup(popup_);
+        }
+    }
     Rect Wedge() const { return collapsed_ ? Rect{} : Rect{rect.x + 36, rect.Cy() - 9, 86, 18}; }
     // Narrow windows keep only the speaker (wheel still changes the volume), so the
     // seek bar keeps its room.
@@ -175,7 +276,8 @@ public:
         if (c == collapsed_) return;
         collapsed_ = c;
         width = Length::Px(c ? 32.0f : 126.0f);
-        tooltip = c ? Tr(L"Volume: scroll to change, click to mute") : std::wstring();
+        // Collapsed, the speaker opens the slider popup (it shows the level); right click mutes.
+        tooltip.clear();
     }
     void Paint(Painter& p) override {
         const PlayerState& s = PS();
@@ -206,12 +308,19 @@ public:
         const float t = static_cast<float>(std::clamp(s.volume / 100.0, 0.0, 1.0));
         if (t > 0) wedge(t, s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid);
         PaintFocusRing(p, w, 2);
-        if (hotWedge_ || dragging_) {
-            const std::wstring label = std::to_wstring(static_cast<int>(std::lround(s.volume))) + L"%";
-            const Rect tip{w.Cx() - 24, rect.y - 30, 48, 24};
-            p.Fill(tip, P().bgMenu, 4);
-            p.Text(label, tip, TextStyle::Small, P().textPrimary, HAlign::Center);
-        }
+    }
+    // The level while the pointer is on the wedge: the seek tip's bubble (26 DIP, shadow) at the
+    // seek tip's height, so the two read as one kind of thing.
+    void PaintOver(Painter& p) override {
+        if (collapsed_ || !(hotWedge_ || dragging_)) return;
+        const Rect w = Wedge();
+        const std::wstring label = std::to_wstring(static_cast<int>(std::lround(PS().volume))) + L"%";
+        const float tw = gfx::Text::Get().Measure(label, TextStyle::Small).width + 20;
+        const float barCy = Parent() ? Parent()->rect.Cy() : rect.Cy();
+        const Rect tip{std::round(w.Cx() - tw / 2), barCy - 47, tw, 26};
+        p.Shadow(tip, 4, 8, 3, 0.3f);
+        p.Fill(tip, P().bgMenu, 4);
+        p.Text(label, tip, TextStyle::Small, P().textPrimary, HAlign::Center);
     }
     bool OnMouseMove(const MouseEvent& e) override {
         const bool sp = e.x < rect.x + 34, wd = Wedge().Inset(-4).Contains(e.x, e.y);
@@ -220,15 +329,33 @@ public:
             hotWedge_ = wd;
             Invalidate();
         }
+        // Collapsed: resting on the speaker for a moment opens the slider.
+        if (collapsed_ && hoverArmed_ && !PopupOpen() && !hoverTimer_)
+            if (Host* h = GetHost())
+                hoverTimer_ = h->StartTimer(300, [this] {
+                    hoverTimer_ = 0;
+                    if (IsHot()) OpenPopup();
+                });
         if (dragging_) SetFromX(e.x);
         return true;
     }
     void OnMouseLeave() override {
         hotSpeaker_ = hotWedge_ = false;
         Invalidate();
+        if (Host* h = GetHost(); h && hoverTimer_) {
+            h->CancelTimer(hoverTimer_);
+            hoverTimer_ = 0;
+        }
+        hoverArmed_ = true;
+        if (PopupOpen()) popup_->CloseWhenLeft();
     }
     bool OnMouseDown(const MouseEvent& e) override {
-        if (collapsed_ || e.x < rect.x + 34) {
+        if (collapsed_) {
+            // A click while it is open closes it (the click outside the popup does that).
+            if (!PopupOpen()) OpenPopup();
+            return true;
+        }
+        if (e.x < rect.x + 34) {
             Run(Action::Mute);
             return true;
         }
@@ -255,7 +382,25 @@ public:
     }
 
 private:
+    bool PopupOpen() const { return popup_ && GetHost() && GetHost()->IsPopupOpen(popup_); }
+    void OpenPopup() {
+        Host* h = GetHost();
+        if (!h || PopupOpen()) return;
+        const Rect speaker{rect.x, rect.y, 32, rect.h};
+        PopupOptions o;
+        // Above the bar, like the popovers, centered on the speaker.
+        const float barTop = Parent() ? Parent()->rect.y : rect.y;
+        o.anchor = {speaker.Cx() - VolumePopup::kW / 2, barTop, VolumePopup::kW, 0};
+        o.place = Place::Above;
+        o.offset = 8;
+        o.focusContent = false;  // the arrow keys keep changing the volume through the player
+        popup_ = static_cast<VolumePopup*>(h->ShowPopup(std::make_unique<VolumePopup>(speaker), o));
+        hoverArmed_ = false;  // closed while the pointer stays here (a click): no reopening by itself
+    }
     bool collapsed_ = false;
+    bool hoverArmed_ = true;
+    VolumePopup* popup_ = nullptr;
+    UINT_PTR hoverTimer_ = 0;
     void SetFromX(float x) {
         const Rect w = Wedge();
         if (w.w <= 0) return;
@@ -577,7 +722,19 @@ void SeekBar::OnMouseLeave() {
 void SeekBar::Paint(Painter& p) {
     const PlayerState& s = TheApp().player().State();
     const Rect t = Track();
-    p.Fill(t, P().bgDeep, compact ? 3.0f : 3.0f);
+    // The unplayed track needs ~3:1 against the bar (WCAG 1.4.11). bgDeep does that only in the
+    // dark theme; in light it is #E6E6E6 on #EBEBEB, so the thin tracks take the volume wedge's
+    // "empty" tone and the tall one a groove with an outline of it.
+    const bool light = Theme::Get().Mode() == ThemeMode::Light;
+    const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
+    const bool thin = slim || compact;
+    const Color track = slim ? (light ? empty : P().lineStrong) : compact ? (light ? empty : P().bgDeep)
+                        : light ? P().lineStrong : P().bgDeep;
+    // Thin tracks show the played part in the accent itself: a dimmed accent would be darker than
+    // the grey of the rest.
+    const bool strongPlayed = slim || (compact && light);
+    p.Fill(t, track, 3.0f);
+    if (!thin && light) p.Stroke(t, empty, 3.0f);
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));
@@ -593,8 +750,8 @@ void SeekBar::Paint(Painter& p) {
             smooth = smooth * 0.55f + r * 0.45f;
             const float bh = std::round(4 + (t.h - 10) * smooth * smooth * 1.4f);
             const float bhc = std::min(bh, t.h - 6);
-            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc}, bx < playX ? P().accentMid : P().lineStrong,
-                   0.75f);
+            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc},
+                   bx < playX ? P().accentMid : light ? empty : P().lineStrong, 0.75f);
         }
         const float x = std::clamp(playX, t.x + 2, t.Right() - 2);
         p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);
@@ -605,7 +762,7 @@ void SeekBar::Paint(Painter& p) {
         const float kc = static_cast<float>(std::clamp(s.cacheTime / s.duration, 0.0, 1.0));
         p.Fill({t.x + t.w * k, t.Bottom() - 3, t.w * (kc - k), 3}, P().line, 1);
     }
-    p.Fill({t.x, t.y, t.w * k, t.h}, Color::Mix(P().bgDeep, P().accent, 0.32f), 3);
+    p.Fill({t.x, t.y, t.w * k, t.h}, strongPlayed ? P().accent : Color::Mix(track, P().accent, 0.32f), 3);
     // A-B loop range.
     const LiveValues& lv = LiveState::Get().V();
     if (!std::isnan(lv.abA)) {
@@ -617,8 +774,14 @@ void SeekBar::Paint(Painter& p) {
     }
     for (const Chapter& c : s.chapters) {
         if (c.time <= 0 || c.time >= s.duration) continue;  // a mark past the end would sit beyond the bar
-        const float cx = t.x + t.w * static_cast<float>(c.time / s.duration);
-        p.Fill({std::round(cx), t.y + (compact ? 0.0f : 6.0f), 1, compact ? t.h : t.h - 12}, P().lineStrong);
+        const float cx = std::round(t.x + t.w * static_cast<float>(c.time / s.duration));
+        if (slim)
+            // A 4-8 DIP track has no room for a tick inside it: a 2 DIP gap in the track (uosc).
+            p.Fill({cx - 1, t.y, 2, t.h}, P().bgChrome);
+        else if (compact)
+            p.Fill({cx, t.y, 1, t.h}, light ? P().bgPanel : P().lineStrong);
+        else
+            p.Fill({cx, t.y + 6, 1, t.h - 12}, light ? P().bgChrome : P().lineStrong);
     }
     const float x = std::clamp(t.x + t.w * k, t.x + 2, t.Right() - 2);
     if (slim)
@@ -644,6 +807,12 @@ void SeekBar::PaintOver(Painter& p) {
     const float at = dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_;
     const Size client = GetHost() ? GetHost()->ClientSize() : Size{rect.Right(), rect.Bottom()};
     const Rect bounds{0, 0, client.w, client.h};
+    if (!dragging_) {
+        // Where a click would land, under the tip (uosc, YouTube): easier to aim on a wide bar.
+        const float hx = std::round(std::clamp(hoverX_, tr.x, tr.Right()));
+        const float grow = slim ? 4.0f : 0.0f;
+        p.Fill({hx - 1, tr.y - grow, 2, tr.h + 2 * grow}, P().textPrimary.Fade(0.7f), 1);
+    }
     PaintSeekPreview(p, tr, at, t, bounds);
     const Rect tip{ClampedLeft(at, w, tr, bounds), tr.y - 34, w, 26};
     p.Shadow(tip, 4, 8, 3, 0.3f);
@@ -710,15 +879,23 @@ void ControlBar::OnLayout() {
 }
 
 void ControlBar::Paint(Painter& p) {
+    // The bar and everything on it (buttons, seek bar, times, the seek tip in PaintOver) fade as
+    // one: the opacity multiplies every primitive until PaintOver pops it, no offscreen layer.
+    p.PushOpacity(opacity);
     if (floating) {
-        // Over the picture: a rounded, nearly opaque panel with a soft shadow, inset from the edges.
+        // Over the picture: a rounded, opaque panel with a soft shadow, inset from the edges. Opaque,
+        // so the picture's colours never show through it (no hue seam where the video changes).
         const float r = minimal_ ? 20.0f : 14.0f;
-        p.Shadow(rect, r, 18, 6, 0.40f * opacity);
-        p.Fill(rect, P().bgChrome.Fade(0.96f * opacity), r);
-        p.Stroke(rect, P().line.Fade(opacity), r);
+        p.Shadow(rect, r, 18, 6, 0.40f);
+        p.Fill(rect, P().bgChrome, r);
+        p.Stroke(rect, P().line, r);
         return;
     }
-    p.Fill(rect, P().bgChrome.Fade(opacity));
+    p.Fill(rect, P().bgChrome);
+}
+
+void ControlBar::PaintOver(Painter& p) {
+    p.PopOpacity();
 }
 
 }  // namespace app

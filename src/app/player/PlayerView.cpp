@@ -31,6 +31,28 @@ const PlayerState& PS() {
     return TheApp().player().State();
 }
 
+// The open video or PiP context menu: its labels ("Play", the checked track, the queue) are a
+// snapshot, so it closes when the file, play/pause or the window mode changes under it.
+Host* g_menuHost = nullptr;
+Widget* g_menu = nullptr;
+
+void KeepMenu(Host* host, Widget* menu) {
+    g_menuHost = host;
+    g_menu = menu;
+}
+
+// Posted: it can be asked for in the middle of a layout (a fullscreen switch lays out from WM_SIZE).
+void CloseStaleMenu() {
+    if (!g_menuHost || !g_menu) return;
+    Host* host = g_menuHost;
+    Widget* menu = g_menu;
+    g_menuHost = nullptr;
+    g_menu = nullptr;
+    host->Post([host, menu] {
+        if (host->IsPopupOpen(menu)) host->ClosePopup(menu);
+    });
+}
+
 MenuItem Item(const wchar_t* label, Action a, const char* icon = "") {
     MenuItem m{Tr(label), ShortcutText(a), icon};
     m.enabled = Enabled(a);
@@ -42,9 +64,12 @@ MenuItem Item(const wchar_t* label, Action a, const char* icon = "") {
 std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool allowOff) {
     std::vector<MenuItem> items;
     bool any = false;
+    int ordinal = 0;
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
-        MenuItem m{t.Label()};
+        const std::wstring detail = panel::TrackDetail(t);
+        const std::wstring name = panel::TrackName(t, ++ordinal);
+        MenuItem m{detail.empty() ? name : name + L" · " + detail};
         m.radio = true;
         m.checked = t.selected;
         any |= t.selected;
@@ -183,7 +208,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
     open.submenu.push_back(Item(L"Open network stream", Action::OpenNetwork, "streaming"));
     items.push_back(open);
     items.push_back(Item(L"Quit", Action::Quit, "quit"));
-    ShowContextMenu(host, at, std::move(items));
+    KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
 }
 
 }  // namespace
@@ -203,7 +228,7 @@ void ShowPipContextMenu(Host* host, Point at) {
     items.push_back(std::move(speed));
     items.push_back({Tr(L"Back to full window"), ShortcutText(Action::PictureInPicture), "open", false, true, false, false,
                      [] { TheApp().main()->Post([] { TheApp().main()->SetPictureInPicture(false); }); }});
-    ShowContextMenu(host, at, std::move(items));
+    KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
 }
 
 // The video rectangle: a transparent hole the mpv child window shows through,
@@ -408,6 +433,14 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
+        if ((m & kChangeFile) || ((m & kChangeState) && PS().paused != menuPaused_)) CloseStaleMenu();
+        menuPaused_ = PS().paused;
+        // The fullscreen top panel names the chapter and the title.
+        if ((m & (kChangeChapters | kChangeMeta)) && window_->IsFullscreen()) Invalidate();
+        // In a queue mpv goes on to the next file by itself: say which one it skipped.
+        if ((m & kChangeAdvance) && !PS().skippedPath.empty())
+            ShowToast(window_, Fmt(Tr(L"Skipped “{0}”: it can't be played"), {FileNameOf(PS().skippedPath)}), "info",
+                      4000);
         if (m & (kChangeTracks | kChangeFile | kChangeState | kChangeError)) InvalidateLayout();
         // The thin progress line repaints only when it grows by a pixel.
         if ((m & kChangeTime) && thinShown_) {
@@ -438,6 +471,10 @@ void PlayerView::SetSidePanel(bool shown) {
     TheApp().SetUiValue("player.sidePanel", shown ? "1" : "0");
     side_->visible = shown && !window_->PictureInPicture();
     InvalidateLayout();
+}
+
+bool PlayerView::PipControlsShown() const {
+    return pip_ && PipOverlayShown(pip_);
 }
 
 Rect PlayerView::VideoRect() const {
@@ -475,6 +512,12 @@ float PlayerView::SubtitleBand(float h) const {
 void PlayerView::OnLayout() {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
     const PlayerState& s = PS();
+    // Fullscreen, hide-UI or PiP switched: an open video menu sits where the old layout had it.
+    const int mode = (window_->IsFullscreen() ? 1 : 0) | (window_->UiHidden() ? 2 : 0) | (window_->PictureInPicture() ? 4 : 0);
+    if (mode != layoutMode_) {
+        if (layoutMode_ >= 0) CloseStaleMenu();
+        layoutMode_ = mode;
+    }
     const bool audioOnly = s.fileLoaded && !s.hasVideo;
     const float barH = bar_->BarHeight();
     const bool pip = window_->PictureInPicture();
@@ -509,7 +552,11 @@ void PlayerView::OnLayout() {
     bar_->floating = floats;
     const float slide = immersive || overlay ? (1 - chrome) * 10 : 0.0f;
     if (floats) {
-        const float w = std::min(rect.w - 32, bar_->Minimal() ? 760.0f : 1180.0f);
+        // Fullscreen and maximized: a longer timeline (70 % of the width, 1180-1600 DIP) instead
+        // of 13 s per DIP of a film on a 2560-wide screen; the minimal bar keeps its narrow width.
+        const bool wide = window_->IsFullscreen() || window_->IsWindowMaximized();
+        const float full = wide ? std::clamp(std::floor(rect.w * 0.7f), 1180.0f, 1600.0f) : 1180.0f;
+        const float w = std::min(rect.w - 32, bar_->Minimal() ? 760.0f : full);
         bar_->Arrange({rect.x + (rect.w - w) / 2, rect.Bottom() - kFloatMargin - barH + slide, w, barH});
     } else {
         bar_->Arrange({rect.x, rect.Bottom() - barH + slide, rect.w, barH});
@@ -518,7 +565,9 @@ void PlayerView::OnLayout() {
     pip_->visible = pip;
     if (pip) pip_->Arrange(rect);
 
-    error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && !pip;
+    // Only once mpv has nothing left to try: a failed file in a queue is skipped (a toast says so),
+    // and the card would flash with the next file's name.
+    error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && s.idle && !pip;
     if (error_->visible) {
         const Rect v = video_->Inner(immersive);
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);
@@ -551,6 +600,43 @@ void PlayerView::Paint(Painter& p) {
     if (!PS().fileLoaded) p.Fill(video_->Inner(false), P().videoBg);
 }
 
+// Fullscreen: the title (and the chapter) in a panel at the top that comes and goes with the
+// control bar, under the same opacity, sliding the other way (uosc, IINA). Painted, not a widget,
+// so clicks on it still reach the video. Returns the height it takes from the top.
+float PlayerView::PaintTopInfo(Painter& p) {
+    const PlayerState& s = PS();
+    const float k = window_->ChromeOpacity();
+    if (!window_->IsFullscreen() || window_->PictureInPicture() || !s.fileLoaded || !bar_->visible || k <= 0.01f)
+        return 0;
+    const QueueItem* item = TheApp().queue().CurrentItem();
+    const std::wstring title = !s.title.empty() ? s.title : item ? FileNameOf(item->path) : std::wstring();
+    if (title.empty()) return 0;
+    std::wstring chapter;
+    if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size()))
+        chapter = s.chapters[static_cast<size_t>(s.chapter)].title;
+    const float side = 20, space = 10, h = 40;
+    const float widest = std::min(rect.w - 32, std::max(bar_->rect.w, 480.0f));
+    const float cw = chapter.empty() ? 0.0f : gfx::Text::Get().Measure(chapter, TextStyle::Body).width + 2;
+    const float sep = chapter.empty() ? 0.0f : space * 2 + 1;
+    const float chapterW = std::min(cw, std::floor((widest - 2 * side - sep) * 0.4f));
+    const float titleW = std::min(gfx::Text::Get().Measure(title, TextStyle::BodyStrong).width + 2,
+                                  widest - 2 * side - sep - chapterW);
+    const float w = std::round(titleW + sep + chapterW + 2 * side);
+    const Rect r{std::round(rect.Cx() - w / 2), rect.y + kFloatMargin - (1 - k) * 10, w, h};
+    p.PushOpacity(k);
+    p.Shadow(r, 14, 18, 6, 0.40f);
+    p.Fill(r, P().bgChrome, 14);
+    p.Stroke(r, P().line, 14);
+    p.Text(title, {r.x + side, r.y, titleW, h}, TextStyle::BodyStrong, P().textPrimary);
+    if (!chapter.empty()) {
+        const float x = r.x + side + titleW + space;
+        p.Fill({x, r.y + 12, 1, h - 24}, P().lineStrong);
+        p.Text(chapter, {x + 1 + space, r.y, chapterW, h}, TextStyle::Body, P().textSecondary);
+    }
+    p.PopOpacity();
+    return kFloatMargin + h;
+}
+
 void PlayerView::PaintOver(Painter& p) {
     const PlayerState& s = PS();
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
@@ -558,8 +644,9 @@ void PlayerView::PaintOver(Painter& p) {
     const bool pip = window_->PictureInPicture();
     if (!pip) stats_->Paint(p, video);
 
+    const float info = PaintTopInfo(p);
     if (video_->Holding()) {
-        const Rect badge{std::round(video.Cx() - 36), video.y + 20, 72, 32};
+        const Rect badge{std::round(video.Cx() - 36), video.y + 20 + info, 72, 32};
         p.Fill(badge, P().bgMenu.Fade(0.9f), 16);
         p.Icon("speed", {badge.x + 10, badge.y + 6, 20, 20}, P().textPrimary);
         p.Text(L"2×", {badge.x + 34, badge.y, badge.w - 40, badge.h}, TextStyle::BodyStrong, P().textPrimary);
@@ -693,7 +780,7 @@ void MiniPlayer::OnLayout() {
         }
         for (auto& c : Children()) {
             if (c->id == "queue") c->visible = false;
-            if (c->id == "seek") c->Arrange({v.Right() + 10, rect.Bottom() - 18, rect.Right() - 60 - v.Right() - 10, 12});
+            if (c->id == "seek") c->Arrange({v.Right() + 10, rect.Bottom() - 24, rect.Right() - 60 - v.Right() - 10, 24});
         }
         return;
     }
@@ -709,7 +796,8 @@ void MiniPlayer::OnLayout() {
         else if (c->id == "next") c->Arrange({v.Cx() + 20 + 8, v.Cy() - 18, s.w, s.h});
     }
     for (auto& c : Children()) {
-        if (c->id == "seek") c->Arrange({rect.x + 8, v.Bottom() + 4, rect.w - 16, 12});
+        // 24 DIP tall for the pointer (WCAG 2.5.8); the thin track stays where it was.
+        if (c->id == "seek") c->Arrange({rect.x + 8, v.Bottom() - 2, rect.w - 16, 24});
         if (c->id == "queue") {
             c->visible = true;
             c->Arrange({rect.Right() - 8 - 28, rect.Bottom() - 8 - 28, 28, 28});
