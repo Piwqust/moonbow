@@ -56,3 +56,7 @@
 {L"K or Space plays and pauses, J and L seek 10 s, 0–9 jump to 0–90%, Shift+, and Shift+. change the speed, C turns subtitles on and off. Your other changes to shortcuts are reset.", L"K или пробел ставят на паузу и продолжают, J и L перематывают на 10 с, 0–9 переходят на 0–90%, Shift+, и Shift+. меняют скорость, C включает и выключает субтитры. Остальные изменения сочетаний сбросятся."},
 {L"Use YouTube keys", L"Включить"},
 {L"YouTube keys are on", L"Клавиши YouTube включены"},
+// --- subtitle example, shaders
+{L"Subtitle example", L"Пример субтитров"},
+{L"Look for new shaders", L"Найти новые шейдеры"},
+{L"No shaders", L"Нет шейдеров"},

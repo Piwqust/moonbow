@@ -35,6 +35,30 @@ Color HeadingColor() {
     return Color::Mix(P().textPrimary, P().textSecondary, 0.36f);
 }
 
+namespace {
+
+float Luminance(const Color& c) {
+    auto lin = [](float v) { return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); };
+    return 0.2126f * lin(c.r) + 0.7152f * lin(c.g) + 0.0722f * lin(c.b);
+}
+
+float ContrastRatio(const Color& a, const Color& b) {
+    const float la = Luminance(a), lb = Luminance(b);
+    return (std::max(la, lb) + 0.05f) / (std::min(la, lb) + 0.05f);
+}
+
+}  // namespace
+
+Color DisabledTextColor() {
+    // text.disabled is ~2.5:1 on the light page; antialiased text then reads lighter still. Step it
+    // towards text.secondary until it clears 3.3:1 (3:1 plus a margin for the antialiasing).
+    const Palette& c = P();
+    Color out = c.textDisabled;
+    for (float t = 0.05f; t <= 1.0f && ContrastRatio(out, c.bgBase) < 3.3f; t += 0.05f)
+        out = Color::Mix(c.textDisabled, c.textSecondary, t);
+    return out;
+}
+
 void SyncTree(Widget* w) {
     if (!w) return;
     if (auto* s = dynamic_cast<Syncable*>(w)) s->Sync();
@@ -61,6 +85,9 @@ std::wstring FormatValue(const Item& item, double v, bool withUnit) {
         if (!s.empty() && s.back() == L'.') s.pop_back();
     }
     if (s == L"-0") s = L"0";
+    if (Lang() == settings::Lang::Ru)  // "0,5 с"; typed values accept both separators
+        for (wchar_t& ch : s)
+            if (ch == L'.') ch = L',';
     const std::wstring& unit = item.Unit(Lang());
     if (!withUnit || unit.empty()) return s;
     if (unit == L"%" || unit == L"×") return s + unit;
@@ -92,6 +119,7 @@ public:
     RowLabel(std::wstring text, std::wstring description) {
         width = Length::Grow();
         label_ = Add<Label>(std::move(text), TextStyle::Body, Tone::Secondary);
+        label_->color = [l = label_] { return l->IsEnabled() ? P().textSecondary : DisabledTextColor(); };
         if (!description.empty()) info_ = Add<InfoIcon>(std::move(description));
     }
     Size MeasureContent(float availW, float) override {
@@ -121,6 +149,24 @@ public:
         onChange = [this](bool on) { Cfg().SetBool(item.key, on); };
     }
     void Sync() override { SetValue(Cfg().GetBool(item.key)); }
+    // Disabled: the stock toggle sits on the panel color, which is white in the light theme and
+    // brighter than the grey tracks of live toggles. Draw it flatter than any live toggle instead.
+    void Paint(Painter& p) override {
+        if (IsEnabled()) {
+            Toggle::Paint(p);
+            return;
+        }
+        const Palette& c = P();
+        const bool on = Value();
+        const Rect box = rect.Center(66, 30);
+        p.Fill(box, Color::Mix(c.bgBase, c.bgCard, 0.5f), 4);
+        p.Stroke(box, Color::Mix(c.bgBase, c.bgDeep, 0.6f), 4, 2);
+        const float knobW = 26, knobH = 22;
+        const Rect knob{on ? box.Right() - 4 - knobW : box.x + 4, box.y + 4, knobW, knobH};
+        p.Fill(knob, Color::Mix(c.bgCard, c.lineStrong, on ? 0.9f : 0.5f), 3);
+        const Rect caption{on ? box.x + 4 : box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
+        p.Text(on ? Tr(L"ON") : Tr(L"OFF"), caption, TextStyle::Micro, DisabledTextColor(), HAlign::Center);
+    }
     const Item& item;
 };
 
@@ -544,7 +590,7 @@ std::unique_ptr<Widget> MakeParamCard(const std::string& key, const std::vector<
         name->width = Length::Grow();
         if (!it->Description(Lang()).empty()) name->tooltip = it->Description(Lang());
         auto* value = top->Add<ValueLabel>(*it);
-        auto* slider = block->Add<TickSlider>(*it, false);
+        auto* slider = block->Add<TickSlider>(*it);
         slider->width = Length::Grow();
         slider->onValue = [value, it](double v) { value->SetText(FormatValue(*it, v)); };
     }
@@ -604,11 +650,64 @@ std::unique_ptr<Widget> MakeCropCard(const std::vector<const Item*>& items, Page
     return card;
 }
 
+// Editable value next to a row slider; follows the thumb while it is dragged.
+class SliderValue : public SettingField {
+public:
+    explicit SliderValue(const Item& it) : SettingField(it) {
+        width = Length::Px(88);
+        height = Length::Px(36);
+    }
+    void Show(double v) {
+        if (!IsFocused()) SetText(FormatValue(item, v, false));
+    }
+};
+
+// Every slider row: track + value box, so the current value is always readable (R3-07).
+std::unique_ptr<Widget> MakeSliderControl(const Item& item) {
+    auto box = std::make_unique<Widget>();
+    box->dir = Dir::Row;
+    box->gap = 12;
+    box->align = Align::Center;
+    box->width = Length::Px(kControlW);
+    auto* slider = box->Add<TickSlider>(item);
+    slider->width = Length::Grow();
+    auto* value = box->Add<SliderValue>(item);
+    slider->onValue = [value](double v) { value->Show(v); };
+    return box;
+}
+
+// "Replay gain has no effect while loudness normalization is on": only while both are on.
+class LoudnessConflictHint : public Widget, public Syncable {
+public:
+    explicit LoudnessConflictHint(const Item& it) {
+        dir = Dir::Row;
+        align = Align::Start;
+        width = Length::Grow();
+        gap = 10;
+        pad = {0, kRowPad, 0, kRowPad};
+        id = it.key;
+        auto* icon = Add<IconView>("info", 18, Tone::Secondary);
+        icon->width = Length::Px(18);
+        icon->height = Length::Px(18);
+        auto* text = Add<Label>(it.Label(Lang()), TextStyle::Body, Tone::Secondary);
+        text->wrap = true;
+        text->width = Length::Grow();
+        Sync();
+    }
+    void Sync() override {
+        const bool show = Cfg().GetBool("audio.normalize") && Cfg().GetString("audio.replayGain") != "off";
+        if (show != visible) {
+            visible = show;
+            InvalidateLayout();
+        }
+    }
+};
+
 }  // namespace
 
 // --- TickSlider -------------------------------------------------------------------------------
 
-TickSlider::TickSlider(const Item& it, bool showScale) : item(it), showScale_(showScale) {
+TickSlider::TickSlider(const Item& it) : item(it) {
     interactive = true;
     focusable = true;
     width = Length::Px(kControlW);
@@ -622,7 +721,7 @@ TickSlider::~TickSlider() {
 }
 
 Size TickSlider::MeasureContent(float availW, float) {
-    return {std::min(availW, kControlW), showScale_ ? 47.0f : 24.0f};
+    return {std::min(availW, kControlW), 24.0f};
 }
 
 Rect TickSlider::Track() const {
@@ -742,40 +841,9 @@ void TickSlider::Paint(Painter& p) {
 
     p.Fill(t, c.bgDeep, 6);
     if (cx - t.x - 2 > 0) p.Fill({t.x + 2, t.y + 2, cx - t.x - 2, 12}, c.accentDim, 4);
-    const int steps = item.step > 0 ? static_cast<int>(std::lround(range / item.step)) : 0;
-    if (steps >= 2 && steps <= 40)
-        for (int i = 1; i < steps; ++i) {
-            const float x = std::round(left + w * static_cast<float>(i) / static_cast<float>(steps));
-            if (std::abs(x - cx) < 6) continue;
-            p.Fill({x, t.Cy() - 3, 1, 6}, x < cx ? c.accentMid.Fade(0.35f) : c.lineStrong, 0);
-        }
     const Rect thumb{cx - 4, rect.y, 8, 24};
     p.Fill(thumb, !on ? c.textDisabled : (dragging_ || IsHot()) ? c.accent : c.accentMid, 4);
     if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.accentMid, 6, 1.5f);
-
-    if (!showScale_) return;
-    const Rect scale{rect.x, rect.y + 28, rect.w, 15};
-    const Color sc = c.textTertiary;
-    if (item.Unit(Lang()) == L"×" && steps >= 1 && steps <= 12) {
-        for (int i = 0; i <= steps; ++i) {
-            const std::wstring s = FormatValue(item, item.min + item.step * i, false);
-            const float tw = p.Measure(s, TextStyle::Small).width;
-            float x = left + w * static_cast<float>(i) / static_cast<float>(steps) - tw / 2;
-            x = std::clamp(x, rect.x, rect.Right() - tw);
-            p.Text(s, {x, scale.y, tw + 1, scale.h}, TextStyle::Small, sc, HAlign::Leading, VAlign::Center, 0);
-        }
-    } else {
-        // Scale ends read "0 s ... 10 s", without the decimals the value itself shows.
-        auto label = [&](double v) {
-            if (std::abs(v - std::round(v)) > 1e-9) return FormatValue(item, v);
-            Item whole = item;
-            whole.step = 1;
-            return FormatValue(whole, v);
-        };
-        p.Text(label(item.min), scale, TextStyle::Small, sc, HAlign::Leading);
-        p.Text(label(Snap((item.min + item.max) / 2)), scale, TextStyle::Small, sc, HAlign::Center);
-        p.Text(label(item.max), scale, TextStyle::Small, sc, HAlign::Trailing);
-    }
 }
 
 void TickSlider::PaintOver(Painter& p) {
@@ -840,8 +908,11 @@ SettingField::~SettingField() {
 }
 
 std::wstring SettingField::ValueText() const {
-    if (item.type == ItemType::Number || item.type == ItemType::Slider)
-        return FormatValue(item, Cfg().GetDouble(item.key), false);
+    if (item.type == ItemType::Number || item.type == ItemType::Slider) {
+        const double v = Cfg().GetDouble(item.key);
+        if (!placeholder.empty() && v <= item.min) return {};  // "Auto" for 0
+        return FormatValue(item, v, false);
+    }
     return Cfg().GetWString(item.key);
 }
 
@@ -880,7 +951,11 @@ void SettingField::Commit() {
         case ItemType::Number:
         case ItemType::Slider: {
             double v = 0;
-            const bool ok = ParseNumber(text, &v);
+            bool ok = ParseNumber(text, &v);
+            if (!ok && !placeholder.empty() && text.find_first_not_of(L' ') == std::wstring::npos) {
+                v = item.min;  // cleared: back to the automatic value
+                ok = true;
+            }
             if (ok) Cfg().SetDouble(item.key, v);
             // Say why the value changed or reverted instead of clamping silently.
             if ((!ok || !InRange(item, v)) && item.max > item.min)
@@ -1107,9 +1182,12 @@ std::unique_ptr<Widget> MakeItemRow(const Item& item, PageHost& page) {
         case ItemType::Choice: control = std::make_unique<ChoiceDropdown>(item); break;
         case ItemType::Segmented: control = std::make_unique<ChoiceSegmented>(item); break;
         case ItemType::AccentPicker: control = std::make_unique<AccentSwatches>(item); break;
-        case ItemType::Slider: control = std::make_unique<TickSlider>(item, !item.Unit(Lang()).empty()); break;
-        case ItemType::Number:
-        case ItemType::Text: control = std::make_unique<SettingField>(item); break;
+        case ItemType::Slider: control = MakeSliderControl(item); break;
+        case ItemType::Number: control = std::make_unique<SettingField>(item); break;
+        case ItemType::Text:
+            if (item.key == "video.shaders") return std::make_unique<SettingRow>(item, MakeShaderList(item, page), 0.0f);
+            control = std::make_unique<SettingField>(item);
+            break;
         case ItemType::Path: control = MakePathControl(item, page); break;
         case ItemType::Color: control = std::make_unique<ColorField>(item); break;
         case ItemType::Button: {
@@ -1126,6 +1204,8 @@ std::unique_ptr<Widget> MakeItemRow(const Item& item, PageHost& page) {
         }
         case ItemType::Info:
             if (item.action == "addons-list") return MakeAddonsList(item, page);
+            if (item.action == "subtitle-preview") return MakeSubtitlePreview(item);
+            if (item.action == "loudness-conflict") return std::make_unique<LoudnessConflictHint>(item);
             break;
         case ItemType::KeyBindings: return nullptr;
     }

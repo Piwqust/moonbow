@@ -39,10 +39,10 @@ bool RunSettingsAction(const std::string& action) {
         toast(L"Picture reset", "video");
         return true;
     }
-    if (action == "open-scripts-folder" || action == "open-data-folder") {
+    if (action == "open-scripts-folder" || action == "open-data-folder" || action == "open-shaders-folder") {
         std::wstring dir = DataDir();
-        if (action == "open-scripts-folder") {
-            dir += L"\\scripts";
+        if (action != "open-data-folder") {
+            dir += action == "open-scripts-folder" ? L"\\scripts" : L"\\shaders";
             CreateDirectoryW(dir.c_str(), nullptr);
         }
         ui::Host::ShellOpen(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
