@@ -10,6 +10,12 @@ param([Parameter(Mandatory = $true)][string]$DataDir, [string]$Exe = "",
       [switch]$Fresh, [string]$Settings = "", [string]$Library = "", [switch]$Onboarding, [double]$Scale = 0,
       [Parameter(ValueFromRemainingArguments = $true)][string[]]$Files)
 if (-not $Exe) { $Exe = Join-Path $PSScriptRoot "..\..\build\Lumen.exe" }
+# -Fresh deletes the folder and settings.json is always rewritten: never the real profile.
+$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+$full = [IO.Path]::GetFullPath($DataDir).TrimEnd('\') + '\'
+if (-not $full.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or $full -eq $tempRoot) {
+  throw "-DataDir must be a folder inside %TEMP% ($tempRoot), not $DataDir"
+}
 if ($Fresh -and (Test-Path $DataDir)) { Remove-Item -Recurse -Force $DataDir }
 New-Item -ItemType Directory -Force $DataDir | Out-Null
 $enc = New-Object System.Text.UTF8Encoding $false
