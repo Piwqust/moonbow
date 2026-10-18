@@ -15,6 +15,10 @@
 #include "../src/library/Thumbnails.h"
 #include "../src/app/player/Episodes.h"
 #include "../src/app/PlayQueue.h"
+#include "../src/net/Cache.h"
+#include "../src/net/Http.h"
+#include "../src/net/OnlineData.h"
+#include "../src/net/Secret.h"
 
 #include <windows.h>
 #include <objbase.h>
@@ -1894,6 +1898,331 @@ void TestPlayQueue() {
     CHECK(q.Items()[0].title == L"Tagged" && q.Items()[0].duration == 90);
 }
 
+// --- online features (src/net) -----------------------------------------------------------------
+
+void TestMovieHash() {
+    // Expected values from the reference implementation (Python, OpenSubtitles "Hash Source Codes").
+    auto make = [](size_t size) {
+        std::string data(size, '\0');
+        for (size_t i = 0; i < size; ++i) data[i] = static_cast<char>((i * 31 + 7) & 0xFF);
+        return data;
+    };
+    const struct {
+        size_t size;
+        const char* hash;
+    } cases[] = {{131072, "5f9fe02060a2c000"}, {200000, "5f9fe02060a3cd40"}, {1000003, "003f7fc0004fa243"}};
+    for (const auto& c : cases) {
+        const std::wstring file = g_temp + L"\\hash-" + std::to_wstring(c.size) + L".bin";
+        WriteFile(file, make(c.size));
+        uint64_t h = 0, size = 0;
+        CHECK(net::MovieHash(file, &h, &size));
+        CHECK(size == c.size);
+        CHECK_MSG(net::HashHex(h) == c.hash, "%zu: %s", c.size, net::HashHex(h).c_str());
+    }
+    // Under 128 KiB there is no hash (the server would not know such a file anyway).
+    const std::wstring tiny = g_temp + L"\\hash-tiny.bin";
+    WriteFile(tiny, make(131071));
+    uint64_t h = 0;
+    CHECK(!net::MovieHash(tiny, &h));
+    CHECK(!net::MovieHash(g_temp + L"\\missing.bin", &h));
+    CHECK(net::HashHex(0x1ull) == "0000000000000001");
+}
+
+void TestGuessVideo() {
+    using net::VideoGuess;
+    auto g = [](const wchar_t* p) { return net::GuessVideo(p); };
+    VideoGuess v = g(L"D:\\Movies\\Inception.2010.1080p.BluRay.x264-GRP.mkv");
+    CHECK(v.kind == VideoGuess::Movie && v.title == L"Inception" && v.year == 2010);
+    v = g(L"D:\\Movies\\The Matrix (1999).mkv");
+    CHECK(v.kind == VideoGuess::Movie && v.title == L"The Matrix" && v.year == 1999);
+    v = g(L"D:\\Movies\\Blade.Runner.2049.2017.2160p.mkv");
+    CHECK_MSG(v.title == L"Blade Runner 2049" && v.year == 2017, "%s %d", U8(v.title).c_str(), v.year);
+    v = g(L"D:\\Movies\\1917 (2019).mp4");
+    CHECK(v.title == L"1917" && v.year == 2019);
+    v = g(L"D:\\Movies\\2012.mkv");  // the year is the title
+    CHECK(v.kind == VideoGuess::Movie && v.title == L"2012" && v.year == 0);
+    v = g(L"D:\\Movies\\Амели [2001] WEB-DL.mkv");
+    CHECK(v.title == L"Амели" && v.year == 2001);
+    v = g(L"D:\\Home\\Holiday at the lake.mp4");  // no year: a movie guess without one
+    CHECK(v.kind == VideoGuess::Movie && v.year == 0);
+    v = g(L"D:\\TV\\Show.Name.S01E02.720p.mkv");
+    CHECK(v.kind == VideoGuess::Episode && v.title == L"Show Name" && v.season == 1 && v.episode == 2);
+    v = g(L"D:\\TV\\Doctor.Who.2005.S03E07.mkv");
+    CHECK_MSG(v.title == L"Doctor Who" && v.year == 2005 && v.season == 3 && v.episode == 7, "%s", U8(v.title).c_str());
+    v = g(L"D:\\TV\\The Office\\Season 2\\S02E05.mkv");  // the show from the folder above the season
+    CHECK_MSG(v.kind == VideoGuess::Episode && v.title == L"The Office" && v.episode == 5, "%s", U8(v.title).c_str());
+    v = g(L"D:\\TV\\Lost\\1x04 Walkabout.mkv");
+    CHECK(v.kind == VideoGuess::Episode && v.title == L"Lost" && v.season == 1 && v.episode == 4);
+    CHECK(net::CleanTitle(L"Mad_Max_Fury_Road_2015_REMUX") == L"Mad Max Fury Road");
+}
+
+void TestOnlineCaches() {
+    const std::wstring dir = MakeDir(L"cache");
+    net::DiskCache disk(dir);
+    const int64_t now = 1700000000;
+    CHECK(disk.Put("a", 200, "body-a", 60, now));
+    CHECK(disk.Put("b", 404, "", 10, now));
+    net::CacheEntry e;
+    CHECK(disk.Get("a", &e, now + 59) && e.status == 200 && e.body == "body-a");
+    CHECK(disk.Get("b", &e, now + 5) && e.status == 404 && e.body.empty());
+    CHECK(!disk.Get("b", &e, now + 10));  // expired: gone, and the file with it
+    CHECK(!FileExists(disk.FileFor("b")));
+    CHECK(!disk.Get("missing", &e, now));
+    // A body with newlines and binary bytes survives; another key never reads it.
+    const std::string binary("line1\nline2\n\0\xFF", 14);
+    CHECK(disk.Put("bin", 200, binary, 60, now));
+    CHECK(disk.Get("bin", &e, now) && e.body == binary);
+    CHECK(!disk.Put("zero-ttl", 200, "x", 0, now));
+    CHECK(disk.Prune(now + 61) == 2);  // a and bin
+    CHECK(CountFiles(dir, L"*.bin") == 0);
+    disk.Put("c", 200, "c", 60, now);
+    disk.Clear();
+    CHECK(CountFiles(dir, L"*.bin") == 0);
+
+    net::MemoryCache mem(100);
+    mem.Put("k1", {200, now + 60, std::string(40, 'x')});
+    mem.Put("k2", {200, now + 60, std::string(40, 'y')});
+    CHECK(mem.Get("k1", &e, now));  // k1 is now the most recent
+    mem.Put("k3", {200, now + 60, std::string(40, 'z')});  // over budget: k2 goes
+    CHECK(mem.Get("k1", &e, now) && mem.Get("k3", &e, now) && !mem.Get("k2", &e, now));
+    CHECK(mem.Bytes() <= 100 && mem.Count() == 2);
+    CHECK(!mem.Get("k1", &e, now + 60));  // expired
+    mem.Put("huge", {200, now + 60, std::string(500, 'h')});  // larger than the budget: not kept
+    CHECK(!mem.Get("huge", &e, now));
+    mem.Clear();
+    CHECK(mem.Count() == 0 && mem.Bytes() == 0);
+}
+
+void TestOnlineJson() {
+    // URLs
+    CHECK(net::UrlEncode(L"AC/DC & Кино") == L"AC%2FDC%20%26%20%D0%9A%D0%B8%D0%BD%D0%BE");
+    CHECK(net::UrlEncode(L"a b", true) == L"a+b");
+    CHECK(net::HostOf(L"https://API.themoviedb.org:443/3/x?y") == L"api.themoviedb.org");
+    CHECK(net::HostOf(L"https://user@evil.com/") == L"");
+    CHECK(net::UrlAllowed(L"https://lrclib.net/api/get", false));
+    CHECK(!net::UrlAllowed(L"http://lrclib.net/api/get", true));
+    CHECK(net::UrlAllowed(L"http://127.0.0.1:8765/x", true));
+    CHECK(!net::UrlAllowed(L"http://127.0.0.1:8765/x", false));
+    CHECK(!net::UrlAllowed(L"ftp://x/", true));
+
+    // LRCLIB
+    auto doc = json::Parse(R"({"id":1,"trackName":"T","artistName":"A","duration":233.0,"instrumental":false,
+        "plainLyrics":"one\ntwo","syncedLyrics":"[00:01.00]one\n[00:02.50]two"})");
+    CHECK(doc.has_value());
+    net::LyricsAnswer a = net::ParseLrclibRecord(*doc);
+    CHECK(a.found && a.synced && a.text.rfind(L"[00:01.00]", 0) == 0 && a.duration == 233);
+    doc = json::Parse(R"({"plainLyrics":"just text","syncedLyrics":null,"instrumental":false})");
+    a = net::ParseLrclibRecord(*doc);
+    CHECK(a.found && !a.synced && a.text == L"just text");
+    doc = json::Parse(R"({"plainLyrics":null,"syncedLyrics":null,"instrumental":true})");
+    CHECK(!net::ParseLrclibRecord(*doc).found);
+    doc = json::Parse(R"([{"duration":200,"plainLyrics":"far"},{"duration":231,"plainLyrics":"plain"},
+        {"duration":234,"syncedLyrics":"[00:01.00]x"},{"duration":233,"instrumental":true}])");
+    CHECK(net::PickLrclibRecord(*doc, 233) == 2);  // synced within 3 s beats a closer plain one
+    CHECK(net::PickLrclibRecord(*doc, 500) == -1);
+    CHECK(net::PickLrclibRecord(*doc, 0) == 2);
+    CHECK(net::LrclibGetPath(L"Кино", L"Звезда по имени Солнце", L"", 225.6) ==
+          L"/api/get?artist_name=%D0%9A%D0%B8%D0%BD%D0%BE&track_name=%D0%97%D0%B2%D0%B5%D0%B7%D0%B4%D0%B0%20%D0%BF%D0%BE%20"
+          L"%D0%B8%D0%BC%D0%B5%D0%BD%D0%B8%20%D0%A1%D0%BE%D0%BB%D0%BD%D1%86%D0%B5&duration=226");
+    net::LyricsAnswer save;
+    save.found = save.synced = true;
+    save.text = L"[00:01.00]one\n[00:02.00]two";
+    const std::string lrc = net::LrcFileText(save, L"A", L"T", L"");
+    CHECK(lrc.rfind("\xEF\xBB\xBF[ar:A]\r\n[ti:T]\r\n[re:LRCLIB]\r\n[00:01.00]one\r\n[00:02.00]two\r\n", 0) == 0);
+    // The saved file reads back as the same synced lyrics.
+    app::Lyrics back = app::ParseLyrics(app::DecodeLyricsFile(lrc));
+    CHECK(back.synced && back.lines.size() == 2 && back.lines[1].text == L"two");
+
+    // OpenSubtitles: sorted parameters, lower case, "+" for spaces, sorted languages.
+    net::SubtitleQuery q;
+    q.moviehash = "8e245d9679d31e12";
+    q.query = L"The Office";
+    q.season = 2;
+    q.episode = 5;
+    q.languages = {"RU", "en", "ru"};
+    CHECK(net::SubtitleQueryString(q) ==
+          L"?episode_number=5&languages=en,ru&moviehash=8e245d9679d31e12&query=the+office&season_number=2");
+    CHECK(net::SubtitleQueryString({}) == L"");
+    doc = json::Parse(R"({"total_count":2,"data":[
+        {"id":"1","type":"subtitle","attributes":{"language":"en","download_count":1200,"ratings":7.5,"votes":3,
+          "hearing_impaired":true,"foreign_parts_only":false,"moviehash_match":false,"release":"Show.S02E05.WEB",
+          "feature_details":{"title":"Episode","movie_name":"The Office - S02E05","year":2005},
+          "files":[{"file_id":111,"file_name":"Show.S02E05.WEB.srt"}]}},
+        {"id":"2","type":"subtitle","attributes":{"language":"ru","download_count":5,"moviehash_match":true,
+          "foreign_parts_only":true,"release":"","files":[{"file_id":222,"file_name":"exact.srt"}]}},
+        {"id":"3","type":"subtitle","attributes":{"language":"de","files":[]}}]})");
+    const auto subs = net::ParseSubtitleSearch(*doc);
+    CHECK(subs.size() == 2);
+    CHECK(subs[0].fileId == 222 && subs[0].hashMatch && subs[0].foreignOnly && subs[0].release == L"exact.srt");
+    CHECK(subs[1].fileId == 111 && subs[1].hearingImpaired && subs[1].downloads == 1200 && subs[1].rating == 7.5 &&
+          subs[1].title == L"The Office - S02E05" && subs[1].year == 2005);
+    doc = json::Parse(R"({"link":"https://www.opensubtitles.com/download/abc/x.srt","file_name":"x.srt","requests":3,
+        "remaining":17,"message":"ok","reset_time":"23 hours"})");
+    const net::SubtitleDownload d = net::ParseSubtitleDownload(*doc);
+    CHECK(d.remaining == 17 && d.requests == 3 && d.fileName == L"x.srt" && d.resetTime == L"23 hours");
+    doc = json::Parse(R"({"user":{"allowed_downloads":100,"vip":true},"base_url":"vip-api.opensubtitles.com","token":"t0k"})");
+    const net::SubtitleLogin l = net::ParseSubtitleLogin(*doc);
+    CHECK(l.token == "t0k" && l.vip && l.allowed == 100 && l.baseUrl == L"vip-api.opensubtitles.com");
+    CHECK(net::ParseSubtitleQuota(*json::Parse(R"({"data":{"remaining_downloads":4}})")) == 4);
+    CHECK(net::ParseSubtitleQuota(*json::Parse(R"({"data":{}})")) == -1);
+    CHECK(net::SubtitleFileName(L"D:\\TV\\Show.S02E05.mkv", L"en", L"Whatever.SRT") == L"Show.S02E05.en.srt");
+    CHECK(net::SubtitleFileName(L"D:\\TV\\a.mkv", L"pt-BR", L"noext") == L"a.pt-br.srt");
+
+    // TMDB
+    doc = json::Parse(R"({"results":[
+        {"id":10,"title":"Inception","release_date":"2011-01-01","vote_average":5,"poster_path":"/p1.jpg"},
+        {"id":27205,"title":"Inception","release_date":"2010-07-15","overview":"Dreams.","vote_average":8.4,
+         "poster_path":"/abc.jpg","backdrop_path":"/bd.jpg"},
+        {"id":0,"title":"broken"}]})");
+    const auto movies = net::ParseTmdbSearch(*doc, false);
+    CHECK(movies.size() == 2 && movies[1].year == 2010 && movies[1].poster == "/abc.jpg" && movies[1].rating == 8.4);
+    net::VideoGuess guess;
+    guess.year = 2010;
+    CHECK(net::PickTmdbMatch(movies, guess) == 1);  // the same year wins over the first result
+    guess.year = 2012;
+    CHECK(net::PickTmdbMatch(movies, guess) == 0);  // ±1 year
+    guess.year = 0;
+    CHECK(net::PickTmdbMatch(movies, guess) == 0);
+    CHECK(net::PickTmdbMatch({}, guess) == -1);
+    doc = json::Parse(R"({"results":[{"id":2316,"name":"The Office","first_air_date":"2005-03-24","poster_path":null}]})");
+    const auto shows = net::ParseTmdbSearch(*doc, true);
+    CHECK(shows.size() == 1 && shows[0].tv && shows[0].title == L"The Office" && shows[0].year == 2005 &&
+          shows[0].poster.empty());
+    doc = json::Parse(R"({"name":"Halloween","overview":"Scary.","still_path":"/st.jpg","vote_average":7.9,"air_date":"2005-10-18"})");
+    const net::EpisodeMeta ep = net::ParseTmdbEpisode(*doc);
+    CHECK(ep.name == L"Halloween" && ep.still == "/st.jpg" && ep.year == 2005 && ep.rating == 7.9);
+    CHECK(net::TmdbKeyIsBearer("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ4In0.sig"));
+    CHECK(!net::TmdbKeyIsBearer("0123456789abcdef0123456789abcdef"));
+    CHECK(net::YearOf("") == 0 && net::YearOf("1999-03-31") == 1999);
+}
+
+void TestSecretSettings() {
+    // DPAPI round trip and the plain-text fallback of older files.
+    const std::string sealed = net::ProtectSecret("s3cr3t-key");
+    CHECK(net::IsProtectedSecret(sealed) && sealed.find("s3cr3t") == std::string::npos);
+    std::string plain;
+    CHECK(net::UnprotectSecret(sealed, &plain) && plain == "s3cr3t-key");
+    CHECK(net::UnprotectSecret("old-plain", &plain) && plain == "old-plain");
+    CHECK(!net::UnprotectSecret("dpapi:bm90IGEgYmxvYg==", &plain));
+    CHECK(net::ProtectSecret("").empty());
+
+    // Secret settings never reach settings.json in plain text and come back on load.
+    std::wstring dir = FreshDataDir(L"secrets");
+    std::wstring file = dir + L"\\settings.json";
+    {
+        Config c;
+        c.Load();
+        CHECK(c.SetString("privacy.tmdbKey", "tmdb-key-123"));
+        CHECK(c.SetString("privacy.opensubtitlesPassword", "pa55word"));
+        CHECK(c.SetString("privacy.opensubtitlesUser", "someone"));  // not a secret
+        CHECK(c.Save());
+    }
+    std::string text;
+    CHECK(json::ReadFileUtf8(file, &text));
+    CHECK(text.find("tmdb-key-123") == std::string::npos && text.find("pa55word") == std::string::npos);
+    CHECK(text.find("dpapi:") != std::string::npos && text.find("someone") != std::string::npos);
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetString("privacy.tmdbKey") == "tmdb-key-123");
+        CHECK(c.GetString("privacy.opensubtitlesPassword") == "pa55word");
+    }
+    // A blob from another account reads as empty, not as the blob.
+    WriteFile(file, R"({"version":1,"values":{"privacy.tmdbKey":"dpapi:bm90IGEgYmxvYg=="}})");
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetString("privacy.tmdbKey").empty());
+    }
+    // Every online feature is off by default.
+    {
+        Config c;
+        CHECK(!c.GetBool("privacy.fetchLyrics") && !c.GetBool("privacy.onlineSubtitles") &&
+              !c.GetBool("privacy.fetchMetadata") && c.GetString("library.metadata") == "file");
+    }
+    SetDataDirForTests(g_temp + L"\\data");
+}
+
+// The async client without the internet: refused URLs, a refused local port (offline state)
+// and an answer from the disk cache, all delivered through the message loop.
+void TestHttpClient() {
+    auto wait = [](const std::shared_ptr<bool>& done) {
+        const ULONGLONG end = GetTickCount64() + 15000;
+        while (!*done && GetTickCount64() < end) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) DispatchMessageW(&msg);
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+        }
+        return *done;
+    };
+    auto done = std::make_shared<bool>(false);
+    net::Response got;
+    bool inside = true;
+    net::Request r;
+    r.url = L"http://example.com/";  // plain http to the internet: refused before any I/O
+    net::Send(r, [&, done](const net::Response& resp) {
+        got = resp;
+        *done = true;
+        CHECK(!inside);  // never called from inside Send
+    });
+    inside = false;
+    CHECK(wait(done) && got.error == net::Error::Blocked);
+
+    // Port 1 on loopback refuses the connection: a network error, then the client is offline and
+    // background requests stop without trying.
+    const uint64_t before = net::NetworkRequests();
+    *done = false;
+    r.url = L"http://127.0.0.1:1/x";
+    r.allowLoopbackHttp = true;
+    r.timeoutMs = 3000;
+    net::Send(r, [&, done](const net::Response& resp) {
+        got = resp;
+        *done = true;
+    });
+    CHECK(wait(done) && (got.error == net::Error::Network || got.error == net::Error::Timeout));
+    CHECK(net::NetworkRequests() == before + 1 && net::Offline());
+    *done = false;
+    net::Send(r, [&, done](const net::Response& resp) {
+        got = resp;
+        *done = true;
+    });
+    CHECK(wait(done) && got.error == net::Error::Offline && net::NetworkRequests() == before + 1);
+
+    // A fresh disk-cache entry answers without the network (even while offline).
+    net::SharedDisk().Put("test:key", 200, "{\"cached\":true}", 60);
+    *done = false;
+    r.cacheKey = "test:key";
+    net::Send(r, [&, done](const net::Response& resp) {
+        got = resp;
+        *done = true;
+    });
+    CHECK(wait(done) && got.Ok() && got.fromCache && got.body == "{\"cached\":true}");
+    // The second time the memory cache answers.
+    *done = false;
+    const uint64_t hits = net::CacheHits();
+    net::Send(r, [&, done](const net::Response& resp) {
+        got = resp;
+        *done = true;
+    });
+    CHECK(wait(done) && got.fromCache && net::CacheHits() == hits + 1 && net::NetworkRequests() == before + 1);
+
+    // Cancelled requests never call back; Async runs work then done on this thread.
+    *done = false;
+    r.cacheKey.clear();
+    bool called = false;
+    const uint64_t id = net::Send(r, [&](const net::Response&) { called = true; });
+    net::Cancel(id);
+    const DWORD mainThread = GetCurrentThreadId();
+    DWORD workThread = 0, doneThread = 0;
+    net::Async([&] { workThread = GetCurrentThreadId(); },
+               [&, done] {
+                   doneThread = GetCurrentThreadId();
+                   *done = true;
+               });
+    CHECK(wait(done));
+    CHECK(!called && workThread != mainThread && doneThread == mainThread);
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -1926,6 +2255,12 @@ const TestCase kTests[] = {
     {"thumbnails", TestThumbnails},
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
+    {"movie_hash", TestMovieHash},
+    {"guess_video", TestGuessVideo},
+    {"online_caches", TestOnlineCaches},
+    {"online_json", TestOnlineJson},
+    {"secret_settings", TestSecretSettings},
+    {"http_client", TestHttpClient},
 };
 
 }  // namespace
