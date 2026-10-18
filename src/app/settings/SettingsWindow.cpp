@@ -160,7 +160,7 @@ public:
         MONITORINFO mi{sizeof(mi)};
         HMONITOR mon = MonitorFromWindow(o.owner, MONITOR_DEFAULTTOPRIMARY);
         if (GetMonitorInfoW(mon, &mi)) {
-            const float scale = (o.owner ? GetDpiForWindow(o.owner) : GetDpiForSystem()) / 96.0f;
+            const float scale = (o.owner ? GetDpiForWindow(o.owner) : GetDpiForSystem()) / 96.0f * ui::Host::ScaleOverride();
             o.width = std::min(o.width, (mi.rcWork.right - mi.rcWork.left) / scale - 24);
             o.height = std::min(o.height, (mi.rcWork.bottom - mi.rcWork.top) / scale - 24);
         }
