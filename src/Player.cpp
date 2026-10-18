@@ -2,6 +2,7 @@
 
 #include "Trace.h"
 #include "Util.h"
+#include "core/Json.h"
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
 
@@ -60,6 +61,25 @@ double NodeDouble(const mpv_node* n) {
 
 bool NodeFlag(const mpv_node* n) {
     return n && n->format == MPV_FORMAT_FLAG && n->u.flag;
+}
+
+// Writes the GPU shaders embedded in the exe (res/shaders) to <data>\cache\shaders, where the
+// glsl-shaders setting points (core/SettingsSchema.cpp). Runs on the init thread; rewrites a file
+// only when the exe carries a different version.
+void InstallBuiltinShaders(const std::wstring& dataDir) {
+    if (dataDir.empty()) return;
+    HRSRC res = FindResourceW(nullptr, L"LUMEN_CAS", RT_RCDATA);
+    HGLOBAL mem = res ? LoadResource(nullptr, res) : nullptr;
+    const char* data = mem ? static_cast<const char*>(LockResource(mem)) : nullptr;
+    if (!data) return;
+    const std::string text(data, SizeofResource(nullptr, res));
+    const std::wstring dir = dataDir + L"\\cache\\shaders";
+    CreateDirectoryW((dataDir + L"\\cache").c_str(), nullptr);
+    CreateDirectoryW(dir.c_str(), nullptr);
+    const std::wstring path = dir + L"\\lumen-cas.glsl";
+    std::string current;
+    if (json::ReadFileUtf8(path, &current) && current == text) return;
+    json::WriteFileAtomic(path, text);
 }
 
 }  // namespace
@@ -150,6 +170,7 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("background-color", "#000000");
 
     std::wstring appData = DataDir();
+    InstallBuiltinShaders(appData);
     if (!appData.empty()) {
         opt("config-dir", WideToUtf8(appData));
         opt("config", "yes");
@@ -196,8 +217,10 @@ bool Player::FinishStart(bool ok) {
         {kPropPath, "path", MPV_FORMAT_STRING},
         {kPropTrackList, "track-list", MPV_FORMAT_NODE},
         {kPropIdle, "idle-active", MPV_FORMAT_FLAG},
-        {kPropWidth, "dwidth", MPV_FORMAT_INT64},
-        {kPropHeight, "dheight", MPV_FORMAT_INT64},
+        // The decoder's display size: dwidth/dheight would also count video-crop and the
+        // AI upscaler's d3d11vpp scaling (app/player/LiveState), which must not resize the window.
+        {kPropWidth, "video-params/dw", MPV_FORMAT_INT64},
+        {kPropHeight, "video-params/dh", MPV_FORMAT_INT64},
         {kPropSpeed, "speed", MPV_FORMAT_DOUBLE},
         {kPropEof, "eof-reached", MPV_FORMAT_FLAG},
         {kPropSeekable, "seekable", MPV_FORMAT_FLAG},

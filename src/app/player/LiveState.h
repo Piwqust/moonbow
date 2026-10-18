@@ -42,10 +42,11 @@ public:
     int flip = 0;                          // 0 none, 1 horizontal, 2 vertical
     std::string zoomMode = "fit";          // fit, quarter, half, original, double
     std::string aspect = "auto";           // auto, 16:9, 4:3, ...
+    // Crop starts from the video.crop setting for every file; the quick settings change it for
+    // the current one. Applied as mpv's video-crop (the GPU cuts the picture, no frame copies).
     std::string crop = "none";             // none, 16:9, 4:3, 21:9, 2.35:1, custom
     double cropT = 0, cropB = 0, cropL = 0, cropR = 0;  // custom crop, source pixels
     std::string deinterlace = "auto";      // auto, yes, no
-    std::string toneMapping = "auto";
     bool negate = false, grayscale = false;
     void SetFlip(int f);
     void SetZoomMode(const std::string& mode);
@@ -53,9 +54,13 @@ public:
     void SetCrop(const std::string& c);
     void ApplyCrop();
     void SetDeinterlace(const std::string& d);
-    void SetToneMapping(const std::string& t);
     void SetColorFx(bool negate, bool grayscale);
     void ResetPicture();  // brightness... hue back to 0
+
+    // AI upscaling / RTX Video HDR (video.superResolution, video.trueHdr): a d3d11vpp filter on
+    // the hardware-decoded frames. Why it is not active right now, or empty when it is (or off).
+    std::wstring UpscalerStatus() const;
+    bool UpscalerActive() const { return !srFilter_.empty(); }
 
     // --- audio / subtitles -------------------------------------------------------------
     std::string stereoMode = "stereo";  // stereo, mono, reverse, left, right
@@ -85,6 +90,8 @@ private:
     LiveState();
     void ObserveAll();
     void ApplyVideoFilters();
+    void ApplyUpscaler();
+    void LoadCropSetting();
     void ApplyAudioFilters();
     void Notify();
 
@@ -96,6 +103,10 @@ private:
     uintptr_t sleepTimer_ = 0;
     ScopedConnection playerConn_;
     uint64_t configToken_ = 0;
+    int64_t srcW_ = 0, srcH_ = 0;  // decoded frame size (video-params/w, h): crop coordinates
+    std::string srFilter_;         // the @lsr filter in mpv's chain, empty when none
+    double srScale_ = 1;           // its scale factor (video-crop is applied after it)
+    std::string appliedCrop_;      // last video-crop sent to mpv
 };
 
 inline LiveState& Live() {

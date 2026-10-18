@@ -9,8 +9,11 @@
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
+#include "core/Paths.h"
 #include "core/SettingsSchema.h"
 #include "gfx/Text.h"
+
+#include <algorithm>
 
 namespace app::panel {
 
@@ -314,6 +317,57 @@ Expander* AddExpander(Widget* section, const std::string& key, const std::wstrin
     return e;
 }
 
+// --- custom shaders (<data>\shaders, enabled ones in video.shaders as "a.glsl|b.hook") ----------
+
+std::wstring ShadersFolder() {
+    return DataDir() + L"\\shaders";
+}
+
+// .glsl / .hook files in the shaders folder, sorted. A few directory entries, read when the
+// Video tab opens (local folder; no recursion).
+std::vector<std::wstring> ShaderFiles() {
+    std::vector<std::wstring> out;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW((ShadersFolder() + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
+                                FIND_FIRST_EX_LARGE_FETCH);
+    if (h == INVALID_HANDLE_VALUE) return out;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const std::wstring name = fd.cFileName;
+        const size_t dot = name.rfind(L'.');
+        if (dot == std::wstring::npos) continue;
+        const wchar_t* ext = name.c_str() + dot;
+        if (_wcsicmp(ext, L".glsl") == 0 || _wcsicmp(ext, L".hook") == 0) out.push_back(name);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(out.begin(), out.end(),
+              [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+    return out;
+}
+
+std::vector<std::string> EnabledShaderList() {
+    std::vector<std::string> out;
+    const std::string list = Cfg().GetString("video.shaders");
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t bar = list.find('|', start);
+        if (bar == std::string::npos) bar = list.size();
+        if (bar > start) out.push_back(list.substr(start, bar - start));
+        start = bar + 1;
+    }
+    return out;
+}
+
+// Toggling rewrites glsl-shaders live (Config pushes it to mpv); mpv keeps playing.
+void SetShaderEnabled(const std::string& name, bool on) {
+    std::vector<std::string> list = EnabledShaderList();
+    list.erase(std::remove(list.begin(), list.end(), name), list.end());
+    if (on) list.push_back(name);
+    std::string joined;
+    for (const std::string& n : list) joined += (joined.empty() ? "" : "|") + n;
+    Cfg().SetString("video.shaders", joined);
+}
+
 std::unique_ptr<Widget> Page(SyncPage** out) {
     auto sv = std::make_unique<ScrollView>();
     sv->width = Length::Grow();
@@ -429,15 +483,7 @@ std::unique_ptr<Widget> VideoTab() {
                {Tr(L"2:1 Double"), "double", ""}},
               [] { return Live().zoomMode; }, [](const std::string& v) { Live().SetZoomMode(v); });
     AddConfigChoice(page, s, Tr(L"HDR"), "video.hdr");
-    AddChoice(page, s, Tr(L"Tone Mapping"),
-              {{Tr(L"Auto"), "auto", ""},
-               {L"BT.2390", "bt.2390", ""},
-               {L"Spline", "spline", ""},
-               {L"Hable", "hable", ""},
-               {L"Mobius", "mobius", ""},
-               {L"Reinhard", "reinhard", ""},
-               {Tr(L"Clip"), "clip", ""}},
-              [] { return Live().toneMapping; }, [](const std::string& v) { Live().SetToneMapping(v); });
+    AddConfigChoice(page, s, Tr(L"Tone Mapping"), "video.toneMapping");
     AddConfigChoice(page, s, Tr(L"Resolution"), "playback.videoQuality");
     AddChoice(page, s, Tr(L"Aspect Ratio"),
               {{Tr(L"Default"), "auto", ""},
@@ -463,6 +509,37 @@ std::unique_ptr<Widget> VideoTab() {
     bottom->height = Length::Px(8);
 
     AddSectionLine(page);
+    AddSectionTitle(page, Tr(L"Quality"));
+    Widget* q = AddSection(page);
+    AddConfigChoice(page, q, Tr(L"Image Quality"), "video.quality");
+    AddChoice(page, q, Tr(L"Upscaler"),
+              {{Tr(L"Auto"), "auto", ""},
+               {Tr(L"Bilinear"), "bilinear", ""},
+               {L"Spline36", "spline36", ""},
+               {L"Lanczos", "lanczos", ""},
+               {L"EWA Lanczos", "ewa_lanczos", ""},
+               {L"EWA Lanczos Sharp", "ewa_lanczossharp", ""}},
+              [] { return Cfg().GetString("video.upscaler"); },
+              [](const std::string& v) { Cfg().SetString("video.upscaler", v); });
+    AddConfigToggle(page, q, Tr(L"Smooth Motion"), "video.smoothMotion");
+    AddConfigToggle(page, q, Tr(L"AI Upscaling"), "video.superResolution");
+    {
+        // Why the upscaler isn't running (no D3D11 decoding, CPU filters on, video big enough...).
+        auto* status = q->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
+        status->pad = {4, 0, 0, 0};
+        status->wrap = true;
+        auto sync = [status] {
+            std::wstring t = Live().UpscalerStatus();
+            if (t.empty() && Live().UpscalerActive()) t = Tr(L"Upscaling on the graphics card");
+            if (t != status->Text()) status->SetText(t);
+        };
+        sync();
+        page->OnSync(sync);
+    }
+    auto* qbottom = q->Add<Widget>();
+    qbottom->height = Length::Px(10);
+
+    AddSectionLine(page);
     AddSectionTitle(page, Tr(L"Filters"));
     Widget* f = AddSection(page);
     Expander* ess = AddExpander(f, "video.essential", Tr(L"Essential"));
@@ -485,6 +562,7 @@ std::unique_ptr<Widget> VideoTab() {
         prop(L"Saturation", "saturation", &LiveValues::saturation);
         prop(L"Gamma", "gamma", &LiveValues::gamma);
         AddConfigRange(page, b, "video.sharpen", Tr(L"Sharpen Sigma"));
+        AddConfigToggle(page, b, Tr(L"Debanding"), "video.deband", 48);
         AddConfigRange(page, b, "video.debandRange", Tr(L"Banding Removal Radius"));
         AddConfigRange(page, b, "video.filmGrain", Tr(L"Film Grain Variance"));
         auto* reset = b->Add<FlatButton>(Tr(L"Reset picture"), "refresh");
@@ -547,6 +625,37 @@ std::unique_ptr<Widget> VideoTab() {
                   [](bool v) { Live().SetColorFx(v, Live().grayscale); });
         AddToggle(page, b, Tr(L"Grayscale"), [] { return Live().grayscale; },
                   [](bool v) { Live().SetColorFx(Live().negate, v); });
+    }
+    AddSectionLine(page);
+    Widget* sh = AddSection(page);
+    auto* shgap = sh->Add<Widget>();
+    shgap->height = Length::Px(10);
+    Expander* shaders = AddExpander(sh, "video.shaders", Tr(L"Shaders"));
+    {
+        Widget* b = shaders->Body();
+        const std::vector<std::wstring> files = ShaderFiles();
+        if (files.empty()) {
+            auto* hint = b->Add<Label>(Tr(L"Put .glsl or .hook shader files (FSRCNNX, Anime4K...) in the shaders folder."),
+                                       TextStyle::Small, Tone::Tertiary);
+            hint->wrap = true;
+            hint->pad = {4, 4, 0, 10};
+        }
+        for (const std::wstring& file : files) {
+            const std::string name = WideToUtf8(file);
+            AddToggle(
+                page, b, file,
+                [name] {
+                    const auto list = EnabledShaderList();
+                    return std::find(list.begin(), list.end(), name) != list.end();
+                },
+                [name](bool v) { SetShaderEnabled(name, v); }, 48);
+        }
+        auto* open = b->Add<FlatButton>(Tr(L"Open shaders folder"), "folder");
+        open->onClick = [] {
+            const std::wstring dir = ShadersFolder();
+            CreateDirectoryW(dir.c_str(), nullptr);
+            ui::Host::ShellOpen(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        };
     }
     return root;
 }

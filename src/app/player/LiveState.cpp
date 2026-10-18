@@ -5,8 +5,12 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "core/Json.h"
+#include "core/SettingsSchema.h"
+#include "gfx/Gpu.h"
 #include "ui/Controls.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 
 namespace app {
@@ -31,6 +35,44 @@ double Ratio(const std::string& s) {
 
 constexpr const char* kPresetsKey = "player.presets";
 
+Config& Cfg() {
+    return TheApp().config();
+}
+
+// Video Super Resolution flavour of the graphics card Lumen (and mpv, on the default adapter)
+// renders with: "nvidia", "intel" or "" when it has none. Asked once the device exists.
+const char* SuperResVendor() {
+    static int vendor = -1;
+    if (vendor < 0) {
+        IDXGIDevice* dev = gfx::Gpu::Get().DxgiDevice();
+        if (!dev) return "";
+        vendor = 0;
+        gfx::ComPtr<IDXGIAdapter> adapter;
+        DXGI_ADAPTER_DESC desc{};
+        if (SUCCEEDED(dev->GetAdapter(&adapter)) && SUCCEEDED(adapter->GetDesc(&desc)))
+            vendor = static_cast<int>(desc.VendorId);
+    }
+    if (vendor == 0x10DE) return "nvidia";
+    if (vendor == 0x8086) return "intel";
+    return "";
+}
+
+// True when the config's vf chain has CPU filters (a deinterlacing method, deblocking...).
+bool ConfigCpuFilters() {
+    for (const auto& [name, value] : MpvOptionFor(Cfg(), "performance.postprocessing"))
+        if (name == "vf") return !value.empty();
+    return false;
+}
+
+// Settings whose mpv mapping rewrites the whole vf chain (dropping Lumen's labelled filters).
+bool RewritesVf(const std::string& key) {
+    const settings::Item* item = settings::FindItem(key);
+    if (!item) return false;
+    for (const settings::MpvMap& m : item->mpv)
+        if (m.option == "vf") return true;
+    return false;
+}
+
 }  // namespace
 
 LiveState& LiveState::Get() {
@@ -47,18 +89,40 @@ LiveState::LiveState() {
             lastPath = Mpv().State().path;
             zoomMode = "fit";
             aspect = "auto";
-            if (crop != "none") {
-                crop = "none";
-                ApplyCrop();
-            }
+            LoadCropSetting();
+            ApplyCrop();
         }
-        if ((m & kChangeVideoSize) && crop != "none") ApplyCrop();
+        // hwdec-current and the HDR flag arrive as state changes.
+        if (m & (kChangeState | kChangeFile)) ApplyUpscaler();
     });
+    LoadCropSetting();
     // Config writes the whole vf/af chains when mapped settings change; put ours back on top.
     configToken_ = TheApp().config().Subscribe("", [this](const std::string& key) {
-        if (key.rfind("video.", 0) == 0 || key.rfind("performance.", 0) == 0) ApplyVideoFilters();
+        if (RewritesVf(key)) {
+            srFilter_.clear();  // gone with the old chain
+            ApplyVideoFilters();
+        }
+        if (key.rfind("video.crop", 0) == 0) {
+            LoadCropSetting();
+            ApplyCrop();
+            Notify();
+        }
+        if (key == "video.superResolution" || key == "video.trueHdr") {
+            ApplyUpscaler();
+            Notify();
+        }
         if (key.rfind("audio.", 0) == 0) ApplyAudioFilters();
     });
+}
+
+void LiveState::LoadCropSetting() {
+    const Config& c = Cfg();
+    crop = c.GetString("video.crop");
+    if (crop.empty()) crop = "none";
+    cropT = c.GetDouble("video.cropTop");
+    cropB = c.GetDouble("video.cropBottom");
+    cropL = c.GetDouble("video.cropLeft");
+    cropR = c.GetDouble("video.cropRight");
 }
 
 void LiveState::Start() {
@@ -128,6 +192,18 @@ void LiveState::ObserveAll() {
         if (e.format == MPV_FORMAT_FLAG && e.data) v_.subVisible = *static_cast<int*>(e.data) != 0;
         Notify();
     });
+    // Decoded frame size: crop rectangles and the upscaler's factor are computed from it.
+    auto size = [this, &p](const char* name, int64_t LiveState::*field) {
+        p.Observe(name, MPV_FORMAT_INT64, [this, field](const mpv_event_property& e) {
+            const int64_t v = e.format == MPV_FORMAT_INT64 && e.data ? *static_cast<int64_t*>(e.data) : 0;
+            if (this->*field == v) return;
+            this->*field = v;
+            ApplyUpscaler();
+            ApplyCrop();
+        });
+    };
+    size("video-params/w", &LiveState::srcW_);
+    size("video-params/h", &LiveState::srcH_);
     p.Observe("audio-device", MPV_FORMAT_STRING, [this](const mpv_event_property& e) {
         if (e.format == MPV_FORMAT_STRING && e.data) {
             const char* s = *static_cast<char**>(e.data);
@@ -170,6 +246,58 @@ void LiveState::ApplyVideoFilters() {
     if (negate) fx = "negate";
     if (grayscale) fx += std::string(fx.empty() ? "" : ",") + "hue=s=0";
     if (!fx.empty()) Mpv().Command({"vf", "add", "@lfx:lavfi=[" + fx + "]"});
+    ApplyUpscaler();
+}
+
+// AI upscaling: mpv's d3d11vpp filter with the vendor's Video Super Resolution, scaling the
+// decoded frames on the GPU to about the screen size (the renderer then only fine-tunes). It
+// takes D3D11 frames only, so it waits for zero-copy d3d11va decoding and steps aside while a
+// CPU filter is on (frames are in RAM then). RTX Video HDR rides on the same filter.
+void LiveState::ApplyUpscaler() {
+    if (!Mpv().Ready()) return;
+    const PlayerState& s = Mpv().State();
+    const Config& c = Cfg();
+    const bool sr = c.GetBool("video.superResolution"), trueHdr = c.GetBool("video.trueHdr");
+    std::string want;
+    double scale = 1;
+    if ((sr || trueHdr) && s.fileLoaded && s.hasVideo && s.hwdec == L"d3d11va" && srcW_ > 0 && srcH_ > 0 &&
+        !ConfigCpuFilters() && flip == 0 && !negate && !grayscale) {
+        const std::string vendor = SuperResVendor();
+        std::string args;
+        MainWindow* w = TheApp().main();
+        MONITORINFO mi{sizeof(mi)};
+        if (sr && !vendor.empty() && w && GetMonitorInfoW(MonitorFromWindow(w->Hwnd(), MONITOR_DEFAULTTONEAREST), &mi)) {
+            const double mw = mi.rcMonitor.right - mi.rcMonitor.left, mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+            const double f = std::min({4.0, mw / static_cast<double>(srcW_), mh / static_cast<double>(srcH_)});
+            // Below ~1.2x the renderer's own scaler is as good and the extra pass isn't worth it.
+            if (f >= 1.2) {
+                scale = std::floor(f * 100) / 100;
+                args = "scale=" + Num(scale) + ":scaling-mode=" + vendor;
+            }
+        }
+        if (trueHdr && vendor == "nvidia" && !s.hdr) args += std::string(args.empty() ? "" : ":") + "nvidia-true-hdr";
+        if (!args.empty()) want = "@lsr:d3d11vpp=" + args;
+    }
+    if (want == srFilter_) return;
+    if (!srFilter_.empty()) Mpv().Command({"vf", "remove", "@lsr"});
+    if (!want.empty()) Mpv().Command({"vf", "add", want});
+    srFilter_ = want;
+    srScale_ = want.empty() ? 1 : scale;
+    ApplyCrop();  // video-crop works on the upscaled frame
+}
+
+std::wstring LiveState::UpscalerStatus() const {
+    const Config& c = Cfg();
+    const bool sr = c.GetBool("video.superResolution"), trueHdr = c.GetBool("video.trueHdr");
+    if ((!sr && !trueHdr) || !srFilter_.empty()) return {};
+    const PlayerState& s = Mpv().State();
+    if (!s.fileLoaded || !s.hasVideo) return {};
+    const std::string vendor = SuperResVendor();
+    if (vendor.empty() || (!sr && vendor != "nvidia")) return Tr(L"Not supported by this graphics card");
+    if (s.hwdec != L"d3d11va") return Tr(L"Needs Direct3D 11 hardware decoding");
+    if (ConfigCpuFilters() || flip != 0 || negate || grayscale) return Tr(L"Off while CPU filters are on");
+    if (!sr && s.hdr) return Tr(L"The video is already HDR");
+    return Tr(L"The video already matches the screen");
 }
 
 void LiveState::SetFlip(int f) {
@@ -210,8 +338,9 @@ void LiveState::SetCrop(const std::string& c) {
 }
 
 void LiveState::ApplyCrop() {
-    const PlayerState& s = Mpv().State();
-    const double w = static_cast<double>(s.videoW), h = static_cast<double>(s.videoH);
+    if (!Mpv().Ready()) return;
+    // Source pixels; ratios are of the stored frame (anamorphic video crops its stored shape).
+    const double w = static_cast<double>(srcW_), h = static_cast<double>(srcH_);
     std::string value;  // empty = no crop
     if (w > 0 && h > 0) {
         if (crop == "custom") {
@@ -230,18 +359,23 @@ void LiveState::ApplyCrop() {
             }
         }
     }
-    Mpv().SetProperty("video-crop", value.empty() ? std::string("0x0+0+0") : value);
+    // The upscaler's d3d11vpp enlarges the frame before the renderer crops it.
+    if (!value.empty() && srScale_ != 1) {
+        double cw = 0, ch = 0, x = 0, y = 0;
+        if (sscanf_s(value.c_str(), "%lfx%lf+%lf+%lf", &cw, &ch, &x, &y) == 4) {
+            auto px = [this](double v) { return Num(std::round(v * srScale_)); };
+            value = px(cw) + "x" + px(ch) + "+" + px(x) + "+" + px(y);
+        }
+    }
+    if (value.empty()) value = "0x0+0+0";
+    if (value == appliedCrop_) return;
+    appliedCrop_ = value;
+    Mpv().SetProperty("video-crop", value);
 }
 
 void LiveState::SetDeinterlace(const std::string& d) {
     deinterlace = d;
     Mpv().SetProperty("deinterlace", d);
-    Notify();
-}
-
-void LiveState::SetToneMapping(const std::string& t) {
-    toneMapping = t;
-    Mpv().SetProperty("tone-mapping", t);
     Notify();
 }
 
@@ -402,7 +536,8 @@ void LiveState::ResetToDefaults() {
     ResetPicture();
     SetZoomMode("fit");
     SetAspect("auto");
-    SetCrop("none");
+    LoadCropSetting();
+    SetCrop(crop);
     flip = 0;
     ApplyVideoFilters();
     SetStereoMode("stereo");

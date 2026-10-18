@@ -233,12 +233,117 @@ std::optional<std::string> BuildDeinterlace(const Config& c) {
 }
 
 std::optional<std::string> BuildDeband(const Config& c) {
-    return c.GetDouble("video.debandRange") > 0 ? "yes" : "no";
+    return c.GetBool("video.deband") ? "yes" : "no";
 }
 
 std::optional<std::string> BuildDebandRange(const Config& c) {
-    double r = c.GetDouble("video.debandRange");
-    return r > 0 ? std::optional<std::string>(Num(r)) : std::nullopt;
+    return c.GetBool("video.deband") ? std::optional<std::string>(Num(c.GetDouble("video.debandRange"))) : std::nullopt;
+}
+
+// --- image quality (video.quality presets, upscaler, tone mapping) ---
+// "balanced" keeps mpv's defaults; "fast" and "high" follow mpv's [fast] and [high-quality]
+// profiles, written as single options so that switching back restores each one (the `reset`
+// values below are mpv 0.41's defaults).
+
+bool QualityIs(const Config& c, const char* preset) {
+    return c.GetString("video.quality") == preset;
+}
+
+std::optional<std::string> BuildScale(const Config& c) {
+    const std::string up = c.GetString("video.upscaler");
+    if (!up.empty() && up != "auto") return up;
+    if (QualityIs(c, "fast")) return "bilinear";
+    if (QualityIs(c, "high")) return "ewa_lanczossharp";
+    return std::nullopt;
+}
+
+std::optional<std::string> BuildFastScaler(const Config& c) {  // dscale, cscale
+    return QualityIs(c, "fast") ? std::optional<std::string>("bilinear") : std::nullopt;
+}
+
+std::optional<std::string> BuildFastOff(const Config& c) {  // dither, *-downscaling, sigmoid-upscaling
+    return QualityIs(c, "fast") ? std::optional<std::string>("no") : std::nullopt;
+}
+
+std::optional<std::string> BuildAntiring(const Config& c) {
+    return QualityIs(c, "high") ? std::optional<std::string>("0.6") : std::nullopt;
+}
+
+std::optional<std::string> BuildPeakPercentile(const Config& c) {
+    return QualityIs(c, "high") ? std::optional<std::string>("99.995") : std::nullopt;
+}
+
+std::optional<std::string> BuildContrastRecovery(const Config& c) {
+    return QualityIs(c, "high") ? std::optional<std::string>("0.3") : std::nullopt;
+}
+
+std::optional<std::string> BuildComputePeak(const Config& c) {
+    const std::string v = c.GetString("video.hdrComputePeak");
+    if (v == "yes" || v == "no") return v;
+    return QualityIs(c, "fast") ? std::optional<std::string>("no") : std::nullopt;
+}
+
+std::optional<std::string> BuildTargetPeak(const Config& c) {
+    const double nits = c.GetDouble("video.targetPeak");
+    return nits > 0 ? std::optional<std::string>(Num(nits)) : std::nullopt;
+}
+
+// --- motion ---
+
+std::optional<std::string> BuildVideoSync(const Config& c) {
+    if (c.GetBool("video.smoothMotion")) return "display-resample";
+    const std::string s = c.GetString("performance.clockSync");
+    if (s == "resample") return "display-resample";
+    if (s == "vdrop") return "display-vdrop";
+    return std::nullopt;
+}
+
+std::optional<std::string> BuildTscale(const Config& c) {
+    if (!c.GetBool("video.smoothMotion")) return std::nullopt;
+    const std::string blend = c.GetString("video.motionBlend");
+    return blend.empty() ? std::nullopt : std::optional<std::string>(blend);
+}
+
+// --- GPU shaders: built-in sharpening and the user's own (<data>\shaders) ---
+
+constexpr const char* kCasParam = "lumen_cas_sharpness";
+
+// vo=gpu (legacy) has no shader parameters; there sharpening stays a CPU filter (BuildVf).
+bool GpuSharpen(const Config& c) {
+    return c.GetDouble("video.sharpen") > 0 && c.GetString("performance.vo") != "gpu";
+}
+
+// "a.glsl|b.hook" -> enabled file names in <data>\shaders (plain names only, no paths).
+std::vector<std::string> EnabledShaders(const Config& c) {
+    std::vector<std::string> out;
+    const std::string list = c.GetString("video.shaders");
+    size_t start = 0;
+    while (start <= list.size()) {
+        size_t bar = list.find('|', start);
+        if (bar == std::string::npos) bar = list.size();
+        std::string name = list.substr(start, bar - start);
+        if (!name.empty() && name.find_first_of("\\/:;") == std::string::npos && name != "." && name != "..")
+            out.push_back(std::move(name));
+        start = bar + 1;
+    }
+    return out;
+}
+
+std::optional<std::string> BuildGlslShaders(const Config& c) {
+    std::string list;
+    auto add = [&list](const std::wstring& path) { list += (list.empty() ? "" : ";") + json::ToUtf8(path); };
+    if (GpuSharpen(c)) add(DataDir() + L"\\cache\\shaders\\lumen-cas.glsl");
+    const std::wstring folder = DataDir() + L"\\shaders\\";
+    for (const std::string& name : EnabledShaders(c)) {
+        const std::wstring path = folder + json::ToWide(name);
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) add(path);  // skip deleted files
+    }
+    return list.empty() ? std::nullopt : std::optional<std::string>(list);
+}
+
+std::optional<std::string> BuildShaderOpts(const Config& c) {
+    if (!GpuSharpen(c)) return std::nullopt;
+    return std::string(kCasParam) + "=" + Num(std::min(1.0, c.GetDouble("video.sharpen") / 10.0));
 }
 
 std::optional<std::string> BuildHdrHint(const Config& c) {
@@ -258,8 +363,10 @@ std::optional<std::string> BuildHdrPrim(const Config& c) {
     return "bt.2020";
 }
 
-// One lavfi graph for every video filter Lumen manages. Order: deinterlace, deblock, crop,
-// sharpen. Note that any video filter makes hardware decoding copy frames back to RAM.
+// One lavfi graph for the CPU video filters the user explicitly picked: a deinterlacing method,
+// deblocking, and sharpening on the legacy renderer. Any of them makes hardware decoding copy
+// frames back to RAM, so everything that can run on the GPU stays out of here: crop is mpv's
+// video-crop (app/player/LiveState), sharpening a GLSL shader, deinterlacing mpv's own switch.
 std::optional<std::string> BuildVf(const Config& c) {
     std::vector<std::string> f;
     std::string method = c.GetString("video.deinterlaceMethod");
@@ -272,21 +379,8 @@ std::optional<std::string> BuildVf(const Config& c) {
     if (pp == "medium") f.push_back("deblock=filter=weak:block=8");
     if (pp == "high") f.push_back("deblock=filter=strong:block=8");
 
-    std::string crop = c.GetString("video.crop");
-    if (crop == "custom") {
-        double t = c.GetDouble("video.cropTop"), b = c.GetDouble("video.cropBottom");
-        double l = c.GetDouble("video.cropLeft"), r = c.GetDouble("video.cropRight");
-        if (t + b + l + r > 0)
-            f.push_back("crop=w=iw-" + Num(l + r) + ":h=ih-" + Num(t + b) + ":x=" + Num(l) + ":y=" + Num(t));
-    } else if (!crop.empty() && crop != "none") {
-        // "16:9" -> keep the largest centered 16:9 rectangle.
-        size_t colon = crop.find(':');
-        std::string a = crop.substr(0, colon), d = crop.substr(colon + 1);
-        f.push_back("crop=w='min(iw,ih*" + a + "/" + d + ")':h='min(ih,iw*" + d + "/" + a + ")'");
-    }
-
     double sharpen = c.GetDouble("video.sharpen");
-    if (sharpen > 0) f.push_back("cas=strength=" + Num(std::min(1.0, sharpen / 10.0)));
+    if (sharpen > 0 && !GpuSharpen(c)) f.push_back("cas=strength=" + Num(std::min(1.0, sharpen / 10.0)));
 
     if (f.empty()) return std::nullopt;
     std::string graph;
@@ -940,27 +1034,137 @@ void BuildMedia(Builder& b) {
         .MpvBuild("target-prim", BuildHdrPrim, "auto");
     b.inferred = false;
 
+    b.inferred = true;
+    b.Sec("quality", L"Image Quality", L"Качество изображения");
+    {
+        auto q = b.Pick("video.quality", L"Image quality", L"Качество изображения",
+                        {{"fast", L"Fast", L"Быстро"},
+                         {"balanced", L"Balanced", L"Сбалансированно"},
+                         {"high", L"High quality", L"Максимум"}},
+                        "balanced");
+        q.Desc(L"How the picture is scaled and processed on the graphics card. Fast suits weak or battery-powered "
+               L"laptops; High quality needs a dedicated graphics card for 4K.",
+               L"Как видеокарта масштабирует и обрабатывает картинку. «Быстро» подходит слабым ноутбукам и работе "
+               L"от батареи; для «Максимума» в 4K нужна дискретная видеокарта.")
+            .MpvBuild("scale", BuildScale, "lanczos")
+            .MpvBuild("dscale", BuildFastScaler, "hermite")
+            .MpvBuild("cscale", BuildFastScaler, "")
+            .MpvBuild("dither", BuildFastOff, "fruit")
+            .MpvBuild("correct-downscaling", BuildFastOff, "yes")
+            .MpvBuild("linear-downscaling", BuildFastOff, "yes")
+            .MpvBuild("sigmoid-upscaling", BuildFastOff, "yes")
+            .MpvBuild("scale-antiring", BuildAntiring, "0")
+            .MpvBuild("hdr-peak-percentile", BuildPeakPercentile, "0")
+            .MpvBuild("hdr-contrast-recovery", BuildContrastRecovery, "0")
+            .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
+    }
+    b.Pick("video.upscaler", L"Upscaler", L"Алгоритм увеличения",
+           {{"auto", L"From the quality setting", L"По настройке качества"},
+            {"bilinear", L"Bilinear (fastest)", L"Билинейный (самый быстрый)"},
+            {"spline36", L"Spline36", L"Spline36"},
+            {"lanczos", L"Lanczos", L"Lanczos"},
+            {"ewa_lanczos", L"EWA Lanczos", L"EWA Lanczos"},
+            {"ewa_lanczossharp", L"EWA Lanczos Sharp (best)", L"EWA Lanczos Sharp (лучший)"}},
+           "auto")
+        .Desc(L"Filter used to enlarge videos smaller than the window.",
+              L"Фильтр, которым увеличиваются видео меньше окна.")
+        .MpvBuild("scale", BuildScale, "lanczos");
+    b.Toggle("video.superResolution", L"AI upscaling (NVIDIA RTX / Intel)", L"ИИ-апскейл (NVIDIA RTX / Intel)", false)
+        .Desc(L"Enlarge low-resolution video with the graphics card's Video Super Resolution. Needs an NVIDIA RTX or "
+              L"Intel Arc / Core Ultra GPU and Direct3D 11 hardware decoding.",
+              L"Увеличивать видео низкого разрешения через Video Super Resolution видеокарты. Нужна NVIDIA RTX или "
+              L"Intel Arc / Core Ultra и аппаратное декодирование Direct3D 11.");
+    b.Toggle("video.trueHdr", L"NVIDIA RTX Video HDR", L"HDR из SDR (NVIDIA RTX Video HDR)", false)
+        .Desc(L"Turn SDR video into HDR on NVIDIA RTX cards. Needs Windows HDR on and Direct3D 11 hardware decoding.",
+              L"Превращать SDR-видео в HDR на видеокартах NVIDIA RTX. Нужны включённый HDR в Windows и аппаратное "
+              L"декодирование Direct3D 11.");
+    b.Toggle("video.deband", L"Debanding", L"Устранение полос", false)
+        .Desc(L"Smooth out color banding in gradients (skies, dark scenes).",
+              L"Сглаживает ступеньки в градиентах (небо, тёмные сцены).")
+        .MpvBuild("deband", BuildDeband, "no")
+        .MpvBuild("deband-range", BuildDebandRange, "16");
+    b.Slider("video.debandRange", L"Banding removal radius", L"Радиус устранения полос", 1, 64, 1, 16)
+        .Desc(L"How far debanding looks for steps. 16 suits most videos.",
+              L"Как далеко искать ступеньки. Для большинства видео подходит 16.")
+        .When("video.deband", "true")
+        .MpvBuild("deband-range", BuildDebandRange, "16");
+    b.Slider("video.filmGrain", L"Film grain variance", L"Плёночное зерно", 0, 256, 1, 48)
+        .Desc(L"Grain added after banding removal to hide remaining steps.",
+              L"Зерно, которое добавляется после устранения полос, чтобы скрыть остатки ступенек.")
+        .When("video.deband", "true")
+        .Mpv("deband-grain");
+
+    b.Sec("tonemapping", L"HDR Tone Mapping", L"Тональная компрессия HDR");
+    b.Pick("video.toneMapping", L"Tone mapping", L"Тональная компрессия",
+           {{"auto", L"Automatic", L"Автоматически", "auto"},
+            {"bt.2390", L"BT.2390", L"BT.2390", "bt.2390"},
+            {"bt.2446a", L"BT.2446a", L"BT.2446a", "bt.2446a"},
+            {"spline", L"Spline", L"Spline", "spline"},
+            {"st2094-40", L"ST 2094-40 (HDR10+)", L"ST 2094-40 (HDR10+)", "st2094-40"},
+            {"hable", L"Hable (filmic)", L"Hable (кинематографичная)", "hable"},
+            {"mobius", L"Mobius", L"Mobius", "mobius"},
+            {"reinhard", L"Reinhard", L"Reinhard", "reinhard"},
+            {"clip", L"Clip", L"Обрезка", "clip"}},
+           "auto")
+        .Desc(L"How HDR brightness is fitted to a screen that can't show all of it.",
+              L"Как яркость HDR укладывается в возможности экрана.")
+        .Mpv("tone-mapping");
+    b.Pick("video.gamutMapping", L"Gamut mapping", L"Преобразование цветового охвата",
+           {{"auto", L"Automatic", L"Автоматически", "auto"},
+            {"perceptual", L"Perceptual", L"Перцептивное", "perceptual"},
+            {"relative", L"Relative colorimetric", L"Относительное колориметрическое", "relative"},
+            {"saturation", L"Saturation", L"Насыщенность", "saturation"},
+            {"desaturate", L"Desaturate", L"Обесцвечивание", "desaturate"},
+            {"clip", L"Clip", L"Обрезка", "clip"}},
+           "auto")
+        .Desc(L"How wide-gamut colors are fitted to the screen.", L"Как широкий цветовой охват укладывается в экран.")
+        .Mpv("gamut-mapping-mode");
+    b.Pick("video.hdrComputePeak", L"Measure scene brightness", L"Измерять яркость сцены",
+           {{"auto", L"Automatic", L"Автоматически"}, {"yes", L"On", L"Вкл."}, {"no", L"Off", L"Выкл."}}, "auto")
+        .Desc(L"Analyze each frame's brightness for more accurate tone mapping. Costs some GPU time.",
+              L"Анализировать яркость каждого кадра для более точной тональной компрессии. Немного нагружает видеокарту.")
+        .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
+    b.Number("video.targetPeak", L"Display peak brightness", L"Пиковая яркость экрана", 0, 10000, 10, 0)
+        .Unit(L"nits", L"нит")
+        .Desc(L"Brightest white your screen can show. 0 detects it automatically.",
+              L"Самый яркий белый, который может показать экран. 0 — определить автоматически.")
+        .MpvBuild("target-peak", BuildTargetPeak, "auto");
+
+    b.Sec("motion", L"Motion", L"Движение");
+    b.Toggle("video.smoothMotion", L"Smooth motion", L"Плавное движение", false)
+        .Desc(L"Sync video to the display and blend frames, so 24 fps films pan without judder on 60 Hz screens.",
+              L"Подстраивать видео под частоту экрана и смешивать кадры, чтобы фильмы 24 кадр/с без рывков шли на "
+              L"экранах 60 Гц.")
+        .MpvBuild("video-sync", BuildVideoSync, "audio")
+        .MpvBool("interpolation")
+        .MpvBuild("tscale", BuildTscale, "oversample");
+    b.Pick("video.motionBlend", L"Frame blending", L"Смешивание кадров",
+           {{"oversample", L"Sharp", L"Чёткое"}, {"linear", L"Soft", L"Мягкое"}}, "oversample")
+        .Desc(L"Sharp keeps frames crisp and blends only at their edges; Soft blends more and looks smoother.",
+              L"«Чёткое» сохраняет резкость и смешивает кадры только на стыках; «Мягкое» смешивает сильнее и "
+              L"выглядит плавнее.")
+        .When("video.smoothMotion", "true")
+        .MpvBuild("tscale", BuildTscale, "oversample");
+    // Enabled user shaders ("a.glsl|b.hook" in <data>\shaders); toggled in the player's quick settings.
+    b.Text("video.shaders", L"Custom shaders", L"Свои шейдеры")
+        .MpvBuild("glsl-shaders", BuildGlslShaders, "")
+        .Hidden();
+    b.inferred = false;
+
     b.Sec("picture", L"Picture", L"Изображение");
     b.Slider("video.hue", L"Hue", L"Оттенок", -100, 100, 1, 0).Mpv("hue");
     b.Slider("video.brightness", L"Brightness", L"Яркость", -100, 100, 1, 0).Mpv("brightness");
     b.Slider("video.contrast", L"Contrast", L"Контраст", -100, 100, 1, 0).Mpv("contrast");
     b.Slider("video.saturation", L"Saturation", L"Насыщенность", -100, 100, 1, 0).Mpv("saturation");
     b.Slider("video.gamma", L"Gamma", L"Гамма", -100, 100, 1, 0).Mpv("gamma");
-    // The next three come from components/Video-Essential.
+    // From components/Video-Essential (debanding and film grain moved to Image Quality).
     b.inferred = true;
     b.Slider("video.sharpen", L"Sharpen", L"Резкость", 0, 10, 0.5, 0)
-        .Desc(L"Contrast-adaptive sharpening. 0 turns it off.", L"Адаптивное повышение резкости. 0 — выключено.")
+        .Desc(L"Contrast-adaptive sharpening on the graphics card. 0 turns it off.",
+              L"Адаптивное повышение резкости на видеокарте. 0 — выключено.")
+        .MpvBuild("glsl-shaders", BuildGlslShaders, "")
+        .MpvBuild("glsl-shader-opts", BuildShaderOpts, "")
         .MpvBuild("vf", BuildVf);
-    b.Slider("video.debandRange", L"Banding removal radius", L"Радиус устранения полос", 0, 64, 1, 0)
-        .Desc(L"Smooth out color banding in gradients. 0 turns it off; 16 suits most videos.",
-              L"Сглаживает ступеньки в градиентах. 0 — выключено, для большинства видео подходит 16.")
-        .MpvBuild("deband", BuildDeband, "no")
-        .MpvBuild("deband-range", BuildDebandRange, "16");
-    b.Slider("video.filmGrain", L"Film grain variance", L"Плёночное зерно", 0, 256, 1, 48)
-        .Desc(L"Grain added after banding removal to hide remaining steps.",
-              L"Зерно, которое добавляется после устранения полос, чтобы скрыть остатки ступенек.")
-        .When("video.debandRange", "0", true)
-        .Mpv("deband-grain");
     b.inferred = false;
     b.Button("video.resetPicture", L"Reset picture", L"Сбросить изображение", "reset-picture", L"Reset", L"Сбросить");
 
@@ -972,13 +1176,16 @@ void BuildMedia(Builder& b) {
               L"Убирает «гребёнку» в чересстрочном видео (записи ТВ, DVD). «Автоматически» — только для "
               L"чересстрочных кадров.")
         .MpvBuild("deinterlace", BuildDeinterlace, "no");
+    // Automatic is mpv's switch: the graphics card's video processor (d3d11vpp) with hardware decoding.
     b.Pick("video.deinterlaceMethod", L"Method", L"Метод",
-           {{"auto", L"Automatic", L"Автоматически"},
-            {"bwdif", L"Bwdif (best)", L"Bwdif (лучший)"},
-            {"yadif", L"Yadif (faster)", L"Yadif (быстрее)"}},
+           {{"auto", L"Graphics card (recommended)", L"Видеокарта (рекомендуется)"},
+            {"bwdif", L"Bwdif (CPU-heavy)", L"Bwdif (нагружает процессор)"},
+            {"yadif", L"Yadif (CPU-heavy)", L"Yadif (нагружает процессор)"}},
            "auto")
-        .Desc(L"Deinterlacing algorithm. Automatic uses the GPU when possible.",
-              L"Алгоритм устранения чересстрочности. «Автоматически» по возможности использует видеокарту.")
+        .Desc(L"The graphics card deinterlaces without extra CPU load. Bwdif and Yadif run on the processor and copy "
+              L"every frame to memory.",
+              L"Видеокарта устраняет чересстрочность без нагрузки на процессор. Bwdif и Yadif работают на процессоре и "
+              L"копируют каждый кадр в память.")
         .When("video.deinterlace", "off", true)
         .MpvBuild("deinterlace", BuildDeinterlace, "no")
         .MpvBuild("vf", BuildVf);
@@ -1005,10 +1212,10 @@ void BuildMedia(Builder& b) {
             {"2.35:1", L"2.35:1", L"2.35:1"},
             {"custom", L"Custom", L"Своя"}},
            "none")
-        .Desc(L"Cut black bars or crop the picture to a shape.", L"Убрать чёрные полосы или обрезать кадр до нужной формы.")
-        .MpvBuild("vf", BuildVf);
+        .Desc(L"Cut black bars or crop the picture to a shape.", L"Убрать чёрные полосы или обрезать кадр до нужной формы.");
     b.inferred = true;
-    // components/Video-Crop
+    // components/Video-Crop. Crop is mpv's video-crop, set per file by app/player/LiveState (it needs
+    // the video size); the GPU cuts the picture, frames stay in video memory.
     for (auto [key, en, ru] : {std::tuple{"video.cropTop", L"Top", L"Сверху"},
                                std::tuple{"video.cropBottom", L"Bottom", L"Снизу"},
                                std::tuple{"video.cropLeft", L"Left", L"Слева"},
@@ -1016,8 +1223,7 @@ void BuildMedia(Builder& b) {
         b.Number(key, en, ru, 0, 4000, 1, 0)
             .Unit(L"px", L"пкс")
             .Group("crop")
-            .When("video.crop", "custom")
-            .MpvBuild("vf", BuildVf);
+            .When("video.crop", "custom");
     }
     b.Toggle("video.keepAspect", L"Keep aspect ratio when resizing", L"Сохранять пропорции при изменении окна", true)
         .MpvBool("keepaspect");
@@ -1571,9 +1777,11 @@ void BuildSystem(Builder& b) {
             {"resample", L"Resample audio to the display", L"Подстройка звука под дисплей", "display-resample"},
             {"vdrop", L"Drop or repeat video frames", L"Пропуск и повтор кадров", "display-vdrop"}},
            "default")
-        .Desc(L"Syncing to the display removes judder; the default syncs video to the audio clock.",
-              L"Синхронизация с дисплеем убирает подёргивания; по умолчанию видео подстраивается под звук.")
-        .Mpv("video-sync");
+        .Desc(L"Syncing to the display removes judder; the default syncs video to the audio clock. Video > Smooth "
+              L"motion always resamples to the display.",
+              L"Синхронизация с дисплеем убирает подёргивания; по умолчанию видео подстраивается под звук. «Видео > "
+              L"Плавное движение» всегда подстраивает звук под дисплей.")
+        .MpvBuild("video-sync", BuildVideoSync, "audio");
     b.Number("performance.clockJitter", L"Clock jitter", L"Допустимый джиттер", 0, 60000, 100, 5000)
         .Unit(L"ms", L"мс")
         .Desc(L"Largest clock deviation tolerated for live streams before resynchronizing.",
@@ -1584,10 +1792,6 @@ void BuildSystem(Builder& b) {
               L"Сколько отсчётов часов усреднять для прямых трансляций.")
         .Hidden();  // not implemented yet
     b.inferred = true;
-    b.Toggle("performance.interpolation", L"Frame interpolation", L"Интерполяция кадров", false)
-        .Desc(L"Blend frames to remove judder when the video and display rates differ. Needs display sync.",
-              L"Смешивает кадры, чтобы убрать подёргивания при разной частоте видео и экрана. Нужна синхронизация с дисплеем.")
-        .MpvBool("interpolation");
     b.Pick("performance.vo", L"Video output", L"Вывод видео",
            {{"gpu-next", L"GPU (libplacebo)", L"GPU (libplacebo)", "gpu-next"}, {"gpu", L"GPU (legacy)", L"GPU (старый)", "gpu"}},
            "gpu-next")
