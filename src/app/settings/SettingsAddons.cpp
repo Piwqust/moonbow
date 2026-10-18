@@ -62,6 +62,9 @@ std::vector<Addon> Scan(std::wstring dir) {
 
 class AddonsList;
 AddonsList* g_list = nullptr;  // the one in the open settings window
+Widget* g_remove = nullptr;    // its "Remove" button: enabled while a row is selected
+
+void UpdateRemove();
 
 class AddonsList : public Widget {
 public:
@@ -136,6 +139,7 @@ public:
     }
     bool OnMouseDown(const MouseEvent& e) override {
         selected_ = IndexAt(e.y);
+        UpdateRemove();
         Invalidate();
         return true;
     }
@@ -159,6 +163,7 @@ public:
         if (e.key == VK_UP) selected_ = std::max(0, selected_ - 1);
         else if (e.key == VK_DOWN) selected_ = std::min(static_cast<int>(shown_.size()) - 1, selected_ + 1);
         else return false;
+        UpdateRemove();
         Invalidate();
         return true;
     }
@@ -184,6 +189,7 @@ private:
         for (size_t i = 0; i < shown_.size(); ++i)
             if (shown_[i].path == keep) selected_ = static_cast<int>(i);
         scroll_ = 0;
+        UpdateRemove();
         Invalidate();
     }
 
@@ -196,10 +202,64 @@ private:
     UINT_PTR poll_ = 0;
 };
 
+void UpdateRemove() {
+    if (!g_remove) return;
+    const bool on = g_list && g_list->Selected();
+    if (g_remove->enabled != on) {
+        g_remove->enabled = on;
+        g_remove->Invalidate();
+    }
+}
+
+class RemoveButton : public Button {
+public:
+    RemoveButton(std::wstring text) : Button(std::move(text), ButtonKind::Secondary) {
+        g_remove = this;
+        UpdateRemove();
+    }
+    ~RemoveButton() override {
+        if (g_remove == this) g_remove = nullptr;
+    }
+};
+
+// The search field and the buttons on one line; below ~620 DIP the buttons move to a second
+// line (right-aligned) instead of running off the window.
+class AddonsToolbar : public Widget {
+public:
+    static constexpr float kSearchMin = 160, kSearchMax = 210;
+    Size MeasureContent(float availW, float) override {
+        const float inner = availW - pad.H();
+        const bool wrap = ButtonsWidth() + gap + kSearchMin > inner;
+        return {availW, pad.V() + (wrap ? 36 + 10 + 32 : 36.0f)};
+    }
+    void OnLayout() override {
+        const Rect in = rect.Inset(pad);
+        const float buttons = ButtonsWidth();
+        const bool wrap = buttons + gap + kSearchMin > in.w;
+        const float searchW = wrap ? in.w : std::min(kSearchMax, in.w - buttons - gap);
+        Children().front()->Arrange({in.x, in.y, searchW, 36});
+        float x = in.Right() - buttons;
+        const float y = wrap ? in.y + 46 : in.y + 2;
+        for (size_t i = 1; i < Children().size(); ++i) {
+            Widget* b = Children()[i].get();
+            const float w = b->Measure(kInf, 32).w;
+            b->Arrange({x, y, w, 32});
+            x += w + gap;
+        }
+    }
+
+private:
+    float ButtonsWidth() {
+        float w = 0;
+        for (size_t i = 1; i < Children().size(); ++i) w += Children()[i]->Measure(kInf, 32).w + (i > 1 ? gap : 0);
+        return w;
+    }
+};
+
 class AddonSearch : public TextBox {
 public:
     AddonSearch() : TextBox(Tr(L"Search")) {
-        width = Length::Px(210);
+        width = Length::Grow();
         height = Length::Px(36);
         onChange = [](const std::wstring& t) {
             if (g_list) g_list->SetQuery(t);
@@ -277,17 +337,15 @@ std::unique_ptr<Widget> MakeAddonsList(const Item& item, PageHost&) {
 }
 
 std::unique_ptr<Widget> MakeAddonsToolbar(const std::vector<const Item*>& items, PageHost& page) {
-    auto row = std::make_unique<Widget>();
-    row->dir = Dir::Row;
-    row->align = Align::Center;
+    auto row = std::make_unique<AddonsToolbar>();
     row->width = Length::Grow();
     row->gap = 10;
     row->pad = {0, kRowPad, 0, 10};
     row->Add<AddonSearch>();
-    row->Add<Spacer>();
     Host* host = page.host;
     for (const Item* it : items) {
-        auto* b = row->Add<Button>(it->ActionLabel(Lang()), ButtonKind::Secondary);
+        Button* b = it->action == "remove-extension" ? row->Add<RemoveButton>(it->ActionLabel(Lang()))
+                                                     : row->Add<Button>(it->ActionLabel(Lang()), ButtonKind::Secondary);
         b->id = it->action;
         if (it->action == "find-extensions") {
             b->minW = 185;
