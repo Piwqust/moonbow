@@ -471,8 +471,10 @@ LibraryPane::LibraryPane(bool compact) : compact_(compact) {
     leaveConn_ = Connect(TheApp().routeLeaving, [this] {
         if (view_ && route_ == TheApp().route()) TheApp().CurrentViewState(compact_) = view_->SaveState();
     });
-    // Header and page strings are translated when built: rebuild on a language switch.
+    // Header and page strings are translated when built: rebuild on a language switch, keeping the
+    // scroll offset and selection as Back/Forward do (ShowRoute restores the saved state).
     langConn_ = Connect(TheApp().languageChanged, [this] {
+        if (view_ && route_ == TheApp().route()) TheApp().CurrentViewState(compact_) = view_->SaveState();
         ClosePagePopups();
         headerConn_.Reset();
         view_ = nullptr;
@@ -577,7 +579,7 @@ void LibraryPane::ShowRoute(const Route& route) {
     if (view_) {
         ViewState st = TheApp().CurrentViewState(compact_);
         // Up a level (a crumb, the "…" menu) to a page not seen before: select the folder we came from.
-        const bool folder = from.path.size() >= 2 && (from.path[1] == L':' || from.path.compare(0, 2, L"\\\\") == 0);
+        const bool folder = lib::LooksLikeFolder(from.path);
         if (st.Empty() && hadView && folder && from.section == route.section && from.path.size() > route.path.size()) {
             st.selPath = from.path;
             st.within = true;
