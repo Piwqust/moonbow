@@ -118,10 +118,26 @@ bool Config::ApplyDocument(const json::Value& doc) {
     for (const Item* item : settings::AllItems())
         if (item->HasValue()) next.emplace(item->key, item->def);
     unknown_ = json::Value::MakeObject();
+    // Keys that were renamed: an old file keeps its value under the new name (unless the file
+    // already has the new key).
+    static const std::pair<const char*, const char*> kRenamed[] = {
+        {"performance.interpolation", "video.smoothMotion"},
+    };
+    auto renamed = [&](const std::string& key) -> const char* {
+        for (const auto& [from, to] : kRenamed)
+            if (key == from && !values->Find(to)) return to;
+        return nullptr;
+    };
     for (const json::Member& m : values->AsObject()) {
-        const Item* item = settings::FindItem(m.key);
+        const char* newKey = renamed(m.key);
+        const Item* item = settings::FindItem(newKey ? std::string(newKey) : m.key);
         if (!item) {
             unknown_.Set(m.key, m.value);
+            continue;
+        }
+        if (newKey) {
+            if (item->HasValue())
+                if (std::optional<json::Value> v = Validate(*item, m.value)) next[item->key] = std::move(*v);
             continue;
         }
         if (!item->HasValue()) continue;

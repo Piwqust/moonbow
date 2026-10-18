@@ -641,6 +641,21 @@ void TestConfigPersistence() {
         CHECK(notices.size() == 1 && notices[0] == L"settings.json");
         CHECK(TakeCorruptFileNotices().empty());
     }
+
+    // Renamed keys: the old value moves to the new key, unless the file has the new key too.
+    WriteFile(file, R"({"version":1,"values":{"performance.interpolation":true}})");
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetBool("video.smoothMotion"));
+        CHECK(c.ToJson().Find("values")->Find("performance.interpolation") == nullptr);
+    }
+    WriteFile(file, R"({"version":1,"values":{"performance.interpolation":true,"video.smoothMotion":false}})");
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(!c.GetBool("video.smoothMotion"));
+    }
 }
 
 void TestHiddenCondition() {
