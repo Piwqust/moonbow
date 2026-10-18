@@ -203,7 +203,7 @@
                   { "p": "$MEDIA\\Videos\\Фильм — тест «кавычки» 日本語.mp4" }, { "p": "$MEDIA\\Videos\\Series S01\\Series S01E01.mp4" },
                   { "p": "$MEDIA\\Videos\\Series S01\\Series S01E02.mp4" }, { "p": "$MEDIA\\Videos\\Series S01\\Series S01E03.mp4" } ] } },
       "steps": [ { "cmd": "nav home", "after": 500 } ],
-      "description": "r7 library: Home cards with the 'Новое' chip top left of the new video and the new song ('Vertical phone clip', 'Песня 2'), clear of the duration badge." },
+      "description": "r7 library: Home cards: 'Песня 2' in Recently Added Music carries the 'Новое' chip top left, clear of the duration badge (the new video, 'Vertical phone clip', is past the first row)." },
     { "name": "lib-new-scale", "screen": "library", "priority": 2, "settleMs": 1500, "vary": { "scale": ["1.5"], "lang": ["en"] },
       "seed": { "library.json": { "version": 1, "roots": ["$MEDIA"], "seen": 1 },
                 "library-cache.json": { "version": 5, "items": [ { "p": "$MEDIA\\Music\\Artist A - Album One\\01 Track Number 1.mp3" } ] } },
