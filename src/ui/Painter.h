@@ -25,6 +25,7 @@ struct TextRecord {
     Rect clip;  // Painter::Clip() at the time
     TextStyle style = TextStyle::Body;
     HAlign halign = HAlign::Leading;
+    VAlign valign = VAlign::Center;
     uint8_t flags = 0;
     bool faded = false;  // drawn (nearly) fully transparent
 };

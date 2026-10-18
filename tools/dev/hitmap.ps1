@@ -52,7 +52,8 @@ foreach ($line in Get-Content (Join-Path $env:TEMP "lumen-tree-$ProcessId.txt") 
   # v2 header: the DIP scale, including the --scale test override.
   if ($line -match '^=== window .* scale=([\d.]+)') { $scale = [double]$matches[1]; continue }
   if ($line -eq "--- popup") { $popup = $true; $hiddenDepth = -1; continue }
-  if ($line -notmatch '^( *)(\S+)(?: #(\S+))? \[(-?[\d.]+),(-?[\d.]+) ([\d.]+)x([\d.]+)\](.*)$') { continue }
+  # Type names of local classes contain spaces ("`public: __cdecl ...'::QueueButton"), so match lazily.
+  if ($line -notmatch '^( *)(.+?)(?: #(\S+))? \[(-?[\d.]+),(-?[\d.]+) ([\d.]+)x([\d.]+)\](.*)$') { continue }
   $depth = $matches[1].Length / 2
   if ($hiddenDepth -ge 0 -and $depth -gt $hiddenDepth) { continue }
   $hiddenDepth = -1

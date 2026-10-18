@@ -155,7 +155,9 @@ int PlayQueue::PrevIndex() const {
     if (items_.empty()) return -1;
     if (!shuffle_) return current_ > 0 ? current_ - 1 : (repeat_ == Repeat::All ? static_cast<int>(items_.size()) - 1 : -1);
     auto it = std::find(order_.begin(), order_.end(), current_);
-    if (it == order_.end() || it == order_.begin()) return -1;
+    if (it == order_.end()) return -1;
+    // At the start of the shuffled order Repeat All wraps to its end, as NextIndex wraps forward.
+    if (it == order_.begin()) return repeat_ == Repeat::All ? order_.back() : -1;
     return *(it - 1);
 }
 

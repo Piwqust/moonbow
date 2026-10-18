@@ -1260,6 +1260,14 @@ private:
     }
 
     void Refilter() {
+        // The rows move: a submenu opened from one of them would stay behind, detached from it.
+        if (Host* host = GetHost()) {
+            if (submenuTimer_) host->CancelTimer(submenuTimer_);
+            if (child_) host->ClosePopup(child_);
+        }
+        submenuTimer_ = 0;
+        child_ = nullptr;
+        highlight_ = -1;
         visible_.clear();
         for (size_t i = 0; i < items_.size(); ++i) {
             const MenuItem& m = items_[i];

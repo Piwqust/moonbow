@@ -1811,6 +1811,23 @@ void TestPlayQueue() {
     q.SetRepeat(app::Repeat::Off);
     CHECK(q.GaplessNextIndex() == -1);
 
+    // Shuffle + Repeat All: Previous on the first item of the play order wraps to its last one,
+    // the way Next wraps from the last to the first (audit: it did nothing).
+    q.Set(make(4), 1);
+    q.SetShuffle(true);  // the current item heads the shuffled order
+    CHECK(q.PrevIndex() == -1);
+    q.SetRepeat(app::Repeat::All);
+    {
+        const int prev = q.PrevIndex();
+        CHECK(prev >= 0 && prev != q.Current());
+        settingCurrent = true;
+        q.SetCurrent(prev);
+        settingCurrent = false;
+        CHECK(q.NextIndex(true) == 1);  // and Next from there comes back round to the start
+    }
+    q.SetRepeat(app::Repeat::Off);
+    q.SetShuffle(false);
+
     // Shuffled: edits keep the play order of what is queued; "play next" plays next.
     q.Set(make(8), 0);
     q.SetShuffle(true);

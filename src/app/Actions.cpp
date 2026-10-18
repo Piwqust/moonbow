@@ -8,6 +8,7 @@
 #include "app/library/LibraryCommon.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/LiveState.h"
 #include "app/player/PlayerView.h"
 
 #include <cmath>
@@ -546,10 +547,11 @@ void Run(Action a) {
             break;
         }
         case Action::Record: {
-            static bool recording = false;
             static std::wstring dir;  // where the running recording goes
-            recording = !recording;
-            if (recording) {
+            // mpv's option is the truth: it is cleared when the file changes or closes
+            // (reset-on-next-file), where a flag of our own went stale.
+            const bool start = p.GetPropertyString("stream-record").empty();
+            if (start) {
                 dir = Utf8ToWide(app.config().GetString("recording.folder"));
                 if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
                 CreateDirectoryW(dir.c_str(), nullptr);
@@ -579,7 +581,7 @@ void Run(Action a) {
             for (int k = 0; k < 5; ++k)
                 if (std::abs(cur - ratios[k]) < 0.01) i = k;
             i = (i + 1) % 5;
-            p.SetProperty("video-aspect-override", std::string(values[i]));
+            Live().SetAspect(i == 0 ? "auto" : values[i]);  // through LiveState: the Video tab agrees
             Toast(Fmt(Tr(L"Aspect ratio: {0}"), {Tr(labels[i])}), "video");
             break;
         }
@@ -685,14 +687,27 @@ bool VideoWheel(float delta, bool horizontal) {
         return true;
     }
     if (mode == "volume") {
-        const double step = std::clamp(c.GetDouble("audio.volumeStep"), 1.0, 25.0);
-        Player& p = TheApp().player();
-        if (PS().mute) p.SetMute(false);
-        p.SetVolume(std::round(PS().volume + step * delta));
-        Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), VolumeIcon(PS().volume, false));
+        WheelVolume(delta, true);
         return true;
     }
     return false;
+}
+
+void WheelVolume(float delta, bool toast) {
+    const double step = std::clamp(TheApp().config().GetDouble("audio.volumeStep"), 1.0, 25.0);
+    // A touchpad sends tenths of a notch: they add up to whole percents instead of each one
+    // rounding back to the same volume.
+    static double carry = 0;
+    if ((carry > 0 && delta < 0) || (carry < 0 && delta > 0)) carry = 0;
+    carry += step * delta;
+    const double whole = std::trunc(carry);
+    if (whole == 0) return;
+    carry -= whole;
+    Player& p = TheApp().player();
+    if (PS().mute) p.SetMute(false);
+    p.SetVolume(std::round(PS().volume) + whole);
+    if (toast)
+        Toast(Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))), VolumeIcon(PS().volume, false));
 }
 
 const char* VolumeIcon(double volume, bool mute) {
