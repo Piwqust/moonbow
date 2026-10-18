@@ -170,6 +170,11 @@ extern const char* const kEqBandKeys[kEqBands];  // "audio.eq60" ... "audio.eq16
 extern const double kEqFrequencies[kEqBands];    // 60 ... 16000 Hz
 inline constexpr const char* kEqPreampKey = "audio.eqPreamp";
 
+// mpv "hwdec" for performance.hwdec = auto, and the decoder thread count for decodeThreads = 0
+// (also Player's defaults before the settings are applied).
+inline constexpr const char* kAutoHwdec = "d3d11va,d3d11va-copy";
+int AutoDecodeThreads();
+
 struct EqPreset {
     std::string id;  // same as the audio.eqPreset choice value
     double preamp = 0;

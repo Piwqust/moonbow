@@ -23,7 +23,9 @@ struct Track {
     bool external = false;
     std::wstring file;  // external-filename for external tracks
 
-    std::wstring Label() const;
+    std::wstring Label() const;  // Name() + " · codec" (menus, media info)
+    std::wstring Name() const;   // "Title (lang)", the external file name, the language or "#id" (OSD)
+    bool TitleFromFileName() const;  // an external track whose best name is its file name
 };
 
 struct Chapter {

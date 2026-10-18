@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 
@@ -133,6 +134,15 @@ std::optional<std::string> BuildLogFile(const Config& c) {
         file = json::ToUtf8(def);
     }
     return file;
+}
+
+// 0 = automatic. FFmpeg's own choice (cores + 1, up to 16) keeps a few full frames per thread:
+// about 1 GB for 4K software decoding on a 32-thread CPU. Six threads still decode 4K H.264
+// several times faster than real time.
+std::optional<std::string> BuildDecodeThreads(const Config& c) {
+    const double n = c.GetDouble("performance.decodeThreads");
+    if (n >= 1) return Num(n);
+    return std::to_string(AutoDecodeThreads());
 }
 
 std::optional<std::string> BuildStartupVolume(const Config& c) {
@@ -595,7 +605,7 @@ void BuildApp(Builder& b) {
     b.Path("general.logFile", L"Log file", L"Файл журнала", PathKind::SaveFile)
         .Desc(L"Where the log is written. Leave empty to use lumen.log in the Lumen data folder.",
               L"Куда записывать журнал. Если пусто — lumen.log в папке данных Lumen.")
-        .Hint(L"%APPDATA%\\Lumen\\lumen.log", L"%APPDATA%\\Lumen\\lumen.log")
+        .Hint(DataFileDisplayPath(L"lumen.log"), DataFileDisplayPath(L"lumen.log"))
         .When("general.saveLog", "true")
         .MpvBuild("log-file", BuildLogFile);
     b.Pick("general.logLevel", L"Log details", L"Подробность журнала",
@@ -1487,7 +1497,9 @@ void BuildSystem(Builder& b) {
 
     b.Sec("decoding", L"Decoding", L"Декодирование");
     b.Pick("performance.hwdec", L"Hardware-accelerated decoding", L"Аппаратное декодирование",
-           {{"auto", L"Automatic", L"Автоматически", "auto-safe"},
+           // Not auto-safe: after d3d11va fails (4:4:4 or 10-bit H.264) it creates a CUDA context
+           // for nvdec (and dxva2 a D3D9 device), about 250 MB, and fails on the same formats.
+           {{"auto", L"Automatic", L"Автоматически", kAutoHwdec},
             {"d3d11", L"Direct3D 11", L"Direct3D 11", "d3d11va"},
             {"d3d11copy", L"Direct3D 11 (copy back)", L"Direct3D 11 (с копированием)", "d3d11va-copy"},
             {"nvdec", L"NVIDIA NVDEC", L"NVIDIA NVDEC", "nvdec"},
@@ -1517,7 +1529,7 @@ void BuildSystem(Builder& b) {
     b.Number("performance.decodeThreads", L"Decoding threads", L"Потоки декодирования", 0, 64, 1, 0)
         .Desc(L"CPU threads for software decoding. 0 picks automatically.",
               L"Потоки процессора для программного декодирования. 0 — автоматически.")
-        .Mpv("vd-lavc-threads");
+        .MpvBuild("vd-lavc-threads", BuildDecodeThreads);
 
     b.Sec("smooth", L"Smooth Playback", L"Плавное воспроизведение");
     b.Toggle("performance.frameDrop", L"Drop frames when the system can't keep up", L"Пропускать кадры при нехватке ресурсов",
@@ -1879,6 +1891,11 @@ const KeyAction* FindKeyAction(std::string_view id) {
     for (const KeyAction& a : KeyActions())
         if (a.id == id) return &a;
     return nullptr;
+}
+
+int AutoDecodeThreads() {
+    const unsigned n = std::thread::hardware_concurrency();
+    return static_cast<int>(std::clamp(n, 2u, 6u));
 }
 
 }  // namespace settings

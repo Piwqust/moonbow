@@ -3,6 +3,8 @@
 // Files without artwork get generated monochrome art (concentric grooves).
 #include "Util.h"
 #include "app/App.h"
+#include "app/player/ControlBar.h"
+#include "app/player/PanelKit.h"
 #include "app/player/PlayerView.h"
 #include "gfx/Gpu.h"
 #include "gfx/Text.h"
@@ -41,11 +43,17 @@ public:
         const QueueItem* item = TheApp().queue().CurrentItem();
         const std::wstring path = item ? item->path : s.path;
 
+        // An open popover (queue, tracks, settings) takes the right side: center the cover and
+        // the text in what is left, when that is still wide enough.
+        Rect area = rect;
+        const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
+                           PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
+        if (panel && rect.w - (panel::kPanelW + panel::kGap) >= 480) area.w -= panel::kPanelW + panel::kGap;
         // Layout: cover centered, text 88 DIP under it (1920×1080: 738 cover, 73 top margin).
-        const float side = std::floor(std::max(96.0f, std::min({rect.w - 96, rect.h - 180, 738.0f})));
+        const float side = std::floor(std::max(96.0f, std::min({area.w - 96, rect.h - 180, 738.0f})));
         const float block = side + 88 + 30;
         const float top = rect.y + std::max(24.0f, (rect.h - block) / 2);
-        const Rect cover{std::round(rect.Cx() - side / 2), std::round(top), side, side};
+        const Rect cover{std::round(area.Cx() - side / 2), std::round(top), side, side};
 
         ID2D1Bitmap* bmp = nullptr;
         if (!path.empty() && GetHost()) {
@@ -67,10 +75,10 @@ public:
         // The view is always on the (dark) video background, also in the light theme, so the
         // text is light rather than the palette's text colors.
         const Color white = Color::Hex(0xFFFFFF);
-        p.Text(title, {rect.x + 48, cover.Bottom() + 70, rect.w - 96, 36}, TextStyle::Title,
+        p.Text(title, {area.x + 48, cover.Bottom() + 70, area.w - 96, 36}, TextStyle::Title,
                Color::Mix(c.videoBg, white, 0.8f), HAlign::Center);
         if (!s.album.empty())
-            p.Text(s.album, {rect.x + 48, cover.Bottom() + 106, rect.w - 96, 22}, TextStyle::Body,
+            p.Text(s.album, {area.x + 48, cover.Bottom() + 106, area.w - 96, 22}, TextStyle::Body,
                    Color::Mix(c.videoBg, white, 0.5f), HAlign::Center);
     }
 

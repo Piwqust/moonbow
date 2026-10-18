@@ -795,6 +795,31 @@ void TickSlider::PaintOver(Painter& p) {
 
 // --- SettingField ------------------------------------------------------------------------------
 
+namespace {
+
+// Typed number with a decimal comma or point. False for empty or non-numeric text.
+bool ParseNumber(std::wstring text, double* out) {
+    for (wchar_t& ch : text)
+        if (ch == L',') ch = L'.';
+    wchar_t* end = nullptr;
+    const double v = std::wcstod(text.c_str(), &end);
+    if (!end || end == text.c_str() || !std::isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
+bool InRange(const Item& item, double v) {
+    const double eps = 1e-9 * std::max(1.0, std::abs(item.max - item.min));
+    return v >= item.min - eps && v <= item.max + eps;
+}
+
+// "1–3600 s": shown inside a focused number field.
+std::wstring RangeText(const Item& item) {
+    return FormatValue(item, item.min, false) + L"–" + FormatValue(item, item.max, true);
+}
+
+}  // namespace
+
 SettingField::SettingField(const Item& it) : item(it) {
     width = Length::Px(kControlW);
     height = Length::Px(36);
@@ -854,12 +879,15 @@ void SettingField::Commit() {
     switch (item.type) {
         case ItemType::Number:
         case ItemType::Slider: {
-            for (wchar_t& ch : text)
-                if (ch == L',') ch = L'.';
-            wchar_t* end = nullptr;
-            const double v = std::wcstod(text.c_str(), &end);
-            const bool ok = end && end != text.c_str() && std::isfinite(v);
+            double v = 0;
+            const bool ok = ParseNumber(text, &v);
             if (ok) Cfg().SetDouble(item.key, v);
+            // Say why the value changed or reverted instead of clamping silently.
+            if ((!ok || !InRange(item, v)) && item.max > item.min)
+                if (Host* h = GetHost())
+                    ShowToast(h, Fmt(Tr(L"Enter a value from {0} to {1}"),
+                                     {FormatValue(item, item.min), FormatValue(item, item.max)}),
+                              "", 2600);
             break;
         }
         case ItemType::Color: {
@@ -922,12 +950,27 @@ void SettingField::Paint(Painter& p) {
     TextBox::Paint(p);
     const bool number = item.type == ItemType::Number || item.type == ItemType::Slider;
     const std::wstring& unit = item.Unit(Lang());
+    float textRight = rect.x + 12;
+    if (number && !Text().empty()) textRight += p.Measure(Text(), TextStyle::Body).width;
     if (number && !unit.empty() && !Text().empty()) {
-        const float tw = p.Measure(Text(), TextStyle::Body).width;
-        const float x = rect.x + 12 + tw + (unit == L"%" ? 1.0f : 4.0f);
-        if (x < rect.Right() - 8)
-            p.Text(unit, {x, rect.y, rect.Right() - x - 8, rect.h}, TextStyle::Body,
-                   IsEnabled() ? P().textTertiary : P().textDisabled);
+        const float x = textRight + (unit == L"%" ? 1.0f : 4.0f);
+        const float uw = p.Measure(unit, TextStyle::Body).width;
+        // The whole unit or nothing (narrow EQ value boxes).
+        if (x + uw <= rect.Right() - 6) {
+            p.Text(unit, {x, rect.y, uw + 1, rect.h}, TextStyle::Body, IsEnabled() ? P().textTertiary : P().textDisabled);
+            textRight = x + uw;
+        }
+    }
+    // The allowed range while typing; red once the typed value is outside it.
+    if (number && IsFocused() && item.max > item.min) {
+        const std::wstring hint = RangeText(item);
+        const float hw = p.Measure(hint, TextStyle::Small).width;
+        if (textRight + 16 + hw <= rect.Right() - 12) {
+            double v = 0;
+            const bool bad = edited_ && !Text().empty() && (!ParseNumber(Text(), &v) || !InRange(item, v));
+            p.Text(hint, {rect.Right() - 12 - hw, rect.y, hw + 1, rect.h}, TextStyle::Small,
+                   bad ? P().danger : P().textTertiary, HAlign::Trailing);
+        }
     }
 }
 

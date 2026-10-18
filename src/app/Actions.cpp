@@ -108,12 +108,22 @@ MainWindow* Win() {
     return TheApp().main();
 }
 
-void Toast(const std::wstring& text, const char* icon = "") {
-    if (Win() && TheApp().config().GetBool("interface.osdMessages")) ShowToast(Win(), text, icon, 1200);
-}
+constexpr UINT kToastMs = 1200;
 
 const PlayerState& PS() {
     return TheApp().player().State();
+}
+
+// The last toast and the file it was about, so a file change can replace it (a seek or volume
+// toast must not hang over the next file).
+double g_toastAt = -1e9;
+uint64_t g_toastSerial = 0;
+
+void Toast(const std::wstring& text, const char* icon = "") {
+    if (!Win() || !TheApp().config().GetBool("interface.osdMessages")) return;
+    ShowToast(Win(), text, icon, kToastMs);
+    g_toastAt = ui::AnimFloat::Now();
+    g_toastSerial = PS().loadSerial;
 }
 
 // Messages about things mpv reports back a moment later.
@@ -128,7 +138,7 @@ void ExpectOsd(PendingOsd kind) {
 
 std::wstring SelectedTrackText(const wchar_t* type) {
     for (const Track& t : PS().tracks)
-        if (t.selected && t.type == type) return t.Label();
+        if (t.selected && t.type == type) return t.Name();
     return Tr(L"off");
 }
 
@@ -443,9 +453,10 @@ void Run(Action a) {
         }
         case Action::Record: {
             static bool recording = false;
+            static std::wstring dir;  // where the running recording goes
             recording = !recording;
             if (recording) {
-                std::wstring dir = Utf8ToWide(app.config().GetString("recording.folder"));
+                dir = Utf8ToWide(app.config().GetString("recording.folder"));
                 if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
                 CreateDirectoryW(dir.c_str(), nullptr);
                 SYSTEMTIME t;
@@ -457,7 +468,7 @@ void Run(Action a) {
                 Toast(Tr(L"Recording started"), "record");
             } else {
                 p.SetRecording(L"");
-                Toast(Tr(L"Recording saved to Videos\\Lumen"), "record");
+                Toast(Fmt(Tr(L"Recording saved to {0}"), {dir}), "record");
             }
             break;
         }
@@ -465,9 +476,14 @@ void Run(Action a) {
         case Action::ZoomOut: Zoom(-0.1); break;
         case Action::ZoomReset: Zoom(0, true); break;
         case Action::CycleAspect: {
-            static int i = 0;
             const char* values[] = {"-1", "16:9", "4:3", "2.35:1", "1:1"};
             const wchar_t* labels[] = {L"Default", L"16:9", L"4:3", L"2.35:1", L"1:1"};
+            // Continue from the real override (it resets per file and can be set elsewhere).
+            const double ratios[] = {-1, 16.0 / 9, 4.0 / 3, 2.35, 1};
+            const double cur = p.GetPropertyDouble("video-aspect-override", -1);
+            int i = 0;
+            for (int k = 0; k < 5; ++k)
+                if (std::abs(cur - ratios[k]) < 0.01) i = k;
             i = (i + 1) % 5;
             p.SetProperty("video-aspect-override", std::string(values[i]));
             Toast(Fmt(Tr(L"Aspect ratio: {0}"), {Tr(labels[i])}), "video");
@@ -572,6 +588,22 @@ const char* VolumeIcon(double volume, bool mute) {
 }
 
 void OnPlayerChangeForOsd(unsigned changes) {
+    if ((changes & kChangeFile) && PS().loadSerial != g_toastSerial) {
+        // Whatever was pending or on screen was about the previous file.
+        g_pendingOsd = PendingOsd::None;
+        if (ui::AnimFloat::Now() - g_toastAt < kToastMs) {
+            // Same text as the title bar: the tag title, or the file name without its extension.
+            const std::wstring file = FileNameOf(PS().path);
+            std::wstring title = PS().title.empty() ? file : PS().title;
+            if (_wcsicmp(title.c_str(), file.c_str()) == 0) {
+                const size_t dot = title.find_last_of(L'.');
+                if (dot != std::wstring::npos && dot > 0) title.resize(dot);
+            }
+            if (!title.empty()) Toast(title, "play");
+            g_toastSerial = PS().loadSerial;
+        }
+        return;
+    }
     if (g_pendingOsd == PendingOsd::None) return;
     if (ui::AnimFloat::Now() > g_pendingUntil) {
         g_pendingOsd = PendingOsd::None;

@@ -21,6 +21,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <set>
@@ -626,14 +627,71 @@ void TestConfigPersistence() {
         CHECK(c.Save());
     }
 
-    // A corrupt file is kept as .bad and defaults are used.
+    // A corrupt file is kept as settings.corrupt-<time>.json, reported once, and defaults are used.
+    TakeCorruptFileNotices();
     WriteFile(file, "{ this is not json");
     {
         Config c;
         CHECK(!c.Load());
         CHECK(c.GetString("general.theme") == "dark");
-        CHECK(FileExists(file + L".bad"));
+        CHECK(CountFiles(dir, L"settings.corrupt-*.json") == 1);
+        const std::vector<std::wstring> notices = TakeCorruptFileNotices();
+        CHECK(notices.size() == 1 && notices[0] == L"settings.json");
+        CHECK(TakeCorruptFileNotices().empty());
     }
+}
+
+void TestHiddenCondition() {
+    FreshDataDir(L"hidden-condition");
+    Config c;
+    // library.enabled is hidden (not implemented); an old stored "false" must not grey out the
+    // visible library options that depend on it.
+    const settings::Item* parent = settings::FindItem("library.enabled");
+    CHECK(parent && parent->hidden);
+    c.SetBool("library.enabled", false);
+    CHECK(c.IsEnabled("library.readTags"));
+    CHECK(c.IsEnabled("library.scanOnStartup"));
+    // Visible switches still gate their dependents.
+    c.SetBool("general.saveLog", false);
+    CHECK(!c.IsEnabled("general.logFile"));
+    c.SetBool("general.saveLog", true);
+    CHECK(c.IsEnabled("general.logFile"));
+}
+
+void TestCorruptBackup() {
+    std::wstring dir = FreshDataDir(L"corrupt");
+    TakeCorruptFileNotices();
+    const std::wstring file = dir + L"\\history.json";
+    WriteFile(file, "{\"items\": [ {\"path\": \"C:\\\\a.mkv\"}, {\"pa");
+    // Two failures in the same second keep two copies; the original stays untouched.
+    const std::wstring a = BackupCorruptFile(file);
+    const std::wstring b = BackupCorruptFile(file);
+    CHECK(!a.empty() && !b.empty() && a != b);
+    CHECK(a.find(L"\\history.corrupt-") != std::wstring::npos);
+    CHECK(a.size() > 5 && a.compare(a.size() - 5, 5, L".json") == 0);
+    CHECK(CountFiles(dir, L"history.corrupt-*.json") == 2);
+    CHECK(FileExists(file));
+    std::string copy;
+    CHECK(json::ReadFileUtf8(a, &copy) && copy.find("a.mkv") != std::string::npos);
+    CHECK(TakeCorruptFileNotices().size() == 2);
+    // Missing file: nothing to keep, nothing reported.
+    CHECK(BackupCorruptFile(dir + L"\\missing.json").empty());
+    CHECK(TakeCorruptFileNotices().empty());
+    // A file without an extension still gets a readable name.
+    WriteFile(dir + L"\\ui", "x");
+    CHECK(BackupCorruptFile(dir + L"\\ui").find(L"\\ui.corrupt-") != std::wstring::npos);
+    TakeCorruptFileNotices();
+
+    // The log path hint follows a moved data folder.
+    CHECK(DataDirOverridden());
+    const std::wstring shown = DataFileDisplayPath(L"lumen.log");
+    CHECK(shown.rfind(L"%TEMP%\\", 0) == 0);  // the test data dir lives under %TEMP%
+    const std::wstring tail = L"\\data-corrupt\\lumen.log";
+    CHECK(shown.size() > tail.size() && shown.compare(shown.size() - tail.size(), tail.size(), tail) == 0);
+    SetDataDirForTests({});
+    CHECK(!DataDirOverridden());
+    CHECK(DataFileDisplayPath(L"lumen.log") == L"%APPDATA%\\Lumen\\lumen.log");
+    SetDataDirForTests(dir);
 }
 
 std::string FindOption(const std::vector<MpvOption>& opts, const char* name, bool* found = nullptr) {
@@ -651,7 +709,14 @@ void TestConfigMpv() {
     Config c;
     auto opts = MpvOptions(c);
     bool found = false;
-    CHECK(FindOption(opts, "hwdec") == "auto-safe");
+    // Not auto-safe: its nvdec fallback costs a CUDA context for files d3d11va can't decode.
+    CHECK_MSG(FindOption(opts, "hwdec") == "d3d11va,d3d11va-copy", "hwdec=%s", FindOption(opts, "hwdec").c_str());
+    // Automatic decoder threads are capped (each one holds full frames: ~40 MB at 4K).
+    const int threads = std::atoi(FindOption(opts, "vd-lavc-threads").c_str());
+    CHECK(threads >= 2 && threads <= 6);
+    c.SetDouble("performance.decodeThreads", 12);
+    CHECK(FindOption(MpvOptions(c), "vd-lavc-threads") == "12");
+    c.SetDouble("performance.decodeThreads", 0);
     CHECK(FindOption(opts, "sub-color") == "#FFFFFFFF");
     CHECK(FindOption(opts, "deinterlace") == "auto");
     CHECK(FindOption(opts, "save-position-on-quit").empty());  // Lumen saves positions itself
@@ -1276,6 +1341,8 @@ const TestCase kTests[] = {
     {"config_subscribe", TestConfigSubscribe},
     {"config_persistence", TestConfigPersistence},
     {"config_mpv", TestConfigMpv},
+    {"corrupt_backup", TestCorruptBackup},
+    {"hidden_condition", TestHiddenCondition},
     {"history", TestHistory},
     {"playlists", TestPlaylists},
     {"bookmarks_favorites", TestBookmarksFavorites},

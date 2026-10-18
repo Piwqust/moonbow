@@ -101,6 +101,12 @@ Rect PlaceAboveBar(float prefH) {
     return {std::round(right - width), std::round(bottom - h), width, h};
 }
 
+// Audio without chapters gets no Chapters tab (it would always be empty).
+bool HasChaptersTab() {
+    const PlayerState& ps = TheApp().player().State();
+    return ps.hasVideo || !ps.chapters.empty();
+}
+
 // Directly above the mini player, same width.
 Rect PlaceAboveMini(float prefH) {
     MainWindow* w = TheApp().main();
@@ -118,10 +124,12 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
     Popover* raw = pop.get();
     switch (g) {
         case Group::Lists:
-            pop->SetTabs({{L"Queue", "queue", "queue_twotone"},
-                          {L"Bookmarks", "bookmarks", "bookmarks_twotone"},
-                          {L"Chapters", "chapters", "chapters_twotone"}},
-                         tab);
+        {
+            std::vector<Tab> tabs = {{L"Queue", "queue", "queue_twotone"},
+                                     {L"Bookmarks", "bookmarks", "bookmarks_twotone"}};
+            if (HasChaptersTab()) tabs.push_back({L"Chapters", "chapters", "chapters_twotone"});
+            pop->SetTabs(std::move(tabs), tab);
+        }
             pop->build = [](int t) {
                 return t == 1 ? BuildBookmarksTab() : t == 2 ? BuildChaptersTab() : BuildQueueTab(false);
             };
@@ -233,7 +241,8 @@ void TogglePlayerPanel(PanelKind kind, const Rect&) {
         return;
     }
     const Group g = GroupFor(kind);
-    const int tab = TabFor(kind);
+    int tab = TabFor(kind);
+    if (g == Group::Lists && tab == 2 && !HasChaptersTab()) tab = 0;
     if (s.pop && w->IsPopupOpen(s.pop) && s.group == g) {
         s.pop->ShowTab(tab);
         return;

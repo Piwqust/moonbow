@@ -136,7 +136,8 @@ public:
             if (!duration_)
                 text = FormatTime(s.position, hours);
             else if (s.duration > 0)
-                text = remaining_ ? L"-" + FormatTime(std::max(0.0, s.duration - s.position), hours)
+                // Rounded up: "-10:00" at the start of a 10:00 file, "-0:00" only at the end.
+                text = remaining_ ? L"-" + FormatTime(std::ceil(std::max(0.0, s.duration - s.position) - 1e-3), hours)
                                   : FormatTime(s.duration, hours);
         }
         p.Text(text, rect, TextStyle::Mono, IsHot() ? P().textPrimary : P().textSecondary, HAlign::Center);

@@ -144,24 +144,17 @@ private:
     UINT_PTR timer_ = 0;
 };
 
-// "0.0 dB" box under each band.
-class EqValue : public Widget {
+// Editable "0.0 dB" box under each band (type a value, or Up/Down/wheel while focused).
+class EqValue : public SettingField {
 public:
-    EqValue() {
+    explicit EqValue(const Item& it) : SettingField(it) {
         width = Length::Px(kColumnW);
         height = Length::Px(32);
     }
-    void Set(std::wstring s) {
-        text_ = std::move(s);
-        Invalidate();
+    // Follows the band while it is dragged (the setting is written when the drag settles).
+    void Show(double v) {
+        if (!IsFocused()) SetText(FormatValue(item, v, false));
     }
-    void Paint(Painter& p) override {
-        p.Fill(rect, P().bgDeep, 6);
-        p.Text(text_, rect, TextStyle::Small, P().textSecondary, HAlign::Center);
-    }
-
-private:
-    std::wstring text_;
 };
 
 class EqBody : public Widget, public Syncable {
@@ -215,10 +208,8 @@ public:
             name->width = Length::Px(kColumnW + 8);
             if (preamp) name->tooltip = it->Label(Lang());
             col->Add<Widget>()->height = Length::Px(10);
-            auto* value = col->Add<EqValue>();
-            const Item* item = it;
-            band->onValue = [value, item](double v) { value->Set(FormatValue(*item, v)); };
-            value->Set(FormatValue(*it, Cfg().GetDouble(it->key)));
+            auto* value = col->Add<EqValue>(*it);
+            band->onValue = [value](double v) { value->Show(v); };
         }
         body_->visible = open_;
         pad = {0, 6, 0, 0};

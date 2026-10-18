@@ -35,7 +35,7 @@ public:
 
     // --- Persistence -------------------------------------------------------------------------
     // Load() reads DataFilePath(L"settings.json"). A missing file is not an error. A file that
-    // fails to parse is copied to settings.json.bad and false is returned (defaults stay).
+    // fails to parse is copied to settings.corrupt-<timestamp>.json (BackupCorruptFile) and false is returned (defaults stay).
     // Values that fail validation are skipped. Listeners are notified for every key that changed.
     bool Load();
     bool LoadFrom(const std::wstring& path);
