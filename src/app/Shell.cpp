@@ -610,6 +610,11 @@ void LibraryPane::OnLayout() {
     Widget::OnLayout();
 }
 
+bool LibraryPane::Backdrop(Color& out) const {
+    out = compact_ ? P().bgPanel : P().bgBase;
+    return true;
+}
+
 void LibraryPane::Paint(Painter& p) {
     p.Fill(rect, compact_ ? P().bgPanel : P().bgBase);
     const float y = header_->rect.Bottom();

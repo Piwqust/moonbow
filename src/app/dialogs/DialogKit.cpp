@@ -474,6 +474,11 @@ void Frame::Paint(Painter& p) {
     p.Stroke(rect, c.lineSubtle, kRadius);
 }
 
+bool Frame::Backdrop(Color& out) const {
+    out = P().bgPanel;  // under the body; only the header is bgDeep
+    return true;
+}
+
 bool Frame::OnKeyDown(const KeyEvent& e) {
     if (e.key == VK_ESCAPE) {
         Close();

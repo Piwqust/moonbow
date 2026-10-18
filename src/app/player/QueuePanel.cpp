@@ -713,7 +713,7 @@ public:
                 if (i != q.Current()) q.Remove(i);
         });
         HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
-        auto* sv = Add<PanelScroll>();
+        auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
         list_ = sv->SetContent<QueueList>(compact);
@@ -923,7 +923,7 @@ public:
             if (list_->Selected() >= 0) list_->Delete(list_->Selected());
         });
         HeaderButton(header_, "add", L"Add bookmark", [this] { list_->AddCurrent(); });
-        auto* sv = Add<PanelScroll>();
+        auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
         list_ = sv->SetContent<BookmarkList>();
@@ -1068,7 +1068,7 @@ std::unique_ptr<Widget> BuildBookmarksTab() {
 }
 
 std::unique_ptr<Widget> BuildChaptersTab() {
-    auto sv = std::make_unique<PanelScroll>();
+    auto sv = std::make_unique<ScrollView>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     sv->SetContent<ChapterList>();

@@ -298,8 +298,13 @@ private:
 
 // Vertical scroller for one content child (any layout). Smooth wheel scrolling,
 // auto-hiding scrollbar, drag on the thumb.
+// A vertical scroller. While its content is taller than the view it shows a thin resting thumb
+// (how much there is and where this is in it, at a glance; the full thumb covers it while
+// scrolling) and fades each cut edge into the backdrop of the nearest ancestor that has one.
+// An overflow of a few DIP (a rounding of row heights) doesn't scroll at all.
 class ScrollView : public Widget {
 public:
+    static constexpr float kNoScroll = 4;
     ScrollView();
     ~ScrollView() override;
     template <class T, class... A>
@@ -310,6 +315,7 @@ public:
     Widget* Content() const { return Children().empty() ? nullptr : Children().front().get(); }
     float Offset() const { return offset_.Get(); }
     float MaxOffset() const { return std::max(0.0f, contentH_ - rect.h); }
+    bool Scrollable() const { return MaxOffset() > kNoScroll; }
     // showBar = false moves silently (restoring a saved position), without flashing the scrollbar.
     void ScrollTo(float y, bool animate = true, bool showBar = true);
     void ScrollIntoView(const Rect& r);
@@ -348,6 +354,7 @@ public:
     float radius = 0;
     bool shadow = false;
     void Paint(Painter& p) override;
+    bool Backdrop(Color& out) const override;
 };
 
 // --- menus ------------------------------------------------------------------------------

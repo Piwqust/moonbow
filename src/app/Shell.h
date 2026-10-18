@@ -58,6 +58,7 @@ public:
     LibraryView* View() const { return view_; }
     void FocusSearch();
     void Paint(ui::Painter& p) override;
+    bool Backdrop(ui::Color& out) const override;
     void OnLayout() override;
 
 private:

@@ -121,6 +121,9 @@ public:
     void PaintTree(Painter& p);
     // Painter::Clip() while painting; lets virtualized widgets skip offscreen items.
     void PaintFocusRing(Painter& p, const Rect& r, float radius) const;
+    // The colour a widget fills its whole rect with under its children, if any: a scroll view
+    // fades its cut edges into the nearest one.
+    virtual bool Backdrop(Color& /*out*/) const { return false; }
 
     // --- input ----------------------------------------------------------------
     // Deepest visible widget under the point (interactive or not).
