@@ -7,8 +7,10 @@
 // and read it without locks; Current() swaps under a short mutex.
 //
 // Scan order: (1) enumerate files (FindFirstFileExW + FIND_FIRST_EX_LARGE_FETCH, recursive,
-// hidden/system skipped) and publish; (2) read duration and tags (title, artist, album, genre,
-// track, disc, year) through the Windows property system and publish again. Step 2 is skipped
+// hidden/system skipped) and publish; (2) read duration and tags (title, artist, album, album
+// artist, genre, track, disc, year) with Lumen's own reader (TagReader.h) and publish again. The
+// Windows property system is the fallback for the formats the reader doesn't cover (MKV, AVI,
+// WMA...) and for durations it can't get cheaply. Step 2 is skipped
 // for files whose size and modification time match library-cache.json. If the first files show
 // that reading properties costs <= 3 ms per file, steps 1 and 2 run back to back with a single
 // publish.
@@ -38,6 +40,7 @@ struct MediaItem {
     std::wstring title;     // tags, may be empty
     std::wstring artist;
     std::wstring album;
+    std::wstring albumArtist;  // may be empty
     int track = 0;  // track number tag, 0 = none
     int year = 0;   // release year tag, 0 = none
     int disc = 0;   // disc number tag, 0 = none
@@ -46,6 +49,9 @@ struct MediaItem {
     // The metadata pass found the file unplayable: its header isn't the promised container, or
     // an MP4-family file has no readable length (truncated download). Never set for offline files.
     bool damaged = false;
+    // When the scanner first found the file (Unix ms); 0 = before the library kept this (and the
+    // whole first scan of a folder), so a new library doesn't call everything new.
+    int64_t firstSeen = 0;
     std::wstring searchKey;  // SearchFold(name + title + artist + album)
 
     // Title tag when present, else the file name.
@@ -83,6 +89,7 @@ public:
     std::vector<MediaItem> items;
     std::vector<FolderNode> folders;
     ScanStats stats;
+    int64_t newestFirstSeen = 0;  // max MediaItem::firstSeen
 
     int FindFolder(std::wstring_view path) const;  // index or -1
     const FolderNode* Folder(std::wstring_view path) const;
@@ -109,6 +116,15 @@ private:
 // Natural name order uses StrCmpLogicalW (like Explorer); ties fall back to name.
 // Duration sorts unknown durations last.
 void SortItems(std::vector<const MediaItem*>& items, SortKey key, bool descending = false);
+
+// What a running scan has done, for the progress banner. Read from any thread.
+struct ScanProgress {
+    bool scanning = false;
+    bool counting = false;  // still enumerating: `total` = files found so far
+    size_t done = 0;        // files whose metadata is known (cached or read)
+    size_t total = 0;       // files found
+    double elapsedMs = 0;   // since the scan started
+};
 
 struct ScanOptions {
     bool includeHidden = false;
@@ -140,6 +156,15 @@ public:
     uint64_t Rescan();
     void Cancel();
     bool Scanning() const { return scanning_.load(); }
+    ScanProgress Progress() const;
+    uint64_t Generation() const { return generation_.load(); }
+
+    // "New" badges: files first found after the user last looked at the library. The threshold
+    // is fixed for the session (the time saved in library.json); MarkSeen, called when a library
+    // page shows the current snapshot, saves "now" so these files aren't new next session.
+    int64_t NewSince() const { return newSince_; }
+    bool IsNew(const MediaItem& m) const { return m.firstSeen > newSince_; }
+    void MarkSeen();
 
     // Latest published snapshot; never null (empty before the first scan).
     std::shared_ptr<const Snapshot> Current() const;
@@ -160,6 +185,13 @@ private:
     std::shared_ptr<std::atomic<bool>> cancel_;   // the latest scan's cancel flag
     std::atomic<bool> scanning_{false};
     std::atomic<uint64_t> generation_{0};
+    int64_t newSince_ = 0;  // Unix ms
+    int64_t seenSaved_ = 0;  // "seen" in library.json
+
+    // Progress of the latest scan.
+    std::atomic<int64_t> scanStartMs_{0};  // steady clock
+    std::atomic<bool> counting_{false};
+    std::atomic<size_t> progressDone_{0}, progressTotal_{0};
 };
 
 }  // namespace library

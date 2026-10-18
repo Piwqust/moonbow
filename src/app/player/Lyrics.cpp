@@ -1,5 +1,7 @@
 #include "Lyrics.h"  // relative: the unit tests build it without /I src
 
+#include "../../library/TagReader.h"
+
 #include <windows.h>
 
 #include <algorithm>
@@ -233,6 +235,30 @@ Lyrics LoadLyricsFile(const std::wstring& lrcPath) {
     }
     CloseHandle(f);
     return ParseLyrics(DecodeLyricsFile(bytes));
+}
+
+Lyrics LoadEmbeddedLyrics(const std::wstring& mediaPath) {
+    if (mediaPath.empty() || mediaPath.find(L"://") != std::wstring::npos) return {};
+    library::TagInfo tags;
+    library::TagOptions opt;
+    opt.lyrics = true;
+    if (!library::ReadTagsFromFile(mediaPath, &tags, opt)) return {};
+    Lyrics out;
+    for (library::SyncedLyric& l : tags.syncedLyrics) out.lines.push_back({l.time, std::move(l.text)});
+    std::stable_sort(out.lines.begin(), out.lines.end(), [](const LyricLine& a, const LyricLine& b) { return a.time < b.time; });
+    // Leading blanks only mark silence, as in ParseLyrics.
+    while (!out.lines.empty() && out.lines.front().text.empty()) out.lines.erase(out.lines.begin());
+    while (!out.lines.empty() && out.lines.back().text.empty()) out.lines.pop_back();
+    if (!out.lines.empty()) {
+        out.synced = true;
+        return out;
+    }
+    return ParseLyrics(tags.lyrics);
+}
+
+Lyrics LoadLyricsFor(const std::wstring& mediaPath) {
+    Lyrics l = LoadLyricsFile(LyricsPathFor(mediaPath));
+    return l.Empty() ? LoadEmbeddedLyrics(mediaPath) : l;
 }
 
 bool IsLyricsTag(std::string_view key) {

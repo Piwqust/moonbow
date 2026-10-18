@@ -190,13 +190,13 @@ private:
             SetLyrics({});
             if (!s.fileLoaded) return;
             const QueueItem* item = TheApp().queue().CurrentItem();
-            const std::wstring lrc = LyricsPathFor(item ? item->path : s.path);
-            if (!lrc.empty()) {
+            const std::wstring media = item ? item->path : s.path;
+            if (!LyricsPathFor(media).empty()) {
                 auto job = std::make_shared<LyricsLoad>();
                 pending_ = job;
                 const HWND hwnd = GetHost() ? GetHost()->Hwnd() : nullptr;
-                std::thread([job, lrc, hwnd] {
-                    Lyrics l = LoadLyricsFile(lrc);
+                std::thread([job, media, hwnd] {
+                    Lyrics l = LoadLyricsFor(media);  // the .lrc, else SYLT / USLT from the file
                     {
                         std::lock_guard lock(job->mu);
                         job->lyrics = std::move(l);
