@@ -34,13 +34,28 @@ std::vector<std::wstring> Arguments() {
     return args;
 }
 
-// Hands the files to an already running Lumen window. Returns true if it did.
-bool ForwardToRunningInstance(const std::vector<std::wstring>& args) {
-    HWND other = nullptr;
-    while ((other = FindWindowExW(nullptr, other, L"LumenHost", app::kMainWindowTitle)) != nullptr) {
-        if (!GetWindow(other, GW_OWNER)) break;
+enum class Forward { NoWindow, Refused, Done };
+
+// The main window: an unowned LumenHost titled "Lumen", or "<file> — Lumen" while something plays
+// (an exact-title search missed it then, and a second window opened).
+HWND FindMainWindow() {
+    HWND w = nullptr;
+    while ((w = FindWindowExW(nullptr, w, L"LumenHost", nullptr)) != nullptr) {
+        if (GetWindow(w, GW_OWNER)) continue;
+        wchar_t title[512];
+        const int n = GetWindowTextW(w, title, static_cast<int>(std::size(title)));
+        const std::wstring_view t(title, n > 0 ? static_cast<size_t>(n) : 0);
+        const std::wstring_view suffix = L" \u2014 Lumen";
+        if (t == app::kMainWindowTitle || (t.size() > suffix.size() && t.substr(t.size() - suffix.size()) == suffix))
+            return w;
     }
-    if (!other) return false;
+    return nullptr;
+}
+
+// Hands the files to an already running Lumen window.
+Forward ForwardToRunningInstance(const std::vector<std::wstring>& args) {
+    HWND other = FindMainWindow();
+    if (!other) return Forward::NoWindow;
     std::wstring payload;
     for (const auto& a : args)
         if (!a.empty() && a[0] != L'-') payload += a + L"\n";
@@ -53,7 +68,9 @@ bool ForwardToRunningInstance(const std::vector<std::wstring>& args) {
     // A window that is closing answers FALSE: this process then opens the files itself.
     return SendMessageTimeoutW(other, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000,
                                &result) != 0 &&
-           result != 0;
+                   result != 0
+               ? Forward::Done
+               : Forward::Refused;
 }
 
 // "Only allow one Lumen window" (library.singleInstance). Read straight from the
@@ -105,9 +122,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     if (!newInstance && SingleInstanceDisabled()) newInstance = true;
     HANDLE mutex = newInstance ? nullptr : CreateMutexW(nullptr, FALSE, L"Lumen.SingleInstance.v2");
-    if (mutex && GetLastError() == ERROR_ALREADY_EXISTS && ForwardToRunningInstance(files)) {
-        CloseHandle(mutex);
-        return 0;
+    if (mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Explorer starts one process per file when several are opened: the first may not have
+        // its window yet. Wait for it (up to ~3 s) instead of opening a window of our own.
+        Forward f = ForwardToRunningInstance(files);
+        for (int i = 0; f == Forward::NoWindow && i < 30; ++i) {
+            Sleep(100);
+            f = ForwardToRunningInstance(files);
+        }
+        if (f == Forward::Done) {
+            CloseHandle(mutex);
+            return 0;
+        }
     }
     // Always, also with --new-instance: two writers on one data folder wipe each other's saves.
     if (!gallery) ClaimDataDir();
