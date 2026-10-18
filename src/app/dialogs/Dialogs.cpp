@@ -46,28 +46,91 @@ Widget* Row(Widget* parent, float gap = 10) {
     return r;
 }
 
+// Text block + a control at its right. The block is measured at the width it really gets, so
+// a description that wraps to two lines makes the row two lines tall.
+class SideRow : public Widget {
+public:
+    SideRow() {
+        dir = Dir::Row;
+        align = Align::Center;
+        width = Length::Grow();
+        gap = 12;
+    }
+    Size MeasureContent(float availW, float availH) override {
+        if (Children().size() < 2) return FlexMeasure(availW, availH);
+        const Size c = Children().back()->Measure(availW, availH);
+        const Size t = Children().front()->Measure(std::max(1.0f, availW - pad.H() - c.w - gap), availH);
+        return {availW, std::max(t.h, c.h) + pad.V()};
+    }
+};
+
 // =============================================================================================
 // Keyboard Shortcuts
 // =============================================================================================
 
-// Left inset of the key text; the column headers use it too, so the table lines up.
-constexpr float kKeyInset = 16;
+// Left inset of the key text and the room of the icon at the right; the column headers use
+// them too, so the table lines up.
+constexpr float kKeyInset = 16, kKeyIconRoom = 44;
 
-// Read-only key field from the design: dark pill, key text, pencil at the right.
+// "P", "PgUp, Media Next": the slot's bindings as the Settings editor writes them.
+std::wstring JoinKeys(const std::vector<std::pair<UINT, Mods>>& keys, size_t from, size_t to) {
+    std::wstring s;
+    for (size_t i = from; i < std::min(to, keys.size()); ++i)
+        if (keys[i].first != 0) s += (s.empty() ? L"" : L", ") + KeyText(keys[i].first, keys[i].second);
+    return s;
+}
+
+// Column widths of the shortcut table: the keys narrow (270 -> 120) and the gap between them
+// shrinks before the action name drops below 200 DIP.
+void KeyColumns(float w, float* keyW, float* gapW) {
+    *gapW = std::clamp(w - 2 * 270.0f - 300.0f, 16.0f, 89.0f);
+    *keyW = std::clamp(std::floor((w - 200.0f - *gapW) / 2), 120.0f, 270.0f);
+}
+
+// Action | first key | other keys, laid out with KeyColumns.
+class KeyTableRow : public Widget {
+public:
+    explicit KeyTableRow(float h) { height = Length::Px(h); width = Length::Grow(); }
+    Size MeasureContent(float availW, float) override { return {availW, height.value}; }
+    void OnLayout() override {
+        if (Children().size() < 3) return;
+        float keyW = 0, gapW = 0;
+        KeyColumns(rect.w, &keyW, &gapW);
+        const float labelW = std::max(0.0f, rect.w - 2 * keyW - gapW);
+        Children()[0]->Arrange({rect.x, rect.y, labelW, rect.h});
+        Children()[1]->Arrange({rect.x + labelW, rect.y, keyW, rect.h});
+        Children()[2]->Arrange({rect.Right() - keyW, rect.y, keyW, rect.h});
+    }
+};
+
+// Column title over a KeyField, centred over the key text (not over the icon).
+class KeyHeader : public Label {
+public:
+    explicit KeyHeader(std::wstring text) : Label(std::move(text), TextStyle::Body, Tone::Tertiary) {}
+    void Paint(Painter& p) override {
+        p.Text(Text(), rect.Inset(Insets{kKeyInset, 0, kKeyIconRoom, 0}), style, ToneColor(tone), halign, valign);
+    }
+};
+
+// Read-only key field: dark pill, the keys centred as in the Settings editor, "—" for an empty
+// slot, and an "open" arrow: a click opens the editor in Settings.
 class KeyField : public Widget {
 public:
     KeyField(std::wstring text, std::function<void()> edit) : text_(std::move(text)) {
         interactive = true;
-        width = Length::Px(270);
         height = Length::Px(33);
-        tooltip = Tr(L"Edit in Settings");
+        tooltip = text_.empty() ? std::wstring(Tr(L"Edit in Settings")) : text_ + L"\n" + Tr(L"Edit in Settings");
         onClick = std::move(edit);
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
         p.Fill(rect, IsHot() ? Color::Mix(c.bgDeep, c.bgSelected, 0.35f) : c.bgDeep, 6);
-        p.Text(text_, {rect.x + kKeyInset, rect.y, rect.w - kKeyInset - 44, rect.h}, TextStyle::Mono, SoftText());
-        p.Icon("edit", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, IsHot() ? c.textPrimary : c.textTertiary);
+        const Rect box{rect.x + kKeyInset, rect.y, rect.w - kKeyInset - kKeyIconRoom, rect.h};
+        if (text_.empty())
+            p.Text(L"—", box, TextStyle::Body, c.textDisabled, HAlign::Center);
+        else
+            p.Text(text_, box, TextStyle::Mono, SoftText(), HAlign::Center);
+        p.Icon("open", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, IsHot() ? c.textPrimary : c.textTertiary);
     }
 
 private:
@@ -97,15 +160,19 @@ public:
             for (const ActionInfo& a : AllActions()) {
                 if (a.action == Action::None || g != a.group) continue;
                 const auto& keys = Bindings(a.action);
-                std::wstring k1 = keys.size() > 0 ? KeyText(keys[0].first, keys[0].second) : L"";
-                std::wstring k2 = keys.size() > 1 ? KeyText(keys[1].first, keys[1].second) : L"";
+                // Every binding: the first slot, then all the others (as Settings shows them).
+                const std::wstring k1 = JoinKeys(keys, 0, 1);
+                const std::wstring k2 = JoinKeys(keys, 1, keys.size());
                 const std::wstring label = Tr(a.label);
                 if (!q.empty()) {
                     const bool byName = library::SearchFold(label).find(q) != std::wstring::npos ||
                                         library::SearchFold(a.label).find(q) != std::wstring::npos;
                     bool byKey = false;
+                    // Translated key names ("Пробел") and the English ones ("Space") both match.
                     for (const auto& [vk, mods] : keys)
-                        if (library::SearchFold(KeyText(vk, mods)).find(q) != std::wstring::npos) byKey = true;
+                        if (library::SearchFold(KeyText(vk, mods)).find(q) != std::wstring::npos ||
+                            library::SearchFold(KeyText(vk, mods, false)).find(q) != std::wstring::npos)
+                            byKey = true;
                     if (!(mode == 1 ? byName : mode == 2 ? byKey : byName || byKey)) continue;
                 }
                 if (!section) {
@@ -125,18 +192,16 @@ public:
                     section->width = Length::Grow();
                     section->gap = 14;
                 }
-                auto* row = Row(section, 0);
-                row->height = Length::Px(33);
+                auto* row = section->Add<KeyTableRow>(33.0f);
                 auto* l = row->Add<Label>(label, TextStyle::Body);
                 l->color = SoftText;
-                l->width = Length::Grow();
+                if (gfx::Text::Get().Measure(label, TextStyle::Body).width > 200) l->tooltip = label;
                 Frame* f = frame_;
                 auto edit = [f] {
                     f->Close();
                     TheApp().OpenSettings("controls");
                 };
                 row->Add<KeyField>(k1, edit);
-                row->Add<Widget>()->width = Length::Px(89);
                 row->Add<KeyField>(k2, edit);
                 ++shown;
             }
@@ -408,15 +473,37 @@ struct InfoSection {
 
 // "Key   value" row: the value wraps (up to 3 lines) and the row grows with it; the key
 // stays on the first line.
+// Wrapped value capped at maxLines: the last line ends with "…" instead of running over the
+// next rows (a file name with no spaces wraps at every character).
+class CappedText : public Label {
+public:
+    using Label::Label;
+    void Paint(Painter& p) override {
+        p.Text(Text(), rect, style, color ? color() : ToneColor(tone), halign, valign, gfx::kTextWrap | gfx::kTextEllipsis);
+    }
+};
+
+// Break opportunities after path separators, so a long path wraps at its folders first.
+std::wstring BreakablePath(const std::wstring& s) {
+    std::wstring out;
+    out.reserve(s.size() + 16);
+    for (wchar_t ch : s) {
+        out.push_back(ch);
+        if (ch == L'\\' || ch == L'/' || ch == L'_' || ch == L'.') out.push_back(L'\x200B');
+    }
+    return out;
+}
+
 class InfoLine : public Widget {
 public:
     static constexpr float kKeyW = 210, kGap = 16;
     InfoLine(const std::wstring& key, const std::wstring& value) {
         width = Length::Grow();
         dir = Dir::None;
+        clipChildren = true;
         key_ = Add<Label>(key, TextStyle::Body, Tone::Tertiary);
         key_->valign = VAlign::Top;
-        value_ = Add<Label>(value, TextStyle::Body);
+        value_ = Add<CappedText>(BreakablePath(value), TextStyle::Body);
         value_->color = SoftText;
         value_->wrap = true;
         value_->maxLines = 3;
@@ -545,7 +632,10 @@ std::wstring InfoText(const std::vector<InfoSection>& sections) {
 void ShowKeyboardShortcutsDialog() {
     MainWindow* w = TheApp().main();
     if (!w) return;
-    auto frame = std::make_unique<Frame>(Tr(L"Keyboard Shortcuts"), FitWidth(w, 1048), FitHeight(w, 800));
+    // A modal over the whole window: at the 720x440 minimum the list keeps most of the height.
+    const bool shortWindow = w->ClientSize().h < 600;
+    auto frame = std::make_unique<Frame>(Tr(L"Keyboard Shortcuts"), FitWidth(w, 1048),
+                                         std::min(800.0f, std::floor(w->ClientSize().h - 24)));
     Frame* f = frame.get();
     auto* search = f->Toolbar()->Add<TextBox>(Tr(L"Search Keyboard Shortcuts..."), "search");
     search->width = Length::Grow();
@@ -556,20 +646,17 @@ void ShowKeyboardShortcutsDialog() {
     mode->height = Length::Px(34);
 
     Widget* body = f->Body();
-    body->pad = {20, 20, 20, 0};
+    body->pad = {20, shortWindow ? 10.0f : 20.0f, 20, 0};
     body->gap = 0;
-    auto* head = Row(body, 0);
-    head->height = Length::Px(25);
-    head->Add<Label>(Tr(L"Action"), TextStyle::Body, Tone::Tertiary)->width = Length::Grow();
-    auto* h1 = head->Add<Label>(Tr(L"Hotkey"), TextStyle::Body, Tone::Tertiary);
-    h1->width = Length::Px(270);
-    h1->pad = {kKeyInset, 0, 0, 0};
-    head->Add<Widget>()->width = Length::Px(89);
-    auto* h2 = head->Add<Label>(Tr(L"Alternative"), TextStyle::Body, Tone::Tertiary);
-    h2->width = Length::Px(270);
-    h2->pad = {kKeyInset, 0, 0, 0};
+    // Same column titles and alignment as Settings > Controls ("Shortcut", centred keys).
+    auto* head = body->Add<KeyTableRow>(25.0f);
+    head->Add<Label>(Tr(L"Action"), TextStyle::Body, Tone::Tertiary);
+    for (const wchar_t* t : {L"Shortcut", L"Alternative"}) {
+        auto* h = head->Add<KeyHeader>(Tr(t));
+        h->halign = HAlign::Center;
+    }
     auto* gapW = body->Add<Widget>();
-    gapW->height = Length::Px(20);
+    gapW->height = Length::Px(shortWindow ? 8.0f : 20.0f);
     AddSeparator(body);
 
     auto* scroll = body->Add<ScrollView>();
@@ -663,7 +750,7 @@ void ShowNetworkStreamDialog() {
     // Buffering (Settings > Network) right here: streams are where it matters. Same
     // heading + description scale as the two fields above.
     AddSeparator(body);
-    auto* buf = Row(body, 12);
+    auto* buf = body->Add<SideRow>();
     Widget* bl = AddFieldHeader(
         buf, Tr(L"Buffering"),
         Tr(L"More buffering survives a slow connection but starts later. Applies to all streams."));
@@ -872,6 +959,88 @@ void ShowMediaInfoDialog() {
     f->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Accent)->onClick = [f] { f->Close(); };
     f->onSubmit = [f] { f->Close(); };
     ShowFrame(w, std::move(frame));
+}
+
+// =============================================================================================
+// About
+// =============================================================================================
+
+namespace {
+
+// "0.1.0" from the VERSIONINFO resource (res/app.rc), without version.lib.
+std::wstring AppVersion() {
+    HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(1), MAKEINTRESOURCEW(16));  // VS_VERSION_INFO, RT_VERSION
+    HGLOBAL mem = res ? LoadResource(nullptr, res) : nullptr;
+    const auto* data = mem ? static_cast<const BYTE*>(LockResource(mem)) : nullptr;
+    const DWORD size = res ? SizeofResource(nullptr, res) : 0;
+    for (DWORD i = 0; data && i + 16 <= size; i += 4) {
+        DWORD sig = 0;
+        memcpy(&sig, data + i, 4);
+        if (sig != 0xFEEF04BD) continue;  // VS_FIXEDFILEINFO
+        DWORD ms = 0, ls = 0;
+        memcpy(&ms, data + i + 8, 4);
+        memcpy(&ls, data + i + 12, 4);
+        return std::to_wstring(HIWORD(ms)) + L"." + std::to_wstring(LOWORD(ms)) + L"." + std::to_wstring(HIWORD(ls));
+    }
+    return L"?";
+}
+
+class AboutLink : public LinkButton {
+public:
+    AboutLink(std::wstring text, std::wstring url) : LinkButton(std::move(text)), url_(std::move(url)) {
+        trailingIcon = "open";
+        tooltip = url_;
+        onClick = [this] { Host::ShellOpen(nullptr, L"open", url_.c_str(), nullptr, nullptr, SW_SHOWNORMAL); };
+    }
+
+private:
+    std::wstring url_;
+};
+
+}  // namespace
+
+void ShowAboutDialog(Host* host) {
+    if (!host) host = TheApp().main();
+    if (!host) return;
+    auto frame = std::make_unique<Frame>(Tr(L"About Lumen"), FitWidth(host, 560));
+    Frame* f = frame.get();
+    Widget* body = f->Body();
+    body->gap = 16;
+
+    auto* top = Row(body, 14);
+    auto* logo = top->Add<IconView>("lumen", 40);
+    logo->width = Length::Px(48);
+    logo->height = Length::Px(48);
+    auto* names = top->Add<Widget>();
+    names->dir = Dir::Column;
+    names->gap = 2;
+    auto* title = names->Add<Label>(L"Lumen", TextStyle::Large);
+    title->color = SoftText;
+    names->Add<Label>(Fmt(Tr(L"Version {0}"), {AppVersion()}), TextStyle::Body, Tone::Tertiary);
+
+    // mpv starts with the first file; before that its versions aren't known.
+    Player& player = TheApp().player();
+    const std::wstring later = Tr(L"known once a file has been opened");
+    std::wstring mpv = player.Ready() ? Utf8ToWide(player.GetPropertyString("mpv-version")) : L"";
+    std::wstring ffmpeg = player.Ready() ? Utf8ToWide(player.GetPropertyString("ffmpeg-version")) : L"";
+    body->Add<InfoLine>(L"libmpv", mpv.empty() ? later : mpv);
+    body->Add<InfoLine>(L"FFmpeg", ffmpeg.empty() ? later : ffmpeg);
+
+    AddSeparator(body);
+    body->Add<Label>(Tr(L"Licences"), TextStyle::Body, Tone::Tertiary);
+    auto* links = body->Add<Widget>();
+    links->dir = Dir::Column;
+    links->gap = 6;
+    links->width = Length::Grow();
+    links->Add<AboutLink>(Tr(L"Lumen: GNU GPL 3.0 or later"), L"https://www.gnu.org/licenses/gpl-3.0.html");
+    links->Add<AboutLink>(Tr(L"mpv and libmpv: GPL 2.0 or later"), L"https://github.com/mpv-player/mpv/blob/master/Copyright");
+    links->Add<AboutLink>(Tr(L"FFmpeg: LGPL 2.1 or later"), L"https://ffmpeg.org/legal.html");
+    links->Add<AboutLink>(Tr(L"Inter typeface: SIL Open Font License 1.1"), L"https://openfontlicense.org");
+
+    f->Footer()->Add<Spacer>();
+    f->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Accent)->onClick = [f] { f->Close(); };
+    f->onSubmit = [f] { f->Close(); };
+    ShowFrame(host, std::move(frame));
 }
 
 }  // namespace app

@@ -283,14 +283,16 @@ void SetBindings(Action a, Keys keys) {
         Overrides()[a] = std::move(keys);
 }
 
-std::wstring KeyText(UINT vk, const Mods& mods) {
+std::wstring KeyText(UINT vk, const Mods& mods, bool localized) {
     if (vk == 0) return {};  // "unassigned" marker set by Settings > Controls
     std::wstring s;
     if (mods.ctrl) s += L"Ctrl + ";
     if (mods.alt) s += L"Alt + ";
     if (mods.shift) s += L"Shift + ";
+    // Names Windows translates; keycap labels (Esc, Home, PgUp, Del...) stay as printed.
+    auto tr = [localized](const wchar_t* english) { return localized ? Tr(english) : english; };
     switch (vk) {
-        case VK_SPACE: return s + L"Space";
+        case VK_SPACE: return s + tr(L"Space");
         case VK_LEFT: return s + L"←";
         case VK_RIGHT: return s + L"→";
         case VK_UP: return s + L"↑";
@@ -312,15 +314,15 @@ std::wstring KeyText(UINT vk, const Mods& mods) {
         case VK_OEM_2: return s + L"/";
         case VK_OEM_PLUS: return s + L"+";
         case VK_OEM_MINUS: return s + L"−";
-        case VK_MEDIA_PLAY_PAUSE: return s + L"Media Play";
-        case VK_MEDIA_STOP: return s + L"Media Stop";
-        case VK_MEDIA_NEXT_TRACK: return s + L"Media Next";
-        case VK_MEDIA_PREV_TRACK: return s + L"Media Prev";
-        case VK_VOLUME_UP: return s + L"Volume Up";
-        case VK_VOLUME_DOWN: return s + L"Volume Down";
-        case VK_VOLUME_MUTE: return s + L"Volume Mute";
-        case VK_BROWSER_BACK: return s + L"Browser Back";
-        case VK_BROWSER_FORWARD: return s + L"Browser Forward";
+        case VK_MEDIA_PLAY_PAUSE: return s + tr(L"Media Play");
+        case VK_MEDIA_STOP: return s + tr(L"Media Stop");
+        case VK_MEDIA_NEXT_TRACK: return s + tr(L"Media Next");
+        case VK_MEDIA_PREV_TRACK: return s + tr(L"Media Prev");
+        case VK_VOLUME_UP: return s + tr(L"Volume Up");
+        case VK_VOLUME_DOWN: return s + tr(L"Volume Down");
+        case VK_VOLUME_MUTE: return s + tr(L"Volume Mute");
+        case VK_BROWSER_BACK: return s + tr(L"Browser Back");
+        case VK_BROWSER_FORWARD: return s + tr(L"Browser Forward");
         default: break;
     }
     if (vk >= VK_F1 && vk <= VK_F24) return s + L"F" + std::to_wstring(vk - VK_F1 + 1);

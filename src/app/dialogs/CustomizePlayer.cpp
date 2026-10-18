@@ -27,7 +27,8 @@ using namespace dlg;
 namespace {
 
 constexpr ControlId kSeek = ControlId::Count;  // marker for the seek bar in a sequence
-constexpr float kCellW = 86, kCellGap = 24, kRowPitch = 120;
+// Cells fit two-line labels at word breaks ("Вперёд на / 10 с"); 24 DIP between them.
+constexpr float kCellW = 104, kCellGap = 16, kRowPitch = 120;
 constexpr float kBarH = 56;
 
 bool Repeatable(ControlId id) {
@@ -56,6 +57,12 @@ const wchar_t* LabelOf(ControlId id) {
     return ControlInfoFor(id).label;
 }
 
+// The palette's shorter caption where the full one needs three lines in a cell.
+const wchar_t* PaletteLabelOf(ControlId id) {
+    if (id == ControlId::Speed) return L"Speed";
+    return LabelOf(id);
+}
+
 void NoFocus(Widget* w) {
     w->focusable = false;
     for (auto& c : w->Children()) NoFocus(c.get());
@@ -81,7 +88,7 @@ public:
     PaletteCell(Editor* e, ControlId id) : editor_(e), id_(id) {
         interactive = true;
         focusable = true;
-        tooltip = {};
+        tooltip = Tr(LabelOf(id));
     }
     ControlId Id() const { return id_; }
     void Paint(Painter& p) override;
@@ -200,7 +207,10 @@ public:
                 area.h = barRect_.y;
             }
         }
-        const Size s = frame_->Measure(std::min(area.w - 32, 1048.0f), area.h - 24);
+        // Narrower than the design on small windows (the palette grid reflows to the width).
+        const float fw = std::floor(std::min(area.w - 32, 1048.0f));
+        if (frame_->width.value != fw) frame_->width = Length::Px(fw);
+        const Size s = frame_->Measure(fw, area.h - 24);
         frame_->Arrange({std::round(area.x + (area.w - s.w) / 2), std::round(std::max(12.0f, area.y + (area.h - s.h) / 2)),
                          s.w, s.h});
     }
@@ -516,10 +526,11 @@ void PaletteCell::Paint(Painter& p) {
                                                                          : Rect{rect.Cx() - 15, rect.y, 30, 32};
     DashedRect(p, box, hot ? c.textSecondary : c.textTertiary);
     PaintItemIcon(p, id_, box, hot ? c.textPrimary : c.textSecondary);
-    const float w = rect.w + 20;
-    const std::wstring label = Hyphenate(GlueLastWord(Tr(LabelOf(id_))), TextStyle::Body, w);
-    p.Text(label, {rect.Cx() - w / 2, rect.y + 48, w, 60}, TextStyle::Body, hot ? c.textPrimary : c.textSecondary,
-           HAlign::Center, VAlign::Top, gfx::kTextWrap);
+    // The label stays inside the cell (+8 of the hover pad on each side), two lines at most.
+    const float w = rect.w + 12;
+    const std::wstring label = Hyphenate(GlueLastWord(Tr(PaletteLabelOf(id_))), TextStyle::Body, w);
+    p.Text(label, {rect.Cx() - w / 2, rect.y + 40, w, 42}, TextStyle::Body, hot ? c.textPrimary : c.textSecondary,
+           HAlign::Center, VAlign::Top, gfx::kTextWrap | gfx::kTextEllipsis);
     if (dragging) p.PopOpacity();
 }
 
@@ -621,6 +632,7 @@ void ShowCustomizePlayerDialog() {
     o.scrim = false;  // the editor dims everything but the bar itself
     o.dismissOnOutside = false;
     o.dismissOnEscape = true;
+    CloseTransientPopups(w);
     w->ShowPopup(std::move(editor), o);
     w->RequestLayout();
 }
