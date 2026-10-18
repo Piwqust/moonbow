@@ -229,9 +229,14 @@ private:
             reset->id = "skin-reset";
             reset->minW = kSmallButtonW;
             reset->tooltip = Tr(L"Go back to the Lumen skin");
-            reset->onClick = [] {
-                Cfg().SetString("interface.skin", "lumen");
-                Cfg().SetBool("interface.customSkin", false);
+            // Posted: applying the skin rebuilds this status, and with it the button running the click.
+            reset->onClick = [host = page_.host] {
+                auto apply = [] {
+                    Cfg().SetString("interface.skin", "lumen");
+                    Cfg().SetBool("interface.customSkin", false);
+                };
+                if (host) host->Post(apply);
+                else apply();
             };
         }
         status_->visible = !status_->Children().empty();
