@@ -31,6 +31,7 @@ struct Entry {
     bool audio = false;  // media entry is audio (square cover placeholder)
     bool favorite = false;  // small heart mark
     bool damaged = false;   // the scanner found the file unplayable: dimmed, with a warning mark
+    bool isNew = false;     // found since the user last looked at the library: a "New" chip
     int track = 0;          // track number column (kColTrack), 0 = none
     int ref = -1;        // owner's index (queue position etc.)
 };

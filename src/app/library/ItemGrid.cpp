@@ -47,10 +47,10 @@ constexpr float kCardMaxGrow = 1.25f;
 
 constexpr float kChipH = 20;
 
-// "Damaged" chip of a file the scanner found unplayable: the warning icon and the word, the
+// "Damaged file" chip of a file the scanner found unplayable: the warning icon and the words, the
 // same on cards (the badge slot) and on list rows (after the title).
 float DamagedChipWidth(Painter& p) {
-    return 6 + 14 + 5 + std::ceil(p.Measure(Tr(L"Damaged"), TextStyle::Small).width) + 8;
+    return 6 + 14 + 5 + std::ceil(p.Measure(Tr(L"Damaged file"), TextStyle::Small).width) + 8;
 }
 
 void PaintDamagedChip(Painter& p, const Rect& b, Color bg) {
@@ -58,8 +58,19 @@ void PaintDamagedChip(Painter& p, const Rect& b, Color bg) {
     p.Fill(b, bg, 4);
     const float x = b.x + 6, cy = b.Cy();
     p.Icon("warning", {x - 1, cy - 8, 16, 16}, c.danger);
-    p.Text(Tr(L"Damaged"), {x + 19, b.y, b.Right() - x - 19 - 6, b.h}, TextStyle::Small, c.textPrimary, HAlign::Leading,
+    p.Text(Tr(L"Damaged file"), {x + 19, b.y, b.Right() - x - 19 - 6, b.h}, TextStyle::Small, c.textPrimary, HAlign::Leading,
            VAlign::Center, 0);
+}
+
+// "New" chip of a file found since the user last looked at the library: the word on the accent.
+float NewChipWidth(Painter& p) {
+    return 8 + std::ceil(p.Measure(Tr(L"New"), TextStyle::Small).width) + 8;
+}
+
+void PaintNewChip(Painter& p, const Rect& b) {
+    const Palette& c = P();
+    p.Fill(b, c.accent, 4);
+    p.Text(Tr(L"New"), {b.x + 8, b.y, b.w - 16, b.h}, TextStyle::Small, c.onAccent, HAlign::Leading, VAlign::Center, 0);
 }
 
 // When Enter opened the page, its grid lands on the first item with a focus ring.
@@ -435,6 +446,12 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Fill(b, c.bgBase.Fade(0.82f), 12);
         p.Icon("favorite_active", b.Center(14, 14), c.textPrimary);
     }
+    // Top left, after the heart; a damaged file shows only its warning.
+    if (e.isNew && !e.damaged) {
+        const float x = t.x + 8 + (e.favorite ? 24 + 6 : 0);
+        const float cw = std::min(NewChipWidth(p), t.Right() - 8 - x);
+        if (cw > 16) PaintNewChip(p, {x, t.y + 10, cw, kChipH});
+    }
 
     if (now) {
         // On artwork: a fixed dark chip with a white glyph, the same in both themes.
@@ -590,12 +607,13 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     float titleW = flex;
     if (sub && extra) titleW = flex * 0.44f;
     else if (sub || extra) titleW = flex * 0.6f;
-    if (e.damaged) {
+    if (e.damaged || e.isNew) {
         // The chip follows the title (shortened if needed), in the title's own column.
-        const float cw = DamagedChipWidth(p);
+        const float cw = e.damaged ? DamagedChipWidth(p) : NewChipWidth(p);
         const float textW = std::min(std::ceil(p.Measure(e.title, body).width) + 1, std::max(0.0f, titleW - 16 - cw - 8));
         ItemText(p, i, e.title, {x, r.y, textW, r.h}, body, fg);
-        if (titleW - 16 >= cw) PaintDamagedChip(p, {x + textW + 8, r.Cy() - kChipH / 2, cw, kChipH}, c.bgCard);
+        const Rect chip{x + textW + 8, r.Cy() - kChipH / 2, cw, kChipH};
+        if (titleW - 16 >= cw) e.damaged ? PaintDamagedChip(p, chip, c.bgCard) : PaintNewChip(p, chip);
     } else {
         ItemText(p, i, e.title, {x, r.y, titleW - 16, r.h}, body, fg);
     }

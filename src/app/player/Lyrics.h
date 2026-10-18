@@ -37,6 +37,15 @@ std::wstring LyricsPathFor(const std::wstring& mediaPath);
 // Blocking file I/O: call it off the UI thread.
 Lyrics LoadLyricsFile(const std::wstring& lrcPath);
 
+// Lyrics stored in the file itself, read with Lumen's tag reader: ID3 SYLT (synced) first, then
+// USLT, Vorbis LYRICS / UNSYNCEDLYRICS, MP4 ©lyr or APE Lyrics (LRC text in them stays synced).
+// Blocking file I/O: call it off the UI thread.
+Lyrics LoadEmbeddedLyrics(const std::wstring& mediaPath);
+
+// What the music view shows for a local file: the .lrc next to it, else the embedded lyrics.
+// Blocking file I/O: call it off the UI thread.
+Lyrics LoadLyricsFor(const std::wstring& mediaPath);
+
 // True for the tag names that carry lyrics: "lyrics", "lyrics-eng" (ID3 USLT as FFmpeg names
 // it), "UNSYNCEDLYRICS" (foobar2000 / Mp3tag in Vorbis comments), any case.
 bool IsLyricsTag(std::string_view key);

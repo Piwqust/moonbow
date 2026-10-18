@@ -1,5 +1,6 @@
 #include "MediaLibrary.h"
 
+#include "TagReader.h"
 #include "../core/Json.h"
 #include "../core/Paths.h"
 
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <cwctype>
 #include <thread>
 
@@ -27,7 +29,13 @@ constexpr int kProbeFiles = 8;
 constexpr double kInlineMetadataTotalMs = 300;  // estimated rest of the pass; above it, publish first
 constexpr auto kProgressInterval = std::chrono::seconds(2);
 constexpr size_t kMetadataChunk = 192;  // files read in parallel between progress checks
-constexpr int kCacheVersion = 4;        // library-cache.json format, see LoadCache
+constexpr int kCacheVersion = 5;        // library-cache.json format, see LoadCache
+// A scan still running after this tells the window once (pages then follow its progress); quicker
+// scans post nothing but their result.
+constexpr double kAnnounceMs = 400;
+// An inline metadata pass (one publish at the end) that runs longer than this publishes what it
+// has and continues as a second pass: the files show while slow ones are read.
+constexpr double kInlineLimitMs = 1000;
 
 
 double MsSince(Clock::time_point t) {
@@ -54,7 +62,9 @@ struct TempFolder {
     std::vector<MediaItem> items;
 };
 
-void Enumerate(TempFolder& node, const ScanOptions& opt, const std::atomic<bool>& cancel, ScanStats& stats) {
+void Enumerate(TempFolder& node, const ScanOptions& opt, const std::atomic<bool>& cancel, ScanStats& stats,
+               std::atomic<size_t>& found, const std::function<void()>& tick) {
+    tick();
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileExW(Join(node.path, L"*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
                                 FIND_FIRST_EX_LARGE_FETCH);
@@ -71,7 +81,7 @@ void Enumerate(TempFolder& node, const ScanOptions& opt, const std::atomic<bool>
             auto child = std::make_unique<TempFolder>();
             child->path = Join(node.path, name);
             child->name = name;
-            Enumerate(*child, opt, cancel, stats);
+            Enumerate(*child, opt, cancel, stats, found, tick);
             if (!child->items.empty() || !child->children.empty()) {
                 ++stats.folders;
                 node.children.push_back(std::move(child));
@@ -93,6 +103,7 @@ void Enumerate(TempFolder& node, const ScanOptions& opt, const std::atomic<bool>
                               FILE_ATTRIBUTE_RECALL_ON_OPEN)) != 0;
         node.items.push_back(std::move(it));
         ++stats.files;
+        found.fetch_add(1, std::memory_order_relaxed);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
 }
@@ -154,18 +165,6 @@ std::wstring PropString(IPropertyStore* store, REFPROPERTYKEY key) {
     return out;
 }
 
-// The first bytes of the file; false when it can't be opened (locked, gone).
-bool ReadHead(const std::wstring& path, unsigned char* buf, size_t cap, size_t* got) {
-    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                           OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    DWORD n = 0;
-    const BOOL ok = ReadFile(f, buf, static_cast<DWORD>(cap), &n, nullptr);
-    CloseHandle(f);
-    *got = n;
-    return ok != FALSE;
-}
-
 // Windows reads the length of every intact MP4/MOV; none means the index (moov) is missing.
 bool LengthAlwaysKnown(const std::wstring& path) {
     const wchar_t* ext = PathFindExtensionW(path.c_str());
@@ -174,14 +173,14 @@ bool LengthAlwaysKnown(const std::wstring& path) {
     return false;
 }
 
-void ReadMetadata(MediaItem& it) {
-    if (it.offline) return;  // reading would download the file from the cloud
-    unsigned char head[16];
-    size_t got = 0;
-    const bool headRead = ReadHead(it.path, head, sizeof(head), &got);
-    // A header that doesn't fit the extension is damage only when it is no media at all: mpv
-    // sniffs the content, so an MP3 named .mkv plays.
-    it.damaged = headRead && !HeaderMatchesExtension(it.path, head, got) && !HeaderLooksLikeMedia(head, got);
+void FirstGenre(std::wstring& genre) {
+    if (const size_t semi = genre.find(L';'); semi != std::wstring::npos) genre.resize(semi);
+    while (!genre.empty() && iswspace(genre.back())) genre.pop_back();
+}
+
+// The Windows property system: formats TagReader doesn't cover, and durations it couldn't get.
+// Fills only what is still empty.
+void ReadShellMetadata(MediaItem& it, bool headRead) {
     IPropertyStore* store = nullptr;
     if (FAILED(SHGetPropertyStoreFromParsingName(it.path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store)))) {
         // The MP4 handler refuses files whose index is cut off (an interrupted download).
@@ -190,39 +189,90 @@ void ReadMetadata(MediaItem& it) {
     }
     PROPVARIANT v;
     PropVariantInit(&v);
-    if (SUCCEEDED(store->GetValue(PKEY_Media_Duration, &v)) && v.vt == VT_UI8)
+    if (!(it.duration > 0) && SUCCEEDED(store->GetValue(PKEY_Media_Duration, &v)) && v.vt == VT_UI8)
         it.duration = static_cast<double>(v.uhVal.QuadPart) / 1e7;  // 100 ns units
     PropVariantClear(&v);
     if (headRead && !(it.duration > 0) && LengthAlwaysKnown(it.path)) it.damaged = true;
     if (it.kind == MediaKind::Audio) {
-        it.title = PropString(store, PKEY_Title);
-        it.artist = PropString(store, PKEY_Music_Artist);
-        it.album = PropString(store, PKEY_Music_AlbumTitle);
+        auto text = [&](std::wstring& field, REFPROPERTYKEY key) {
+            if (field.empty()) field = PropString(store, key);
+        };
+        text(it.title, PKEY_Title);
+        text(it.artist, PKEY_Music_Artist);
+        text(it.album, PKEY_Music_AlbumTitle);
+        text(it.albumArtist, PKEY_Music_AlbumArtist);
         PROPVARIANT n;
         PropVariantInit(&n);
-        if (SUCCEEDED(store->GetValue(PKEY_Music_TrackNumber, &n)) && n.vt == VT_UI4) it.track = static_cast<int>(n.ulVal);
+        if (it.track <= 0 && SUCCEEDED(store->GetValue(PKEY_Music_TrackNumber, &n)) && n.vt == VT_UI4)
+            it.track = static_cast<int>(n.ulVal);
         PropVariantClear(&n);
-        if (SUCCEEDED(store->GetValue(PKEY_Media_Year, &n)) && n.vt == VT_UI4) it.year = static_cast<int>(n.ulVal);
+        if (it.year <= 0 && SUCCEEDED(store->GetValue(PKEY_Media_Year, &n)) && n.vt == VT_UI4) it.year = static_cast<int>(n.ulVal);
         PropVariantClear(&n);
-        if (SUCCEEDED(store->GetValue(PKEY_Music_DiscNumber, &n)) && n.vt == VT_UI4) it.disc = static_cast<int>(n.ulVal);
+        if (it.disc <= 0 && SUCCEEDED(store->GetValue(PKEY_Music_DiscNumber, &n)) && n.vt == VT_UI4)
+            it.disc = static_cast<int>(n.ulVal);
         PropVariantClear(&n);
         // The MP3 handler leaves DiscNumber empty and exposes ID3 TPOS only as PartOfSet ("2/2").
         if (it.disc <= 0) it.disc = ParseDiscNumber(PropString(store, PKEY_Music_PartOfSet));
         // Genres are read here, with the other tags, so the Genres page never reads files itself.
-        it.genre = PropString(store, PKEY_Music_Genre);
-        if (const size_t semi = it.genre.find(L';'); semi != std::wstring::npos) it.genre.resize(semi);  // first genre
-        while (!it.genre.empty() && iswspace(it.genre.back())) it.genre.pop_back();
+        if (it.genre.empty()) {
+            it.genre = PropString(store, PKEY_Music_Genre);
+            FirstGenre(it.genre);
+        }
     }
     store->Release();
+}
+
+void ReadMetadata(MediaItem& it) {
+    if (it.offline) return;  // reading would download the file from the cloud
+    bool headRead = false;
+    {
+        FileSource file(it.path);
+        headRead = file.Ok();  // false when it can't be opened (locked, gone)
+        if (headRead) {
+            unsigned char head[16];
+            const size_t got = file.Read(0, head, sizeof(head));
+            // A header that doesn't fit the extension is damage only when it is no media at all:
+            // mpv sniffs the content, so an MP3 named .mkv plays. Such a file has nothing for the
+            // property system to read either.
+            it.damaged = !HeaderMatchesExtension(it.path, head, got) && !HeaderLooksLikeMedia(head, got);
+            if (it.damaged) return;
+        }
+        TagInfo t;
+        TagOptions o;
+        o.tags = it.kind == MediaKind::Audio;
+        if (headRead && ReadTags(file, &t, o)) {
+            if (t.damaged && LengthAlwaysKnown(it.path)) {  // an MP4 without its index
+                it.damaged = true;
+                return;
+            }
+            it.duration = t.duration;
+            if (o.tags) {
+                it.title = std::move(t.title);
+                it.artist = std::move(t.artist);
+                it.album = std::move(t.album);
+                it.albumArtist = std::move(t.albumArtist);
+                it.genre = std::move(t.genre);
+                FirstGenre(it.genre);
+                it.track = t.track;
+                it.year = t.year;
+                it.disc = t.disc;
+            }
+            // Matroska gives only the length: a .mka song still asks the property system for its tags.
+            if (it.duration > 0 && !(t.format == TagFormat::Matroska && o.tags)) return;
+        }
+    }
+    ReadShellMetadata(it, headRead);
 }
 
 struct CacheEntry {
     uint64_t size = 0;
     int64_t mtime = 0;
     double duration = 0;
-    std::wstring title, artist, album, genre;
+    std::wstring title, artist, album, albumArtist, genre;
     int track = 0, year = 0, disc = 0;
     bool damaged = false;
+    int64_t firstSeen = 0;
+    bool stale = false;  // an older format: only firstSeen is kept, the tags are read again
 };
 
 std::unordered_map<std::wstring, CacheEntry> LoadCache() {
@@ -231,8 +281,11 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     if (!json::ReadFileUtf8(DataFilePath(L"library-cache.json"), &text)) return cache;
     std::optional<json::Value> doc = json::Parse(text);
     // Version 2 added track numbers and years, 3 disc numbers and the damaged flag, 4 genres and
-    // the MP3 disc number (PartOfSet): older caches are read again from the files.
-    if (!doc || doc->GetInt("version") < kCacheVersion) return cache;
+    // the MP3 disc number (PartOfSet), 5 album artists, first-seen times and Lumen's own tag
+    // reader. Older caches are read again from the files; a version 4 cache still says which
+    // files were already known, so an upgrade doesn't make every file "new".
+    const int64_t version = doc ? doc->GetInt("version") : 0;
+    if (version < 4) return cache;
     const json::Value* items = doc->Find("items");
     if (!items) return cache;
     for (const json::Value& e : items->AsArray()) {
@@ -248,6 +301,9 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
         c.year = static_cast<int>(e.GetInt("y"));
         c.disc = static_cast<int>(e.GetInt("k"));
         c.damaged = e.GetBool("b");
+        c.albumArtist = e.GetWString("aa");
+        c.firstSeen = e.GetInt("f");
+        c.stale = version < kCacheVersion || e.GetBool("o");
         cache.emplace(PathKey(e.GetWString("p")), std::move(c));
     }
     return cache;
@@ -262,7 +318,7 @@ int MetadataThreads() {
 
 // Reads metadata for items[pending[first..last)] on `threads` worker threads.
 void ReadMetadataParallel(Snapshot& snap, const std::vector<size_t>& pending, size_t first, size_t last, int threads,
-                          const std::atomic<bool>& cancel) {
+                          const std::atomic<bool>& cancel, std::atomic<size_t>& progress) {
     std::atomic<size_t> next{first};
     auto work = [&] {
         HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
@@ -271,6 +327,7 @@ void ReadMetadataParallel(Snapshot& snap, const std::vector<size_t>& pending, si
             MediaItem& it = snap.items[pending[i]];
             ReadMetadata(it);
             FillSearchKey(it);
+            progress.fetch_add(1, std::memory_order_relaxed);
         }
         SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
         if (SUCCEEDED(com)) CoUninitialize();
@@ -304,18 +361,21 @@ void SaveCache(const Snapshot& s, const std::vector<char>* unread, const KeptCac
         if (!c.title.empty()) e.Set("t", json::ToUtf8(c.title));
         if (!c.artist.empty()) e.Set("a", json::ToUtf8(c.artist));
         if (!c.album.empty()) e.Set("l", json::ToUtf8(c.album));
+        if (!c.albumArtist.empty()) e.Set("aa", json::ToUtf8(c.albumArtist));
         if (!c.genre.empty()) e.Set("g", json::ToUtf8(c.genre));
         if (c.track > 0) e.Set("n", c.track);
         if (c.year > 0) e.Set("y", c.year);
         if (c.disc > 0) e.Set("k", c.disc);
         if (c.damaged) e.Set("b", true);
+        if (c.firstSeen > 0) e.Set("f", c.firstSeen);
+        if (c.stale) e.Set("o", true);  // an unplugged drive's entry from an older format
         items.Push(std::move(e));
     };
     for (size_t i = 0; i < s.items.size(); ++i) {
         const MediaItem& it = s.items[i];
         if (it.offline || (unread && (*unread)[i])) continue;
-        add(it.path, {it.size, it.mtime, it.duration, it.title, it.artist, it.album, it.genre, it.track, it.year,
-                      it.disc, it.damaged});
+        add(it.path, {it.size, it.mtime, it.duration, it.title, it.artist, it.album, it.albumArtist, it.genre, it.track,
+                      it.year, it.disc, it.damaged, it.firstSeen});
     }
     for (const auto& [key, c] : kept) add(key, c);
     json::Value doc = json::Value::MakeObject();
@@ -452,6 +512,7 @@ MediaLibrary::~MediaLibrary() {
 }
 
 bool MediaLibrary::Load() {
+    newSince_ = UnixMsNow();  // no record yet: only files found from now on are new
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"library.json"), &text)) {
         DWORD err = GetLastError();
@@ -469,6 +530,7 @@ bool MediaLibrary::Load() {
         for (const json::Value& r : list->AsArray())
             if (r.IsString() && !r.AsString().empty()) roots.push_back(NormalizePath(r.AsWString()));
     roots_ = std::move(roots);
+    if (const int64_t seen = doc->GetInt("seen"); seen > 0) newSince_ = seenSaved_ = seen;
     return true;
 }
 
@@ -478,6 +540,7 @@ bool MediaLibrary::Save() const {
     json::Value& roots = doc["roots"];
     roots = json::Value::MakeArray();
     for (const std::wstring& r : roots_) roots.Push(json::ToUtf8(r));
+    if (seenSaved_ > 0) doc.Set("seen", seenSaved_);
     return json::WriteFileAtomic(DataFilePath(L"library.json"), json::Serialize(doc, true));
 }
 
@@ -521,6 +584,25 @@ void MediaLibrary::SetNotifyWindow(HWND hwnd, UINT msg) {
     notifyWnd_ = hwnd;
 }
 
+void MediaLibrary::MarkSeen() {
+    // Writes only when the library holds files newer than the saved time: most views write nothing.
+    if (Current()->newestFirstSeen <= seenSaved_) return;
+    seenSaved_ = UnixMsNow();
+    Save();
+}
+
+ScanProgress MediaLibrary::Progress() const {
+    ScanProgress p;
+    p.scanning = scanning_.load();
+    if (!p.scanning) return p;
+    p.counting = counting_.load();
+    p.done = progressDone_.load(std::memory_order_relaxed);
+    p.total = progressTotal_.load(std::memory_order_relaxed);
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    p.elapsedMs = static_cast<double>(now - scanStartMs_.load());
+    return p;
+}
+
 std::shared_ptr<const Snapshot> MediaLibrary::Current() const {
     std::lock_guard lock(mutex_);
     return current_;
@@ -553,6 +635,9 @@ uint64_t MediaLibrary::Rescan() {
     cancel_ = cancel;
     auto previous = std::make_shared<std::thread>(std::move(thread_));
     const uint64_t generation = ++generation_;
+    scanStartMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    counting_ = true;
+    progressDone_ = progressTotal_ = 0;
     scanning_ = true;
     try {
         thread_ = std::thread([this, generation, roots = roots_, options = options_, cancel, previous]() mutable {
@@ -574,6 +659,16 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     auto snap = std::make_shared<Snapshot>();
     snap->generation = generation;
     snap->roots = roots;
+    counting_ = true;  // again: the scan before this one may have touched the counters
+    progressDone_ = progressTotal_ = 0;
+    const int64_t scanTime = UnixMsNow();
+    const auto started = Clock::now();
+    bool announced = false;
+    auto announce = [&] {
+        if (announced || MsSince(started) < kAnnounceMs) return;
+        announced = true;
+        if (HWND hwnd = notifyWnd_.load()) PostMessageW(hwnd, notifyMsg_.load(), 0, static_cast<LPARAM>(generation));
+    };
 
     // 1. Enumerate.
     auto t0 = Clock::now();
@@ -591,7 +686,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         t.path = root;
         t.name = FileNameOf(root);
         if (t.name.empty() || (root.size() == 3 && root[1] == L':')) t.name = root;  // "D:\"
-        Enumerate(t, options, cancel, snap->stats);
+        Enumerate(t, options, cancel, snap->stats, progressTotal_, announce);
         ++snap->stats.folders;
         Flatten(t, -1, *snap);
     }
@@ -608,16 +703,46 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
                     kept.emplace_back(key, entry);
                     break;
                 }
+        // A root the cache knows nothing about (a new library, a folder just added) is scanned for
+        // the first time: its files aren't "new", they are the library.
+        std::vector<std::wstring> rootKeys;
+        std::vector<char> knownRoot(roots.size(), 0);
+        for (size_t r = 0; r < roots.size(); ++r) {
+            std::wstring key = PathKey(roots[r]);
+            if (key.empty() || key.back() != L'\\') key += L'\\';
+            for (const auto& entry : cache)
+                if (entry.first.compare(0, key.size(), key) == 0) {
+                    knownRoot[r] = 1;
+                    break;
+                }
+            rootKeys.push_back(std::move(key));
+        }
+        int lastRoot = -1;
+        std::wstring lastFolder;
         for (size_t i = 0; i < snap->items.size(); ++i) {
             MediaItem& it = snap->items[i];
-            auto c = cache.find(PathKey(it.path));
+            const std::wstring pathKey = PathKey(it.path);
+            auto c = cache.find(pathKey);
+            if (c != cache.end()) {
+                it.firstSeen = c->second.firstSeen;
+            } else {
+                if (it.folder != lastFolder) {  // items come folder by folder
+                    lastFolder = it.folder;
+                    lastRoot = -1;
+                    for (size_t r = 0; r < roots.size() && lastRoot < 0; ++r)
+                        if (pathKey.compare(0, rootKeys[r].size(), rootKeys[r]) == 0) lastRoot = static_cast<int>(r);
+                }
+                it.firstSeen = lastRoot >= 0 && knownRoot[static_cast<size_t>(lastRoot)] ? scanTime : 0;
+            }
             // Files marked damaged are few and are checked again (the rule may have changed since
             // the cache was written); everything else comes from the cache.
-            if (c != cache.end() && c->second.size == it.size && c->second.mtime == it.mtime && !c->second.damaged) {
+            if (c != cache.end() && c->second.size == it.size && c->second.mtime == it.mtime && !c->second.damaged &&
+                !c->second.stale) {
                 it.duration = c->second.duration;
                 it.title = std::move(c->second.title);
                 it.artist = std::move(c->second.artist);
                 it.album = std::move(c->second.album);
+                it.albumArtist = std::move(c->second.albumArtist);
                 it.genre = std::move(c->second.genre);
                 it.track = c->second.track;
                 it.year = c->second.year;
@@ -628,8 +753,14 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
             }
         }
     }
-    for (MediaItem& it : snap->items) FillSearchKey(it);
+    for (MediaItem& it : snap->items) {
+        FillSearchKey(it);
+        snap->newestFirstSeen = std::max(snap->newestFirstSeen, it.firstSeen);
+    }
     snap->BuildIndex();
+    progressTotal_ = snap->items.size();
+    progressDone_ = snap->items.size() - pending.size();
+    counting_ = false;
 
     size_t done = 0;
     auto tm = Clock::now();
@@ -637,6 +768,8 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         ReadMetadata(snap->items[pending[done]]);
         FillSearchKey(snap->items[pending[done]]);
         ++done;
+        ++progressDone_;
+        announce();
     }
     double probeMs = MsSince(tm);
     // Slow files, or fast ones in such numbers (20 000 songs) that the list would stay empty for
@@ -664,10 +797,21 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     for (size_t i = done; i < pending.size(); ++i) unread[pending[i]] = 1;
     while (done < pending.size() && !cancel) {
         const size_t last = std::min(pending.size(), done + kMetadataChunk);
-        ReadMetadataParallel(*snap, pending, done, last, threads, cancel);
+        ReadMetadataParallel(*snap, pending, done, last, threads, cancel, progressDone_);
         if (cancel) break;
         for (size_t i = done; i < last; ++i) unread[pending[i]] = 0;
         done = last;
+        announce();
+        // The probe guessed fast files, but slow ones followed (MKVs for the property system):
+        // show the files now and fill in the rest as a second pass.
+        if (!snap->stats.metadataSecondPass && done < pending.size() && MsSince(tm) > kInlineLimitMs) {
+            snap->stats.metadataSecondPass = true;
+            snap->complete = false;
+            snap->stats.metadataFiles = done;
+            if (options.readMetadata) SaveCache(*snap, &unread, kept);
+            Publish(std::make_shared<Snapshot>(*snap));
+            lastPublish = Clock::now();
+        }
         if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
             snap->stats.metadataFiles = done;
             if (options.readMetadata) SaveCache(*snap, &unread, kept);

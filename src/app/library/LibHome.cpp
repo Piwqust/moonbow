@@ -150,7 +150,14 @@ public:
     explicit HomePage(bool compact) : compact_(compact) {
         dir = Dir::Stack;
         align = Align::Stretch;
-        scroll_ = Add<ScrollView>();
+        // The scan banner sits above the scrolling sections and pushes them down while it shows.
+        auto* body = Add<Widget>();
+        body->dir = Dir::Column;
+        body->align = Align::Stretch;
+        body->width = Length::Grow();
+        body->height = Length::Grow();
+        scan_ = body->Add<ScanBanner>(compact);
+        scroll_ = body->Add<ScrollView>();
         content_ = scroll_->SetContent<Widget>();
         content_->dir = Dir::Column;
         content_->width = Length::Grow();
@@ -181,7 +188,6 @@ public:
 
         empty_ = Add<EmptyState>();
         empty_->visible = false;
-        scan_ = Add<ScanBadge>(compact);
 
         libConn_ = Connect(TheApp().libraryChanged, [this] { Rebuild(); });
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
@@ -249,6 +255,7 @@ public:
     }
     void OnLayout() override {
         LibraryView::OnLayout();
+        scan_->Attach();
         if (restorePending_) {
             restorePending_ = false;
             if (restoreGrid_) {
@@ -282,6 +289,7 @@ private:
         e.duration = m && m->duration > 0 ? m->duration : h ? h->duration : 0;
         e.favorite = TheApp().favorites().Contains(path);
         e.damaged = m && m->damaged;
+        e.isNew = m && !h && TheApp().library().IsNew(*m);  // a file played already is not news
         return e;
     }
 
@@ -541,8 +549,8 @@ private:
         bool any = false;
         for (HomeSection* s : Sections()) any |= s->visible;
         const bool scanning = app.library().Scanning();
-        scan_->Update();
-        if (!any) scan_->visible = false;  // the empty state says it already
+        scan_->Update(!any);  // without sections the empty state says it already
+        if (!compact_) app.library().MarkSeen();
         empty_->visible = !any;
         if (!any) {
             const bool noRoots = app.library().Roots().empty();
@@ -635,7 +643,7 @@ private:
     long long count_ = 0;
     ScrollView* scroll_ = nullptr;
     Widget* content_ = nullptr;
-    ScanBadge* scan_ = nullptr;
+    ScanBanner* scan_ = nullptr;
     EmptyState* empty_ = nullptr;
     HomeSection* results_[4] = {};  // artists, albums, videos, music
     HomeSection *continue_ = nullptr, *listen_ = nullptr, *favorites_ = nullptr, *folders_ = nullptr,

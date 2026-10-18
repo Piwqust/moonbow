@@ -70,35 +70,156 @@ Widget* EmptyState::HitTest(float x, float y) {
     return nullptr;
 }
 
-// --- ScanBadge ---------------------------------------------------------------------------------
+// --- ScanBanner --------------------------------------------------------------------------------
 
-ScanBadge::ScanBadge(bool compact) : compact_(compact) {
+namespace {
+
+constexpr double kBannerDelayMs = 1000;  // scans shorter than this never show the banner
+constexpr UINT kBannerPollMs = 250;
+uint64_t g_bannerHidden = 0;  // the scan generation whose banner the user hid
+
+// "1 284" (a no-break space) in Russian, "1,284" in English.
+std::wstring Grouped(size_t n) {
+    const std::wstring digits = std::to_wstring(n);
+    const wchar_t sep = CurrentLanguage() == Language::Russian ? L' ' : L',';
+    std::wstring out;
+    for (size_t i = 0; i < digits.size(); ++i) {
+        if (i > 0 && (digits.size() - i) % 3 == 0) out += sep;
+        out += digits[i];
+    }
+    return out;
+}
+
+}  // namespace
+
+ScanBanner::ScanBanner(bool compact) : compact_(compact) {
+    dir = Dir::Row;
+    align = Align::Center;
+    justify = Justify::End;
     width = Length::Grow();
-    height = Length::Grow();
+    interactive = true;  // for the tooltip of a cut-off text
+    // The strip lines up with the page content beside it and keeps 12 DIP above it.
+    box_ = compact ? Insets{12, 6, 12, 0} : Insets{28, 12, 20, 0};
+    const float h = compact ? 36.0f : 40.0f;
+    height = Length::Px(box_.t + h);
+    pad = {box_.l, box_.t, box_.r + 4, 0};
     visible = false;
+    id = "scan-banner";
+    if (compact)
+        hide_ = Add<IconButton>("close", Tr(L"Hide"), 28, 16);
+    else
+        hide_ = Add<Button>(Tr(L"Hide"), ButtonKind::Ghost);
+    hide_->id = "scan-hide";
+    hide_->onClick = [this] {
+        g_bannerHidden = TheApp().library().Generation();
+        following_ = false;
+        StopTimer();
+        visible = false;
+        InvalidateLayout();
+    };
 }
 
-void ScanBadge::Update() {
-    App& app = TheApp();
-    visible = app.library().Scanning();
-    if (!visible) return;
-    const size_t files = app.library().Current()->items.size();
-    text_ = files && !compact_ ? Fmt(Tr(L"Scanning library… {0} files so far"), static_cast<long long>(files))
-                  : std::wstring(Tr(L"Scanning library…"));
-    Invalidate();
+ScanBanner::~ScanBanner() {
+    StopTimer();
 }
 
-void ScanBadge::Paint(Painter& p) {
+void ScanBanner::StopTimer() {
+    if (!timer_) return;
+    // The window may be going away together with its pages.
+    const auto& hosts = Host::All();
+    if (timerHost_ && std::find(hosts.begin(), hosts.end(), timerHost_) != hosts.end()) timerHost_->CancelTimer(timer_);
+    timer_ = 0;
+    timerHost_ = nullptr;
+}
+
+void ScanBanner::Update(bool suppressed) {
+    suppressed_ = suppressed;
+    following_ = TheApp().library().Scanning();
+    Poll();
+}
+
+void ScanBanner::Attach() {
+    if (following_ && !timer_) Poll();
+}
+
+void ScanBanner::Poll() {
+    library::MediaLibrary& lib = TheApp().library();
+    const library::ScanProgress pr = lib.Progress();
+    // Hidden for this scan: nothing to follow (the page's refresh at the end calls Update anyway).
+    if (!pr.scanning || g_bannerHidden == lib.Generation()) following_ = false;
+    if (!following_) {
+        StopTimer();
+    } else if (!timer_) {
+        if (Host* h = GetHost()) {
+            timerHost_ = h;
+            timer_ = h->StartTimer(kBannerPollMs, [this] { Poll(); }, true);
+        }
+    }
+    const bool show = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
+    if (show) {
+        std::wstring text;
+        float fraction = -1;
+        if (pr.counting || pr.total == 0) {
+            text = Fmt(Tr(compact_ ? L"Indexing… files found: {0}" : L"Indexing your library… files found: {0}"), {Grouped(pr.total)});
+        } else {
+            const size_t done = std::min(pr.done, pr.total);
+            text = Fmt(Tr(compact_ ? L"Indexing… {0} of {1}" : L"Indexing your library… {0} of {1}"), {Grouped(done), Grouped(pr.total)});
+            fraction = static_cast<float>(static_cast<double>(done) / static_cast<double>(pr.total));
+        }
+        if (text != text_ || fraction != fraction_) {
+            text_ = std::move(text);
+            fraction_ = fraction;
+            UpdateTip();
+            Invalidate();
+        }
+    }
+    if (show != visible) {
+        visible = show;
+        InvalidateLayout();
+    }
+}
+
+Rect ScanBanner::Box() const {
+    return {rect.x + box_.l, rect.y + box_.t, std::max(0.0f, rect.w - box_.l - box_.r), std::max(0.0f, rect.h - box_.t)};
+}
+
+void ScanBanner::OnLayout() {
+    Widget::OnLayout();
+    UpdateTip();
+}
+
+void ScanBanner::UpdateTip() {
+    const Rect b = Box();
+    const float avail = hide_->rect.x - 8 - (b.x + 36);
+    const float need = gfx::Text::Get().Measure(text_, compact_ ? TextStyle::Small : TextStyle::Body).width;
+    tooltip = hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
+}
+
+void ScanBanner::DebugInfo(std::string& out) const {
+    if (following_) out += " following";
+    if (timer_) out += " timer";
+    if (fraction_ >= 0) out += " value=" + std::to_string(std::round(fraction_ * 100) / 100).substr(0, 4);
+}
+
+Widget* ScanBanner::HitTest(float x, float y) {
+    if (!visible || !Box().Contains(x, y)) return nullptr;
+    return Widget::HitTest(x, y);
+}
+
+void ScanBanner::Paint(Painter& p) {
     const Palette& c = P();
-    const float tw = std::ceil(p.Measure(text_, TextStyle::Small).width);
-    // Bottom center: the mini player owns a corner of the library.
-    const float w = std::min(tw + 46, rect.w - 24);
-    const Rect pill{std::round(rect.Cx() - w / 2), rect.Bottom() - (compact_ ? 12.0f : 20.0f) - 32, w, 32};
-    p.Shadow(pill, 16, 12, 4);
-    p.Fill(pill, c.bgMenu, 16);
-    p.Stroke(pill, c.line, 16);
-    p.Icon("refresh", {pill.x + 12, pill.Cy() - 8, 16, 16}, c.textSecondary);
-    p.Text(text_, {pill.x + 34, pill.y, pill.w - 44, pill.h}, TextStyle::Small, c.textSecondary);
+    const Rect b = Box();
+    p.Fill(b, c.bgPanel, 6);
+    p.Stroke(b, c.line, 6);
+    p.Icon("refresh", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
+    const float tx = b.x + 36;
+    p.Text(text_, {tx, b.y, std::max(0.0f, hide_->rect.x - 8 - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
+           c.textSecondary);
+    // The progress along the bottom edge, inside the rounded corners.
+    p.PushRoundClip(b, 6);
+    p.Fill({b.x, b.Bottom() - 2, b.w, 2}, c.line);
+    if (fraction_ > 0) p.Fill({b.x, b.Bottom() - 2, std::round(b.w * fraction_), 2}, c.accent);
+    p.PopClip();
 }
 
 // --- SectionTitle ------------------------------------------------------------------------------
@@ -208,6 +329,7 @@ Widget* Page::HitTest(float x, float y) {
 
 void Page::OnLayout() {
     LibraryView::OnLayout();
+    scan_->Attach();
     if (restorePending_) {
         restorePending_ = false;
         if (!empty_->visible) ApplyViewState(*grid_, *scroll_, pendingState_);
@@ -232,7 +354,14 @@ void Page::RestoreState(const ViewState& st) {
 Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)), compact_(compact), key_(std::move(key)) {
     dir = Dir::Stack;
     align = Align::Stretch;
-    scroll_ = Add<ScrollView>();
+    // The scan banner sits above the scrolling content and pushes it down while it shows.
+    auto* body = Add<Widget>();
+    body->dir = Dir::Column;
+    body->align = Align::Stretch;
+    body->width = Length::Grow();
+    body->height = Length::Grow();
+    scan_ = body->Add<ScanBanner>(compact);
+    scroll_ = body->Add<ScrollView>();
     content_ = scroll_->SetContent<Widget>();
     content_->dir = Dir::Column;
     content_->width = Length::Grow();
@@ -256,7 +385,6 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
 
     empty_ = Add<EmptyState>();
     empty_->visible = false;
-    scan_ = Add<ScanBadge>(compact);
 
     libConn_ = Connect(TheApp().libraryChanged, [this] { Refresh(); });
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
@@ -374,6 +502,7 @@ int Page::AddMedia(const library::MediaItem& m) {
     e.watched = h.watched && !e.audio;
     e.favorite = Favorite(m.path);
     e.damaged = m.damaged;
+    e.isNew = !h.watched && h.progress < 0 && TheApp().library().IsNew(m);  // a file played already is not news
     e.track = m.track;
     e.ref = static_cast<int>(queue_.size());
     queue_.push_back(MakeQueueItem(m.path, e.audio ? m.DisplayTitle() : std::wstring(), m.duration));
@@ -477,7 +606,8 @@ void Page::Refresh() {
     grid_->SetEntries(std::move(entries_));
     entries_.clear();
 
-    scan_->Update();
+    scan_->Update(showEmpty);  // the empty state explains the scan itself
+    if (!compact_) app.library().MarkSeen();  // what this page shows as new is not new next session
 
     empty_->visible = showEmpty;
     if (showEmpty) {
@@ -486,7 +616,6 @@ void Page::Refresh() {
                         Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {ShortQuery(filter_)}));
         else
             FillEmpty(*empty_);
-        scan_->visible = false;  // the empty state explains the scan itself
     }
     InvalidateLayout();
     headerChanged.Emit();

@@ -15,6 +15,7 @@
 #include "../src/library/MediaLibrary.h"
 #include "../src/library/MediaTypes.h"
 #include "../src/library/Playlists.h"
+#include "../src/library/TagReader.h"
 #include "../src/library/Thumbnails.h"
 #include "../src/app/player/Episodes.h"
 #include "../src/app/player/SubText.h"
@@ -1656,7 +1657,7 @@ void TestLibraryScan() {
     CHECK(empty && empty->items.empty() && empty->folders.empty());
 }
 
-// Genres and discs come from library-cache.json (version 4) on a warm start, without reading
+// Genres and discs come from library-cache.json (version 5) on a warm start, without reading
 // the files; an older cache is read again.
 void TestLibraryCacheTags() {
     const std::wstring dir = FreshDataDir(L"library-cache");
@@ -1684,7 +1685,7 @@ void TestLibraryCacheTags() {
     };
     library::MediaLibrary lib;
     lib.SetRoots({root});
-    writeCache(4);
+    writeCache(5);
     auto snap = ScanAndWait(lib);
     const library::MediaItem* m = snap ? snap->FindItem(song) : nullptr;
     CHECK(m && m->genre == L"Rock" && m->disc == 2 && m->title == L"Song");
@@ -1712,7 +1713,7 @@ void TestLibraryCacheTags() {
         json::Value items = json::Value::MakeArray();
         items.Push(std::move(e));
         json::Value doc = json::Value::MakeObject();
-        doc.Set("version", 4);
+        doc.Set("version", 5);
         doc.Set("items", std::move(items));
         CHECK(json::WriteFileAtomic(dir + L"\\library-cache.json", json::Serialize(doc)));
     }
@@ -1759,6 +1760,462 @@ void TestLibraryMetadata() {
         for (const library::MediaItem& it : again->items)
             if (it.duration > 0) ++withDuration2;
     CHECK(withDuration2 == withDuration);
+}
+
+// --- Tag reader ---------------------------------------------------------------------------------
+
+namespace tagbytes {
+
+std::string Be16(uint32_t v) { return {static_cast<char>(v >> 8), static_cast<char>(v)}; }
+std::string Be32(uint32_t v) {
+    return {static_cast<char>(v >> 24), static_cast<char>(v >> 16), static_cast<char>(v >> 8), static_cast<char>(v)};
+}
+std::string Le16(uint32_t v) { return {static_cast<char>(v), static_cast<char>(v >> 8)}; }
+std::string Le32(uint32_t v) {
+    return {static_cast<char>(v), static_cast<char>(v >> 8), static_cast<char>(v >> 16), static_cast<char>(v >> 24)};
+}
+std::string Le64(uint64_t v) { return Le32(static_cast<uint32_t>(v)) + Le32(static_cast<uint32_t>(v >> 32)); }
+std::string Syncsafe(uint32_t v) {
+    return {static_cast<char>((v >> 21) & 0x7F), static_cast<char>((v >> 14) & 0x7F), static_cast<char>((v >> 7) & 0x7F),
+            static_cast<char>(v & 0x7F)};
+}
+std::string Utf16Le(const std::wstring& w) {
+    std::string s;
+    for (wchar_t c : w) s += Le16(c);
+    return s;
+}
+
+std::string Frame(const char* id, const std::string& body, int major = 3, bool plainSize = false) {
+    if (major == 2) return std::string(id, 3) + Be32(static_cast<uint32_t>(body.size())).substr(1) + body;
+    const std::string size = major == 4 && !plainSize ? Syncsafe(static_cast<uint32_t>(body.size())) : Be32(static_cast<uint32_t>(body.size()));
+    return std::string(id, 4) + size + std::string(2, '\0') + body;
+}
+std::string Tag(int major, const std::string& frames, uint8_t flags = 0) {
+    const std::string body = frames + std::string(32, '\0');
+    return std::string("ID3") + static_cast<char>(major) + '\0' + static_cast<char>(flags) +
+           Syncsafe(static_cast<uint32_t>(body.size())) + body;
+}
+std::string Text(int enc, const std::string& bytes) { return static_cast<char>(enc) + bytes; }
+
+// MPEG-1 Layer III, 128 kbit/s, 44.1 kHz, stereo: 417-byte frames. The first one is a LAME
+// "Info" frame (frame count, encoder delay 576 and padding 1000) when `info` is set.
+std::string Mpeg(int frames, bool info) {
+    std::string out;
+    for (int i = 0; i < frames + (info ? 1 : 0); ++i) {
+        std::string f = std::string("\xFF\xFB\x90\x00", 4) + std::string(413, '\0');
+        if (info && i == 0) {
+            std::string x = "Info" + Be32(1) + Be32(static_cast<uint32_t>(frames));
+            x += "LAME3.100" + std::string(12, '\0');
+            x += std::string{static_cast<char>(576 >> 4), static_cast<char>(((576 & 0xF) << 4) | (1000 >> 8)), static_cast<char>(1000 & 0xFF)};
+            f.replace(36, x.size(), x);
+        }
+        out += f;
+    }
+    return out;
+}
+
+std::string V1(const std::string& title, const std::string& artist, const std::string& album, const std::string& year,
+               int track, int genre) {
+    auto field = [](std::string s, size_t n) {
+        s.resize(n, '\0');
+        return s;
+    };
+    return "TAG" + field(title, 30) + field(artist, 30) + field(album, 30) + field(year, 4) + std::string(28, '\0') + '\0' +
+           static_cast<char>(track) + static_cast<char>(genre);
+}
+
+std::string Ape(const std::vector<std::pair<std::string, std::string>>& items) {
+    std::string body;
+    for (const auto& [k, v] : items) body += Le32(static_cast<uint32_t>(v.size())) + Le32(0) + k + '\0' + v;
+    auto header = [&](uint32_t flags) {
+        return "APETAGEX" + Le32(2000) + Le32(static_cast<uint32_t>(body.size() + 32)) + Le32(static_cast<uint32_t>(items.size())) +
+               Le32(flags) + std::string(8, '\0');
+    };
+    return header(0xA0000000u) + body + header(0x80000000u);
+}
+
+std::string Comments(const std::vector<std::string>& entries) {
+    std::string s = Le32(6) + "Lumen!" + Le32(static_cast<uint32_t>(entries.size()));
+    for (const std::string& e : entries) s += Le32(static_cast<uint32_t>(e.size())) + e;
+    return s;
+}
+
+std::string FlacPicture(const std::string& image) {
+    return Be32(3) + Be32(10) + "image/jpeg" + Be32(0) + Be32(1) + Be32(1) + Be32(24) + Be32(0) +
+           Be32(static_cast<uint32_t>(image.size())) + image;
+}
+
+std::string Flac(const std::vector<std::string>& comments, const std::string& picture) {
+    std::string info = std::string(10, '\0');
+    const uint64_t v = (uint64_t{44100} << 44) | (uint64_t{1} << 41) | (uint64_t{15} << 36) | uint64_t{44100 * 3};
+    for (int i = 7; i >= 0; --i) info += static_cast<char>(v >> (i * 8));
+    info += std::string(16, '\0');  // MD5
+    auto block = [](int type, bool last, const std::string& body) {
+        return static_cast<char>(type | (last ? 0x80 : 0)) + Be32(static_cast<uint32_t>(body.size())).substr(1) + body;
+    };
+    const std::string vc = Comments(comments);
+    return "fLaC" + block(0, false, info) + block(4, picture.empty(), vc) +
+           (picture.empty() ? std::string() : block(6, true, FlacPicture(picture))) + std::string(64, '\0');
+}
+
+std::string OggPage(uint8_t type, uint64_t granule, uint32_t seq, const std::string& packet) {
+    std::string lacing;
+    size_t n = packet.size();
+    while (n >= 255) lacing += '\xFF', n -= 255;
+    lacing += static_cast<char>(n);
+    return "OggS" + std::string(1, '\0') + static_cast<char>(type) + Le64(granule) + Le32(0x1234) + Le32(seq) + Le32(0) +
+           static_cast<char>(lacing.size()) + lacing + packet;
+}
+
+std::string Opus(const std::vector<std::string>& comments) {
+    const std::string head = "OpusHead" + std::string(1, '\1') + '\2' + Le16(312) + Le32(48000) + Le16(0) + '\0';
+    return OggPage(2, 0, 0, head) + OggPage(0, 0, 1, "OpusTags" + Comments(comments)) +
+           OggPage(0, 48000 * 2, 2, std::string(300, 'a')) + OggPage(4, 48000 * 5 + 312, 3, std::string(300, 'b'));
+}
+
+std::string Atom(const char* type, const std::string& body) { return Be32(static_cast<uint32_t>(8 + body.size())) + type + body; }
+std::string Item(const char* key, uint32_t type, const std::string& value) {
+    return Atom(key, Atom("data", Be32(type) + Be32(0) + value));
+}
+std::string Mp4(const std::string& items, bool withMoov = true) {
+    std::string mvhd = std::string(4, '\0') + Be32(0) + Be32(0) + Be32(1000) + Be32(7500) + std::string(80, '\0');
+    std::string hdlr = Atom("hdlr", std::string(8, '\0') + "mdirappl" + std::string(9, '\0'));
+    std::string meta = Atom("meta", std::string(4, '\0') + hdlr + Atom("ilst", items));
+    std::string moov = Atom("moov", Atom("mvhd", mvhd) + Atom("udta", meta));
+    return Atom("ftyp", "M4A " + Be32(0) + "M4A isom") + (withMoov ? moov : std::string()) + Atom("mdat", std::string(256, 'm'));
+}
+
+std::string Wav(const std::string& extraChunks) {
+    std::string fmt = Le16(1) + Le16(2) + Le32(44100) + Le32(176400) + Le16(4) + Le16(16);
+    std::string body = "WAVE" + std::string("fmt ") + Le32(16) + fmt + "data" + Le32(17640) + std::string(17640, '\0') + extraChunks;
+    return "RIFF" + Le32(static_cast<uint32_t>(body.size())) + body;
+}
+
+std::string Aiff(const std::string& id3) {
+    // 44100 Hz as an 80-bit extended float: exponent 16398, mantissa 0xAC44 << 48.
+    std::string rate = std::string("\x40\x0E\xAC\x44", 4) + std::string(6, '\0');
+    std::string comm = Be16(2) + Be32(88200) + Be16(16) + rate;
+    std::string body = "AIFF" + std::string("COMM") + Be32(18) + comm + "SSND" + Be32(16) + std::string(16, '\0') + "ID3 " +
+                       Be32(static_cast<uint32_t>(id3.size())) + id3 + (id3.size() % 2 ? std::string(1, '\0') : std::string());
+    return "FORM" + Be32(static_cast<uint32_t>(body.size())) + body;
+}
+
+}  // namespace tagbytes
+
+bool ParseBytes(const std::string& bytes, library::TagInfo* t, bool all = true) {
+    library::MemorySource src(bytes.data(), bytes.size());
+    library::TagOptions o;
+    o.lyrics = all;
+    o.cover = all;
+    o.codePage = 1251;
+    return library::ReadTags(src, t, o);
+}
+
+// One sample of every format, with what the reader must find (the fuzz test mutates them).
+std::vector<std::string> TagSamples() {
+    using namespace tagbytes;
+    const std::string jpeg("\xFF\xD8\xFF\xE0 fake jpeg \xFF\x00\xFF\xD9", 19);
+    std::vector<std::string> s;
+    // 0: ID3v2.3, every text encoding, TXXX album artist, cover, USLT, plus ID3v1 below it.
+    s.push_back(Tag(3, Frame("TIT2", Text(1, "\xFF\xFE" + Utf16Le(L"Песня"))) + Frame("TPE1", Text(0, "\xCA\xE8\xED\xEE")) +
+                           Frame("TALB", Text(3, "Альбом")) + Frame("TRCK", Text(0, "3/12")) + Frame("TPOS", Text(0, "2/3")) +
+                           Frame("TCON", Text(0, "(17)")) + Frame("TYER", Text(0, "1998")) +
+                           Frame("TXXX", Text(0, std::string("ALBUM ARTIST\0Various", 20))) +
+                           Frame("APIC", Text(0, std::string("image/jpeg\0\x03\0", 13) + jpeg)) +
+                           Frame("USLT", Text(3, std::string("eng\0", 4) + "[00:01.00]one\n[00:02.00]two"), 3)) +
+                Mpeg(40, true) + V1("v1 title", "v1 artist", "v1 album", "1990", 7, 0));
+    // 1: ID3v2.4 with NUL-separated values, TPE2, TDRC, SYLT in milliseconds.
+    std::string sylt = Text(3, std::string("eng\x02\x01", 5) + '\0');
+    const std::pair<uint32_t, const char*> kLines[] = {{1000, "first"}, {2500, "second"}, {4000, "third"}};
+    for (const auto& [ms, line] : kLines) sylt += std::string(line) + '\0' + Be32(ms);
+    s.push_back(Tag(4, Frame("TIT2", Text(3, "Title 2.4"), 4) + Frame("TPE1", Text(3, std::string("One\0Two", 7)), 4) +
+                           Frame("TPE2", Text(2, std::string("\0A\0A", 4)), 4) + Frame("TDRC", Text(3, "2021-12-31"), 4) +
+                           Frame("TCON", Text(3, "13"), 4) + Frame("SYLT", sylt, 4)) +
+                Mpeg(20, false));
+    // 2: ID3v2.2 (3-character ids, PIC).
+    s.push_back(Tag(2, Frame("TT2", Text(0, "Old"), 2) + Frame("TP1", Text(0, "Tagger"), 2) + Frame("TRK", Text(0, "5"), 2) +
+                           Frame("PIC", Text(0, "JPG" + std::string("\x03\0", 2) + jpeg), 2)) +
+                Mpeg(10, false));
+    // 3: legacy CP-1251 ID3v1 only, with an APE tag in front of it (APE wins).
+    s.push_back(Mpeg(10, false) + Ape({{"Title", "APE title"}, {"Album Artist", "APE AA"}, {"Track", "4/9"}}) +
+                V1("\xC7\xE2\xE5\xE7\xE4\xE0", "\xCA\xE8\xED\xEE", "x", "1989", 8, 17));
+    // 4: iTunes-style 2.4 with plain 32-bit frame sizes over 127 bytes.
+    s.push_back(Tag(4, Frame("TIT2", Text(3, std::string(200, 'L')), 4, true) + Frame("TPE1", Text(3, "iTunes"), 4, true)) +
+                Mpeg(10, false));
+    // 5: whole-tag unsynchronisation (2.3).
+    {
+        std::string frames = Frame("TIT2", Text(0, "Unsync")) + Frame("APIC", Text(0, std::string("image/jpeg\0\x03\0", 13) + jpeg));
+        std::string uns;
+        for (size_t i = 0; i < frames.size(); ++i) {
+            uns += frames[i];
+            if (static_cast<uint8_t>(frames[i]) == 0xFF) uns += '\0';
+        }
+        s.push_back(Tag(3, uns, 0x80) + Mpeg(10, false));
+    }
+    // 6: FLAC with comments and a picture.
+    s.push_back(Flac({"TITLE=Flac title", "ARTIST=A", "ARTIST=B", "ALBUMARTIST=Flac AA", "TRACKNUMBER=2", "TRACKTOTAL=10",
+                      "DISCNUMBER=1/2", "DATE=2004-01-01", "GENRE=Jazz", "LYRICS=plain words"},
+                     jpeg));
+    // 7: Ogg Opus, 5 s after pre-skip.
+    s.push_back(Opus({"title=Opus title", "album=Opus album", "tracknumber=7"}));
+    // 8: MP4 ilst.
+    s.push_back(Mp4(Item("\xA9nam", 1, "Mp4 title") + Item("\xA9" "ART", 1, "Mp4 artist") + Item("aART", 1, "Mp4 AA") +
+                    Item("\xA9" "alb", 1, "Mp4 album") + Item("trkn", 0, std::string("\0\0\0\x06\0\x0B\0\0", 8)) +
+                    Item("disk", 0, std::string("\0\0\0\x02\0\x03", 6)) + Item("\xA9" "day", 1, "2019-04-01") +
+                    Item("gnre", 0, std::string("\0\x10", 2)) + Item("\xA9lyr", 1, "mp4 words") + Item("covr", 13, jpeg)));
+    // 9: MP4 without its index.
+    s.push_back(Mp4({}, false));
+    // 10: WAV with LIST INFO and an id3 chunk (ID3 wins), 0.1 s.
+    {
+        const std::string info = "INFO" + std::string("INAM") + Le32(10) + "Info name" + '\0' + "IART" + Le32(8) + "Info ar" + '\0';
+        const std::string id3 = Tag(3, Frame("TIT2", Text(0, "Id3 name")));
+        s.push_back(Wav("LIST" + Le32(static_cast<uint32_t>(info.size())) + info + "id3 " + Le32(static_cast<uint32_t>(id3.size())) + id3));
+    }
+    // 11: AIFF, 2 s, ID3 chunk.
+    s.push_back(Aiff(Tag(3, Frame("TIT2", Text(0, "Aiff title")))));
+    // 12: Matroska: EBML header, a Segment of unknown size, Void, Info (scale 1 ms, 12 345 ms), Cluster.
+    {
+        double ms = 12345.0;
+        uint64_t bits;
+        memcpy(&bits, &ms, 8);
+        std::string dur;
+        for (int i = 7; i >= 0; --i) dur += static_cast<char>(bits >> (i * 8));
+        const std::string info = std::string("\x2A\xD7\xB1\x83\x0F\x42\x40", 7) + std::string("\x44\x89\x88", 3) + dur;
+        s.push_back(std::string("\x1A\x45\xDF\xA3\x84\x42\x82\x81w", 9) + std::string("\x18\x53\x80\x67\x01\xFF\xFF\xFF\xFF\xFF\xFF\xFF", 12) +
+                    std::string("\xEC\x83\0\0\0", 5) + std::string("\x15\x49\xA9\x66", 4) + static_cast<char>(0x80 | info.size()) + info +
+                    std::string("\x1F\x43\xB6\x75\x84", 5) + std::string(4, 'c'));
+    }
+    return s;
+}
+
+void TestTagReader() {
+    const auto s = TagSamples();
+    library::TagInfo t;
+
+    CHECK(ParseBytes(s[0], &t) && t.format == library::TagFormat::Mp3);
+    CHECK(t.title == L"Песня" && t.artist == L"Кино" && t.album == L"Альбом");
+    CHECK(t.track == 3 && t.trackTotal == 12 && t.disc == 2 && t.discTotal == 3);
+    CHECK(t.genre == L"Rock" && t.year == 1998 && t.albumArtist == L"Various");
+    CHECK(t.hasCover && t.coverType == 3 && t.coverMime == "image/jpeg" && t.cover.size() == 19);
+    CHECK(t.lyrics == L"[00:01.00]one\n[00:02.00]two");
+    // 40 frames of 1152 samples less LAME's delay and padding.
+    CHECK_MSG(std::fabs(t.duration - (40.0 * 1152 - 1576) / 44100) < 1e-6, "d=%f", t.duration);
+    // Without options: no lyrics, no cover bytes, but the cover is known.
+    library::TagInfo bare;
+    CHECK(ParseBytes(s[0], &bare, false) && bare.lyrics.empty() && bare.cover.empty() && bare.hasCover && bare.title == L"Песня");
+
+    CHECK(ParseBytes(s[1], &t) && t.title == L"Title 2.4" && t.artist == L"One; Two" && t.albumArtist == L"AA");
+    CHECK(t.year == 2021 && t.genre == L"Pop");
+    CHECK(t.syncedLyrics.size() == 3);
+    if (t.syncedLyrics.size() == 3) CHECK(t.syncedLyrics[1].time == 2.5 && t.syncedLyrics[1].text == L"second");
+    CHECK_MSG(std::fabs(t.duration - 20 * 417 * 8 / 128000.0) < 1e-6, "cbr d=%f", t.duration);  // CBR estimate
+
+    CHECK(ParseBytes(s[2], &t) && t.title == L"Old" && t.artist == L"Tagger" && t.track == 5 && t.hasCover && t.cover.size() == 19);
+    CHECK(ParseBytes(s[3], &t) && t.title == L"APE title" && t.albumArtist == L"APE AA" && t.track == 4 && t.trackTotal == 9);
+    CHECK(t.artist == L"Кино" && t.year == 1989 && t.genre == L"Rock");  // the rest from CP-1251 ID3v1
+    CHECK(ParseBytes(s[4], &t) && t.title == std::wstring(200, L'L') && t.artist == L"iTunes");
+    CHECK(ParseBytes(s[5], &t) && t.title == L"Unsync" && t.cover.size() == 19 && t.cover[0] == 0xFF && t.cover[1] == 0xD8);
+
+    CHECK(ParseBytes(s[6], &t) && t.format == library::TagFormat::Flac && t.duration == 3.0);
+    CHECK(t.title == L"Flac title" && t.artist == L"A; B" && t.albumArtist == L"Flac AA" && t.track == 2 && t.trackTotal == 10);
+    CHECK(t.disc == 1 && t.discTotal == 2 && t.year == 2004 && t.genre == L"Jazz" && t.lyrics == L"plain words");
+    CHECK(t.hasCover && t.cover.size() == 19 && t.coverMime == "image/jpeg");
+
+    CHECK(ParseBytes(s[7], &t) && t.format == library::TagFormat::Opus && std::fabs(t.duration - 5.0) < 1e-9);
+    CHECK(t.title == L"Opus title" && t.album == L"Opus album" && t.track == 7);
+
+    CHECK(ParseBytes(s[8], &t) && t.format == library::TagFormat::Mp4 && !t.damaged && t.duration == 7.5);
+    CHECK(t.title == L"Mp4 title" && t.artist == L"Mp4 artist" && t.albumArtist == L"Mp4 AA" && t.album == L"Mp4 album");
+    CHECK(t.track == 6 && t.trackTotal == 11 && t.disc == 2 && t.discTotal == 3 && t.year == 2019 && t.genre == L"Rap");
+    CHECK(t.lyrics == L"mp4 words" && t.hasCover && t.cover.size() == 19);
+    CHECK(ParseBytes(s[9], &t) && t.damaged);
+    // The index cut off by an interrupted download.
+    CHECK(ParseBytes(s[8].substr(0, s[8].size() - 300), &t) && t.damaged);
+
+    CHECK(ParseBytes(s[10], &t) && t.format == library::TagFormat::Wav && std::fabs(t.duration - 0.1) < 1e-9);
+    CHECK(t.title == L"Id3 name" && t.artist == L"Info ar");
+    CHECK(ParseBytes(s[11], &t) && t.format == library::TagFormat::Aiff && std::fabs(t.duration - 2.0) < 1e-9 && t.title == L"Aiff title");
+
+    CHECK(ParseBytes(s[12], &t) && t.format == library::TagFormat::Matroska && std::fabs(t.duration - 12.345) < 1e-9);
+    // FLAC metadata cut off before the audio: no length (the property system decides).
+    CHECK(ParseBytes(s[6].substr(0, 60), &t) && t.format == library::TagFormat::Flac && t.duration == 0);
+
+    // Not a tagged format: the property system takes over.
+    CHECK(!ParseBytes("\x1A\x45\xDF matroska", &t) && t.format == library::TagFormat::Unknown);
+    CHECK(!ParseBytes(std::string("RIFF\x10\0\0\0AVI LIST", 16), &t) && t.format == library::TagFormat::Unknown);
+    CHECK(!ParseBytes("", &t));
+    CHECK(!ParseBytes("hello world, plain text", &t));
+
+    // Legacy text and genres.
+    CHECK(library::DecodeLegacyText(reinterpret_cast<const uint8_t*>("\xCA\xE8\xED\xEE"), 4, 1251) == L"Кино");
+    CHECK(library::DecodeLegacyText(reinterpret_cast<const uint8_t*>("\xD0\x9A\xD0\xB8"), 4, 1251) == L"Ки");  // UTF-8 wins
+    CHECK(library::DecodeLegacyText(reinterpret_cast<const uint8_t*>("Caf\xE9"), 4, 1252) == L"Café");
+    CHECK(library::Id3GenreName(0) == L"Blues" && library::Id3GenreName(191) == L"Psybient" && library::Id3GenreName(192).empty());
+}
+
+// Bytes of a file that is far larger than anything a parse may read, made up on the fly.
+class EndlessSource : public library::ByteSource {
+public:
+    EndlessSource(std::string prefix, uint32_t seed) : prefix_(std::move(prefix)), seed_(seed) {}
+    uint64_t Size() const override { return 1ull << 40; }
+    size_t Read(uint64_t offset, void* buf, size_t n) override {
+        ++reads;
+        bytes += n;
+        auto* out = static_cast<uint8_t*>(buf);
+        for (size_t i = 0; i < n; ++i) {
+            const uint64_t at = offset + i;
+            uint64_t x = (at ^ seed_) * 0x9E3779B97F4A7C15ull;
+            out[i] = at < prefix_.size() ? static_cast<uint8_t>(prefix_[static_cast<size_t>(at)]) : static_cast<uint8_t>(x >> 56);
+        }
+        return n;
+    }
+    uint64_t reads = 0, bytes = 0;
+
+private:
+    std::string prefix_;
+    uint32_t seed_;
+};
+
+// Truncated, mutated and garbage files: every parse ends, without a crash and within its budget.
+void TestTagReaderFuzz() {
+    const auto samples = TagSamples();
+    uint64_t rng = 12345;
+    auto next = [&rng] {
+        rng = rng * 6364136223846793005ull + 1442695040888963407ull;
+        return static_cast<uint32_t>(rng >> 33);
+    };
+    const auto start = std::chrono::steady_clock::now();
+    size_t parses = 0;
+    library::TagInfo t;
+    for (const std::string& seed : samples) {
+        const size_t step = std::max<size_t>(1, seed.size() / 4000);
+        for (size_t n = 0; n <= seed.size(); n += step) {
+            ParseBytes(seed.substr(0, n), &t);
+            ++parses;
+        }
+        for (int m = 0; m < 4000; ++m) {
+            std::string b = seed;
+            const int edits = 1 + static_cast<int>(next() % 6);
+            for (int e = 0; e < edits && !b.empty(); ++e) {
+                const size_t at = next() % b.size();
+                switch (next() % 4) {
+                    case 0: b[at] = static_cast<char>(next()); break;
+                    case 1: b.replace(at, std::min<size_t>(4, b.size() - at), std::string(4, '\xFF')); break;
+                    case 2: b.replace(at, std::min<size_t>(4, b.size() - at), std::string("\x7F\xFF\xFF\xFF", 4)); break;
+                    default: b.replace(at, std::min<size_t>(4, b.size() - at), std::string(4, '\0')); break;
+                }
+            }
+            b.resize(b.size() - std::min<size_t>(b.size(), next() % 3 == 0 ? next() % 64 : 0));
+            ParseBytes(b, &t);
+            ++parses;
+        }
+    }
+    for (int i = 0; i < 3000; ++i) {  // garbage behind each magic
+        static const std::string kMagic[] = {std::string("ID3\x03\0\0", 6), std::string("ID3\x04\0\0", 6), "fLaC", "OggS",
+                                             std::string("RIFF\0\0\0\0WAVE", 12), std::string("FORM\0\0\0\0" "AIFF", 12),
+                                             std::string("\0\0\0\x18" "ftypM4A ", 12), "MAC ", "wvpk",
+                                             std::string("\xFF\xFB\x90\x00", 4), "\x1A\x45\xDF\xA3"};
+        std::string b = kMagic[i % std::size(kMagic)];
+        const size_t n = next() % 3000;
+        for (size_t k = 0; k < n; ++k) b += static_cast<char>(next());
+        ParseBytes(b, &t);
+        ++parses;
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    std::printf("  %zu parses in %.0f ms\n", parses, ms);
+    CHECK(ms < 60000);
+
+    // A terabyte of garbage behind each magic: the reads stay bounded (the budget is 4096 reads
+    // and 48 MB; the whole "file" is never read).
+    const std::string kEndless[] = {std::string("ID3\x03\0\0\x7F\x7F\x7F\x7F", 10), "fLaC", "OggS", "RIFF\xFF\xFF\xFF\xFFWAVE",
+                                    std::string("\0\0\0\x10" "ftypM4A ", 12), "FORM\xFF\xFF\xFF\xFF" "AIFF", "MAC ", "wvpk",
+                                    std::string("\x1A\x45\xDF\xA3\x80\x18\x53\x80\x67\x01\xFF\xFF\xFF\xFF\xFF\xFF\xFF", 17)};
+    for (const std::string& magic : kEndless) {
+        for (uint32_t seed = 1; seed <= 3; ++seed) {
+            EndlessSource src(magic, seed);
+            library::TagOptions o;
+            o.cover = o.lyrics = true;
+            library::ReadTags(src, &t, o);
+            CHECK_MSG(src.reads <= 4200 && src.bytes <= (64ull << 20), "%s: %llu reads, %llu bytes", magic.c_str() + (magic[0] ? 0 : 4),
+                      static_cast<unsigned long long>(src.reads), static_cast<unsigned long long>(src.bytes));
+        }
+    }
+}
+
+// The scan uses the tag reader: album artists, gapless MP3 length, and the "new" badge times.
+void TestLibraryTagReader() {
+    const std::wstring dir = FreshDataDir(L"library-tags");
+    const std::wstring root = MakeDir(L"lib-tags");
+    const auto s = TagSamples();
+    WriteFile(root + L"\\Album\\01 id3.mp3", s[0]);
+    WriteFile(root + L"\\Album\\02 flac.flac", s[6]);
+    WriteFile(root + L"\\Album\\03 mp4.m4a", s[8]);
+    WriteFile(root + L"\\Album\\04 cut.m4a", s[9]);
+    WriteFile(root + L"\\Clips\\clip.mp4", s[8]);  // a video: duration only
+    library::MediaLibrary lib;
+    CHECK(lib.Load());
+    lib.SetRoots({root});
+    auto snap = ScanAndWait(lib);
+    if (!snap) return;
+    const library::MediaItem* mp3 = snap->FindItem(root + L"\\Album\\01 id3.mp3");
+    CHECK(mp3 && mp3->title == L"Песня" && mp3->albumArtist == L"Various" && mp3->disc == 2 && mp3->track == 3);
+    CHECK(mp3 && std::fabs(mp3->duration - (40.0 * 1152 - 1576) / 44100) < 1e-6);
+    const library::MediaItem* flac = snap->FindItem(root + L"\\Album\\02 flac.flac");
+    CHECK(flac && flac->albumArtist == L"Flac AA" && flac->duration == 3.0 && flac->genre == L"Jazz");
+    const library::MediaItem* m4a = snap->FindItem(root + L"\\Album\\03 mp4.m4a");
+    CHECK(m4a && m4a->title == L"Mp4 title" && m4a->duration == 7.5 && !m4a->damaged);
+    const library::MediaItem* cut = snap->FindItem(root + L"\\Album\\04 cut.m4a");
+    CHECK(cut && cut->damaged);
+    const library::MediaItem* clip = snap->FindItem(root + L"\\Clips\\clip.mp4");
+    CHECK(clip && clip->duration == 7.5 && clip->title.empty());
+    // The first scan of a folder: nothing is new.
+    for (const library::MediaItem& it : snap->items) CHECK(it.firstSeen == 0);
+    CHECK(snap->newestFirstSeen == 0);
+
+    // The cache keeps album artists (version 5); a file added later is new until it is seen.
+    std::string cache;
+    CHECK(json::ReadFileUtf8(dir + L"\\library-cache.json", &cache));
+    CHECK(cache.find("\"version\":5") != std::string::npos && cache.find("\"aa\":\"Flac AA\"") != std::string::npos);
+    Sleep(20);  // the new file's first-seen time must be later than the session start
+    const int64_t before = library::UnixMsNow();
+    WriteFile(root + L"\\Album\\05 new.flac", s[6]);
+    snap = ScanAndWait(lib);
+    const library::MediaItem* fresh = snap ? snap->FindItem(root + L"\\Album\\05 new.flac") : nullptr;
+    CHECK(fresh && fresh->firstSeen >= before && lib.IsNew(*fresh));
+    CHECK(snap && snap->FindItem(root + L"\\Album\\02 flac.flac")->firstSeen == 0);
+    CHECK(snap && snap->newestFirstSeen == fresh->firstSeen);
+    snap = ScanAndWait(lib);  // still new on a rescan: the time comes from the cache
+    fresh = snap ? snap->FindItem(root + L"\\Album\\05 new.flac") : nullptr;
+    CHECK(fresh && fresh->firstSeen >= before && lib.IsNew(*fresh));
+    lib.MarkSeen();  // the user looked at the library
+    {
+        library::MediaLibrary next;  // the next session
+        CHECK(next.Load() && next.NewSince() >= fresh->firstSeen);
+        CHECK(!next.IsNew(*fresh));
+        CHECK(next.Roots().size() == 1);
+    }
+    CHECK(!lib.Progress().scanning);
+}
+
+// Embedded lyrics for the music view: SYLT is synced, USLT holding LRC text stays synced, a .lrc
+// next to the file wins.
+void TestEmbeddedLyrics() {
+    const std::wstring dir = MakeDir(L"lyrics-embedded");
+    const auto s = TagSamples();
+    WriteFile(dir + L"\\sylt.mp3", s[1]);
+    WriteFile(dir + L"\\uslt.mp3", s[0]);
+    WriteFile(dir + L"\\plain.flac", s[6]);
+    app::Lyrics l = app::LoadEmbeddedLyrics(dir + L"\\sylt.mp3");
+    CHECK(l.synced && l.lines.size() == 3 && l.lines[0].text == L"first" && l.lines[2].time == 4.0);
+    l = app::LoadLyricsFor(dir + L"\\uslt.mp3");
+    CHECK(l.synced && l.lines.size() == 2 && l.lines[1].text == L"two");
+    l = app::LoadLyricsFor(dir + L"\\plain.flac");
+    CHECK(!l.synced && l.lines.size() == 1 && l.lines[0].text == L"plain words");
+    WriteFile(dir + L"\\uslt.lrc", "[00:05.00]from the lrc");
+    l = app::LoadLyricsFor(dir + L"\\uslt.mp3");
+    CHECK(l.synced && l.lines.size() == 1 && l.lines[0].text == L"from the lrc");
+    CHECK(app::LoadLyricsFor(L"https://example.com/a.mp3").Empty());
+    CHECK(app::LoadEmbeddedLyrics(dir + L"\\missing.mp3").Empty());
 }
 
 // --- Thumbnails -------------------------------------------------------------------------------
@@ -1860,6 +2317,33 @@ void TestThumbnails() {
     auto direct = library::ExtractThumbnail(bmp, 100);
     CHECK(direct && direct->width == 100 && direct->height == 50);
     CHECK(library::ExtractThumbnail(txt, 100) == nullptr);
+
+    // A cover the shell can't show (Opus METADATA_BLOCK_PICTURE) comes from the tag reader.
+    {
+        std::string image;  // small: one Ogg page holds the comment packet
+        const std::wstring smallBmp = dir + L"\\small.bmp";
+        WriteBmp(smallBmp, 32, 16);
+        CHECK(json::ReadFileUtf8(smallBmp, &image) && image.size() > 54);
+        const std::string block = tagbytes::Be32(3) + tagbytes::Be32(9) + "image/bmp" + tagbytes::Be32(0) + std::string(16, '\0') +
+                                  tagbytes::Be32(static_cast<uint32_t>(image.size())) + image;
+        static const char* const kB64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string b64;
+        for (size_t i = 0; i < block.size(); i += 3) {
+            uint32_t v = static_cast<uint8_t>(block[i]) << 16;
+            if (i + 1 < block.size()) v |= static_cast<uint8_t>(block[i + 1]) << 8;
+            if (i + 2 < block.size()) v |= static_cast<uint8_t>(block[i + 2]);
+            b64 += kB64[(v >> 18) & 63];
+            b64 += kB64[(v >> 12) & 63];
+            b64 += i + 1 < block.size() ? kB64[(v >> 6) & 63] : '=';
+            b64 += i + 2 < block.size() ? kB64[v & 63] : '=';
+        }
+        const std::wstring opus = dir + L"\\cover.opus";
+        WriteFile(opus, tagbytes::Opus({"title=With cover", "METADATA_BLOCK_PICTURE=" + b64}));
+        auto cover = library::ExtractThumbnail(opus, 64);
+        CHECK_MSG(cover && cover->width == 32 && cover->height == 16, "cover %ux%u", cover ? cover->width : 0, cover ? cover->height : 0);
+        auto smaller = library::ExtractThumbnail(opus, 16);  // scaled to fit
+        CHECK(smaller && smaller->width == 16 && smaller->height == 8);
+    }
     if (SUCCEEDED(com)) CoUninitialize();
 }
 
@@ -2567,6 +3051,10 @@ const TestCase kTests[] = {
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},
     {"library_cache_tags", TestLibraryCacheTags},
+    {"tag_reader", TestTagReader},
+    {"tag_reader_fuzz", TestTagReaderFuzz},
+    {"library_tag_reader", TestLibraryTagReader},
+    {"lyrics_embedded", TestEmbeddedLyrics},
     {"thumbnails", TestThumbnails},
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
