@@ -2,6 +2,7 @@
 
 #include "Config.h"
 #include "Paths.h"
+#include "../audio/LoopbackSupport.h"
 
 #include <windows.h>
 #include <shlobj.h>
@@ -192,6 +193,11 @@ std::optional<std::string> BuildSpdif(const Config& c) {
         if (c.GetBool(key)) codecs += (codecs.empty() ? "" : ",") + std::string(codec);
     if (codecs.empty()) return std::nullopt;
     return codecs;
+}
+
+// Player reads this pseudo option itself (audio/Crossfader.h): seconds of crossfade, 0 = off.
+std::optional<std::string> BuildCrossfade(const Config& c) {
+    return c.GetBool("audio.crossfade") ? Num(c.GetDouble("audio.crossfadeSeconds")) : std::string("0");
 }
 
 std::optional<std::string> BuildSubAuto(const Config& c) {
@@ -1353,6 +1359,25 @@ void BuildMedia(Builder& b) {
               L"Не закрывать звуковое устройство между файлами, чтобы следующая песня начиналась без паузы и щелчка.")
         .MpvBool("gapless-audio", "weak", "no")
         .MpvBool("prefetch-playlist");  // opens the next queued file before this one ends
+    b.Toggle("audio.crossfade", L"Crossfade between songs", L"Плавный переход между песнями", false)
+        .Desc(L"Fade each song into the next one, so they overlap for a few seconds. Videos never fade; exclusive "
+              L"mode and passthrough turn it off.",
+              L"Каждая песня плавно перетекает в следующую, и несколько секунд они звучат вместе. На видео не "
+              L"действует; монопольный режим и передача на ресивер его отключают.")
+        .MpvBuild("user-data/lumen/crossfade", BuildCrossfade, "0");
+    b.Slider("audio.crossfadeSeconds", L"Crossfade length", L"Длительность перехода", 1, 12, 1, 5)
+        .Unit(L"s", L"с")
+        .Desc(L"How long the two songs overlap. A short song gets at most half of its length.",
+              L"Сколько секунд песни звучат вместе. Короткой песне достаётся не больше половины её длины.")
+        .When("audio.crossfade", "true")
+        .MpvBuild("user-data/lumen/crossfade", BuildCrossfade, "0");
+    b.Toggle("audio.crossfadeAlbums", L"Only between different albums", L"Только между разными альбомами", true)
+        .Desc(L"Songs of one album keep playing gaplessly, as the album was made; the fade happens where the album "
+              L"changes. Without album tags, songs in one folder count as one album.",
+              L"Песни одного альбома идут без пауз, как задумано в альбоме, а переход звучит там, где альбом "
+              L"меняется. Если тегов альбома нет, альбомом считается папка.")
+        .When("audio.crossfade", "true")
+        .MpvBool("user-data/lumen/crossfade-albums");
     b.Toggle("audio.passthrough", L"Send surround sound to the receiver", L"Передавать объёмный звук на ресивер", false)
         .Desc(L"Pass Dolby and DTS tracks undecoded over HDMI or S/PDIF and let the receiver decode them. Volume, the "
               L"equalizer and effects do not apply to these tracks.",
@@ -1563,16 +1588,25 @@ void BuildMedia(Builder& b) {
             .When("audio.stereoWiden", "true")
             .MpvBuild("af", BuildAf);
     b.advanced = false;
-    b.Pick("audio.visualizer", L"Visualization", L"Визуализация",
+    ItemRef viz = b.Pick("audio.visualizer", L"Visualization", L"Визуализация",
            {{"disabled", L"Disabled", L"Отключена", "", "close"},
             {"spectrometer", L"Spectrometer", L"Спектрометр", "", "spectometer_twotone"},
             {"scope", L"Scope", L"Осциллограф", "", "scope_twotone"},
             {"spectrum", L"Spectrum", L"Спектр", "", "spectrum_twotone"},
             {"waveform", L"Waveform", L"Волна", "", "waveform_twotone"}},
            "disabled")
-        .Desc(L"Animation shown instead of the cover while music plays (components/Audio_Visualizer).",
-              L"Анимация вместо обложки во время воспроизведения музыки.")
-        .Hidden();  // not implemented yet
+        .Desc(L"Animation in place of the cover while music plays (components/Audio_Visualizer). It listens to "
+              L"Lumen's own sound only, never to other apps.",
+              L"Анимация вместо обложки, пока играет музыка. Слушает только звук самого Lumen, а не других "
+              L"приложений.");
+    if (!audio::ProcessLoopbackSupported()) {
+        // Process loopback needs Windows 10 2004: without it the visualizer stays off.
+        viz.Hidden();
+        b.Info("audio.visualizerUnsupported", L"Visualization needs Windows 10 version 2004 or later",
+               L"Для визуализации нужна Windows 10 версии 2004 или новее", "hint")
+            .Desc(L"Lumen listens to its own sound through a Windows feature that older versions don't have.",
+                  L"Lumen слушает свой звук через функцию Windows, которой нет в более старых версиях.");
+    }
     b.Toggle("audio.pitchCorrection", L"Keep pitch when changing speed", L"Сохранять тон при смене скорости", true)
         .MpvBool("audio-pitch-correction");
 
