@@ -28,8 +28,7 @@ constexpr UINT kChromeHideMs = 2200;
 // Lays out the library layer, the player and the floating mini player.
 class ShellBody : public Widget {
 public:
-    ShellBody(MainWindow* w, Widget* library, PlayerView* player, MiniPlayer* mini)
-        : window_(w), library_(library), player_(player), mini_(mini) {
+    ShellBody(Widget* library, PlayerView* player, MiniPlayer* mini) : library_(library), player_(player), mini_(mini) {
         dir = Dir::None;
         width = Length::Grow();
         height = Length::Grow();
@@ -51,7 +50,6 @@ public:
     }
 
 private:
-    MainWindow* window_;
     Widget* library_;
     PlayerView* player_;
     MiniPlayer* mini_;
@@ -70,10 +68,6 @@ public:
         title->visible = !window_->IsFullscreen() && !window_->UiHidden() &&
                          (TheApp().config().GetBool("interface.decorations") || !TheApp().PlayerShown());
         Widget::OnLayout();
-    }
-    bool OnMouseMove(const MouseEvent& e) override {
-        window_->PointerMoved(e.x, e.y);
-        return false;
     }
 
 private:
@@ -120,7 +114,18 @@ bool MainWindow::Create() {
     // back/forward, the search or the "⋯" button.
     // In fullscreen they go below the top info panel while it shows (PlayerView::PaintTopInfo).
     toastTop = [this](float) {
-        if (!TheApp().PlayerShown()) return 122.0f;
+        if (!TheApp().PlayerShown()) {
+            // Below the scan banner too while a scan shows one (it is the strip under the header).
+            float top = 122.0f;
+            std::function<void(Widget*)> find = [&](Widget* w) {
+                if (!w->visible) return;
+                if (w->id == "scan-banner") top = std::max(top, w->rect.Bottom() + 12);
+                else
+                    for (auto& c : w->Children()) find(c.get());
+            };
+            if (library_) find(library_);
+            return top;
+        }
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
     // A new base margin from Settings is what mpv has now; recompute the lift on top of it.
@@ -166,6 +171,7 @@ bool MainWindow::Create() {
             TheApp().Open(files);
     };
     dropHint = Tr(L"Drop to play");
+    langConn_ = Connect(TheApp().languageChanged, [this] { dropHint = Tr(L"Drop to play"); });
     onCloseRequest = [this] {
         // A second close (Quit from the tray, "when finished: close") would start a second
         // shutdown of the same mpv.
@@ -207,7 +213,7 @@ void MainWindow::BuildUi() {
     auto mini = std::make_unique<MiniPlayer>(this);
     mini_ = mini.get();
 
-    auto* body = root->Add<ShellBody>(this, libraryLayer_, player_, mini_);
+    auto* body = root->Add<ShellBody>(libraryLayer_, player_, mini_);
     body->AddChild(std::move(library));
     body->AddChild(std::move(player));
     body->AddChild(std::move(mini));
@@ -526,6 +532,12 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             Post([this] { SetPictureInPicture(false); });
             *result = 0;
             return true;
+        case WM_SETTINGCHANGE:
+            // Windows switched apps between light and dark: the System theme follows it.
+            if (lp && lstrcmpW(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0 &&
+                TheApp().config().GetString("general.theme") == "system")
+                TheApp().ApplyTheme();
+            return false;
         case WM_SIZE:
             if (titleBar_) titleBar_->Refresh();
             return false;

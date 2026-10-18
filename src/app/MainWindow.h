@@ -1,4 +1,5 @@
 #pragma once
+#include "app/Signal.h"
 #include "ui/Controls.h"
 #include "ui/Host.h"
 
@@ -84,6 +85,7 @@ private:
     WINDOWPLACEMENT pipRestore_{sizeof(WINDOWPLACEMENT)};
     ui::AnimFloat chrome_{1.0f};
     UINT_PTR chromeTimer_ = 0;
+    ScopedConnection langConn_;
 
     TitleBar* titleBar_ = nullptr;
     NavSidebar* sidebar_ = nullptr;

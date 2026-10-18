@@ -377,7 +377,7 @@ bool Segmented::OnMouseDown(const MouseEvent& e) {
 }
 
 bool Segmented::OnKeyDown(const KeyEvent& e) {
-    if (e.key != VK_LEFT && e.key != VK_RIGHT) return false;
+    if ((e.key != VK_LEFT && e.key != VK_RIGHT) || choices_.empty()) return false;
     int i = std::clamp(selected_ + (e.key == VK_LEFT ? -1 : 1), 0, static_cast<int>(choices_.size()) - 1);
     if (i != selected_) {
         selected_ = i;
@@ -495,7 +495,7 @@ void Dropdown::OnClick() {
 }
 
 bool Dropdown::OnKeyDown(const KeyEvent& e) {
-    if (e.key != VK_UP && e.key != VK_DOWN) return false;
+    if ((e.key != VK_UP && e.key != VK_DOWN) || choices_.empty()) return false;
     int i = std::clamp(selected_ + (e.key == VK_UP ? -1 : 1), 0, static_cast<int>(choices_.size()) - 1);
     if (i != selected_) {
         selected_ = i;
@@ -528,6 +528,7 @@ void Slider::SetFromX(float x) {
 
 bool Slider::OnMouseDown(const MouseEvent& e) {
     dragging_ = true;
+    dragFrom_ = value_;
     SetFromX(e.x);
     return true;
 }
@@ -537,8 +538,16 @@ bool Slider::OnMouseMove(const MouseEvent& e) {
     return dragging_;
 }
 
-bool Slider::OnMouseUp(const MouseEvent&) {
-    if (dragging_ && onCommit) onCommit(value_);
+bool Slider::OnMouseUp(const MouseEvent& e) {
+    if (dragging_ && e.cancelled) {
+        // Capture lost mid-drag (Alt+Tab, a dialog): back to where the drag started, uncommitted.
+        if (value_ != dragFrom_) {
+            SetValue(dragFrom_);
+            if (onChange) onChange(value_);
+        }
+    } else if (dragging_ && onCommit) {
+        onCommit(value_);
+    }
     dragging_ = false;
     Invalidate();
     return true;
@@ -661,9 +670,19 @@ void TextBox::ResetBlink() {
     Host* host = GetHost();
     if (!host) return;
     if (blinkTimer_ && blinkHost_) blinkHost_->CancelTimer(blinkTimer_);
+    blinkTimer_ = 0;
+    if (readOnly) return;  // no caret to blink
     blinkHost_ = host;
     blinkTimer_ = host->StartTimer(530, [this] {
-        caretOn_ = !caretOn_;
+        // A window in the background shows no caret and wakes nothing: the blink stops here and
+        // starts again with the first frame after the window is activated (Paint).
+        if (!blinkHost_->IsActive()) {
+            blinkHost_->CancelTimer(blinkTimer_);
+            blinkTimer_ = 0;
+            caretOn_ = false;
+        } else {
+            caretOn_ = !caretOn_;
+        }
         Invalidate();
     }, true);
 }
@@ -706,9 +725,13 @@ void TextBox::DeleteSelection() {
 void TextBox::Insert(std::wstring_view s) {
     if (readOnly) return;
     DeleteSelection();
+    // A single line, not a document: a pasted multi-megabyte clipboard would be laid out by
+    // DirectWrite on every keystroke and paint. The longest real input (a stream URL) fits.
+    constexpr size_t kMaxText = 32768;
     std::wstring clean;
     for (wchar_t ch : s)
-        if (ch >= 0x20 && ch != 0x7F) clean.push_back(ch);
+        if (ch >= 0x20 && ch != 0x7F && text_.size() + clean.size() < kMaxText) clean.push_back(ch);
+    if (text_.size() + clean.size() >= kMaxText && !clean.empty() && IS_HIGH_SURROGATE(clean.back())) clean.pop_back();
     text_.insert(caret_, clean);
     MoveCaret(caret_ + clean.size(), false);
     Changed();
@@ -876,6 +899,7 @@ void TextBox::Paint(Painter& p) {
         p.Text(shown, {tr.x - scroll_, tr.y, 100000.0f, tr.h}, TextStyle::Body, IsEnabled() ? c.textPrimary : c.textDisabled,
                HAlign::Leading, VAlign::Center, 0);
     }
+    if (live && IsFocused() && !readOnly && !blinkTimer_ && GetHost()->IsActive()) ResetBlink();
     if (live && IsFocused() && caretOn_ && !readOnly) p.Fill(CaretRect(), c.textPrimary);
     p.PopClip();
 }
@@ -939,7 +963,8 @@ void ScrollView::OnLayout() {
     Widget* c = Content();
     if (!c) return;
     contentH_ = c->Measure(rect.w, kInf).h;
-    const float maxOff = MaxOffset();
+    // Not scrollable (an overflow of up to kNoScroll): back to the top, not left 1-4 DIP down.
+    const float maxOff = Scrollable() ? MaxOffset() : 0.0f;
     if (offset_.Target() > maxOff) offset_.Set(maxOff);
     c->Arrange({rect.x, rect.y - std::round(offset_.Get()), rect.w, std::max(contentH_, rect.h)});
 }
@@ -1047,6 +1072,9 @@ bool ScrollView::OnMouseMove(const MouseEvent& e) {
 }
 
 bool ScrollView::OnMouseUp(const MouseEvent&) {
+    // Only a thumb drag ends here: a click on a blank part neither flashes the bar nor cuts a
+    // smooth scroll (or a track page) short.
+    if (!dragging_) return true;
     dragging_ = false;
     ScrollTo(offset_.Target(), false);
     return true;
@@ -1653,9 +1681,23 @@ struct ToastSlot {
     uint64_t id = 0;  // the timer closes only its own toast, never one reusing the same address
 };
 
-ToastSlot& CurrentToast(Host* host) {
+std::map<Host*, ToastSlot>& Toasts() {
     static std::map<Host*, ToastSlot> toasts;
-    return toasts[host];
+    return toasts;
+}
+
+void CloseToastAfter(Host* host, uint64_t id, UINT ms) {
+    host->StartTimer(ms, [host, id] {
+        auto it = Toasts().find(host);
+        if (it == Toasts().end() || it->second.id != id) return;  // closed or replaced meanwhile
+        Widget* toast = it->second.widget;
+        // Its action button is being pointed at or was reached with Tab: it waits (WCAG 2.2.1).
+        if (toast->IsAncestorOf(host->Hot()) || toast->IsAncestorOf(host->Focus())) {
+            CloseToastAfter(host, id, 1000);
+            return;
+        }
+        host->ClosePopup(toast);
+    });
 }
 
 }  // namespace
@@ -1664,8 +1706,7 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
                std::function<void()> action) {
     if (!host) return;
     static uint64_t nextId = 1;
-    ToastSlot& current = CurrentToast(host);
-    if (current.widget && host->IsPopupOpen(current.widget)) host->ClosePopup(current.widget);
+    DismissToast(host);
     const bool clickable = static_cast<bool>(action);
     if (clickable) {
         // Clicking closes the toast too; posted, as the click runs inside the toast's own widget.
@@ -1685,20 +1726,20 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
     o.dismissOnOutside = false;
     o.dismissOnEscape = false;
     const uint64_t id = nextId++;
-    current = {host->ShowPopup(std::move(bubble), o), id};
-    host->StartTimer(ms, [host, id] {
-        ToastSlot& cur = CurrentToast(host);
-        if (cur.id != id) return;  // replaced meanwhile; ShowToast closed this one already
-        if (cur.widget && host->IsPopupOpen(cur.widget)) host->ClosePopup(cur.widget);
-        cur = {};
-    });
+    // However it closes (its timer, a newer toast, CloseAllPopups), the slot forgets it: a later
+    // popup at the same address is never taken for it.
+    o.onDismiss = [host, id] {
+        auto it = Toasts().find(host);
+        if (it != Toasts().end() && it->second.id == id) Toasts().erase(it);
+    };
+    Toasts()[host] = {host->ShowPopup(std::move(bubble), o), id};
+    CloseToastAfter(host, id, ms);
 }
 
 void DismissToast(Host* host) {
     if (!host) return;
-    ToastSlot& current = CurrentToast(host);
-    if (current.widget && host->IsPopupOpen(current.widget)) host->ClosePopup(current.widget);
-    current = {};
+    auto it = Toasts().find(host);
+    if (it != Toasts().end()) host->ClosePopup(it->second.widget);
 }
 
 }  // namespace ui

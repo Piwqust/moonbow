@@ -28,7 +28,8 @@ private:
     ui::IconButton* fullBtn_ = nullptr;
     ui::IconButton* moreBtn_ = nullptr;
     std::wstring windowTitle_;  // last text given to the window caption
-    ScopedConnection playerConn_, routeConn_, screenConn_;
+    std::vector<std::pair<ui::Widget*, const wchar_t*>> tips_;  // tooltip widget, English text
+    ScopedConnection playerConn_, routeConn_, screenConn_, langConn_;
 };
 
 // Library navigation (Home, Videos, Music, Network, Playlists, Recent, Add).
@@ -47,7 +48,7 @@ public:
 private:
     bool collapsed_ = false;
     bool inPlayer_ = false;
-    ScopedConnection routeConn_;
+    ScopedConnection routeConn_, langConn_;
 };
 
 // Library header + the current LibraryView.
@@ -67,6 +68,7 @@ private:
     void Build();
     void BuildHeader();
     void RefreshHeader();
+    void ClosePagePopups();
     bool compact_;
     Route route_;
     ui::Widget* header_ = nullptr;

@@ -49,7 +49,6 @@ public:
     // Loads the fonts on a worker thread (~10 ms) while the window is created; the first
     // layout waits for it. DirectWrite objects are free-threaded.
     void InitAsync(HINSTANCE instance);
-    float Size(TextStyle s) const;
     float LineHeight(TextStyle s) const;
 
     // Cached layout for one string. Valid until the next Trim() pass drops it.
