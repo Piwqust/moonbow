@@ -8,6 +8,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <initializer_list>
 #include <thread>
@@ -246,7 +247,19 @@ std::optional<std::string> BuildHttpProxy(const Config& c) {
     if (at == std::string::npos) return proxy;  // no user name to attach the password to
     std::string user = proxy.substr(hostStart, at - hostStart);
     if (user.find(':') != std::string::npos) return proxy;
-    return proxy.substr(0, hostStart) + user + ":" + password + proxy.substr(at);
+    // Percent-encoded: "@", ":" or "/" in a password would otherwise end the user part early.
+    std::string encoded;
+    for (unsigned char ch : password) {
+        if (std::isalnum(ch) || ch == '-' || ch == '.' || ch == '_' || ch == '~') {
+            encoded += static_cast<char>(ch);
+        } else {
+            static const char kHex[] = "0123456789ABCDEF";
+            encoded += '%';
+            encoded += kHex[ch >> 4];
+            encoded += kHex[ch & 15];
+        }
+    }
+    return proxy.substr(0, hostStart) + user + ":" + encoded + proxy.substr(at);
 }
 
 // Read-ahead of files mpv does not cache (local files and discs); streams use cache-secs.
