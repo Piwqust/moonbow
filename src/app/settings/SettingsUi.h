@@ -17,6 +17,8 @@ namespace app::sui {
 
 // Layout constants from design/ref/Settings-*.png (DIP).
 inline constexpr float kControlW = 320;  // right column: dropdowns, fields, sliders
+// A narrow window shrinks the control column down to this before it cuts a row label.
+inline constexpr float kControlMinW = 200;
 inline constexpr float kRowPad = 5;
 inline constexpr float kSmallButtonW = 100;
 
@@ -68,11 +70,19 @@ public:
     void Sync() override;
     void Paint(ui::Painter& p) override;
     void PaintOver(ui::Painter& p) override;
+    ui::Size MeasureContent(float availW, float availH) override;
+    void OnLayout() override;
     const settings::Item& item;
 
 private:
     void Build(std::wstring label, std::wstring description, std::unique_ptr<ui::Widget> control, float minHeight);
     void UpdateDisabledHint();
+    void ApplyEnabled();
+    bool on_ = true;
+    // Narrows a control-column control (designed 320 wide) so the label keeps its text.
+    void FitControl(float innerW);
+    ui::Widget* control_ = nullptr;
+    float controlW_ = 0;  // the control's design width; 0 = it never shrinks
 };
 
 // ui::Label that honours `pad` (the stock one ignores it).

@@ -13,7 +13,49 @@ using namespace ui;
 
 namespace {
 
-constexpr float kChipW = 200;
+constexpr float kChipW = 200, kMinChipW = 150, kResetW = 28, kMinActionW = 180;
+
+// Action | reset | first key | other keys. The reset slot sits left of the chips, so the chips end
+// where every control of the page ends. The chips narrow to 150 first; below that the keys move to
+// a second line under the action name (as Windows Settings stacks a narrow row).
+class ShortcutLine : public Widget {
+public:
+    ShortcutLine() {
+        width = Length::Grow();
+        gap = 12;
+    }
+    bool Stacked(float innerW) const { return innerW - kResetW - 3 * gap - 2 * kMinChipW < kMinActionW; }
+    Size MeasureContent(float availW, float) override {
+        return {availW, pad.V() + (Stacked(availW - pad.H()) ? 32 + 8 + 32 : 32.0f)};
+    }
+    void OnLayout() override {
+        if (Children().size() < 4) return;
+        const Rect in = rect.Inset(pad);
+        Widget* label = Children()[0].get();
+        float labelW = 0;
+        if (Stacked(in.w)) {
+            labelW = std::max(0.0f, in.w - kResetW - gap);
+            label->Arrange({in.x, in.y, labelW, 32});
+            Children()[1]->Arrange({in.Right() - kResetW, in.y + 2, kResetW, kResetW});
+            const float chipW = std::floor((in.w - gap) / 2);
+            Children()[2]->Arrange({in.x, in.y + 40, chipW, 32});
+            Children()[3]->Arrange({in.Right() - chipW, in.y + 40, chipW, 32});
+        } else {
+            const float chipW = std::clamp(std::floor((in.w - kResetW - 3 * gap - kMinActionW) / 2), kMinChipW, kChipW);
+            labelW = std::max(0.0f, in.w - 2 * chipW - kResetW - 3 * gap);
+            label->Arrange({in.x, in.y, labelW, in.h});
+            Children()[1]->Arrange({in.x + labelW + gap, in.Cy() - kResetW / 2, kResetW, kResetW});
+            Children()[2]->Arrange({in.Right() - 2 * chipW - gap, in.y, chipW, in.h});
+            Children()[3]->Arrange({in.Right() - chipW, in.y, chipW, in.h});
+        }
+        // A cut action name is readable in full on hover.
+        if (auto* l = dynamic_cast<Label*>(label)) {
+            const bool cut = l->Measure(kInf, kInf).w > labelW + 0.5f;
+            tooltip = cut ? l->Text() : std::wstring();
+            interactive = cut;
+        }
+    }
+};
 
 bool IsModifier(UINT vk) {
     switch (vk) {
@@ -129,6 +171,15 @@ private:
     bool warning_ = false;
 };
 
+// Column title centred over the key text of a chip (which leaves 44 DIP for the pencil).
+class HeadLabel : public Label {
+public:
+    explicit HeadLabel(std::wstring text) : Label(std::move(text), TextStyle::Small, Tone::Tertiary) {}
+    void Paint(Painter& p) override {
+        p.Text(Text(), {rect.x + 10, rect.y, rect.w - 44, rect.h}, style, ToneColor(tone), halign, valign);
+    }
+};
+
 class ShortcutEditor;
 
 class ShortcutRow : public Widget {
@@ -169,7 +220,7 @@ public:
         hint->width = Length::Grow();
         auto* youtube = presets->Add<Button>(Tr(L"YouTube keys"), ButtonKind::Secondary);
         youtube->id = "preset-youtube";
-        youtube->width = Length::Px(320);  // like the buttons of the rows above
+        youtube->minW = kSmallButtonW;  // like the buttons of the rows above: as wide as the caption
         youtube->tooltip = Tr(L"K, J, L, 0–9, Shift+, and Shift+., C");
         youtube->onClick = [this] {
             Host* host = GetHost();
@@ -182,17 +233,13 @@ public:
                         ShowToast(host, Tr(L"YouTube keys are on"), "hotkeys");
                     });
         };
-        // Column titles.
-        auto* head = Add<Widget>();
-        head->dir = Dir::Row;
-        head->width = Length::Grow();
-        head->gap = 12;
-        head->pad = {0, 6, 40, 0};
-        auto* a = head->Add<Label>(Tr(L"Action"), TextStyle::Small, Tone::Tertiary);
-        a->width = Length::Grow();
+        // Column titles, laid out like the rows.
+        auto* head = Add<ShortcutLine>();
+        head->pad = {0, 6, 0, 0};
+        head->Add<Label>(Tr(L"Action"), TextStyle::Small, Tone::Tertiary);
+        head->Add<Widget>();
         for (const wchar_t* t : {L"Shortcut", L"Alternative"}) {
-            auto* l = head->Add<Label>(Tr(t), TextStyle::Small, Tone::Tertiary);
-            l->width = Length::Px(kChipW);
+            auto* l = head->Add<HeadLabel>(Tr(t));
             l->halign = HAlign::Center;
         }
         std::wstring group;
@@ -221,25 +268,18 @@ private:
 ShortcutRow::ShortcutRow(ShortcutEditor* editor, Action a) : action(a), editor_(editor) {
     dir = Dir::Column;
     width = Length::Grow();
-    auto* line = Add<Widget>();
-    line->dir = Dir::Row;
-    line->align = Align::Center;
-    line->width = Length::Grow();
-    line->gap = 12;
+    auto* line = Add<ShortcutLine>();
     line->pad = {0, 4, 0, 4};
-    auto* label = line->Add<Label>(Tr(Info(a).label), TextStyle::Body, Tone::Secondary);
-    label->width = Length::Grow();
+    line->Add<Label>(Tr(Info(a).label), TextStyle::Body, Tone::Secondary);
+    // Fixed slot, so the columns stay aligned whether or not the button shows.
+    auto* resetSlot = line->Add<Widget>();
+    resetSlot->dir = Dir::Stack;
+    reset_ = resetSlot->Add<IconButton>("refresh", Tr(L"Restore the default shortcut"), 28, 20);
     for (int slot = 0; slot < 2; ++slot) {
         chips_[slot] = line->Add<KeyChip>();
         chips_[slot]->onRecord = [this, slot](const KeyBinding& k) { Record(slot, k); };
         chips_[slot]->onClear = [this, slot] { Apply(slot, std::nullopt); };
     }
-    // Fixed slot, so the columns stay aligned whether or not the button shows.
-    auto* resetSlot = line->Add<Widget>();
-    resetSlot->dir = Dir::Stack;
-    resetSlot->width = Length::Px(28);
-    resetSlot->height = Length::Px(28);
-    reset_ = resetSlot->Add<IconButton>("refresh", Tr(L"Restore the default shortcut"), 28, 20);
     reset_->onClick = [this] {
         HideConflict();
         ResetBindings(action);
@@ -251,7 +291,7 @@ ShortcutRow::ShortcutRow(ShortcutEditor* editor, Action a) : action(a), editor_(
     warning_->align = Align::Center;
     warning_->gap = 8;
     warning_->width = Length::Grow();
-    warning_->pad = {0, 2, 36, 8};
+    warning_->pad = {0, 2, 0, 8};
     warning_->visible = false;
     auto* icon = warning_->Add<IconView>("info", 18, Tone::Secondary);
     icon->color = [] { return P().danger; };

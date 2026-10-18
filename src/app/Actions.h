@@ -45,7 +45,9 @@ const std::vector<ActionInfo>& AllActions();
 const ActionInfo& Info(Action a);
 // "Ctrl + O" style text for the first binding of `a` (empty if none).
 std::wstring ShortcutText(Action a);
-std::wstring KeyText(UINT vk, const ui::Mods& mods);
+// Key names follow the UI language ("Пробел", "Громкость +"); `localized` false gives the
+// English ones ("Space"), e.g. so a search for either finds the key.
+std::wstring KeyText(UINT vk, const ui::Mods& mods, bool localized = true);
 // The action bound to a key press, honoring user overrides from Config.
 Action ActionForKey(const ui::KeyEvent& e);
 // Overrides a binding (Settings > Controls). Empty `keys` restores the default.

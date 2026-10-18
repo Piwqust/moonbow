@@ -82,6 +82,41 @@ void ForEachInTree(Widget* w, const std::function<void(Widget*)>& fn) {
 namespace {
 unsigned g_automationMods = 0;
 float g_scaleOverride = 1.0f;
+
+constexpr wchar_t kFittedProp[] = L"LumenFitted";
+
+// Keeps a window's normal rect inside its monitor's work area (minus `margin` px), centred when
+// it had to shrink or stood off the screen; never below the minimum size. A first run at 200 %
+// on a 1440p screen asks for 2560x1560 px, a saved rect may come from a larger screen.
+void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
+    WINDOWPLACEMENT wp{sizeof(wp)};
+    if (!GetWindowPlacement(hwnd, &wp)) return;
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(MonitorFromRect(&wp.rcNormalPosition, MONITOR_DEFAULTTONEAREST), &mi)) return;
+    // rcNormalPosition is in workspace coordinates unless the window is a tool window.
+    const bool tool = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) != 0;
+    const LONG dx = tool ? 0 : mi.rcWork.left - mi.rcMonitor.left, dy = tool ? 0 : mi.rcWork.top - mi.rcMonitor.top;
+    RECT r = wp.rcNormalPosition;
+    OffsetRect(&r, dx, dy);
+    const RECT& work = mi.rcWork;
+    const int workW = work.right - work.left, workH = work.bottom - work.top;
+    const int w = std::max(minW, std::min<int>(r.right - r.left, workW - margin));
+    const int h = std::max(minH, std::min<int>(r.bottom - r.top, workH - margin));
+    const bool shrunk = w != r.right - r.left || h != r.bottom - r.top;
+    const bool off = r.left < work.left || r.top < work.top || r.left + w > work.right || r.top + h > work.bottom;
+    if (!shrunk && !off) return;
+    RECT fit{work.left + (workW - w) / 2, work.top + (workH - h) / 2, 0, 0};
+    fit.right = fit.left + w;
+    fit.bottom = fit.top + h;
+    if (!IsZoomed(hwnd) && !IsIconic(hwnd)) {
+        SetWindowPos(hwnd, nullptr, fit.left, fit.top, w, h, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        return;
+    }
+    OffsetRect(&fit, -dx, -dy);
+    wp.rcNormalPosition = fit;
+    wp.flags = 0;
+    SetWindowPlacement(hwnd, &wp);
+}
 }  // namespace
 
 void Host::SetAutomation(bool on) {
@@ -278,8 +313,14 @@ bool Host::Create(const HostOptions& options) {
         MONITORINFO mi{sizeof(mi)};
         if (GetMonitorInfoW(MonitorFromWindow(options.owner, MONITOR_DEFAULTTONEAREST), &mi)) work = mi.rcWork;
     }
-    const int w = static_cast<int>(std::lround(options.width * Scale()));
-    const int h = static_cast<int>(std::lround(options.height * Scale()));
+    // Never larger than the work area (minus a margin), as the Settings window already did by hand.
+    const int margin = static_cast<int>(std::lround(24 * Scale()));
+    const int w = std::max(static_cast<int>(std::lround(options.minWidth * Scale())),
+                           std::min(static_cast<int>(std::lround(options.width * Scale())),
+                                    static_cast<int>(work.right - work.left) - margin));
+    const int h = std::max(static_cast<int>(std::lround(options.minHeight * Scale())),
+                           std::min(static_cast<int>(std::lround(options.height * Scale())),
+                                    static_cast<int>(work.bottom - work.top) - margin));
     int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
     if (options.center) {
         RECT ref = work;
@@ -302,8 +343,7 @@ bool Host::Create(const HostOptions& options) {
     // default max track size (WM_GETMINMAXINFO comes before this host is attached).
     if (actual != dpi_ || g_scaleOverride != 1.0f) {
         dpi_ = actual;
-        SetWindowPos(hwnd_, nullptr, 0, 0, static_cast<int>(std::lround(options.width * Scale())),
-                     static_cast<int>(std::lround(options.height * Scale())), SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hwnd_, nullptr, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER);
     }
     ApplyDwmAttributes();
     // No SWP_FRAMECHANGED here: WM_NCCALCSIZE already ran during CreateWindowExW with
@@ -1191,6 +1231,20 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     if (HandleMessage(msg, wp, lp, &result)) return result;
 
     switch (msg) {
+        case WM_SHOWWINDOW:
+            // First show, after a restored placement too (App::RestoreWindowPlacement shows the
+            // window with a saved rect): fit it once the show has applied that rect.
+            if (wp && !fullscreen_ && !GetPropW(hwnd_, kFittedProp)) {
+                SetPropW(hwnd_, kFittedProp, reinterpret_cast<HANDLE>(1));
+                Post([this] {
+                    if (!hwnd_ || fullscreen_) return;
+                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())),
+                                  static_cast<int>(std::lround(options_.minHeight * Scale())),
+                                  static_cast<int>(std::lround(24 * Scale())));
+                });
+            }
+            break;
+
         case WM_NCCALCSIZE:
             // Also the wp == FALSE call during CreateWindowExW: the whole window is client area
             // from the start, without a SWP_FRAMECHANGED round trip afterwards.
@@ -1515,6 +1569,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case WM_NCDESTROY:
+            RemovePropW(self, kFittedProp);
             surface_.Detach();
             hwnd_ = nullptr;
             break;

@@ -3,6 +3,7 @@
 
 #include "Util.h"
 #include "app/Actions.h"
+#include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
@@ -66,7 +67,8 @@ public:
         width = Length::Grow();
         onClick = [this] {
             std::vector<MenuItem> items;
-            items.push_back({Tr(L"Add folder to library"), L"", "new-folder", false, true, false, false,
+            // It opens a folder picker: the ellipsis, as in the library's "⋯" menu.
+            items.push_back({Tr(L"Add Folder to Library…"), L"", "new-folder", false, true, false, false,
                              [] { lib::AddFolderToLibrary(); }});
             items.push_back({Tr(L"Open file"), ShortcutText(Action::OpenFile), "file", false, true, false, false,
                              [] { Run(Action::OpenFile); }});
@@ -236,6 +238,9 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Customize player", "edit", Action::CustomizePlayer));
     items.push_back(item(L"Keyboard shortcuts", "hotkeys", Action::KeyboardShortcuts));
     items.push_back(item(L"Settings", "settings", Action::Settings));
+    MenuItem about{Tr(L"About Lumen"), L"", "info"};
+    about.action = [] { ShowAboutDialog(); };
+    items.push_back(std::move(about));
     items.push_back(MenuItem::Separator());
     items.push_back(item(L"Quit", "quit", Action::Quit));
     ShowMenu(GetHost(), moreBtn_->rect, std::move(items), Place::Below, 240);

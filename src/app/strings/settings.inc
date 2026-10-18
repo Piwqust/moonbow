@@ -60,3 +60,13 @@
 {L"Subtitle example", L"Пример субтитров"},
 {L"Look for new shaders", L"Найти новые шейдеры"},
 {L"No shaders", L"Нет шейдеров"},
+// Disabled rows name the setting and the value that unlock them.
+{L"Turn on “{0}” to change this", L"Включите «{0}», чтобы изменить"},
+{L"Turn off “{0}” to change this", L"Выключите «{0}», чтобы изменить"},
+{L"Available when “{0}” is set to “{1}”", L"Доступно, если для «{0}» выбрано «{1}»"},
+{L"Not available while “{0}” is set to “{1}”", L"Недоступно, пока для «{0}» выбрано «{1}»"},
+{L"Compressor settings", L"Параметры компрессора"},
+{L"Room settings", L"Параметры помещения"},
+{L"Stereo widener settings", L"Параметры расширения стереобазы"},
+{L"Preamp: the level before the bands", L"Предусиление: уровень перед полосами"},
+{L"About Lumen", L"О программе"},

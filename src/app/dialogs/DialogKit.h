@@ -146,7 +146,10 @@ private:
 };
 
 // Shows the frame centered with a scrim (modal). Focuses `focus` (or the first focusable).
+// Menus and popovers open over the window are closed first.
 Frame* ShowFrame(ui::Host* host, std::unique_ptr<Frame> frame, ui::Widget* focus = nullptr);
+// Closes the popups stacked above the topmost dialog (menus, popovers, tooltips, toasts).
+void CloseTransientPopups(ui::Host* host);
 
 // Title + description block used by the dialog bodies ("Network URL" / "You can enter...").
 ui::Widget* AddFieldHeader(ui::Widget* parent, const std::wstring& title, const std::wstring& desc,

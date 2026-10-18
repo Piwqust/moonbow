@@ -96,11 +96,6 @@ std::wstring FormatValue(const Item& item, double v, bool withUnit) {
 
 namespace {
 
-bool IsWideAction(const std::string& action) {
-    return action == "edit-shortcuts" || action == "reset-shortcuts" || action == "rescan-plugins";
-}
-
-// Label text followed by the (i) icon; the text is shortened when space runs out.
 class InfoIcon : public Widget {
 public:
     explicit InfoIcon(std::wstring text) {
@@ -114,14 +109,18 @@ public:
     }
 };
 
+// Label text followed by the (i) icon. A label cut by a narrow window shows its full text as
+// the tooltip, together with the hint of a disabled row.
 class RowLabel : public Widget {
 public:
     RowLabel(std::wstring text, std::wstring description) {
         width = Length::Grow();
         label_ = Add<Label>(std::move(text), TextStyle::Body, Tone::Secondary);
-        label_->color = [l = label_] { return l->IsEnabled() ? P().textSecondary : DisabledTextColor(); };
+        label_->color = [this] { return !dimmed_ && label_->IsEnabled() ? P().textSecondary : DisabledTextColor(); };
         if (!description.empty()) info_ = Add<InfoIcon>(std::move(description));
     }
+    // Width the label needs to show its whole text.
+    float NaturalWidth() { return std::ceil(label_->Measure(kInf, kInf).w) + (info_ ? 28.0f : 0.0f); }
     Size MeasureContent(float availW, float) override {
         const Size l = label_->Measure(availW, kInf);
         return {l.w + (info_ ? 28.0f : 0.0f), std::max(l.h, 18.0f)};
@@ -132,15 +131,37 @@ public:
         const float lw = std::min(l.w, std::max(0.0f, rect.w - reserve));
         label_->Arrange({rect.x, rect.Cy() - l.h / 2, lw, l.h});
         if (info_) info_->Arrange({rect.x + lw + 10, rect.Cy() - 9, 18, 18});
+        cut_ = l.w > lw + 0.5f;
+        UpdateTooltip();
+    }
+    void SetHint(std::wstring hint) {
+        hint_ = std::move(hint);
+        UpdateTooltip();
+    }
+    // The row's control is disabled; the label stays enabled so its tooltip still shows.
+    void SetDimmed(bool d) {
+        dimmed_ = d;
+        Invalidate();
     }
 
 private:
+    void UpdateTooltip() {
+        std::wstring tip = cut_ ? label_->Text() : std::wstring();
+        if (!hint_.empty()) tip += (tip.empty() ? L"" : L"\n") + hint_;
+        if (tip != tooltip) tooltip = std::move(tip);
+        interactive = !tooltip.empty();
+    }
     Label* label_ = nullptr;
     InfoIcon* info_ = nullptr;
+    std::wstring hint_;
+    bool cut_ = false;
+    bool dimmed_ = false;
 };
 
 // --- simple controls ------------------------------------------------------------------------
 
+// The stock toggle draws the shared disabled look (flat fill, outlined knob, text.disabled), the
+// same as the buttons, dropdowns and segmented controls of disabled rows.
 class BoolToggle : public Toggle, public Syncable {
 public:
     explicit BoolToggle(const Item& it) : Toggle(Cfg().GetBool(it.key)), item(it) {
@@ -149,26 +170,19 @@ public:
         onChange = [this](bool on) { Cfg().SetBool(item.key, on); };
     }
     void Sync() override { SetValue(Cfg().GetBool(item.key)); }
-    // Disabled: the stock toggle sits on the panel color, which is white in the light theme and
-    // brighter than the grey tracks of live toggles. Draw it flatter than any live toggle instead.
-    void Paint(Painter& p) override {
-        if (IsEnabled()) {
-            Toggle::Paint(p);
-            return;
-        }
-        const Palette& c = P();
-        const bool on = Value();
-        const Rect box = rect.Center(66, 30);
-        p.Fill(box, Color::Mix(c.bgBase, c.bgCard, 0.5f), 4);
-        p.Stroke(box, Color::Mix(c.bgBase, c.bgDeep, 0.6f), 4, 2);
-        const float knobW = 26, knobH = 22;
-        const Rect knob{on ? box.Right() - 4 - knobW : box.x + 4, box.y + 4, knobW, knobH};
-        p.Fill(knob, Color::Mix(c.bgCard, c.lineStrong, on ? 0.9f : 0.5f), 3);
-        const Rect caption{on ? box.x + 4 : box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
-        p.Text(on ? Tr(L"ON") : Tr(L"OFF"), caption, TextStyle::Micro, DisabledTextColor(), HAlign::Center);
-    }
     const Item& item;
 };
+
+// Equalizer preset: "Custom" (an empty selection) once the bands no longer match the preset, and
+// "None" puts every band back to 0 dB.
+bool EqMatches(const std::string& preset) {
+    auto same = [](double a, double b) { return std::abs(a - b) < 0.05; };
+    const settings::EqPreset* p = settings::FindEqPreset(preset);
+    if (!same(Cfg().GetDouble(settings::kEqPreampKey), p ? p->preamp : 0.0)) return false;
+    for (int i = 0; i < settings::kEqBands; ++i)
+        if (!same(Cfg().GetDouble(settings::kEqBandKeys[i]), p ? p->bands[i] : 0.0)) return false;
+    return true;
+}
 
 std::vector<ui::Choice> ChoicesOf(const Item& item) {
     std::vector<ui::Choice> out;
@@ -192,14 +206,21 @@ public:
         width = Length::Px(kControlW);
         height = Length::Px(36);
         if (item.dynamicChoices) Refresh();
-        SetSelected(IndexOf(Choices(), Cfg().GetString(item.key)));
+        eqPreset_ = item.key == "audio.eqPreset";
+        if (eqPreset_) placeholder = Tr(L"Custom");
+        SetSelected(CurrentIndex());
         onChange = [this](int i) {
             if (i < 0 || i >= static_cast<int>(Choices().size())) return;
             const std::string value = Choices()[static_cast<size_t>(i)].value;
-            if (item.key == "audio.eqPreset" && settings::FindEqPreset(value))
+            if (eqPreset_ && settings::FindEqPreset(value)) {
                 Cfg().ApplyEqPreset(value);
-            else
+            } else if (eqPreset_) {
+                Cfg().SetDouble(settings::kEqPreampKey, 0);
+                for (const char* key : settings::kEqBandKeys) Cfg().SetDouble(key, 0);
                 Cfg().SetString(item.key, value);
+            } else {
+                Cfg().SetString(item.key, value);
+            }
         };
     }
     void OnClick() override {
@@ -208,7 +229,7 @@ public:
     }
     void Sync() override {
         const std::string v = Cfg().GetString(item.key);
-        int i = IndexOf(Choices(), v);
+        int i = CurrentIndex();
         if (i < 0 && item.dynamicChoices && !v.empty()) {
             Refresh();
             i = IndexOf(Choices(), v);
@@ -218,6 +239,12 @@ public:
     const Item& item;
 
 private:
+    int CurrentIndex() const {
+        const std::string v = Cfg().GetString(item.key);
+        if (eqPreset_ && !EqMatches(v)) return -1;
+        return IndexOf(Choices(), v);
+    }
+    bool eqPreset_ = false;
     // Output devices reported by mpv ("audio-device-list"); the current value stays listed even
     // when the device is unplugged, so the setting is never silently replaced.
     void Refresh() {
@@ -503,6 +530,7 @@ public:
         gap = 2;
         pad = Insets::All(2);
         width = Length::Px(kControlW);
+        minW = 280;  // the second option holds a 120-wide number field
         for (size_t i = 0; i < mode.choices.size() && i < 2; ++i) {
             auto* opt = Add<Option>(this, static_cast<int>(i), mode.choices[i].Label(Lang()));
             if (i == 1 && number) {
@@ -599,6 +627,7 @@ std::unique_ptr<Widget> MakeParamCard(const std::string& key, const std::vector<
 
 std::unique_ptr<Widget> MakeCropCard(const std::vector<const Item*>& items, PageHost& page) {
     auto card = std::make_unique<Card>("crop", page);
+    card->minW = 300;  // two caption + number boxes and the link button per line
     Widget* body = card->Body();
     body->gap = 12;
     // Pairs: top/bottom, left/right, each with a link button that keeps both sides equal.
@@ -956,6 +985,8 @@ void SettingField::Commit() {
                 v = item.min;  // cleared: back to the automatic value
                 ok = true;
             }
+            // Both ends clamp ("0" in a 1–3600 field stores 1), and the toast says so.
+            if (ok && item.max > item.min) v = std::clamp(v, item.min, item.max);
             if (ok) Cfg().SetDouble(item.key, v);
             // Say why the value changed or reverted instead of clamping silently.
             if ((!ok || !InRange(item, v)) && item.max > item.min)
@@ -1123,16 +1154,46 @@ void SettingRow::Build(std::wstring label, std::wstring description, std::unique
     minH = minHeight;
     id = item.key;
     Add<RowLabel>(std::move(label), std::move(description));
-    if (control) AddChild(std::move(control));
-    enabled = Cfg().IsEnabled(item);
+    if (control) {
+        control_ = AddChild(std::move(control));
+        if (control_->width.kind == Length::Fixed && control_->width.value >= kControlW)
+            controlW_ = control_->width.value;
+    }
+    on_ = Cfg().IsEnabled(item);
+    ApplyEnabled();
+}
+
+// Only the control is disabled: a disabled widget never gets the hover, so the label (and its
+// "Turn on …" hint) stays live.
+void SettingRow::ApplyEnabled() {
+    if (control_) control_->enabled = on_;
+    if (!Children().empty()) static_cast<RowLabel*>(Children().front().get())->SetDimmed(!on_);
     UpdateDisabledHint();
+}
+
+void SettingRow::FitControl(float innerW) {
+    if (!control_ || controlW_ <= 0 || Children().empty()) return;
+    auto* label = static_cast<RowLabel*>(Children().front().get());
+    const float floor = std::max(kControlMinW, control_->minW);
+    const float w = std::clamp(std::floor(innerW - gap - label->NaturalWidth()), floor, controlW_);
+    if (control_->width.value != w) control_->width = Length::Px(w);
+}
+
+Size SettingRow::MeasureContent(float availW, float availH) {
+    FitControl(availW - pad.H());
+    return FlexMeasure(availW, availH);
+}
+
+void SettingRow::OnLayout() {
+    FitControl(rect.w - pad.H());
+    FlexLayout();
 }
 
 void SettingRow::Sync() {
     const bool on = Cfg().IsEnabled(item);
-    if (on != enabled) {
-        enabled = on;
-        UpdateDisabledHint();
+    if (on != on_) {
+        on_ = on;
+        ApplyEnabled();
         Invalidate();
     }
 }
@@ -1141,15 +1202,25 @@ void SettingRow::Sync() {
 // row opacity made them unreadable. Hovering the label names the setting that unlocks it.
 void SettingRow::UpdateDisabledHint() {
     if (Children().empty()) return;
-    Widget* label = Children().front().get();
-    label->tooltip.clear();
-    label->interactive = false;
-    if (enabled || !item.enabledWhen) return;
-    if (const Item* parent = settings::FindItem(item.enabledWhen->key)) {
-        label->tooltip = Fmt(Tr(L"Available when “{0}” is set"),
-                             {Lang() == settings::Lang::Ru ? parent->labelRu : parent->label});
-        label->interactive = true;
-    }
+    auto* label = static_cast<RowLabel*>(Children().front().get());
+    std::wstring hint;
+    if (!on_ && item.enabledWhen)
+        if (const Item* parent = settings::FindItem(item.enabledWhen->key)) {
+            // Names the value that unlocks the row: "Turn on “Save log”", "… is set to “Room”".
+            const settings::Condition& when = *item.enabledWhen;
+            const std::wstring& name = parent->Label(Lang());
+            if (parent->type == ItemType::Toggle) {
+                const bool on = (when.value == "true") != when.negate;
+                hint = Fmt(on ? Tr(L"Turn on “{0}” to change this") : Tr(L"Turn off “{0}” to change this"), {name});
+            } else if (const settings::Choice* c = parent->FindChoice(when.value)) {
+                hint = Fmt(when.negate ? Tr(L"Not available while “{0}” is set to “{1}”")
+                                       : Tr(L"Available when “{0}” is set to “{1}”"),
+                           {name, c->Label(Lang())});
+            } else {
+                hint = Fmt(Tr(L"Available when “{0}” is set"), {name});
+            }
+        }
+    label->SetHint(std::move(hint));
 }
 
 void SettingRow::Paint(Painter&) {}
@@ -1191,8 +1262,9 @@ std::unique_ptr<Widget> MakeItemRow(const Item& item, PageHost& page) {
         case ItemType::Path: control = MakePathControl(item, page); break;
         case ItemType::Color: control = std::make_unique<ColorField>(item); break;
         case ItemType::Button: {
+            // As wide as the caption, at least the 100 of "Browse" (not the 320 control column).
             auto b = std::make_unique<Button>(item.ActionLabel(Lang()), ButtonKind::Secondary);
-            b->width = Length::Px(IsWideAction(item.action) ? kControlW : kSmallButtonW);
+            b->minW = kSmallButtonW;
             b->id = item.action;
             const Item* it = &item;
             PageHost* ph = &page;
@@ -1237,10 +1309,11 @@ std::unique_ptr<Widget> MakeGroupRow(const std::string& group, const std::vector
         const wchar_t* label;
         const wchar_t* description;
     };
+    // Labels of their own: a search hit must not show the card under its toggle's name.
     static const CardInfo kCards[] = {
-        {"compressor", L"Compressor", L"How night mode evens out loud and quiet passages."},
-        {"spatializer", L"Room simulation", L"Size and character of the simulated room."},
-        {"stereoWidener", L"Stereo widener", L"How far the stereo image is pushed beyond the speakers."},
+        {"compressor", L"Compressor settings", L"How night mode evens out loud and quiet passages."},
+        {"spatializer", L"Room settings", L"Size and character of the simulated room."},
+        {"stereoWidener", L"Stereo widener settings", L"How far the stereo image is pushed beyond the speakers."},
     };
     for (const CardInfo& c : kCards)
         if (group == c.group)
@@ -1303,13 +1376,23 @@ void Confirm(Host* host, std::wstring title, std::wstring text, std::wstring okT
     body->width = Length::Grow();
     Dialog* raw = d.get();
     d->Footer()->Add<Spacer>();
-    d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost)->onClick = [raw] { raw->Close(); };
+    auto* cancel = d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost);
+    cancel->onClick = [raw] { raw->Close(); };
     d->Footer()->Add<Button>(std::move(okText), ButtonKind::Primary)->onClick = [raw, ok = std::move(ok)] {
         auto run = ok;  // the dialog (and this lambda) is gone after Close()
         raw->Close();
         run();
     };
+    // The header's close button has no caption of its own.
+    std::function<void(Widget*)> tipClose = [&tipClose](Widget* w) {
+        if (auto* b = dynamic_cast<IconButton*>(w); b && b->icon == "close" && b->tooltip.empty()) b->tooltip = Tr(L"Close");
+        for (auto& c : w->Children()) tipClose(c.get());
+    };
+    tipClose(raw);
+    const bool keyboard = host->FocusVisible();
     ShowDialog(host, std::move(d));
+    // Focus the safe answer, not the header's close button: these confirm destructive actions.
+    host->SetFocus(cancel, keyboard);
 }
 
 }  // namespace app::sui
