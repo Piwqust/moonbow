@@ -228,9 +228,19 @@ ID2D1DeviceContext5* Surface::Begin() {
     if (!gpu.Ready() || !hwnd_) return nullptr;
     if (!swap_ || generation_ != gpu.Generation()) {
         Drop();
-        if (!Build()) return nullptr;
+        if (!Build()) Drop();
+    } else if (!target_) {
+        BuildTarget();
     }
-    if (!target_) return nullptr;
+    if (!target_) {
+        // A resize or DPI change can be the first to meet a removed device (driver update, TDR);
+        // End() never runs then, so recover here or the window stays blank.
+        if (FAILED(gpu.D3D()->GetDeviceRemovedReason())) {
+            Drop();
+            if (gpu.RecreateDevice() && !Build()) Drop();
+        }
+        if (!target_) return nullptr;
+    }
     ID2D1DeviceContext5* ctx = gpu.Ctx();
     ctx->SetTarget(target_.Get());
     ctx->SetDpi(dpi_, dpi_);
