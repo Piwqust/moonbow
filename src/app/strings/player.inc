@@ -28,7 +28,6 @@
 {L"Rotate", L"Повернуть"},
 {L"Rotate 90°", L"Повернуть на 90°"},
 {L"Deinterlace", L"Деинтерлейсинг"},
-{L"Deinterlace toggled", L"Деинтерлейсинг переключён"},
 {L"Picture in Picture", L"Картинка в картинке"},
 {L"Snapshot", L"Снимок кадра"},
 {L"Mute", L"Без звука"},
