@@ -3,6 +3,7 @@
 // tracks (add / remove), audio output devices and "Show Preferences".
 #include "Util.h"
 #include "app/App.h"
+#include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/player/ControlBar.h"
@@ -282,6 +283,16 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
         list->Invalidate();
     };
     const bool subs = std::wstring_view(type) == L"sub";
+    if (subs)
+        AddTitleButton(title, "search", L"Find subtitles online", [] {
+            if (!PS().fileLoaded) return;
+            // The dialog replaces the popover; close it after the click returns.
+            if (MainWindow* w = TheApp().main())
+                w->Post([] {
+                    ClosePlayerPanels();
+                    ShowOnlineSubtitlesDialog();
+                });
+        });
     AddTitleButton(title, "add", subs ? L"Add subtitle file" : L"Add audio file", [subs] {
         if (!PS().fileLoaded) return;
         for (const std::wstring& f : PickFiles(subs ? 2 : 1)) {

@@ -4,6 +4,7 @@
 #include "app/I18n.h"
 #include "app/library/LibraryCommon.h"
 #include "library/MediaTypes.h"
+#include "net/Online.h"
 
 #include <algorithm>
 #include <cmath>
@@ -362,7 +363,12 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
     if (!e.image.empty()) {
         Host* host = GetHost();
         const float scale = host ? host->Scale() : 1.0f;
-        bmp = TheApp().images().Get(e.image, static_cast<int>(std::ceil(std::max(t.w, t.h) * scale)));
+        // A video's own thumbnail gives way to its TMDB still or backdrop once downloaded
+        // (Settings › Privacy; a frame where playback stopped stays).
+        std::wstring image = e.image;
+        if (e.kind == EntryKind::Media && !e.audio && e.image == e.path)
+            if (std::wstring online = net::online::CardImage(e.path); !online.empty()) image = std::move(online);
+        bmp = TheApp().images().Get(image, static_cast<int>(std::ceil(std::max(t.w, t.h) * scale)));
     }
     const bool iconOnly = e.kind == EntryKind::Folder || e.kind == EntryKind::Playlist || e.kind == EntryKind::Category ||
                           e.kind == EntryKind::Artist || e.kind == EntryKind::Genre || e.kind == EntryKind::Stream;
@@ -429,6 +435,18 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Fill(b, c.bgBase.Fade(0.82f), 4);
         p.Text(badge, b, TextStyle::MonoSmall, c.textPrimary, HAlign::Center, VAlign::Center, 0);
     }
+
+    // Year and rating from TMDB, top right (the card's text lines keep their layout).
+    if (e.kind == EntryKind::Media && !e.audio && style_ == GridStyle::VideoCards)
+        if (const net::online::MediaMeta* m = net::online::Meta(e.path)) {
+            const std::wstring info = net::online::MetaSummary(*m);
+            if (!info.empty() && t.w > 160) {
+                const float tw = std::ceil(p.Measure(info, TextStyle::Small).width);
+                const Rect b{t.Right() - 8 - tw - 12, t.y + 8, tw + 12, 20};
+                p.Fill(b, c.bgBase.Fade(0.82f), 4);
+                p.Text(info, b, TextStyle::Small, c.textPrimary, HAlign::Center, VAlign::Center, 0);
+            }
+        }
 
     if (e.favorite) {
         const Rect b{t.x + 8, t.y + 8, 24, 24};

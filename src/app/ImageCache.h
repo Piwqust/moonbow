@@ -29,6 +29,9 @@ public:
     // Called by the app when the thumbnail service posts completions.
     void OnCompleted();
     void Clear();
+    // New image files appeared outside the thumbnail service (online posters): views repaint
+    // and ask Get() again.
+    void Refresh() { ready.Emit(); }
 
     Signal<> ready;
 

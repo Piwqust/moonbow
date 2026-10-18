@@ -898,11 +898,69 @@ void BuildApp(Builder& b) {
               L"Забыть все недавние файлы и сохранённые позиции. Отменить нельзя.");
 
     b.Sec("network", L"Network", L"Сеть");
-    b.Toggle("privacy.fetchMetadata", L"Fetch titles and cover art from the internet",
-             L"Загружать названия и обложки из интернета", false)
-        .Desc(L"Look up missing titles and album art online. File names are sent to the metadata service.",
-              L"Искать недостающие названия и обложки в интернете. Имена файлов передаются сервису метаданных.")
-        .Hidden();  // not implemented yet
+    // Online services (src/net/Online.cpp). Each is off until the user turns it on; the services
+    // that need a key use the user's own, stored DPAPI-encrypted (Config.cpp, `secret` items).
+    b.Toggle("privacy.fetchLyrics", L"Search for song lyrics online (LRCLIB)",
+             L"Искать тексты песен в интернете (LRCLIB)", false)
+        .Desc(L"When a song has no lyrics of its own (no .lrc file, no lyrics tag), its artist, title, album and "
+              L"length are sent to lrclib.net. Found lyrics are kept on this computer; saving them as .lrc is up to you.",
+              L"Если у песни нет своего текста (ни файла .lrc, ни тега), её исполнитель, название, альбом и "
+              L"длительность отправляются на lrclib.net. Найденный текст хранится на этом компьютере, сохранить его "
+              L"как .lrc можно вручную.");
+    b.Toggle("privacy.onlineSubtitles", L"Search for subtitles online (OpenSubtitles)",
+             L"Искать субтитры в интернете (OpenSubtitles)", false)
+        .Desc(L"Adds \"Find online\" to Add Subtitles and the subtitle panel. Only when you search: the video's hash "
+              L"(from its first and last 64 KB), its name, season, episode and your subtitle languages are sent to "
+              L"opensubtitles.com.",
+              L"Добавляет «Найти в интернете» в окно «Добавить субтитры» и в панель субтитров. Только когда вы ищете: "
+              L"хеш видео (по первым и последним 64 КБ), его имя, сезон, серия и ваши языки субтитров отправляются на "
+              L"opensubtitles.com.");
+    b.Text("privacy.opensubtitlesKey", L"OpenSubtitles API key", L"Ключ API OpenSubtitles")
+        .Hint(L"Paste your key", L"Вставьте свой ключ")
+        .Desc(L"Free: sign in at opensubtitles.com, open your profile, then API Consumers, and create one. The key is "
+              L"stored encrypted for your Windows account.",
+              L"Бесплатно: войдите на opensubtitles.com, откройте профиль, затем API Consumers, и создайте ключ. Ключ "
+              L"хранится зашифрованным для вашей учётной записи Windows.")
+        .Secret()
+        .When("privacy.onlineSubtitles", "true");
+    b.Text("privacy.opensubtitlesUser", L"OpenSubtitles user name", L"Имя пользователя OpenSubtitles")
+        .Hint(L"Optional", L"Необязательно")
+        .Desc(L"With your account the daily download limit is higher. Without it, downloads count against the key.",
+              L"С вашей учётной записью дневной лимит загрузок выше. Без неё загрузки считаются по ключу.")
+        .When("privacy.onlineSubtitles", "true");
+    b.Text("privacy.opensubtitlesPassword", L"OpenSubtitles password", L"Пароль OpenSubtitles")
+        .Desc(L"Sent only to opensubtitles.com to sign in, stored encrypted.",
+              L"Передаётся только на opensubtitles.com для входа, хранится зашифрованным.")
+        .Secret()
+        .When("privacy.onlineSubtitles", "true");
+    b.Toggle("privacy.fetchMetadata", L"Fetch posters and descriptions of movies and series (TMDB)",
+             L"Загружать постеры и описания фильмов и сериалов (TMDB)", false)
+        .Desc(L"For videos named like a movie with its year or like an episode (S01E02), the title, year, season and "
+              L"episode are sent to themoviedb.org; posters come from image.tmdb.org. This product uses the TMDB API "
+              L"but is not endorsed or certified by TMDB.",
+              L"Для видео, названных как фильм с годом или как серия (S01E02), название, год, сезон и серия "
+              L"отправляются на themoviedb.org, постеры загружаются с image.tmdb.org. This product uses the TMDB API "
+              L"but is not endorsed or certified by TMDB (Lumen использует API TMDB, но не одобрен и не "
+              L"сертифицирован TMDB).");
+    b.Text("privacy.tmdbKey", L"TMDB API key", L"Ключ API TMDB")
+        .Hint(L"Paste your key", L"Вставьте свой ключ")
+        .Desc(L"Free: create an account at themoviedb.org, then Settings, API, and request a key. Either the API key or "
+              L"the API Read Access Token works. Stored encrypted for your Windows account.",
+              L"Бесплатно: зарегистрируйтесь на themoviedb.org, откройте Settings, затем API, и запросите ключ. "
+              L"Подойдёт и API Key, и API Read Access Token. Хранится зашифрованным для вашей учётной записи Windows.")
+        .Secret()
+        .When("privacy.fetchMetadata", "true");
+    b.Button("privacy.clearOnline", L"Downloaded lyrics, posters and search results", L"Загруженные тексты, постеры и "
+             L"результаты поиска", "clear-online-data", L"Clear", L"Очистить")
+        .Desc(L"Delete what the online services sent. Subtitle files you downloaded stay. Clearing the history does "
+              L"this too.",
+              L"Удалить всё, что прислали онлайн-сервисы. Скачанные вами субтитры остаются. Очистка истории делает "
+              L"то же самое.");
+    // --automation only: point the services at local mock servers (src/net/Online.cpp, Server()).
+    b.Text("privacy.lrclibServer", L"LRCLIB server", L"Сервер LRCLIB").Hidden();
+    b.Text("privacy.opensubtitlesServer", L"OpenSubtitles server", L"Сервер OpenSubtitles").Hidden();
+    b.Text("privacy.tmdbServer", L"TMDB server", L"Сервер TMDB").Hidden();
+    b.Text("privacy.tmdbImageServer", L"TMDB image server", L"Сервер изображений TMDB").Hidden();
     b.Toggle("privacy.lastfmSubmit", L"Submit played tracks to last.fm", L"Отправлять прослушанное в last.fm", false)
         .Desc(L"Scrobble the songs you listen to your last.fm profile.",
               L"Отмечать прослушанные песни в вашем профиле last.fm (скробблинг).")
@@ -1766,13 +1824,12 @@ void BuildMedia(Builder& b) {
     b.Sec("metadata", L"Metadata & Artwork", L"Метаданные и обложки");
     b.Pick("library.metadata", L"Fetch titles and artwork", L"Названия и обложки",
            {{"file", L"From the file only", L"Только из файла"},
-            {"internet", L"From the file and the internet", L"Из файла и из интернета"},
-            {"none", L"Don't fetch", L"Не загружать"}},
+            {"internet", L"From the file and the internet (TMDB)", L"Из файла и из интернета (TMDB)"}},
            "file")
-        .Desc(L"Where titles, artists and covers come from. Internet lookups follow the Privacy settings.",
-              L"Откуда брать названия, исполнителей и обложки. Поиск в интернете подчиняется настройкам "
-              L"конфиденциальности.")
-        .Hidden();  // not implemented yet
+        .Desc(L"Posters and descriptions of movies and series from TMDB. The same switch as Privacy › Network, where "
+              L"the TMDB key goes.",
+              L"Постеры и описания фильмов и сериалов из TMDB. Тот же переключатель, что в разделе "
+              L"«Конфиденциальность › Сеть», там же ключ TMDB.");
     b.Toggle("library.enabled", L"Use the media library", L"Использовать медиатеку", true)
         .Desc(L"Index your media folders for the Home, Video and Music pages.",
               L"Индексировать папки с медиа для разделов «Главная», «Видео» и «Музыка».")

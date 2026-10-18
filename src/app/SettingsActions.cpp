@@ -6,6 +6,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "core/Paths.h"
+#include "net/Online.h"
 #include "ui/Controls.h"
 
 #include <shellapi.h>
@@ -25,7 +26,13 @@ bool RunSettingsAction(const std::string& action) {
     if (action == "clear-history") {
         app.history().Clear();
         app.history().Flush();
+        net::online::ClearAll();  // what the online services sent goes with the history
         toast(L"History cleared", "recent");
+        return true;
+    }
+    if (action == "clear-online-data") {
+        net::online::ClearAll();
+        toast(L"Online data cleared", "privacy");
         return true;
     }
     if (action == "reset-picture") {

@@ -13,6 +13,7 @@
 #include "app/dialogs/DialogKit.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
+#include "net/Online.h"
 
 #include <algorithm>
 #include <cmath>
@@ -27,6 +28,7 @@ using namespace dlg;
 
 void InitDialogs() {
     InstallSubtitleMemory();
+    net::online::Init();
 }
 
 namespace {
@@ -631,6 +633,148 @@ std::vector<InfoSection> CollectMediaInfo() {
     return out;
 }
 
+// --- TMDB block of the info dialog ---------------------------------------------------------
+
+// A poster from the image cache (2:3), or the placeholder until it is downloaded.
+class PosterView : public Widget {
+public:
+    explicit PosterView(std::wstring video) : video_(std::move(video)) {
+        width = Length::Px(104);
+        height = Length::Px(156);
+        conn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
+    }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const std::wstring file = net::online::PosterImage(video_);
+        ID2D1Bitmap* bmp = nullptr;
+        if (!file.empty() && GetHost()) bmp = TheApp().images().Get(file, static_cast<int>(rect.h * GetHost()->Scale()));
+        p.Fill(rect, c.bgCard, 6);
+        if (bmp) p.Image(bmp, rect, 6, true);
+        else p.Icon("video", rect.Center(32, 32), c.textTertiary, c.accentMid);
+    }
+
+private:
+    std::wstring video_;
+    ScopedConnection conn_;
+};
+
+// Poster, title, year, rating and overview from TMDB with "Find another match" and "Reset";
+// rebuilt whenever the online records change (the lookup may finish while the dialog is open).
+class MetaBlock : public Widget {
+public:
+    explicit MetaBlock(std::wstring video) : video_(std::move(video)) {
+        dir = Dir::Column;
+        width = Length::Grow();
+        gap = 6;
+        conn_ = Connect(net::online::Changed(), [this] {
+            if (GetHost()) GetHost()->Post([this, alive = alive_] {
+                if (*alive) Rebuild();
+            });
+        });
+        Rebuild();
+    }
+    ~MetaBlock() override { *alive_ = false; }
+
+private:
+    void Rebuild() {
+        ClearChildren();
+        using net::online::MediaMeta;
+        const MediaMeta* m = net::online::Meta(video_);
+        auto actions = [this](Widget* parent, bool matched) {
+            auto* row = parent->Add<Widget>();
+            row->dir = Dir::Row;
+            row->gap = 18;
+            row->pad = {0, 4, 0, 0};
+            const std::wstring video = video_;
+            auto* other = row->Add<LinkButton>(matched ? Tr(L"Find another match") : Tr(L"Find a match"));
+            other->trailingIcon = "search";
+            other->onClick = [video] {
+                if (MainWindow* w = TheApp().main())
+                    w->Post([video] {
+                        CloseTransientPopups(TheApp().main());
+                        ShowMetadataMatchDialog(video);
+                    });
+            };
+            if (matched) {
+                auto* reset = row->Add<LinkButton>(Tr(L"Reset"));
+                reset->tooltip = Tr(L"Forget this match and show the file's own thumbnail");
+                reset->onClick = [video] { net::online::ResetMeta(video); };
+            }
+        };
+        if (!net::online::MetadataToggle()) {
+            visible = false;
+            InvalidateLayout();
+            return;
+        }
+        visible = true;
+        if (!net::online::MetadataOn()) {
+            auto* l = Add<Label>(net::online::MetadataKeyRejected()
+                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy.")
+                                     : Tr(L"Paste your TMDB API key in Settings › Privacy to see posters and descriptions."),
+                                 TextStyle::Body, Tone::Tertiary);
+            l->wrap = true;
+            l->width = Length::Grow();
+            InvalidateLayout();
+            return;
+        }
+        if (!m || m->state != MediaMeta::State::Matched) {
+            const bool waiting = m && m->state == MediaMeta::State::Queued;
+            auto* l = Add<Label>(waiting ? Tr(L"Looking this video up on TMDB…")
+                                 : m && m->state == MediaMeta::State::Failed
+                                     ? Tr(L"TMDB couldn't be reached. Lumen tries again next time.")
+                                     : Tr(L"TMDB has nothing for this file name."),
+                                 TextStyle::Body, Tone::Tertiary);
+            l->wrap = true;
+            l->width = Length::Grow();
+            if (!waiting) actions(this, false);
+            InvalidateLayout();
+            return;
+        }
+        auto* row = Add<Widget>();
+        row->dir = Dir::Row;
+        row->width = Length::Grow();
+        row->gap = 16;
+        row->align = Align::Start;
+        row->Add<PosterView>(video_);
+        auto* col = row->Add<Widget>();
+        col->dir = Dir::Column;
+        col->width = Length::Grow();
+        col->gap = 4;
+        auto* title = col->Add<Label>(m->title, TextStyle::Large);
+        title->color = SoftText;
+        title->width = Length::Grow();
+        title->tooltip = m->title;
+        std::wstring line = net::online::MetaSummary(*m);
+        if (m->tv) {
+            wchar_t code[24];
+            swprintf_s(code, L"S%02dE%02d", m->season, m->episode);
+            line = std::wstring(code) + (m->episodeTitle.empty() ? L"" : L" · " + m->episodeTitle) +
+                   (line.empty() ? L"" : L" · " + line);
+        }
+        if (!line.empty()) {
+            auto* l = col->Add<Label>(line, TextStyle::Body, Tone::Tertiary);
+            l->width = Length::Grow();
+        }
+        if (!m->overview.empty()) {
+            auto* o = col->Add<CappedText>(m->overview, TextStyle::Body);
+            o->color = SoftText;
+            o->wrap = true;
+            o->maxLines = 5;
+            o->width = Length::Grow();
+            o->tooltip = m->overview;
+            o->interactive = true;
+        }
+        actions(col, true);
+        auto* credit = col->Add<Label>(Tr(L"Data from TMDB"), TextStyle::Small, Tone::Tertiary);
+        credit->pad = {0, 2, 0, 0};
+        InvalidateLayout();
+    }
+
+    std::wstring video_;
+    ScopedConnection conn_;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+};
+
 std::wstring InfoText(const std::vector<InfoSection>& sections) {
     std::wstring t;
     for (const auto& s : sections) {
@@ -958,6 +1102,15 @@ void ShowMediaInfoDialog() {
         // Frame width minus the body padding (20 + 20).
         const float valueW = FitWidth(w, 720) - 40 - InfoLine::kKeyW - InfoLine::kGap;
         float est = 0;
+        // Poster and overview from TMDB for a video, when the user turned that on.
+        const std::wstring path = TheApp().player().State().path;
+        if (net::online::MetadataToggle() && library::KindOf(path) == library::MediaKind::Video) {
+            content->Add<MetaBlock>(path);
+            auto* g = content->Add<Widget>();
+            g->height = Length::Px(10);
+            AddSeparator(content);
+            est += 200;
+        }
         for (size_t i = 0; i < sections.size(); ++i) {
             if (i > 0) {
                 auto* g = content->Add<Widget>();
@@ -1066,12 +1219,200 @@ void ShowAboutDialog(Host* host) {
     links->Add<AboutLink>(Tr(L"FFmpeg: LGPL 2.1 or later"), L"https://ffmpeg.org/legal.html");
     links->Add<AboutLink>(Tr(L"Inter typeface: SIL Open Font License 1.1"), L"https://openfontlicense.org");
 
+    // The online services (each off until turned on in Settings › Privacy). TMDB's terms ask for
+    // this notice word for word.
+    AddSeparator(body);
+    body->Add<Label>(Tr(L"Online services"), TextStyle::Body, Tone::Tertiary);
+    auto* services = body->Add<Widget>();
+    services->dir = Dir::Column;
+    services->gap = 6;
+    services->width = Length::Grow();
+    services->Add<AboutLink>(Tr(L"Song lyrics: LRCLIB"), L"https://lrclib.net");
+    services->Add<AboutLink>(Tr(L"Subtitles: OpenSubtitles.com"), L"https://www.opensubtitles.com");
+    services->Add<AboutLink>(Tr(L"Posters and descriptions: TMDB"), L"https://www.themoviedb.org");
+    auto* tmdb = services->Add<Label>(L"This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                                      TextStyle::Small, Tone::Tertiary);
+    tmdb->wrap = true;
+    tmdb->width = Length::Grow();
+
     f->Footer()->Add<Spacer>();
     auto* close = f->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Accent);
     close->onClick = [f] { f->Close(); };
     f->onSubmit = [f] { f->Close(); };
     // On "Close", not the first licence link: Enter closes, as in the other dialogs (VF-04).
     ShowFrame(host, std::move(frame), close);
+}
+
+// =============================================================================================
+// TMDB: find another match
+// =============================================================================================
+
+namespace {
+
+class MatchRow : public Widget {
+public:
+    MatchRow(net::MetaMatch m, std::function<void(const net::MetaMatch&)> pick) : m_(std::move(m)), pick_(std::move(pick)) {
+        interactive = true;
+        focusable = true;
+        width = Length::Grow();
+        height = Length::Px(64);
+        tooltip = m_.overview.empty() ? m_.title : m_.title + L"\n\n" + m_.overview;
+        onClick = [this] {
+            if (pick_) pick_(m_);
+        };
+    }
+    void Paint(Painter& p) override {
+        const Palette& c = P();
+        const bool hot = IsHot() || IsPressed();
+        if (hot) p.Fill(rect, IsPressed() ? c.press : c.hover, 6);
+        PaintFocusRing(p, rect, 6);
+        const Color fg = hot ? c.textPrimary : c.textSecondary;
+        p.Icon(m_.tv ? "tv" : "video", {rect.x + 10, rect.y + 10, 24, 24}, fg, c.accentMid);
+        std::wstring title = m_.title;
+        if (m_.year) title += L" (" + std::to_wstring(m_.year) + L")";
+        p.Text(title, {rect.x + 46, rect.y + 8, rect.w - 58, 22}, TextStyle::Body, fg);
+        const std::wstring overview = m_.overview.empty() ? std::wstring(Tr(L"No description")) : m_.overview;
+        p.Text(overview, {rect.x + 46, rect.y + 32, rect.w - 58, 22}, TextStyle::Small, c.textTertiary);
+    }
+
+private:
+    net::MetaMatch m_;
+    std::function<void(const net::MetaMatch&)> pick_;
+};
+
+class MatchDialog : public std::enable_shared_from_this<MatchDialog> {
+public:
+    MatchDialog(MainWindow* w, std::wstring video) : window_(w), video_(std::move(video)) {}
+
+    std::unique_ptr<Frame> Build() {
+        auto frame = std::make_unique<Frame>(Tr(L"Find Another Match"), FitWidth(window_, 780), FitHeight(window_, 640));
+        frame_ = frame.get();
+        const net::VideoGuess g = net::online::Guess(video_);
+        Widget* bar = frame_->Toolbar();
+        query_ = bar->Add<TextBox>(Tr(L"Movie or series title"), "search");
+        query_->raised = true;
+        query_->width = Length::Grow();
+        query_->height = Length::Px(34);
+        query_->SetText(g.title.empty() ? library::StemOf(video_) : g.title);
+        query_->onSubmit = [this](const std::wstring&) { Search(); };
+        year_ = bar->Add<TextBox>(Tr(L"Year"));
+        year_->raised = true;
+        year_->width = Length::Px(84);
+        year_->height = Length::Px(34);
+        if (g.year) year_->SetText(std::to_wstring(g.year));
+        year_->onSubmit = [this](const std::wstring&) { Search(); };
+        kind_ = bar->Add<FieldDropdown>(std::vector<Choice>{{Tr(L"Movie"), "movie"}, {Tr(L"Series"), "tv"}},
+                                        g.kind == net::VideoGuess::Episode ? 1 : 0);
+        kind_->width = Length::Px(150);
+        kind_->height = Length::Px(34);
+        kind_->onChange = [this](int) { Search(); };
+        bar->Add<DButton>(Tr(L"Find"), BtnStyle::Accent)->onClick = [this] { Search(); };
+
+        Widget* body = frame_->Body();
+        body->pad = {};
+        body->gap = 0;
+        scroll_ = body->Add<ScrollView>();
+        scroll_->width = Length::Grow();
+        scroll_->height = Length::Grow();
+
+        frame_->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Neutral)->onClick = [this] { frame_->Close(); };
+        status_ = frame_->Footer()->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
+        status_->pad = {8, 0, 0, 0};
+        status_->width = Length::Grow();
+        auto* reset = frame_->Footer()->Add<DButton>(Tr(L"Reset"), BtnStyle::Neutral);
+        reset->tooltip = Tr(L"Forget this match and show the file's own thumbnail");
+        reset->onClick = [this] {
+            net::online::ResetMeta(video_);
+            ShowToast(window_, Tr(L"Match reset"), "refresh");
+            frame_->Close();
+        };
+        frame_->onSubmit = [this] { Search(); };
+        return frame;
+    }
+    Widget* FirstFocus() const { return query_; }
+    void Closed() { closed_ = true; }
+
+    void Search() {
+        const bool tv = kind_->Selected() == 1;
+        Widget* content = Message(Tr(L"Searching…"));
+        (void)content;
+        auto self = weak_from_this();
+        net::online::SearchMetadata(query_->Text(), std::max(0, _wtoi(year_->Text().c_str())), tv,
+                                    [self](const std::vector<net::MetaMatch>& results, const std::wstring& error) {
+                                        if (auto d = self.lock()) d->Show(results, error);
+                                    });
+    }
+
+private:
+    Widget* Content() {
+        Widget* content = scroll_->SetContent<Widget>();
+        content->dir = Dir::Column;
+        content->width = Length::Grow();
+        content->pad = {16, 12, 16, 12};
+        content->gap = 2;
+        scroll_->ScrollTo(0, false);
+        scroll_->InvalidateLayout();
+        return content;
+    }
+    Widget* Message(const std::wstring& text) {
+        Widget* content = Content();
+        content->align = Align::Center;
+        content->pad = {40, 70, 40, 30};
+        auto* l = content->Add<Label>(text, TextStyle::Body, Tone::Tertiary);
+        l->wrap = true;
+        l->halign = HAlign::Center;
+        l->maxW = 560;
+        return content;
+    }
+    void Show(const std::vector<net::MetaMatch>& results, const std::wstring& error) {
+        if (closed_) return;
+        if (!error.empty()) {
+            Message(error);
+            status_->SetText({});
+            return;
+        }
+        if (results.empty()) {
+            Message(Tr(L"Nothing found. Try another title, the year or the other kind."));
+            status_->SetText({});
+            return;
+        }
+        Widget* content = Content();
+        auto self = weak_from_this();
+        for (const net::MetaMatch& m : results)
+            content->Add<MatchRow>(m, [self](const net::MetaMatch& pick) {
+                if (auto d = self.lock()) d->Pick(pick);
+            });
+        status_->SetText(Fmt(Tr(L"Found: {0}"), {std::to_wstring(results.size())}));
+        status_->InvalidateLayout();
+    }
+    void Pick(const net::MetaMatch& m) {
+        net::online::SetMatch(video_, m);
+        ShowToast(window_, Fmt(Tr(L"Matched with {0}"), {m.title}), "check_selected");
+        frame_->Close();
+    }
+
+    MainWindow* window_;
+    std::wstring video_;
+    Frame* frame_ = nullptr;
+    TextBox* query_ = nullptr;
+    TextBox* year_ = nullptr;
+    FieldDropdown* kind_ = nullptr;
+    ScrollView* scroll_ = nullptr;
+    Label* status_ = nullptr;
+    bool closed_ = false;
+};
+
+}  // namespace
+
+void ShowMetadataMatchDialog(const std::wstring& videoPath) {
+    MainWindow* w = TheApp().main();
+    if (!w || videoPath.empty()) return;
+    auto dialog = std::make_shared<MatchDialog>(w, videoPath);
+    auto frame = dialog->Build();
+    Widget* focus = dialog->FirstFocus();
+    frame->OnClosed([dialog] { dialog->Closed(); });
+    ShowFrame(w, std::move(frame), focus);
+    dialog->Search();
 }
 
 }  // namespace app

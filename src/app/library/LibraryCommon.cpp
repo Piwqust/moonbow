@@ -7,6 +7,7 @@
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
 #include "library/MediaTypes.h"
+#include "net/Online.h"
 
 #include <shellapi.h>
 #include <shlwapi.h>
@@ -501,6 +502,16 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueItem>
                 TheApp().history().UpdatePosition(path, d, d);
                 TheApp().libraryChanged.Emit();
             }));
+        }
+        // TMDB posters (Settings › Privacy): fix a wrong match or go back to the file's thumbnail.
+        if (net::online::MetadataToggle() && !IsUrl(path)) {
+            m.push_back(Item(L"Find Another Match…", "search", [path] { ShowMetadataMatchDialog(path); }));
+            const net::online::MediaMeta* meta = net::online::Meta(path);
+            if (meta && meta->state == net::online::MediaMeta::State::Matched)
+                m.push_back(Item(L"Reset Match", "refresh", [path] {
+                    net::online::ResetMeta(path);
+                    Toast(Tr(L"Match reset"), "refresh");
+                }));
         }
     }
     const bool fav = TheApp().favorites().Contains(path);
