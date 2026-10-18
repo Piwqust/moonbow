@@ -852,19 +852,22 @@ bool TextBox::OnDoubleClick(const MouseEvent& e) {
 
 void TextBox::Paint(Painter& p) {
     const Palette& c = P();
+    const bool live = IsEnabled();
     const Color bg = background.a > 0 ? background : raised ? c.bgRaised : c.bgDeep;
-    p.Fill(rect, bg, 4);
-    if (IsFocused())
+    // Disabled: the flat fill of the other disabled controls, no hover or focus outline.
+    p.Fill(rect, live ? bg : DisabledFill(), 4);
+    if (live && IsFocused())
         p.Stroke(rect, c.lineStrong, 4);
-    else if (IsHot())
+    else if (live && IsHot())
         p.Stroke(rect, c.line, 4);
-    if (!leadingIcon.empty()) p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, c.textTertiary);
+    if (!leadingIcon.empty())
+        p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, live ? c.textTertiary : c.textDisabled);
 
     const Rect tr = TextRect();
     p.PushClip(tr);
     const std::wstring shown = Shown();
     if (shown.empty()) {
-        p.Text(placeholder, tr, TextStyle::Body, c.textTertiary);
+        p.Text(placeholder, tr, TextStyle::Body, live ? c.textTertiary : c.textDisabled);
     } else {
         if (IsFocused() && caret_ != anchor_) {
             const float x1 = XOf(std::min(caret_, anchor_)), x2 = XOf(std::max(caret_, anchor_));
@@ -873,7 +876,7 @@ void TextBox::Paint(Painter& p) {
         p.Text(shown, {tr.x - scroll_, tr.y, 100000.0f, tr.h}, TextStyle::Body, IsEnabled() ? c.textPrimary : c.textDisabled,
                HAlign::Leading, VAlign::Center, 0);
     }
-    if (IsFocused() && caretOn_ && !readOnly) p.Fill(CaretRect(), c.textPrimary);
+    if (live && IsFocused() && caretOn_ && !readOnly) p.Fill(CaretRect(), c.textPrimary);
     p.PopClip();
 }
 
