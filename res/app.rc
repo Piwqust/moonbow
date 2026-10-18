@@ -12,6 +12,11 @@
 // GPU sharpening shader, written to <data>\cache\shaders by src/Player.cpp.
 LUMEN_CAS RCDATA "shaders/lumen-cas.glsl"
 
+// Built-in skins (design/SKINS.md), read by src/app/Skins.cpp.
+LUMEN_SKIN_OLED RCDATA "skins/oled.json"
+LUMEN_SKIN_CONTRAST RCDATA "skins/contrast.json"
+LUMEN_SKIN_SEPIA RCDATA "skins/sepia.json"
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 0,1,0,0
  PRODUCTVERSION 0,1,0,0

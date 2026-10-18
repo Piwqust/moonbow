@@ -788,15 +788,26 @@ void BuildApp(Builder& b) {
     b.Cat("interface", "app", "interface", L"Interface", L"Интерфейс", L"Interface Settings", L"Настройки интерфейса");
 
     b.Sec("skin", L"Skin", L"Скин");
+    // One widget (app/settings/SettingsSkins.cpp): the built-in skins with swatches, then "Custom file".
+    b.Pick("interface.skin", L"Skin", L"Скин",
+           {{"lumen", L"Lumen", L"Lumen"},
+            {"oled", L"OLED black", L"Чёрный OLED"},
+            {"contrast", L"High contrast", L"Высокий контраст"},
+            {"sepia", L"Sepia", L"Сепия"}},
+           "lumen")
+        .Desc(L"Colors and corner sizes of the whole app. Applies to every window at once.",
+              L"Цвета и скругления всего приложения. Меняются сразу во всех окнах.")
+        .Group("skin");
     b.Toggle("interface.customSkin", L"Use a custom skin", L"Использовать свой скин", false)
         .Desc(L"Replace the built-in look with colors and sizes from a skin file.",
               L"Заменить встроенное оформление цветами и размерами из файла скина.")
-        .Hidden();  // not implemented yet
+        .Group("skin");
     b.Path("interface.skinFile", L"Skin file", L"Файл скина", PathKind::File)
-        .Desc(L"A Lumen skin (.json) that overrides design tokens.",
-              L"Скин Lumen (.json), переопределяющий токены оформления.")
+        .Desc(L"A Lumen skin (.json) that overrides design tokens. Lumen reloads it when the file changes.",
+              L"Скин Lumen (.json), переопределяющий токены оформления. Lumen перечитывает его при каждом "
+              L"изменении файла.")
         .When("interface.customSkin", "true")
-        .Hidden();  // not implemented yet
+        .Group("skin");
 
     b.Sec("window", L"Window", L"Окно");
     b.Toggle("interface.embedVideo", L"Play video inside main window", L"Показывать видео в главном окне", true)

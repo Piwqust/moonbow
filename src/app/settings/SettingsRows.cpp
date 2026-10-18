@@ -1290,6 +1290,7 @@ std::unique_ptr<Widget> MakeGroupRow(const std::string& group, const std::vector
     const Item& first = *items.front();
     if (group == "equalizer") return MakeEqualizer(items, page);
     if (group == "addonsToolbar") return MakeAddonsToolbar(items, page);
+    if (group == "skin") return MakeSkinPicker(items, page);
     if (group == "startupVolume") {
         const Item* mode = nullptr;
         const Item* number = nullptr;

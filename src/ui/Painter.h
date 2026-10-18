@@ -77,6 +77,7 @@ public:
 
 private:
     ID2D1SolidColorBrush* Brush(Color c);
+    void FillRaw(const Rect& r, Color c, float radius);  // radius already mapped by the skin
 
     struct ClipEntry {
         Rect rect;

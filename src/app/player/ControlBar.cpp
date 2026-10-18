@@ -912,9 +912,12 @@ void ControlBar::Paint(Painter& p) {
     if (floating) {
         // Over the picture: a rounded, opaque panel with a soft shadow, inset from the edges. Opaque,
         // so the picture's colours never show through it (no hue seam where the video changes).
+        // A skin may ask for a see-through panel (controlBar.opacity); the shadow fades with it so it
+        // does not darken the picture under the bar.
         const float r = minimal_ ? 20.0f : 14.0f;
-        p.Shadow(rect, r, 18, 6, 0.40f);
-        p.Fill(rect, P().bgChrome, r);
+        const float k = Theme::Get().BarOpacity();
+        p.Shadow(rect, r, 18, 6, 0.40f * k);
+        p.Fill(rect, P().bgChrome.Fade(k), r);
         p.Stroke(rect, P().line, r);
         return;
     }

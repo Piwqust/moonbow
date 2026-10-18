@@ -21,6 +21,10 @@ ID2D1SolidColorBrush* Painter::Brush(Color c) {
 }
 
 void Painter::Fill(const Rect& r, Color c, float radius) {
+    FillRaw(r, c, Theme::Get().Radius(radius));
+}
+
+void Painter::FillRaw(const Rect& r, Color c, float radius) {
     if (r.Empty() || c.a <= 0) return;
     if (radius > 0)
         ctx_->FillRoundedRectangle(D2D1::RoundedRect(r.D2D(), radius, radius), Brush(c));
@@ -30,6 +34,7 @@ void Painter::Fill(const Rect& r, Color c, float radius) {
 
 void Painter::Stroke(const Rect& r, Color c, float radius, float width) {
     if (r.Empty() || c.a <= 0) return;
+    radius = Theme::Get().Radius(radius);
     const Rect in = r.Inset(width / 2);
     if (radius > 0) {
         const float rr = std::max(0.0f, radius - width / 2);
@@ -79,6 +84,7 @@ void Painter::Image(ID2D1Bitmap* bitmap, const Rect& r, float radius, bool cover
     const float w = bs.width * s, h = bs.height * s;
     const float x = r.x + (r.w - w) / 2, y = r.y + (r.h - h) / 2;
     opacity *= opacity_;
+    radius = Theme::Get().Radius(radius);
 
     if (radius <= 0 && !cover) {
         ctx_->DrawBitmap(bitmap, D2D1::RectF(x, y, x + w, y + h), opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
@@ -100,12 +106,13 @@ void Painter::Image(ID2D1Bitmap* bitmap, const Rect& r, float radius, bool cover
 
 void Painter::Shadow(const Rect& r, float radius, float blur, float dy, float alpha) {
     if (alpha < 0) alpha = P().shadow.a;
+    radius = Theme::Get().Radius(radius);  // once: radius + grow is not a design radius
     constexpr int kSteps = 6;
     for (int i = kSteps; i >= 1; --i) {
         const float t = static_cast<float>(i) / kSteps;
         const float grow = blur * t * 0.6f;
         Rect s{r.x - grow, r.y - grow + dy * t, r.w + grow * 2, r.h + grow * 2};
-        Fill(s, Color{0, 0, 0, alpha * 0.9f / kSteps * (1.2f - t)}, radius + grow);
+        FillRaw(s, Color{0, 0, 0, alpha * 0.9f / kSteps * (1.2f - t)}, radius + grow);
     }
 }
 
@@ -116,6 +123,7 @@ void Painter::PushClip(const Rect& r) {
 }
 
 void Painter::PushRoundClip(const Rect& r, float radius) {
+    radius = Theme::Get().Radius(radius);
     gfx::ComPtr<ID2D1RoundedRectangleGeometry> g;
     gfx::Gpu::Get().D2DFactory()->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r.D2D(), radius, radius), &g);
     D2D1_LAYER_PARAMETERS1 params = D2D1::LayerParameters1(r.D2D(), g.Get());
