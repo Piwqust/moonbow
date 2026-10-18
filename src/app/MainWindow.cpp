@@ -64,7 +64,7 @@ public:
         // The title bar hides in fullscreen and hide-UI mode.
         Widget* title = Children()[0].get();
         title->visible = !window_->IsFullscreen() && !window_->UiHidden() &&
-                         TheApp().config().GetBool("interface.decorations");
+                         (TheApp().config().GetBool("interface.decorations") || !TheApp().PlayerShown());
         Widget::OnLayout();
     }
     bool OnMouseMove(const MouseEvent&) override {
@@ -119,8 +119,12 @@ bool MainWindow::Create() {
             if (a == Action::Fullscreen) Run(a);
             return true;
         }
-        // Esc only leaves fullscreen / hide-UI; elsewhere it does nothing.
-        if (a == Action::ExitFullscreen && !IsFullscreen() && !UiHidden()) return false;
+        // Esc leaves fullscreen / hide-UI first; in the windowed player it returns to the library.
+        if (a == Action::ExitFullscreen && !IsFullscreen() && !UiHidden()) {
+            if (!TheApp().PlayerShown()) return false;
+            TheApp().ShowPlayer(false);
+            return true;
+        }
         Run(a);
         PokeChrome();
         return true;

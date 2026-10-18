@@ -32,6 +32,7 @@ struct Chapter {
 };
 
 struct PlayerState {
+    uint64_t loadSerial = 0;  // +1 on every MPV_EVENT_FILE_LOADED
     bool ready = false;
     bool idle = true;
     bool fileLoaded = false;

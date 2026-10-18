@@ -228,6 +228,7 @@ unsigned Player::ProcessEvents() {
             case MPV_EVENT_FILE_LOADED:
                 Trace("file loaded");
                 state_.fileLoaded = true;
+                ++state_.loadSerial;
                 state_.eof = false;
                 state_.lastError.clear();
                 changes |= kChangeFile | kChangeState;

@@ -1,4 +1,5 @@
 #include "app/Shell.h"
+#include "library/MediaTypes.h"
 
 #include "Util.h"
 #include "app/Actions.h"
@@ -149,7 +150,9 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
         TheApp().ShowPlayer(false);
         if (item && item->path.find(L"://") == std::wstring::npos) {
             const size_t slash = item->path.find_last_of(L"\\/");
-            if (slash != std::wstring::npos) TheApp().Navigate(Route{Section::Videos, item->path.substr(0, slash)});
+            const Section section =
+                library::KindOf(item->path) == library::MediaKind::Audio ? Section::Music : Section::Videos;
+            if (slash != std::wstring::npos) TheApp().Navigate(Route{section, item->path.substr(0, slash)});
         }
     };
     crumb_->Add<IconView>("folder", 20, Tone::Secondary);
@@ -193,10 +196,9 @@ void TitleBar::Refresh() {
         const size_t dot = title.find_last_of(L'.');
         if (dot != std::wstring::npos && dot > 0) title.resize(dot);
     }
-    if (media && !s.artist.empty() && !app.player().State().hasVideo) title = s.artist + L" — " + title;
+    if (media && !s.artist.empty() && !app.player().State().hasVideo) title += L" · " + s.artist;
+    if (!app.config().GetBool("interface.titleFileName")) title.clear();
     title_->SetText(title.empty() ? L"Lumen" : title);
-    const bool showName = app.config().GetBool("interface.titleFileName");
-    if (!showName) title.clear();
     if (window_) window_->SetTitle(title.empty() ? L"Lumen" : title + L" — Lumen");
     maxBtn_->icon = window_ && window_->IsWindowMaximized() ? "minimize" : "maximize";
     maxBtn_->tooltip = window_ && window_->IsWindowMaximized() ? Tr(L"Restore") : Tr(L"Maximize");
@@ -221,6 +223,7 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Open folder", "folder", Action::OpenFolder));
     items.push_back(item(L"Open network stream", "streaming", Action::OpenNetwork));
     items.push_back(item(L"Add subtitles", "subtitles", Action::OpenSubtitles));
+    items.push_back(item(L"Media information", "info", Action::ShowInfo));
     items.push_back(MenuItem::Separator());
     items.push_back(item(L"Customize player", "edit", Action::CustomizePlayer));
     items.push_back(item(L"Keyboard shortcuts", "hotkeys", Action::KeyboardShortcuts));
@@ -255,6 +258,7 @@ void NavSidebar::SetCollapsed(bool collapsed) {
     for (auto& c : Children()) {
         if (auto* item = dynamic_cast<NavItem*>(c.get())) item->tooltip = collapsed ? Tr(item->Name()) : L"";
         else c->tooltip = collapsed ? Tr(L"Add item") : L"";
+        c->tooltipBeside = collapsed;
     }
     InvalidateLayout();
 }

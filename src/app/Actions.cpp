@@ -136,6 +136,11 @@ std::wstring Clock(double t) {
     return FormatTime(t, PS().duration >= 3600);
 }
 
+double Skip(const char* key, double fallback) {
+    const double v = TheApp().config().GetDouble(key);
+    return v >= 1 ? v : fallback;
+}
+
 void SeekBy(double seconds) {
     const PlayerState& s = PS();
     if (!s.fileLoaded) return;
@@ -311,17 +316,23 @@ void Run(Action a) {
         case Action::Next:
             if (!app.Next(true)) Toast(Tr(L"End of the list"), "next");
             break;
-        case Action::SeekForward: SeekBy(10); break;
-        case Action::SeekBackward: SeekBy(-10); break;
-        case Action::SeekForwardLong: SeekBy(60); break;
-        case Action::SeekBackwardLong: SeekBy(-60); break;
-        case Action::SeekForwardShort: SeekBy(3); break;
-        case Action::SeekBackwardShort: SeekBy(-3); break;
+        case Action::SeekForward: SeekBy(Skip("controls.skipShort", 10)); break;
+        case Action::SeekBackward: SeekBy(-Skip("controls.skipShort", 10)); break;
+        case Action::SeekForwardLong: SeekBy(Skip("controls.skipMedium", 60)); break;
+        case Action::SeekBackwardLong: SeekBy(-Skip("controls.skipMedium", 60)); break;
+        case Action::SeekForwardShort: SeekBy(Skip("controls.skipVeryShort", 3)); break;
+        case Action::SeekBackwardShort: SeekBy(-Skip("controls.skipVeryShort", 3)); break;
         case Action::FrameStep: p.FrameStep(false); break;
         case Action::FrameBackStep: p.FrameStep(true); break;
         case Action::SpeedUp: ChangeSpeed(+1); break;
         case Action::SpeedDown: ChangeSpeed(-1); break;
-        case Action::SpeedReset: ChangeSpeed(0, true); break;
+        case Action::SpeedReset:
+            if (!app.PlayerShown()) {
+                app.GoBack();
+                break;
+            }
+            ChangeSpeed(0, true);
+            break;
         case Action::NextChapter:
         case Action::PreviousChapter:
             if (s.chapters.empty()) {

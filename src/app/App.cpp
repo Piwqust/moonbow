@@ -501,8 +501,11 @@ void App::OnPlayerEvents() {
         if (failedPath_.empty()) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
     }
     if ((changes & kChangeFile) && s.fileLoaded) failedPath_.clear();
-    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && config_.GetBool("privacy.saveHistory"))
+    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && s.loadSerial != recordedSerial_ &&
+        config_.GetBool("privacy.saveHistory")) {
+        recordedSerial_ = s.loadSerial;
         history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
+    }
     if ((changes & kChangeTime) && s.fileLoaded) {
         const double now = ui::AnimFloat::Now();
         if (now - lastHistorySave_ > 5000) {
@@ -703,7 +706,8 @@ void App::PlayIndex(int index, bool showPlayer) {
         return;
     }
     player_.Open(item->path);
-    player_.SetPause(false);
+    // "Start playing as soon as a file opens"; the next item of a running queue always plays.
+    player_.SetPause(!config_.GetBool("playback.autoPlay") && !player_.State().fileLoaded);
     if (showPlayer || playerShown_) ShowPlayer(true);
 }
 
@@ -722,7 +726,8 @@ bool App::Next(bool userAction) {
 
 void App::Previous() {
     const double now = ui::AnimFloat::Now();
-    if (player_.State().fileLoaded && player_.State().position > 3 && now - lastRestart_ > 1500) {
+    const PlayerState& ps = player_.State();
+    if (ps.fileLoaded && ps.position > 3 && !ps.eof && now - lastRestart_ > 3000) {
         player_.SeekAbsolute(0, true);
         lastRestart_ = now;
         return;
