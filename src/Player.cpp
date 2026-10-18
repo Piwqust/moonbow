@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "audio/CrossfadeMath.h"
 #include "audio/Crossfader.h"
+#include "app/player/Lyrics.h"
 #include "core/Json.h"
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
@@ -498,10 +499,15 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
         case kPropMetadata: {
             state_.artist.clear();
             state_.album.clear();
+            state_.lyricsTags.clear();
             if (const mpv_node* n = node()) {
                 state_.artist = NodeString(MapGet(*n, "artist"));
                 if (state_.artist.empty()) state_.artist = NodeString(MapGet(*n, "album_artist"));
                 state_.album = NodeString(MapGet(*n, "album"));
+                // Kept here, so the music view never reads the tags one by one from mpv.
+                for (int i = 0; n->format == MPV_FORMAT_NODE_MAP && i < n->u.list->num; ++i)
+                    if (app::IsLyricsTag(n->u.list->keys[i]))
+                        state_.lyricsTags.push_back(NodeString(&n->u.list->values[i]));
             }
             return kChangeMeta;
         }

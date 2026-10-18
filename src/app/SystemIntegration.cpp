@@ -4,6 +4,7 @@
 #include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/player/NowPlaying.h"
 #include "core/ShellText.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
@@ -420,20 +421,24 @@ void SystemIntegration::Update(unsigned changes) {
         }
     }
 
+    if (!(changes & (kChangeState | kChangeFile | kChangeMeta))) return;
+    // The tags as the player screens show them (the library's reader first, then mpv's).
+    const PlayingTags& tags = CurrentTags();
+    const QueueItem* item = app.queue().CurrentItem();
+    const std::wstring& title = tags.title.empty() && item ? FileNameOf(item->path) : tags.title;
+
     // Tray tooltip and track notification (once per file).
     if (changes & (kChangeFile | kChangeMeta)) {
-        const QueueItem* item = app.queue().CurrentItem();
-        std::wstring title = s.title.empty() && item ? FileNameOf(item->path) : s.title;
         d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" — Lumen", std::size(NOTIFYICONDATAW{}.szTip))
                                                      : L"Lumen");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
-            d.NotifyTrack(s.artist.empty() ? title : title + L"\n" + s.artist);
+            d.NotifyTrack(tags.artist.empty() ? title : title + L"\n" + tags.artist);
         }
     }
 
     // Media transport controls.
-    if (!d.smtc || !(changes & (kChangeState | kChangeFile | kChangeMeta))) return;
+    if (!d.smtc) return;
     try {
         const bool enabled = s.fileLoaded && app.config().GetBool("interface.mediaControls");
         d.smtc.IsEnabled(enabled);
@@ -441,16 +446,14 @@ void SystemIntegration::Update(unsigned changes) {
         d.smtc.PlaybackStatus(s.paused ? wm::MediaPlaybackStatus::Paused : wm::MediaPlaybackStatus::Playing);
         if (changes & (kChangeFile | kChangeMeta)) {
             auto updater = d.smtc.DisplayUpdater();
-            const QueueItem* item = app.queue().CurrentItem();
-            std::wstring title = s.title.empty() && item ? FileNameOf(item->path) : s.title;
             if (s.hasVideo) {
                 updater.Type(wm::MediaPlaybackType::Video);
                 updater.VideoProperties().Title(title);
             } else {
                 updater.Type(wm::MediaPlaybackType::Music);
                 updater.MusicProperties().Title(title);
-                updater.MusicProperties().Artist(s.artist);
-                updater.MusicProperties().AlbumTitle(s.album);
+                updater.MusicProperties().Artist(tags.artist);
+                updater.MusicProperties().AlbumTitle(tags.album);
             }
             updater.Update();
         }

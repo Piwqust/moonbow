@@ -67,6 +67,7 @@ struct PlayerState {
     std::wstring title;       // media-title
     std::wstring path;
     std::wstring artist, album;
+    std::vector<std::wstring> lyricsTags;  // values of the metadata's lyrics tags (IsLyricsTag), in order
     std::wstring hwdec;       // hwdec-current
     std::wstring lastError;
     std::wstring failedPath;   // the file the last kChangeError is about (empty once a file loads)

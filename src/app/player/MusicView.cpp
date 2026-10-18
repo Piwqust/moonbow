@@ -516,12 +516,8 @@ private:
     }
 
     void ReadEmbeddedLyrics() {
-        Player& player = TheApp().player();
-        const int count = static_cast<int>(player.GetPropertyDouble("metadata/list/count", 0));
-        for (int i = 0; i < count && i < 256; ++i) {
-            const std::string base = "metadata/list/" + std::to_string(i);
-            if (!IsLyricsTag(player.GetPropertyString((base + "/key").c_str()))) continue;
-            Lyrics l = ParseLyrics(Utf8ToWide(player.GetPropertyString((base + "/value").c_str())));
+        for (const std::wstring& tag : TheApp().player().State().lyricsTags) {
+            Lyrics l = ParseLyrics(tag);
             if (!l.Empty()) {
                 SetLyrics(std::move(l));
                 online_ = false;

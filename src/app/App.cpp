@@ -7,6 +7,7 @@
 #include "app/Dialogs.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/NowPlaying.h"
 #include "app/player/SeekPreview.h"
 #include "core/Json.h"
 #include "core/Paths.h"
@@ -490,11 +491,13 @@ void App::OnPlayerEvents() {
     if ((changes & kChangeTime) && s.fileLoaded && s.position >= 1 && s.loadSerial != infoSerial_)
         if (const QueueItem* item = queue_.CurrentItem(); item && item->path == s.path) {
             infoSerial_ = s.loadSerial;
-            // A folder queue's title is the file name; tags win, a playlist's own title stays.
+            // A folder queue's title is the file name; tags win (the library's reader first, as the
+            // player screens show them), a playlist's own title stays.
             const std::wstring file = FileNameOf(item->path);
-            const bool learnTitle = !s.title.empty() && s.title != file && !IsUrl(item->path) &&
+            const std::wstring& title = CurrentTags().title;
+            const bool learnTitle = !title.empty() && title != file && !IsUrl(item->path) &&
                                     (item->title.empty() || item->title == file);
-            queue_.SetInfo(queue_.Current(), learnTitle ? s.title : std::wstring(), s.duration);
+            queue_.SetInfo(queue_.Current(), learnTitle ? title : std::wstring(), s.duration);
         }
     if ((changes & kChangeFile) && s.fileLoaded) fitPending_ = true;
     if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
