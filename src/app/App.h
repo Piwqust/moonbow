@@ -129,7 +129,7 @@ public:
     void Quit();
     // Set once the main window starts closing (mpv shuts down on another thread): from then on
     // nothing may touch the player, and files sent by a new instance are refused.
-    void BeginQuit() { quitting_ = true; }
+    void BeginQuit();  // also saves the window placement while the window is still shown
     bool Quitting() const { return quitting_; }
 
     // --- signals --------------------------------------------------------------------

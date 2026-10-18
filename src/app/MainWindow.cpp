@@ -2,6 +2,7 @@
 #include "app/LibraryView.h"
 
 #include "Player.h"
+#include "Trace.h"
 #include "app/Actions.h"
 #include "app/I18n.h"
 #include "app/App.h"
@@ -169,9 +170,11 @@ bool MainWindow::Create() {
         // shutdown of the same mpv.
         if (TheApp().Quitting()) return false;
         TheApp().BeginQuit();
+        Trace("close: requested");
         // mpv's video window is a child of ours, owned by an mpv thread, so
         // shut mpv down off the UI thread while this thread keeps pumping.
         ShowWindow(Hwnd(), SW_HIDE);
+        Trace("close: window hidden");
         HWND hwnd = Hwnd();
         std::thread([hwnd] {
             TheApp().player().Shutdown();
@@ -451,6 +454,7 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             *result = 0;
             return true;
         case WM_APP_CLOSED:
+            Trace("close: destroying the window");
             Destroy();
             *result = 0;
             return true;

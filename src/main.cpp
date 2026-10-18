@@ -151,5 +151,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
     OleUninitialize();
     if (mutex) CloseHandle(mutex);
+    Trace("close: wWinMain returns");
     return code;
 }

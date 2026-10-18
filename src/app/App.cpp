@@ -252,8 +252,10 @@ void App::SaveWindowPlacement() {
     WINDOWPLACEMENT wp{sizeof(wp)};
     if (!GetWindowPlacement(main_->Hwnd(), &wp)) return;
     const RECT& r = wp.rcNormalPosition;
+    // Minimized from maximized comes back maximized.
+    const bool max = wp.showCmd == SW_SHOWMAXIMIZED || (wp.showCmd == SW_SHOWMINIMIZED && (wp.flags & WPF_RESTORETOMAXIMIZED));
     char buf[96];
-    snprintf(buf, sizeof(buf), "%ld,%ld,%ld,%ld,%d", r.left, r.top, r.right, r.bottom, wp.showCmd == SW_SHOWMAXIMIZED ? 1 : 0);
+    snprintf(buf, sizeof(buf), "%ld,%ld,%ld,%ld,%d", r.left, r.top, r.right, r.bottom, max ? 1 : 0);
     SetUiValue("window.placement", buf);
 }
 
@@ -397,9 +399,13 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    Trace("close: message loop ended");
     FlushStores();
+    Trace("close: stores saved");
     ShutdownSeekPreview();
+    Trace("close: seek preview stopped");
     main_.reset();
+    Trace("close: window objects freed");
     return static_cast<int>(msg.wParam);
 }
 
@@ -883,6 +889,12 @@ void App::OpenSettings(const std::string& category) {
 
 void App::ShowOnboarding() {
     app::ShowOnboarding({});
+}
+
+void App::BeginQuit() {
+    // The close hides the window first; the final FlushStores skips a hidden one.
+    SaveWindowPlacement();
+    quitting_ = true;
 }
 
 void App::Quit() {
