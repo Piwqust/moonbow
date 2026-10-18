@@ -700,7 +700,7 @@ public:
             for (const std::string& l : langs_) choices.push_back({LanguageName(l), l});
         choices.push_back({Tr(L"All languages"), "all"});
         lang_ = bar->Add<FieldDropdown>(choices, 0);
-        lang_->width = Length::Px(220);
+        lang_->width = Length::Px(180);
         lang_->height = Length::Px(34);
         lang_->tooltip = Tr(L"Subtitle languages (Settings › Subtitles › Preferred language)");
         lang_->onChange = [this](int) { Search(); };
@@ -719,7 +719,9 @@ public:
         status_ = frame_->Footer()->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
         status_->pad = {8, 0, 0, 0};
         status_->width = Length::Grow();
-        status_->interactive = true;  // the tooltip shows the whole line when it is cut
+        // A hover target (32 DIP, the footer's button height) for the tooltip with the whole line.
+        status_->interactive = true;
+        status_->height = Length::Px(32);
         frame_->onSubmit = [this] { Search(); };
         return frame;
     }
@@ -796,7 +798,8 @@ private:
             s += (s.empty() ? L"" : L" · ") + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(q)});
         if (!note_.empty()) s += (s.empty() ? L"" : L" · ") + note_;
         status_->SetText(s);
-        status_->tooltip = s;
+        // The whole line on hover only when the footer cuts it.
+        status_->tooltip = gfx::Text::Get().Measure(s, TextStyle::Body).width > status_->rect.w - 8 ? s : L"";
         status_->InvalidateLayout();
     }
 
