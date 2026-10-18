@@ -3,10 +3,12 @@
 // call synchronous getters) and the tweaks Lumen manages itself (flip, stereo mode, crop,
 // color effects, sleep timer, "stop after this item", setting presets).
 #include "app/Signal.h"
+#include "library/FileSettings.h"
 
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace app {
@@ -19,7 +21,7 @@ struct AudioDevice {
 struct LiveValues {
     double audioDelay = 0, subDelay = 0, subScale = 1, subPos = 100, subSpeed = 1;
     double brightness = 0, contrast = 0, saturation = 0, gamma = 0, hue = 0;
-    double zoom = 0, rotate = 0;
+    double zoom = 0, rotate = 0, panX = 0, panY = 0;
     double abA = NAN, abB = NAN;  // A-B loop points, NaN = not set
     int64_t secondarySid = 0;
     bool subVisible = true;
@@ -30,6 +32,7 @@ struct LiveValues {
 class LiveState {
 public:
     static LiveState& Get();
+    ~LiveState();
 
     const LiveValues& V() const { return v_; }
     Signal<> changed;
@@ -88,6 +91,17 @@ public:
     void DeletePreset(int index);
     void ResetToDefaults();
 
+    // --- per-file settings (playback.perFile, playback.perFileAll; library/FileSettings) ------
+    // What changed for a file is stored while it plays and comes back the next time it opens,
+    // through mpv's loadfile options (Player::fileOptions), so it ends with the file like the
+    // round 5 per-file rule wants. Nothing runs while the setting is off.
+    bool FileSettingsOn() const;   // playback.perFile
+    bool FileSettingsAll() const;  // playback.perFileAll too: more than the tracks and delays
+    // What is remembered for the playing file (the parts the settings above apply).
+    library::FileOptions FileSettingsStored() const;
+    // Forgets what is remembered for the playing file and returns it to the defaults.
+    void ResetFileSettings();
+
 private:
     LiveState();
     void ObserveAll();
@@ -96,7 +110,19 @@ private:
     void ApplyHwdec();
     void LoadCropSetting();
     void ApplyAudioFilters();
-    void Notify();
+    void Notify();   // something changed: repaint, and remember it for the file
+    void Repaint();  // the panels show something new
+    // Per-file settings.
+    library::FileSettings& Store();  // loaded on first use
+    std::string FileOptionsFor(const std::wstring& path);
+    // A file loaded (`loaded`), or the settings were switched while it plays.
+    void BeginFile(bool loaded);
+    void FixTracks();
+    void ScheduleCapture();
+    void Capture(bool notify = true);
+    void LeaveFile();
+    void ScheduleSave();
+    void ForgetAllFileSettings();
 
     LiveValues v_;
     bool started_ = false;
@@ -113,6 +139,19 @@ private:
     int64_t areaW_ = 0, areaH_ = 0;  // video area (osd-dimensions), the upscaler's target
     uintptr_t areaTimer_ = 0;
     std::string appliedHwdec_;     // hwdec mpv runs with (copy-back while CPU filters are on)
+    // Per-file settings of the loaded file.
+    library::FileSettings store_;  // only the loader thread touches it until Store() joins it
+    std::thread loader_;
+    std::wstring filePath_;
+    uint64_t fileSerial_ = 0;      // its PlayerState::loadSerial
+    bool fileOpen_ = false;        // changes are being remembered for it
+    library::FileOptions fileOpts_;  // what is stored for it
+    uint32_t trackBase_[3] = {};   // Player::TrackChoices when it loaded (or after our own picks)
+    bool tracksTouched_[3] = {};   // audio, subtitles, secondary: the user chose one for this file
+    bool trackFixPending_ = false; // the stored tracks are still to be checked, sidecars picked or added
+    bool tracksTrusted_ = false;   // State().tracks is this file's (switched on mid-file)
+    double lastSpeed_ = 0;
+    uintptr_t captureTimer_ = 0, saveTimer_ = 0;
 };
 
 inline LiveState& Live() {
