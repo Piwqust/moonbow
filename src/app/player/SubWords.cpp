@@ -1030,12 +1030,16 @@ void SubtitleWords::Lookup(const char* key, const std::wstring& text) {
     const std::wstring lang = CurrentLanguage() == Language::Russian ? L"ru" : L"en";
     const std::wstring url = subtext::LookupUrl(Cfg().GetWString(key), text, lang);
     if (url.empty()) {
-        ShowToast(window_, Tr(L"The link in Settings > Subtitles must start with https://"), "warning", 3000);
+        ShowToast(window_, Tr(L"The link in Settings > Subtitles must start with http:// or https:// and have no spaces"),
+                  "warning", 3000);
         return;
     }
     lastUrl_ = url;
     // The browser is a native window: background test runs record the link instead (ShellOpen).
-    Host::ShellOpen(window_->Hwnd(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    // A failure (a link too long for the browser's handler, no browser) says so.
+    const HINSTANCE r = Host::ShellOpen(window_->Hwnd(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (!Host::Automation() && reinterpret_cast<INT_PTR>(r) <= 32)
+        ShowToast(window_, Tr(L"Couldn't open the link in the browser"), "warning", 3000);
 }
 
 void SubtitleWords::DebugInfo(std::string& out) const {

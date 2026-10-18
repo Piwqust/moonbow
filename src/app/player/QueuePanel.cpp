@@ -180,7 +180,7 @@ IconButton* HeaderButton(Widget* parent, const char* icon, const wchar_t* tip, s
 // Summary line + buttons, 68 DIP tall in the design (40 in the mini player).
 class ListHeader : public Widget {
 public:
-    ListHeader(std::function<std::wstring()> text, bool compact) : text_(std::move(text)), compact_(compact) {
+    ListHeader(std::function<std::wstring()> text, bool compact) : text_(std::move(text)) {
         dir = Dir::Row;
         align = Align::Center;
         width = Length::Grow();
@@ -197,7 +197,6 @@ public:
 
 private:
     std::function<std::wstring()> text_;
-    bool compact_;
     Label* label_;
 };
 
