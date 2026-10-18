@@ -16,7 +16,9 @@ Hibernation is off on this PC, so this command sleeps (S3). The sleep is the ver
 4. ⏳ Fixer r5-fix-flows: FL-01…FL-14. It also gets audit items 3, 4, 5, 8, 16 and 17, which are in its files.
 5. ⏳ Fixer r5-fix-audit: the other confirmed items of AUDIT-PONYTAIL.md.
 6. ⏳ r5-tools-sweep: ui-audit.py, sweep.ps1, scenarios.json, make-worstcase.ps1, audit-baseline.md.
-7. ⏳ Hunters r5-player-eye (player-visual.md) and r5-settings-eye (settings-dialogs.md).
+7. ✅ Hunters r5-player-eye (player-visual.md, PV-01…PV-18) and r5-settings-eye (settings-dialogs.md, SD-01…SD-22), both merged.
+   - ⏳ Fixer r5-fix-settings: SD-01…SD-22 except SD-09/10, which went to r5-fix-audit.
+   - ☐ Fixer for PV-01…PV-18: start it AFTER r5-fix-flows is merged, since they share src/app/player/*. It also covers the round 4 leftovers P-06/18, P-07 and P-13, plus the design gaps the owner would care about: a wider bar in fullscreen and a title bar in fullscreen.
 8. ☐ Hunter r5-library-eye: library, home, shell and the worst-case data. It starts after step 6, once the media is ready.
 9. ☐ Fixers for the steps 7–8 reports, split by disjoint files: player / library+shell / settings+dialogs+ui.
 10. ☐ Final verification: rebuild, the full sweep, the audit is clean (or every remaining finding is justified), tests and checks pass, and a few owner scenarios replayed. Rebuild build\Lumen.exe only when the owner's Lumen is not running.
