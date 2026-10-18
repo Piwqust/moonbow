@@ -240,7 +240,7 @@ private:
         // Far jumps (a seek) move quicker than the next line coming up.
         const int dist = std::abs(line - current_);
         current_ = line;
-        scroll_.To(static_cast<float>(line), dist > 3 ? 280.0f : 420.0f, Ease::InOut);
+        scroll_.To(static_cast<float>(line), dist > 3 ? 260.0f : 340.0f, Ease::InOut);
         Invalidate();
     }
 
@@ -336,8 +336,11 @@ private:
         }
         const D2D1_SIZE_F bs = bmp->GetSize();
         if (blur_ && bs.width > 0 && bs.height > 0) {
-            // Cover the view with the image, centered on the cover (slightly larger, like the design).
-            const float k = std::max(rect.w / bs.width, rect.h / bs.height) * 1.15f;
+            // Cover the view with the image, centered on the cover (slightly larger, like the design);
+            // with lyrics the cover sits left of center, so the image must reach the far edge too.
+            const float halfW = std::max(cover.Cx() - rect.x, rect.Right() - cover.Cx());
+            const float halfH = std::max(cover.Cy() - rect.y, rect.Bottom() - cover.Cy());
+            const float k = std::max(2 * halfW / bs.width, 2 * halfH / bs.height) * 1.15f;
             const float w = bs.width * k, h = bs.height * k;
             D2D1_MATRIX_3X2_F old;
             ctx->GetTransform(&old);
@@ -350,39 +353,63 @@ private:
         }
         const Palette& c = P();
         p.Fill(rect, c.videoBg.WithAlpha(0.62f));
-        Vignette(p, cover, 0.0f, 0.85f);
+        Vignette(p, cover);
+    }
+
+    // The gradient and groove brushes, made once per device and palette and moved with
+    // SetCenter / SetRadius: synced lyrics repaint the view every frame while they glide.
+    bool EnsureBrushes(ID2D1DeviceContext5* ctx) {
+        const Palette& c = P();
+        const D2D1_COLOR_F text = c.textPrimary.D2D(), bg = c.videoBg.D2D();
+        const uint32_t gen = gfx::Gpu::Get().Generation();
+        auto same = [](const D2D1_COLOR_F& a, const D2D1_COLOR_F& b) {
+            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+        };
+        if (glow_ && brushGen_ == gen && same(brushText_, text) && same(brushBg_, bg)) return true;
+        glow_.Reset();
+        vignette_.Reset();
+        grooves_.Reset();
+        brushGen_ = gen;
+        brushText_ = text;
+        brushBg_ = bg;
+        const D2D1_GRADIENT_STOP glowStops[] = {{0.0f, c.textPrimary.WithAlpha(0.07f).D2D()},
+                                                {0.55f, c.textPrimary.WithAlpha(0.025f).D2D()},
+                                                {1.0f, c.textPrimary.WithAlpha(0.0f).D2D()}};
+        const D2D1_GRADIENT_STOP vignetteStops[] = {{0.0f, c.videoBg.WithAlpha(0.0f).D2D()},
+                                                    {1.0f, c.videoBg.WithAlpha(0.85f).D2D()}};
+        gfx::ComPtr<ID2D1GradientStopCollection> glowColl, vignetteColl;
+        const auto props = D2D1::RadialGradientBrushProperties({0, 0}, {0, 0}, 1, 1);
+        if (FAILED(ctx->CreateGradientStopCollection(glowStops, 3, &glowColl)) ||
+            FAILED(ctx->CreateGradientStopCollection(vignetteStops, 2, &vignetteColl)) ||
+            FAILED(ctx->CreateRadialGradientBrush(props, glowColl.Get(), &glow_)) ||
+            FAILED(ctx->CreateRadialGradientBrush(props, vignetteColl.Get(), &vignette_)) ||
+            FAILED(ctx->CreateSolidColorBrush(text, &grooves_))) {
+            glow_.Reset();
+            return false;
+        }
+        return true;
     }
 
     // No artwork: a soft light halo behind the generated art.
     void PaintGlow(Painter& p, const Rect& cover) {
         ID2D1DeviceContext5* ctx = p.Ctx();
-        const Palette& c = P();
-        const D2D1_GRADIENT_STOP stops[] = {{0.0f, c.textPrimary.WithAlpha(0.07f).D2D()},
-                                            {0.55f, c.textPrimary.WithAlpha(0.025f).D2D()},
-                                            {1.0f, c.textPrimary.WithAlpha(0.0f).D2D()}};
-        gfx::ComPtr<ID2D1GradientStopCollection> coll;
-        gfx::ComPtr<ID2D1RadialGradientBrush> brush;
-        if (FAILED(ctx->CreateGradientStopCollection(stops, 3, &coll))) return;
+        if (!EnsureBrushes(ctx)) return;
         const float r = cover.w * 0.95f;
-        if (FAILED(ctx->CreateRadialGradientBrush(
-                D2D1::RadialGradientBrushProperties({cover.Cx(), cover.Cy()}, {0, 0}, r, r), coll.Get(), &brush)))
-            return;
-        ctx->FillRectangle(rect.D2D(), brush.Get());
+        glow_->SetCenter({cover.Cx(), cover.Cy()});
+        glow_->SetRadiusX(r);
+        glow_->SetRadiusY(r);
+        ctx->FillRectangle(rect.D2D(), glow_.Get());
     }
 
-    void Vignette(Painter& p, const Rect& cover, float inner, float outer) {
+    void Vignette(Painter& p, const Rect& cover) {
         ID2D1DeviceContext5* ctx = p.Ctx();
-        const Color bg = P().videoBg;
-        const D2D1_GRADIENT_STOP stops[] = {{0.0f, bg.WithAlpha(inner).D2D()}, {1.0f, bg.WithAlpha(outer).D2D()}};
-        gfx::ComPtr<ID2D1GradientStopCollection> coll;
-        gfx::ComPtr<ID2D1RadialGradientBrush> brush;
-        if (FAILED(ctx->CreateGradientStopCollection(stops, 2, &coll))) return;
+        if (!EnsureBrushes(ctx)) return;
         const float rx = std::max(rect.w, rect.h) * 0.75f;
-        if (FAILED(ctx->CreateRadialGradientBrush(
-                D2D1::RadialGradientBrushProperties({cover.Cx(), cover.Cy()}, {0, 0}, rx, rx), coll.Get(), &brush)))
-            return;
-        brush->SetOpacity(p.Opacity());
-        ctx->FillRectangle(rect.D2D(), brush.Get());
+        vignette_->SetCenter({cover.Cx(), cover.Cy()});
+        vignette_->SetRadiusX(rx);
+        vignette_->SetRadiusY(rx);
+        vignette_->SetOpacity(p.Opacity());
+        ctx->FillRectangle(rect.D2D(), vignette_.Get());
     }
 
     // Monochrome stand-in art: dark square, record-like grooves and a center label.
@@ -393,17 +420,16 @@ private:
         const Point center{r.Cx(), r.Cy()};
         const float maxR = r.w * 0.42f;
         ID2D1DeviceContext5* ctx = p.Ctx();
-        gfx::ComPtr<ID2D1SolidColorBrush> brush;
-        ctx->CreateSolidColorBrush(c.textPrimary.WithAlpha(0.05f).D2D(), &brush);
-        if (brush) {
+        if (EnsureBrushes(ctx)) {
+            ID2D1SolidColorBrush* brush = grooves_.Get();
             int k = 0;
             for (float rad = maxR * 0.38f; rad < maxR; rad += r.w * 0.012f, ++k) {
                 const float a = 0.025f + 0.035f * static_cast<float>((seed >> (k % 24)) & 1);
                 brush->SetColor(c.textPrimary.WithAlpha(a * p.Opacity()).D2D());
-                ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, rad, rad), brush.Get(), 1.0f);
+                ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, rad, rad), brush, 1.0f);
             }
             brush->SetColor(c.textPrimary.WithAlpha(0.14f * p.Opacity()).D2D());
-            ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, maxR, maxR), brush.Get(), 1.5f);
+            ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, maxR, maxR), brush, 1.5f);
         }
         p.FillCircle(center, maxR * 0.30f, c.bgSelected);
         const float icon = maxR * 0.22f;
@@ -425,6 +451,10 @@ private:
 
     ScopedConnection conn_, imagesConn_;
     gfx::ComPtr<ID2D1Effect> blur_;
+    gfx::ComPtr<ID2D1RadialGradientBrush> glow_, vignette_;
+    gfx::ComPtr<ID2D1SolidColorBrush> grooves_;
+    uint32_t brushGen_ = 0;
+    D2D1_COLOR_F brushText_{}, brushBg_{};
     ID2D1Bitmap* blurFor_ = nullptr;
     uint32_t generation_ = 0;
 };

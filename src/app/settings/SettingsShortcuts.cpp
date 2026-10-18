@@ -169,6 +169,7 @@ public:
         hint->width = Length::Grow();
         auto* youtube = presets->Add<Button>(Tr(L"YouTube keys"), ButtonKind::Secondary);
         youtube->id = "preset-youtube";
+        youtube->width = Length::Px(320);  // like the buttons of the rows above
         youtube->tooltip = Tr(L"K, J, L, 0–9, Shift+, and Shift+., C");
         youtube->onClick = [this] {
             Host* host = GetHost();
