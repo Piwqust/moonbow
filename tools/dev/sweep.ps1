@@ -24,6 +24,7 @@ param(
   [switch]$List,
   [switch]$NoHitmap,
   [switch]$AssumeScale,
+  [switch]$Reaudit,   # re-run ui-audit on the dumps of an earlier -Out and rebuild index.html (no app runs)
   [int]$TimeoutMin = 30,
   # Internal: worker mode.
   [string]$WorkerPlan = "",
@@ -657,6 +658,31 @@ if ($List) {
   "{0} scenarios ({1} before the filter)" -f $sel.Count, $all.Count
   return
 }
+if ($Reaudit) {
+  if (-not $Out -or -not (Test-Path (Join-Path $Out "plan.json"))) { throw "-Reaudit needs the -Out of an earlier sweep" }
+  $Out = (Resolve-Path $Out).Path
+  $planObj = Get-Content -Raw -Encoding UTF8 (Join-Path $Out "plan.json") | ConvertFrom-Json
+  $Exe = $planObj.exe; $scaleOk = [bool]$planObj.scale; $script:hasCommand = [bool]$planObj.hasCommand; $script:dumpV2 = [bool]$planObj.dumpV2
+  $ordered = @($planObj.scenarios | ForEach-Object { To-Hash $_ })
+  $python = (Get-Command python).Source
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  foreach ($s in $ordered) {
+    $dir = Join-Path $Out (Safe-Name $s["name"]); $rf = Join-Path $dir "result.json"
+    if (-not (Test-Path $rf)) { continue }
+    $r = Get-Content -Raw -Encoding UTF8 $rf | ConvertFrom-Json
+    foreach ($cap in @($r.captures)) {
+      if (-not $cap.tree) { continue }
+      $base = [IO.Path]::GetFileNameWithoutExtension($cap.png)
+      $a = @($auditPy, (Join-Path $dir $cap.tree), "--allow", $allowFile, "--json", (Join-Path $dir "$base.audit.json"), "--md", (Join-Path $dir "$base.audit.md"),
+             "--quiet", "--context", $s["name"], "--state", $cap.state)
+      if ($cap.hitmap) {
+        $stepPx = if ([int](($cap.client -split 'x')[0]) -gt 1400) { 16 } else { 8 }
+        $a += @("--hitmap", (Join-Path $dir $cap.hitmap), "--hitmap-step", "$stepPx", "--hitmap-window", ("^" + [regex]::Escape([string]$cap.window) + "$"))
+      }
+      & $python @a 2>&1 | Out-Null
+    }
+  }
+} else {
 if (-not $Exe) { throw "-Exe is required (never the owner's build\Lumen.exe)" }
 if (-not $Out) { throw "-Out is required" }
 $Exe = (Resolve-Path $Exe).Path
@@ -731,6 +757,7 @@ foreach ($f in Get-ChildItem (Join-Path $Out "pids") -Filter *.pid -ErrorAction 
   Remove-Item $f.FullName -Force
 }
 for ($i = 1; $i -le 4; $i++) { $dd = Join-Path $qaTemp ("{0}-w{1}" -f $Prefix, $i); if (Test-Path $dd) { Remove-Item -Recurse -Force $dd -ErrorAction SilentlyContinue } }
+}
 
 # --- results and the contact sheet -----------------------------------------------------------------
 

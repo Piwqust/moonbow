@@ -29,6 +29,7 @@
     { "check": "clip-parent", "type": "BarEditor", "parent": "Editor", "reason": "Customize player edits the real control bar in place: the bar editor sits at the bar's own position, over the player, outside the dialog body on purpose (design Player-customize_*)." },
     { "check": "text-trunc", "type": "TextBox|SearchField|SettingField|EditBox|ValueBox|ColorBox|SliderValue|EqValue|AddonSearch|TextArea|KeyField", "reason": "An editable field scrolls its text; the full value is reachable by moving the caret." },
     { "check": "zero-size", "type": "ItemGrid", "reason": "An empty grid keeps its place in the layout at zero height; it has no items to click." },
+    { "check": "hitmap-odd", "context": "onboarding.*", "region": "^HTCAPTION", "reason": "The frameless first-run window drags by its whole background; its controls answer HTCLIENT (no hitmap finding over them)." },
     { "check": "hitmap-odd", "context": "pip.*", "region": "^HTCAPTION", "reason": "In picture-in-picture the whole video is the drag handle (HTCAPTION) except the overlay buttons, which answer HTCLIENT." }
   ]
 }
