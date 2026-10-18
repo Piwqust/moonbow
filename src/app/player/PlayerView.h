@@ -62,7 +62,7 @@ private:
     MainWindow* window_;
     ui::Widget* overlay_ = nullptr;
     ui::AnimFloat hover_;
-    ScopedConnection playerConn_;
+    ScopedConnection playerConn_, imagesConn_;
 };
 
 }  // namespace app
