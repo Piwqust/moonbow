@@ -1514,6 +1514,37 @@ void TestLibraryCacheTags() {
     m = snap ? snap->FindItem(song) : nullptr;
     CHECK(snap && snap->stats.metadataFiles == 1);
     CHECK(m && m->genre.empty() && m->title.empty());  // read from the (untagged) file
+
+    // A root that is unplugged during a scan keeps its cached tags for when it comes back.
+    const std::wstring usb = MakeDir(L"lib-cache-usb");
+    const std::wstring usbSong = usb + L"\\02 Away.mp3";
+    WriteFile(usbSong, std::string(64, 'y'));
+    WIN32_FILE_ATTRIBUTE_DATA ua{};
+    CHECK(GetFileAttributesExW(usbSong.c_str(), GetFileExInfoStandard, &ua));
+    lib.SetRoots({root, usb});
+    {
+        json::Value e = json::Value::MakeObject();
+        e.Set("p", json::ToUtf8(usbSong));
+        e.Set("s", 64);
+        e.Set("m", library::FileTimeToUnixMs((static_cast<uint64_t>(ua.ftLastWriteTime.dwHighDateTime) << 32) |
+                                             ua.ftLastWriteTime.dwLowDateTime));
+        e.Set("t", "Away");
+        json::Value items = json::Value::MakeArray();
+        items.Push(std::move(e));
+        json::Value doc = json::Value::MakeObject();
+        doc.Set("version", 4);
+        doc.Set("items", std::move(items));
+        CHECK(json::WriteFileAtomic(dir + L"\\library-cache.json", json::Serialize(doc)));
+    }
+    const std::wstring unplugged = usb + L"-off";
+    CHECK(MoveFileW(usb.c_str(), unplugged.c_str()));
+    WriteFile(root + L"\\Album\\03 New.mp3", std::string(64, 'z'));  // read now, so the cache is saved
+    snap = ScanAndWait(lib);
+    CHECK(snap && snap->stats.metadataFiles >= 1 && !snap->FindItem(usbSong));
+    CHECK(MoveFileW(unplugged.c_str(), usb.c_str()));
+    snap = ScanAndWait(lib);
+    m = snap ? snap->FindItem(usbSong) : nullptr;
+    CHECK(m && m->title == L"Away");  // from the cache, not the untagged file
 }
 
 // Real media from the Windows install, to measure property-store cost and check durations.

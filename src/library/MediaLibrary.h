@@ -69,7 +69,7 @@ struct ScanStats {
     double metadataMs = 0;
     size_t metadataFiles = 0;       // files whose properties were read (not from cache)
     double metadataMsPerFile = 0;   // measured average
-    bool metadataSecondPass = false;  // true when the per-file cost was > 3 ms
+    bool metadataSecondPass = false;  // true when the per-file cost was > 3 ms or the rest > 300 ms
 };
 
 // Track = album order: album (untagged last), disc, track number (numbered first), then title.
