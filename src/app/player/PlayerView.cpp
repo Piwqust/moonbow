@@ -118,10 +118,12 @@ void ShowVideoContextMenu(Host* host, Point at) {
     video.submenu.push_back(MenuItem::Separator());
     MenuItem aspect{Tr(L"Aspect ratio")};
     for (const auto& [label, value] : std::vector<std::pair<const wchar_t*, const char*>>{
-             {L"Default", "no"}, {L"16:9", "16:9"}, {L"4:3", "4:3"}, {L"21:9", "2.33"}, {L"1:1", "1"}}) {
+             {L"Default", "auto"}, {L"16:9", "16:9"}, {L"4:3", "4:3"}, {L"21:9", "21:9"}, {L"1:1", "1:1"}}) {
         MenuItem m{Tr(label)};
         const std::string v = value;
-        m.action = [v] { TheApp().player().SetProperty("video-aspect-override", v); };
+        m.radio = true;
+        m.checked = Live().aspect == v;
+        m.action = [v] { Live().SetAspect(v); };  // through LiveState, so the Video tab agrees
         aspect.submenu.push_back(std::move(m));
     }
     video.submenu.push_back(aspect);
@@ -220,8 +222,6 @@ public:
     }
     bool Holding() const { return holding_; }
     bool OnMouseDown(const MouseEvent& e) override {
-        // The click that closed a player popover doesn't also pause.
-        if (e.button == MouseButton::Left && panel::PanelJustClosed()) return true;
         if (e.button == MouseButton::Left) {
             // The click acts on release, so that a long press can mean 2× instead.
             down_ = true;
@@ -378,24 +378,29 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     width = Length::Grow();
     height = Length::Grow();
 
+    // Children paint first-to-last and are hit-tested last-to-first: whatever may lie over the
+    // full-size video (the fullscreen side panel, the chips, the bar) comes after it.
+    video_ = Add<VideoArea>(window, this);
+    music_ = AddChild(CreateMusicView());
+    music_->visible = false;
+    error_ = Add<ErrorCard>();
+    error_->visible = false;
+
     // Opaque: the rail draws its panel 8 DIP inside, and over the picture that gutter showed video.
     auto* side = Add<Panel>();
     side->fill = [] { return P().bgBase; };
     side_ = side;
     side_->dir = Dir::Row;
-    side_->visible = false;
+    sideWanted_ = TheApp().UiValue("player.sidePanel") == "1";  // as it was left (ui.json)
+    side_->visible = sideWanted_;
     auto* rail = side_->Add<NavSidebar>();
     rail->SetCollapsed(true);
+    rail->SetInPlayer(true);
     sidePane_ = side_->Add<LibraryPane>(true);
     sidePane_->width = Length::Px(kSidePanel);
 
-    video_ = Add<VideoArea>(window, this);
-    music_ = AddChild(CreateMusicView());
-    music_->visible = false;
     pip_ = AddChild(CreatePipOverlay(window));
     pip_->visible = false;
-    error_ = Add<ErrorCard>();
-    error_->visible = false;
     nextEpisode_ = Add<NextEpisodeCard>(window);
     skipChapter_ = Add<SkipChapterButton>(nextEpisode_);
     bar_ = Add<ControlBar>();
@@ -429,7 +434,9 @@ void PlayerView::UpdateStats() {
 }
 
 void PlayerView::SetSidePanel(bool shown) {
-    side_->visible = shown;
+    sideWanted_ = shown;
+    TheApp().SetUiValue("player.sidePanel", shown ? "1" : "0");
+    side_->visible = shown && !window_->PictureInPicture();
     InvalidateLayout();
 }
 
@@ -472,6 +479,8 @@ void PlayerView::OnLayout() {
     const float barH = bar_->BarHeight();
     const bool pip = window_->PictureInPicture();
 
+    // PiP has no room for it; it comes back with the full window.
+    side_->visible = sideWanted_ && !pip;
     float x = rect.x;
     // At most 45% of a small window (800 DIP: 360 instead of 416), so the video stays usable.
     const float sideW = std::min({kSideRail + kSidePanel, std::max(280.0f, std::floor(rect.w * 0.45f)), rect.w});

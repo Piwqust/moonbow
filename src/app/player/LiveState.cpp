@@ -130,12 +130,18 @@ LiveState& LiveState::Get() {
 LiveState::LiveState() {
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (!started_ && Mpv().Ready()) Start();
-        // mpv resets aspect/zoom per file (reset-on-next-file); forget our view of them too.
+        // mpv resets aspect, zoom and rotation per file (reset-on-next-file); forget our view of
+        // them too. Flip is a filter, which mpv keeps: drop it here, so all the transforms follow
+        // one rule (the Video tab says so).
         static std::wstring lastPath;
         if ((m & kChangeFile) && Mpv().State().path != lastPath) {
             lastPath = Mpv().State().path;
             zoomMode = "fit";
             aspect = "auto";
+            if (flip != 0) {
+                flip = 0;
+                ApplyVideoFilters();
+            }
             LoadCropSetting();
             ApplyCrop();
         }

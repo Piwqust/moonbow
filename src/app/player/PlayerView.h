@@ -21,7 +21,7 @@ public:
     ~PlayerView() override;
 
     void SetSidePanel(bool shown);
-    bool SidePanel() const { return side_ && side_->visible; }
+    bool SidePanel() const { return sideWanted_; }
     ControlBar* Bar() const { return bar_; }
 
     // Rect where the video is shown (window DIPs); empty when not visible.
@@ -38,6 +38,7 @@ private:
     void UpdateStats();
     MainWindow* window_;
     ui::Widget* side_ = nullptr;
+    bool sideWanted_ = false;  // the user's choice; PiP hides the panel without changing it
     ui::Widget* sidePane_ = nullptr;  // the library pane next to the rail in side_
     ErrorCard* error_ = nullptr;
     VideoArea* video_ = nullptr;

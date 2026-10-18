@@ -1,6 +1,7 @@
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
+#include "app/player/PanelTabs.h"
 #include "app/player/SeekPreview.h"
 
 #include "Util.h"
@@ -19,6 +20,12 @@ using namespace ui;
 namespace {
 
 constexpr float kBarH = 56;
+
+// At the end of a file mpv's last time-pos is a frame short of the duration ("0:07 / 0:08"):
+// the time and the seek bar show the end itself.
+double ShownPosition(const PlayerState& s) {
+    return s.eof && s.duration > 0 ? s.duration : s.position;
+}
 
 const std::vector<ControlInfo> kControls = {
     {ControlId::Previous, "prev", L"Previous", "previous", true},
@@ -133,12 +140,13 @@ public:
         const PlayerState& s = PS();
         std::wstring text = L"--:--:--";
         if (s.fileLoaded) {
-            const bool hours = s.duration >= 3600 || s.position >= 3600;
+            const double pos = ShownPosition(s);
+            const bool hours = s.duration >= 3600 || pos >= 3600;
             if (!duration_)
-                text = FormatTime(s.position, hours);
+                text = FormatTime(pos, hours);
             else if (s.duration > 0)
                 // Rounded up: "-10:00" at the start of a 10:00 file, "-0:00" only at the end.
-                text = remaining_ ? L"-" + FormatTime(std::ceil(std::max(0.0, s.duration - s.position) - 1e-3), hours)
+                text = remaining_ ? L"-" + FormatTime(std::ceil(std::max(0.0, s.duration - pos) - 1e-3), hours)
                                   : FormatTime(s.duration, hours);
         }
         p.Text(text, rect, TextStyle::Mono, IsHot() ? P().textPrimary : P().textSecondary, HAlign::Center);
@@ -234,10 +242,8 @@ public:
         return true;
     }
     bool OnWheel(const WheelEvent& e) override {
-        TheApp().player().SetVolume(std::round(PS().volume + 5 * e.delta));
-        if (collapsed_)
-            ShowToast(GetHost(), Fmt(Tr(L"Volume {0}%"), static_cast<long long>(std::lround(PS().volume))),
-                      VolumeIcon(PS().volume, PS().mute), 900);
+        // The same rule as the wheel over the video; the toast only when the slider is hidden.
+        WheelVolume(e.delta, collapsed_);
         Invalidate();
         return true;
     }
@@ -466,10 +472,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
             return b;
         }
         case ControlId::Stop: return button("stop", L"Stop", Action::Stop);
-        case ControlId::Repeat:
-            return std::make_unique<StateButton>(
-                "repeat_right", L"Repeat", [] { Run(Action::ToggleRepeat); },
-                [&app] { return app.queue().RepeatMode() != Repeat::Off; });
+        case ControlId::Repeat: return panel::MakeRepeatButton();  // the queue's: it shows One apart from All
         case ControlId::Shuffle:
             return std::make_unique<StateButton>(
                 "shuffle_right", L"Shuffle", [] { Run(Action::ToggleShuffle); }, [&app] { return app.queue().Shuffle(); });
@@ -576,7 +579,7 @@ void SeekBar::Paint(Painter& p) {
     const Rect t = Track();
     p.Fill(t, P().bgDeep, compact ? 3.0f : 3.0f);
     if (!s.fileLoaded || s.duration <= 0) return;
-    const double pos = dragging_ ? dragTime_ : s.position;
+    const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));
     if (!compact && !s.hasVideo) {
         // Music: the design's waveform-style bar (decorative bars seeded by the file name).
@@ -613,7 +616,7 @@ void SeekBar::Paint(Painter& p) {
         if (bx > ax) p.Fill({std::round(bx) - 1, t.y, 2, t.h}, P().accent);
     }
     for (const Chapter& c : s.chapters) {
-        if (c.time <= 0) continue;
+        if (c.time <= 0 || c.time >= s.duration) continue;  // a mark past the end would sit beyond the bar
         const float cx = t.x + t.w * static_cast<float>(c.time / s.duration);
         p.Fill({std::round(cx), t.y + (compact ? 0.0f : 6.0f), 1, compact ? t.h : t.h - 12}, P().lineStrong);
     }
@@ -638,10 +641,11 @@ void SeekBar::PaintOver(Painter& p) {
         }
     const float w = gfx::Text::Get().Measure(label, TextStyle::Small).width + 20;
     const Rect tr = Track();
-    PaintSeekPreview(p, tr, dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_, t);
-    const float x = std::clamp((dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_) - w / 2,
-                               tr.x, tr.Right() - w);
-    const Rect tip{x, tr.y - 34, w, 26};
+    const float at = dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_;
+    const Size client = GetHost() ? GetHost()->ClientSize() : Size{rect.Right(), rect.Bottom()};
+    const Rect bounds{0, 0, client.w, client.h};
+    PaintSeekPreview(p, tr, at, t, bounds);
+    const Rect tip{ClampedLeft(at, w, tr, bounds), tr.y - 34, w, 26};
     p.Shadow(tip, 4, 8, 3, 0.3f);
     p.Fill(tip, P().bgMenu, 4);
     p.Text(label, tip, TextStyle::Small, P().textPrimary, HAlign::Center);

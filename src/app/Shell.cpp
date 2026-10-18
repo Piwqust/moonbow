@@ -26,12 +26,16 @@ public:
         focusable = true;
         height = Length::Px(40);
         width = Length::Grow();
+        // The rail of the player's side panel browses that panel's library pane next to the
+        // video; the library's own sidebar also switches the window to the library.
         onClick = [this] {
-            TheApp().ShowPlayer(false);
+            if (!owner_->InPlayer()) TheApp().ShowPlayer(false);
             TheApp().Navigate(Route{section_, {}});
         };
     }
-    bool Selected() const { return !TheApp().PlayerShown() && TheApp().route().section == section_; }
+    bool Selected() const {
+        return (owner_->InPlayer() || !TheApp().PlayerShown()) && TheApp().route().section == section_;
+    }
     const wchar_t* Name() const { return SectionName(section_); }
     void Paint(Painter& p) override {
         const bool sel = Selected();
@@ -413,8 +417,9 @@ void LibraryPane::ShowRoute(const Route& route) {
     search_->SetText(L"");
     RefreshHeader();
     // Arrow keys work on a page right after it opens (not in the player's side
-    // panel, where the player keeps the keyboard).
-    if (!compact_ && view_)
+    // panel, where the player keeps the keyboard, nor in the hidden library while the side
+    // panel navigates).
+    if (!compact_ && view_ && !TheApp().PlayerShown())
         if (ui::Host* host = GetHost())
             if (ui::Widget* first = view_->InitialFocus()) host->SetFocus(first);
 }

@@ -67,6 +67,9 @@ void OnPlayerChangeForOsd(unsigned changes);
 bool VideoSingleClick();
 bool VideoDoubleClick();
 bool VideoWheel(float delta, bool horizontal);
+// Volume by `delta` notches at the Settings step (the video and the bar's volume control),
+// unmuting; partial notches (touchpads) add up. `toast` shows the new level.
+void WheelVolume(float delta, bool toast);
 // Speaker icon for a volume level ("close_value-none" when muted).
 const char* VolumeIcon(double volume, bool mute);
 bool Enabled(Action a);
