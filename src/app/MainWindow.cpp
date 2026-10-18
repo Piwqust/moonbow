@@ -116,7 +116,11 @@ bool MainWindow::Create() {
     BuildUi();
     // Over video toasts sit at the top; in the library below its header, so they never cover
     // back/forward, the search or the "⋯" button.
-    toastTop = [](float) { return TheApp().PlayerShown() ? 56.0f : 122.0f; };
+    // In fullscreen they go below the top info panel while it shows (PlayerView::PaintTopInfo).
+    toastTop = [this](float) {
+        if (!TheApp().PlayerShown()) return 122.0f;
+        return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
+    };
     // A new base margin from Settings is what mpv has now; recompute the lift on top of it.
     subMarginToken_ = TheApp().config().Subscribe("subtitles.marginBottom", [this](const std::string&) {
         appliedSubMargin_ = -1;
@@ -359,6 +363,9 @@ void MainWindow::UpdateSubtitleLift() {
         BarOverlays() && chrome_.Target() > 0.5f && h > 0) {
         const float lift = h - player_->Bar()->rect.y + 8;
         margin = base + static_cast<int>(std::lround(std::max(0.0f, lift) / h * 720));
+    } else if (pip_ && player_ && player_->visible && s.hasVideo && player_->PipControlsShown() && h > 0) {
+        // PiP: above the overlay's seek bar (16 DIP from the bottom), so it doesn't strike the line through.
+        margin = base + static_cast<int>(std::lround(26.0f / h * 720));
     }
     if (margin == appliedSubMargin_) return;
     appliedSubMargin_ = margin;

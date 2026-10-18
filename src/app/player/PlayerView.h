@@ -23,6 +23,8 @@ public:
     void SetSidePanel(bool shown);
     bool SidePanel() const { return sideWanted_; }
     ControlBar* Bar() const { return bar_; }
+    // Picture in Picture: the hover controls are up, with their seek bar along the bottom edge.
+    bool PipControlsShown() const;
 
     // Rect where the video is shown (window DIPs); empty when not visible.
     ui::Rect VideoRect() const;
@@ -36,6 +38,7 @@ private:
     class VideoArea;
     class ErrorCard;
     void UpdateStats();
+    float PaintTopInfo(ui::Painter& p);
     MainWindow* window_;
     ui::Widget* side_ = nullptr;
     bool sideWanted_ = false;  // the user's choice; PiP hides the panel without changing it
@@ -49,6 +52,8 @@ private:
     ControlBar* bar_ = nullptr;
     std::unique_ptr<StatsOverlay> stats_;
     // Thin progress line: shown on the last paint, its width and filled part in pixels.
+    bool menuPaused_ = false;  // play/pause as last seen (PV-17: the video menu closes on a change)
+    int layoutMode_ = -1;      // fullscreen | hide-UI | PiP bits of the last layout
     bool thinShown_ = false;
     float thinW_ = 0;
     int thinPx_ = -1;
@@ -60,6 +65,8 @@ private:
 std::unique_ptr<ui::Widget> CreateMusicView();
 // Hover controls of Picture in Picture mode (PipOverlay.cpp).
 std::unique_ptr<ui::Widget> CreatePipOverlay(MainWindow* window);
+// Whether the PiP overlay's controls (its seek bar along the bottom) are shown or coming in.
+bool PipOverlayShown(const ui::Widget* overlay);
 // The compact right-click menu of Picture in Picture: play, audio, subtitles, speed, back.
 void ShowPipContextMenu(ui::Host* host, ui::Point at);
 

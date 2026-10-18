@@ -63,6 +63,7 @@ public:
         if (timer_) window_->CancelTimer(timer_);
     }
 
+    bool ControlsShown() const { return shown_.Target() > 0.5f; }
     void OnLayout() override {
         if (visible && !timer_) {
             // The pointer is over a caption area (no WM_MOUSEMOVE), so poll it while in PiP.
@@ -74,7 +75,8 @@ public:
         play_->Arrange({r.Cx() - 24, r.Cy() - 24, 48, 48});
         prev_->Arrange({r.Cx() - 24 - 16 - 36, r.Cy() - 18, 36, 36});
         next_->Arrange({r.Cx() + 24 + 16, r.Cy() - 18, 36, 36});
-        seek_->Arrange({r.x + 10, r.Bottom() - 16, r.w - 20, 12});
+        // A 24 DIP target (WCAG 2.5.8) around the thin track.
+        seek_->Arrange({r.x + 10, r.Bottom() - 24, r.w - 20, 24});
         const float k = shown_.Get();
         for (auto& c : Children()) c->visible = k > 0.02f;
     }
@@ -128,6 +130,11 @@ private:
 
 std::unique_ptr<Widget> CreatePipOverlay(MainWindow* window) {
     return std::make_unique<PipOverlay>(window);
+}
+
+bool PipOverlayShown(const Widget* overlay) {
+    const auto* o = dynamic_cast<const PipOverlay*>(overlay);
+    return o && o->visible && o->ControlsShown();
 }
 
 }  // namespace app
