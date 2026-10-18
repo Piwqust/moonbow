@@ -105,7 +105,7 @@ class SubtitlePreview : public Widget, public Syncable {
 public:
     explicit SubtitlePreview(const Item& it) {
         width = Length::Grow();
-        height = Length::Px(kHeight);
+        height = Length::Px(kHeight + 14);  // and a gap above the first style row
         id = it.key;
         tooltip = it.Label(Lang());
         Sync();
@@ -123,16 +123,19 @@ public:
     }
 
     void Paint(Painter& p) override {
-        p.PushRoundClip(rect, 6);
-        const float half = std::round(rect.w / 2);
-        p.Fill({rect.x, rect.y, half, rect.h}, Color::Hex(kSceneDark));
-        p.Fill({rect.x + half, rect.y, rect.w - half, rect.h}, Color::Hex(kSceneBright));
-        PaintLine(p);
+        const Rect f = Frame();
+        p.PushRoundClip(f, 6);
+        const float half = std::round(f.w / 2);
+        p.Fill({f.x, f.y, half, f.h}, Color::Hex(kSceneDark));
+        p.Fill({f.x + half, f.y, f.w - half, f.h}, Color::Hex(kSceneBright));
+        PaintLine(p, f);
         p.PopClip();
-        p.Stroke(rect, P().line, 6);
+        p.Stroke(f, P().line, 6);
     }
 
 private:
+    Rect Frame() const { return {rect.x, rect.y + 2, rect.w, kHeight}; }
+
     bool Prepare(ID2D1DeviceContext5* ctx) {
         const uint32_t gen = gfx::Gpu::Get().Generation();
         if (gen != generation_) {
@@ -212,14 +215,14 @@ private:
         return true;
     }
 
-    void PaintLine(Painter& p) {
+    void PaintLine(Painter& p, const Rect& frame) {
         ID2D1DeviceContext5* ctx = p.Ctx();
         if (!ctx || !Prepare(ctx)) return;
-        const float x = std::round(rect.Cx() - textW_ / 2);
+        const float x = std::round(frame.Cx() - textW_ / 2);
         // Vertical position: 100% at the bottom edge, as in mpv (with a small margin).
         const float margin = 12;
-        const float travel = std::max(0.0f, rect.h - 2 * margin - textH_);
-        const float y = std::round(rect.y + margin + travel * std::clamp(style_.position, 0.0f, 100.0f) / 100);
+        const float travel = std::max(0.0f, frame.h - 2 * margin - textH_);
+        const float y = std::round(frame.y + margin + travel * std::clamp(style_.position, 0.0f, 100.0f) / 100);
 
         const Rect textRect{x, y, textW_, textH_};
         if (style_.background == "lines") {
