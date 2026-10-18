@@ -11,7 +11,9 @@
 #include <shobjidl.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <thread>
 
 namespace library {
 
@@ -22,6 +24,8 @@ using Clock = std::chrono::steady_clock;
 constexpr double kInlineMetadataMs = 3.0;  // per file; above this the metadata pass runs after a first publish
 constexpr int kProbeFiles = 8;
 constexpr auto kProgressInterval = std::chrono::seconds(2);
+constexpr size_t kMetadataChunk = 192;  // files read in parallel between progress checks
+
 
 double MsSince(Clock::time_point t) {
     return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
@@ -237,11 +241,48 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     return cache;
 }
 
-void SaveCache(const Snapshot& s) {
+// Property handlers are mostly CPU-bound parsers: a few threads cut a first scan several
+// times, and the rest of the machine (playback, the UI) keeps priority over them.
+int MetadataThreads() {
+    const unsigned cores = std::max(1u, std::thread::hardware_concurrency());
+    return static_cast<int>(std::clamp(cores / 2, 1u, 4u));
+}
+
+// Reads metadata for items[pending[first..last)] on `threads` worker threads.
+void ReadMetadataParallel(Snapshot& snap, const std::vector<size_t>& pending, size_t first, size_t last, int threads,
+                          const std::atomic<bool>& cancel) {
+    std::atomic<size_t> next{first};
+    auto work = [&] {
+        HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
+        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+        for (size_t i; !cancel && (i = next++) < last;) {
+            MediaItem& it = snap.items[pending[i]];
+            ReadMetadata(it);
+            FillSearchKey(it);
+        }
+        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+        if (SUCCEEDED(com)) CoUninitialize();
+    };
+    std::vector<std::thread> pool;
+    for (int t = 1; t < threads; ++t) {
+        try {
+            pool.emplace_back(work);
+        } catch (...) {
+            break;
+        }
+    }
+    work();
+    for (std::thread& t : pool) t.join();
+}
+
+// `unread` (optional, by item index): files whose metadata is not read yet stay out of the
+// cache, so an interrupted scan resumes with them next time.
+void SaveCache(const Snapshot& s, const std::vector<char>* unread = nullptr) {
     json::Value items = json::Value::MakeArray();
     items.MutArray().reserve(s.items.size());
-    for (const MediaItem& it : s.items) {
-        if (it.offline) continue;
+    for (size_t i = 0; i < s.items.size(); ++i) {
+        const MediaItem& it = s.items[i];
+        if (it.offline || (unread && (*unread)[i])) continue;
         json::Value e = json::Value::MakeObject();
         e.Set("p", json::ToUtf8(it.path));
         e.Set("s", it.size);
@@ -559,15 +600,21 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         Publish(std::make_shared<Snapshot>(*snap));
     }
 
-    // 3. Remaining metadata, publishing progress every few seconds.
+    // 3. Remaining metadata in parallel chunks, publishing progress (and saving what is read)
+    // every few seconds.
     auto lastPublish = Clock::now();
+    const int threads = MetadataThreads();
+    std::vector<char> unread(snap->items.size(), 0);
+    for (size_t i = done; i < pending.size(); ++i) unread[pending[i]] = 1;
     while (done < pending.size() && !cancel_) {
-        MediaItem& it = snap->items[pending[done]];
-        ReadMetadata(it);
-        FillSearchKey(it);
-        ++done;
-        if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval) {
+        const size_t last = std::min(pending.size(), done + kMetadataChunk);
+        ReadMetadataParallel(*snap, pending, done, last, threads, cancel_);
+        if (cancel_) break;
+        for (size_t i = done; i < last; ++i) unread[pending[i]] = 0;
+        done = last;
+        if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
             snap->stats.metadataFiles = done;
+            if (options.readMetadata) SaveCache(*snap, &unread);
             Publish(std::make_shared<Snapshot>(*snap));
             lastPublish = Clock::now();
         }
