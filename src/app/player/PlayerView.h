@@ -40,6 +40,10 @@ private:
     void UpdateStats();
     float PaintTopInfo(ui::Painter& p);
     MainWindow* window_;
+    // The fullscreen title panel as last painted, and its full text when it cut the title or the
+    // chapter (empty otherwise): the video shows it as a tooltip while the pointer is on it.
+    ui::Rect topInfo_;
+    std::wstring topTip_;
     ui::Widget* side_ = nullptr;
     bool sideWanted_ = false;  // the user's choice; PiP hides the panel without changing it
     ui::Widget* sidePane_ = nullptr;  // the library pane next to the rail in side_

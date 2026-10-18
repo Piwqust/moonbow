@@ -149,6 +149,18 @@ std::wstring CountBookmarks(size_t n) {
     return std::to_wstring(c) + (c == 1 ? L" Bookmark" : L" Bookmarks");
 }
 
+// The hovered row's full text when its painted text was cut (empty otherwise), set while that row
+// paints: the host shows it after the usual delay and re-arms when it changes, as in the library
+// grids. Assigned only on a change, so a row repainting doesn't copy the string each time.
+void RowTip(Widget& list, bool cut, const std::wstring& text) {
+    if (!cut) list.tooltip.clear();
+    else if (list.tooltip != text) list.tooltip = text;
+}
+
+bool TextCut(Painter& p, const std::wstring& text, TextStyle style, float w) {
+    return !text.empty() && (w <= 0 || p.Measure(text, style).width > w + 0.5f);
+}
+
 ScrollView* ScrollerOf(Widget* w) {
     for (Widget* p = w->Parent(); p; p = p->Parent())
         if (auto* s = dynamic_cast<ScrollView*>(p)) return s;
@@ -332,6 +344,10 @@ public:
         // while the keyboard is elsewhere.
         if (!floating && i == selected_) p.Fill(r, IsFocused() ? c.bgSelected : c.bgSelected.Fade(0.5f), 4);
         if (!floating && hot) p.Fill(r, c.hover, 4);
+        // The selected, playing and hovered fills are near-equal greys with the neutral accents:
+        // an accent edge says which row Del removes and Enter plays (VF-03), dimmer unfocused.
+        if (!floating && i == selected_)
+            p.Fill({r.x + 1, r.y + 6, 3, r.h - 12}, IsFocused() ? c.accent : c.textTertiary, 1.5f);
         if (!floating && i == selected_ && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, 4);
         const float box = RowH();
         const bool handleHot = hot && hoverHandle_;
@@ -349,10 +365,17 @@ public:
         const RowInfo& info = Info(i);
         const std::wstring& title = info.title;
         const std::wstring& artist = Playing(i) && !PS().hasVideo ? PS().artist : info.artist;
-        const float tw = std::min(avail, gfx::Text::Get().Measure(title, ts).width + 2);
+        const float natural = gfx::Text::Get().Measure(title, ts).width + 2;
+        const float tw = std::min(avail, natural);
         p.Text(title, {textX, r.y, artist.empty() ? avail : tw, r.h}, ts, fg);
-        if (!artist.empty() && avail - tw > 40)
+        const bool artistShown = !artist.empty() && avail - tw > 40;
+        if (artistShown)
             p.Text(L" \u00b7 " + artist, {textX + tw, r.y, avail - tw, r.h}, ts, current ? c.textSecondary : c.textTertiary);
+        if (hot && !floating && !hoverHandle_ && !hoverRemove_) {
+            const bool cut = natural > avail + 0.5f || (!artist.empty() && !artistShown) ||
+                             (artistShown && TextCut(p, L" \u00b7 " + artist, ts, avail - tw));
+            RowTip(*this, cut, artist.empty() ? title : title + L"\n" + artist);
+        }
         if (showRemove) {
             const Rect x{r.Right() - 26, r.Cy() - 12, 24, 24};
             if (hoverRemove_) p.Fill(x, c.hover, 4);
@@ -368,7 +391,9 @@ public:
         if (!dragging_ && IsHot() && GetHost()) {
             const Point m = GetHost()->MousePos();
             const int i = RowAt(m.y);
-            hover_ = i >= 0 && RowRect(i).Contains(m.x, m.y) ? i : -1;
+            const int h = i >= 0 && RowRect(i).Contains(m.x, m.y) ? i : -1;
+            if (h != hover_) tooltip.clear();  // scrolled under the pointer: the new row sets its own
+            hover_ = h;
         }
         if (n == 0) {
             p.Text(Tr(L"Queue is empty"), {rect.x, rect.y + 24, rect.w, 24}, TextStyle::Body, c.textTertiary,
@@ -436,6 +461,7 @@ public:
         if (dragging_) return;
         hover_ = -1;
         hoverHandle_ = hoverRemove_ = false;
+        tooltip.clear();
         Invalidate();
     }
 
@@ -713,7 +739,7 @@ public:
                 if (i != q.Current()) q.Remove(i);
         });
         HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
-        auto* sv = Add<PanelScroll>();
+        auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
         list_ = sv->SetContent<QueueList>(compact);
@@ -776,6 +802,7 @@ public:
         const Palette& c = P();
         const auto marks = Marks();
         if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y);
+        if (hover_ < 0) tooltip.clear();
         if (marks.empty()) {
             const bool loaded = PS().fileLoaded;
             p.Text(loaded ? Tr(L"No bookmarks yet") : Tr(L"Nothing is playing"), {rect.x, rect.y + 24, rect.w, 24},
@@ -793,9 +820,13 @@ public:
             if (hot) p.Fill(r, c.hover, 4);
             if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
             const std::wstring time = PreciseTime(marks[k].time);
-            if (!(editor_ && editIndex_ == i))
-                p.Text(BookmarkName(marks[k], k), {r.x, r.y, r.w - 130, r.h}, TextStyle::Body,
-                       hot ? c.textPrimary : RowText());
+            if (!(editor_ && editIndex_ == i)) {
+                const std::wstring name = BookmarkName(marks[k], k);
+                p.Text(name, {r.x, r.y, r.w - 130, r.h}, TextStyle::Body, hot ? c.textPrimary : RowText());
+                if (hot) RowTip(*this, TextCut(p, name, TextStyle::Body, r.w - 130), name);
+            } else if (hot) {
+                tooltip.clear();
+            }
             p.Text(time, {r.Right() - 130, r.y, 126, r.h}, TextStyle::Mono, c.textTertiary, HAlign::Trailing);
         }
     }
@@ -803,12 +834,14 @@ public:
         const int i = RowAt(e.y);
         if (i != hover_) {
             hover_ = i;
+            tooltip.clear();
             Invalidate();
         }
         return true;
     }
     void OnMouseLeave() override {
         hover_ = -1;
+        tooltip.clear();
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
@@ -923,7 +956,7 @@ public:
             if (list_->Selected() >= 0) list_->Delete(list_->Selected());
         });
         HeaderButton(header_, "add", L"Add bookmark", [this] { list_->AddCurrent(); });
-        auto* sv = Add<PanelScroll>();
+        auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
         list_ = sv->SetContent<BookmarkList>();
@@ -982,7 +1015,11 @@ public:
     void Paint(Painter& p) override {
         const Palette& c = P();
         const int n = Count();
-        if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y);
+        if (IsHot() && GetHost()) {
+            const int h = RowAt(GetHost()->MousePos().y);
+            if (h != hover_) tooltip.clear();
+            hover_ = h;
+        }
         if (n == 0) {
             p.Text(Tr(L"This file has no chapters"), {rect.x, rect.y + 24, rect.w, 24}, TextStyle::Body, c.textTertiary,
                    HAlign::Center);
@@ -1006,6 +1043,7 @@ public:
             const std::wstring title = ch.title.empty() ? Fmt(Tr(L"Chapter {0}"), static_cast<long long>(i + 1)) : ch.title;
             p.Text(title, {r.x + 48, r.y, r.w - 48 - 90, r.h}, TextStyle::Body,
                    isCur ? c.accent : hot ? c.textPrimary : RowText());
+            if (hot) RowTip(*this, TextCut(p, title, TextStyle::Body, r.w - 48 - 90), title);
             p.Text(FormatTime(ch.time, PS().duration >= 3600), {r.Right() - 90, r.y, 86, r.h}, TextStyle::Mono,
                    isCur ? c.textSecondary : c.textTertiary, HAlign::Trailing);
         }
@@ -1014,12 +1052,14 @@ public:
         const int i = RowAt(e.y);
         if (i != hover_) {
             hover_ = i;
+            tooltip.clear();
             Invalidate();
         }
         return true;
     }
     void OnMouseLeave() override {
         hover_ = -1;
+        tooltip.clear();
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
@@ -1068,7 +1108,7 @@ std::unique_ptr<Widget> BuildBookmarksTab() {
 }
 
 std::unique_ptr<Widget> BuildChaptersTab() {
-    auto sv = std::make_unique<PanelScroll>();
+    auto sv = std::make_unique<ScrollView>();
     sv->width = Length::Grow();
     sv->height = Length::Grow();
     sv->SetContent<ChapterList>();

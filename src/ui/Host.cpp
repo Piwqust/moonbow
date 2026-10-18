@@ -755,6 +755,7 @@ Widget* Host::InteractiveAt(float x, float y) const {
 }
 
 void Host::UpdateHot(float x, float y) {
+    if (ncHover_) return;  // outside the client area; WM_NCMOUSEMOVE keeps hot_
     Widget* hot = mouseInside_ ? InteractiveAt(x, y) : nullptr;
     if (capture_) hot = capture_->rect.Contains(x, y) ? capture_ : nullptr;
     if (hot == hot_) return;
@@ -984,7 +985,7 @@ void Host::UpdateTooltip() {
     tooltipRect_ = target->rect;
     tooltipTimer_ = StartTimer(kTooltipDelayMs, [this] {
         tooltipTimer_ = 0;
-        if (!tooltipFor_ || hot_ == nullptr || !mouseInside_) return;
+        if (!tooltipFor_ || hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
         PopupOptions o;
         o.anchor = {mouse_.x, mouse_.y + 18, 0, 0};
         const Rect& r = tooltipFor_->rect;
@@ -1297,6 +1298,34 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 TrackMouseEvent(&tme);
                 return 0;
             }
+            if (wp == HTCAPTION) {
+                // A caption widget that has a tooltip (the window title, when it is cut) shows it
+                // like any hot widget; the caption still drags the window.
+                POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                ScreenToClient(hwnd_, &pt);
+                const float x = pt.x / Scale(), y = pt.y / Scale();
+                Widget* w = root_ ? root_->HitTest(x, y) : nullptr;
+                while (w && w->tooltip.empty() && w->ncRole != NcRole::Caption) w = w->Parent();
+                if (w && w->tooltip.empty()) w = nullptr;
+                if (w || ncHover_) {
+                    mouse_ = {x, y};
+                    if (w != hot_) {
+                        if (hot_) hot_->OnMouseLeave();
+                        hot_ = w;
+                        if (hot_) hot_->OnMouseEnter();
+                    }
+                    ncHover_ = w != nullptr;
+                    if (ncHover_ && !g_automation) {
+                        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE | TME_NONCLIENT, hwnd_, 0};
+                        TrackMouseEvent(&tme);
+                    }
+                    UpdateTooltip();
+                    if (tooltipWidget_ && tooltipFor_ && !tooltipFor_->rect.Contains(x, y)) HideTooltip();
+                    // Not DefWindowProc: its own caption tracking (for the system buttons this
+                    // frame doesn't have) would end ours with a WM_NCMOUSELEAVE.
+                    return 0;
+                }
+            }
             if (hot_ && hot_->ncRole == NcRole::Maximize) {
                 hot_ = nullptr;
                 RequestRender();
@@ -1304,6 +1333,11 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_NCMOUSELEAVE:
+            if (ncHover_) {
+                ncHover_ = false;
+                hot_ = nullptr;
+                HideTooltip();
+            }
             if (hot_ && hot_->ncRole == NcRole::Maximize) {
                 hot_ = nullptr;
                 pressed_ = nullptr;
@@ -1317,6 +1351,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 RequestRender();
                 return 0;
             }
+            HideTooltip();  // a drag of the window by its title starts
             if (!popups_.empty()) CloseAllPopups();
             break;
 
@@ -1338,6 +1373,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const bool moved = x != mouse_.x || y != mouse_.y;
             mouse_ = {x, y};
             mouseInside_ = true;
+            ncHover_ = false;
             if (!trackingLeave_ && !g_automation) {
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
                 trackingLeave_ = TrackMouseEvent(&tme) != FALSE;
@@ -1362,7 +1398,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             trackingLeave_ = false;
             mouseInside_ = false;
             if (!capture_) UpdateHot(-1, -1);
-            HideTooltip();
+            if (!ncHover_) HideTooltip();  // into a caption widget's tooltip: it keeps its own
             return 0;
 
         case WM_LBUTTONDOWN:

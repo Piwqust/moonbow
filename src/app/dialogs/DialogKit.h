@@ -135,6 +135,7 @@ public:
     std::shared_ptr<std::function<void()>> Closed() const { return closed_; }
 
     void Paint(ui::Painter& p) override;
+    bool Backdrop(ui::Color& out) const override;
     bool OnKeyDown(const ui::KeyEvent& e) override;
 
 private:

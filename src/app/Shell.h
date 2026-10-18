@@ -14,6 +14,7 @@ public:
     explicit TitleBar(MainWindow* window);
     ~TitleBar() override;
     void Paint(ui::Painter& p) override;
+    void OnLayout() override;
     void Refresh();
 
 private:
@@ -58,6 +59,7 @@ public:
     LibraryView* View() const { return view_; }
     void FocusSearch();
     void Paint(ui::Painter& p) override;
+    bool Backdrop(ui::Color& out) const override;
     void OnLayout() override;
 
 private:

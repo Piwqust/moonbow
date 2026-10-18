@@ -236,6 +236,9 @@ private:
     Point mouse_{-1, -1};
     bool mouseInside_ = false;
     bool trackingLeave_ = false;
+    // The pointer is over a caption (HTCAPTION) widget with a tooltip, a cut window title: hot_
+    // is that widget, and mouse_ follows WM_NCMOUSEMOVE until it leaves.
+    bool ncHover_ = false;
     bool cursorHidden_ = false;
     bool active_ = true;
 

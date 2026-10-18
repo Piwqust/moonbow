@@ -529,7 +529,8 @@ private:
                 GoLater(step_, false);
             };
         }
-        pg->At<Label>(Rect{441, 678, 330, 20}, Tr(Theme::AccentName(accent)), TextStyle::Body, Tone::Tertiary);
+        // Up to the Skip link (x 703), not under it: the names are one short word.
+        pg->At<Label>(Rect{441, 678, 240, 20}, Tr(Theme::AccentName(accent)), TextStyle::Body, Tone::Tertiary);
     }
 
     void BuildLanguage(AbsPage* pg) {

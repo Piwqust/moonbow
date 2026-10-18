@@ -288,25 +288,22 @@ public:
         if (collapsed_) return;
 
         const Rect w = Wedge();
-        auto wedge = [&](float t, Color c) {
-            gfx::ComPtr<ID2D1PathGeometry> g;
-            gfx::ComPtr<ID2D1GeometrySink> sink;
-            gfx::Gpu::Get().D2DFactory()->CreatePathGeometry(&g);
-            g->Open(&sink);
-            const float x2 = w.x + w.w * t;
-            const float h2 = w.h * (0.28f + 0.72f * t);
-            sink->BeginFigure({w.x, w.Bottom()}, D2D1_FIGURE_BEGIN_FILLED);
-            const D2D1_POINT_2F pts[] = {{x2, w.Bottom()}, {x2, w.Bottom() - h2}, {w.x, w.Bottom() - w.h * 0.28f}};
-            sink->AddLines(pts, 3);
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            sink->Close();
-            p.FillGeometry(g.Get(), c);
-        };
+        // Geometries are in window DIPs (the DPI is the target's transform): rebuilt only when
+        // the bar moves or the level changes, not on every frame the bar repaints.
+        const float t = static_cast<float>(std::clamp(s.volume / 100.0, 0.0, 1.0));
+        if (!SameRect(w, wedgeRect_)) {
+            wedgeRect_ = w;
+            track_ = MakeWedge(w, 1.0f);
+            level_.Reset();
+        }
+        if (!level_ || t != levelT_) {
+            levelT_ = t;
+            level_ = t > 0 ? MakeWedge(w, t) : nullptr;
+        }
         // The empty track needs ~3:1 against the bar in both themes (bgDeep vanishes in light).
         const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
-        wedge(1.0f, empty);
-        const float t = static_cast<float>(std::clamp(s.volume / 100.0, 0.0, 1.0));
-        if (t > 0) wedge(t, s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid);
+        if (track_) p.FillGeometry(track_.Get(), empty);
+        if (level_) p.FillGeometry(level_.Get(), s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid);
         PaintFocusRing(p, w, 2);
     }
     // The level while the pointer is on the wedge: the seek tip's bubble (26 DIP, shadow) at the
@@ -377,8 +374,19 @@ public:
     bool OnKeyDown(const KeyEvent& e) override {
         if (e.key == VK_LEFT || e.key == VK_DOWN) Run(Action::VolumeDown);
         else if (e.key == VK_RIGHT || e.key == VK_UP) Run(Action::VolumeUp);
-        else return false;
+        // Collapsed, the level shows only in the slider: Enter or Space opens it from the keyboard
+        // (the arrows keep stepping the volume, and the popup shows the new level).
+        else if (collapsed_ && (e.key == VK_RETURN || e.key == VK_SPACE)) {
+            if (PopupOpen()) GetHost()->ClosePopup(popup_);
+            else OpenPopup();
+        } else return false;
         return true;
+    }
+    // The popup is placed once, above the speaker. When the bar moves (fullscreen, a resize, another
+    // bar style) or the wedge comes back, it closes instead of floating away from its speaker.
+    void OnLayout() override {
+        Widget::OnLayout();
+        if (PopupOpen() && (!collapsed_ || !SameRect(rect, popupFor_))) GetHost()->ClosePopup(popup_);
     }
 
 private:
@@ -395,6 +403,7 @@ private:
         o.offset = 8;
         o.focusContent = false;  // the arrow keys keep changing the volume through the player
         popup_ = static_cast<VolumePopup*>(h->ShowPopup(std::make_unique<VolumePopup>(speaker), o));
+        popupFor_ = rect;
         hoverArmed_ = false;  // closed while the pointer stays here (a click): no reopening by itself
     }
     bool collapsed_ = false;
@@ -409,7 +418,25 @@ private:
         TheApp().player().SetVolume(std::round(v));
         Invalidate();
     }
+    static bool SameRect(const Rect& a, const Rect& b) { return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h; }
+    // The wedge filled up to t (0..1): its top edge rises from 28 % of the height to the full one.
+    static gfx::ComPtr<ID2D1PathGeometry> MakeWedge(const Rect& w, float t) {
+        gfx::ComPtr<ID2D1PathGeometry> g;
+        gfx::ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(gfx::Gpu::Get().D2DFactory()->CreatePathGeometry(&g)) || FAILED(g->Open(&sink))) return nullptr;
+        const float x2 = w.x + w.w * t;
+        const float h2 = w.h * (0.28f + 0.72f * t);
+        sink->BeginFigure({w.x, w.Bottom()}, D2D1_FIGURE_BEGIN_FILLED);
+        const D2D1_POINT_2F pts[] = {{x2, w.Bottom()}, {x2, w.Bottom() - h2}, {w.x, w.Bottom() - w.h * 0.28f}};
+        sink->AddLines(pts, 3);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        if (FAILED(sink->Close())) return nullptr;
+        return g;
+    }
     bool hotSpeaker_ = false, hotWedge_ = false, dragging_ = false;
+    gfx::ComPtr<ID2D1PathGeometry> track_, level_;
+    Rect wedgeRect_{}, popupFor_{};
+    float levelT_ = -1;
 };
 
 // Icon button whose active state follows the player (repeat, shuffle, record...).

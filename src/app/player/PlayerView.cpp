@@ -211,6 +211,13 @@ void ShowVideoContextMenu(Host* host, Point at) {
     KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
 }
 
+// Whether text is a, or a + "\n" + b when b is not empty, without building that string per frame.
+bool TipIs(const std::wstring& text, const std::wstring& a, const std::wstring& b) {
+    if (b.empty()) return text == a;
+    return text.size() == a.size() + 1 + b.size() && text.compare(0, a.size(), a) == 0 && text[a.size()] == L'\n' &&
+           text.compare(a.size() + 1, b.size(), b) == 0;
+}
+
 }  // namespace
 
 void ShowPipContextMenu(Host* host, Point at) {
@@ -297,6 +304,8 @@ public:
     }
     bool OnMouseMove(const MouseEvent& e) override {
         window_->PointerMoved(e.x, e.y);
+        if (owner_->topTip_.empty() || !owner_->topInfo_.Contains(e.x, e.y)) tooltip.clear();
+        else if (tooltip != owner_->topTip_) tooltip = owner_->topTip_;
         // Near the bottom edge the floating bar stays up while the pointer rests there.
         const bool nearBottom = window_->BarOverlays() && e.y >= rect.Bottom() - kRevealZone;
         if (nearBottom && !revealTimer_) {
@@ -548,7 +557,11 @@ void PlayerView::OnLayout() {
     bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f);
     // Over the video the bar floats (unless "full width" is chosen) and slides a few DIP while it
     // fades, so showing and hiding read as one motion rather than a blink.
-    const bool floats = (immersive || overlay) && !bar_->Classic() && rect.w >= 480;
+    // The fullscreen side panel is a full-height sheet: the bar keeps to the picture beside it
+    // (centred there), or it covered the panel's bottom rows (VF-02).
+    const float barX = side_->visible && immersive ? rect.x + sideW : rect.x;
+    const float barW = rect.Right() - barX;
+    const bool floats = (immersive || overlay) && !bar_->Classic() && barW >= 480;
     bar_->floating = floats;
     const float slide = immersive || overlay ? (1 - chrome) * 10 : 0.0f;
     if (floats) {
@@ -556,10 +569,10 @@ void PlayerView::OnLayout() {
         // of 13 s per DIP of a film on a 2560-wide screen; the minimal bar keeps its narrow width.
         const bool wide = window_->IsFullscreen() || window_->IsWindowMaximized();
         const float full = wide ? std::clamp(std::floor(rect.w * 0.7f), 1180.0f, 1600.0f) : 1180.0f;
-        const float w = std::min(rect.w - 32, bar_->Minimal() ? 760.0f : full);
-        bar_->Arrange({rect.x + (rect.w - w) / 2, rect.Bottom() - kFloatMargin - barH + slide, w, barH});
+        const float w = std::min(barW - 32, bar_->Minimal() ? 760.0f : full);
+        bar_->Arrange({std::round(barX + (barW - w) / 2), rect.Bottom() - kFloatMargin - barH + slide, w, barH});
     } else {
-        bar_->Arrange({rect.x, rect.Bottom() - barH + slide, rect.w, barH});
+        bar_->Arrange({barX, rect.Bottom() - barH + slide, barW, barH});
     }
     const float barSpace = barH + (floats ? kFloatMargin : 0.0f);
     pip_->visible = pip;
@@ -606,23 +619,39 @@ void PlayerView::Paint(Painter& p) {
 float PlayerView::PaintTopInfo(Painter& p) {
     const PlayerState& s = PS();
     const float k = window_->ChromeOpacity();
+    auto none = [this] {
+        topInfo_ = {};
+        video_->tooltip.clear();  // the panel went with the chrome: so does its tooltip
+        return 0.0f;
+    };
     if (!window_->IsFullscreen() || window_->PictureInPicture() || !s.fileLoaded || !bar_->visible || k <= 0.01f)
-        return 0;
+        return none();
     const QueueItem* item = TheApp().queue().CurrentItem();
-    const std::wstring title = !s.title.empty() ? s.title : item ? FileNameOf(item->path) : std::wstring();
-    if (title.empty()) return 0;
+    std::wstring title = !s.title.empty() ? s.title : item ? FileNameOf(item->path) : std::wstring();
+    // Untagged, mpv's media-title is the file name: shown without its extension, as the title
+    // bar and the queue show it (VF-06).
+    if (item && item->path.find(L"://") == std::wstring::npos && _wcsicmp(title.c_str(), FileNameOf(item->path).c_str()) == 0) {
+        const size_t dot = title.find_last_of(L'.');
+        if (dot != std::wstring::npos && dot > 0) title.resize(dot);
+    }
+    if (title.empty()) return none();
     std::wstring chapter;
     if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size()))
         chapter = s.chapters[static_cast<size_t>(s.chapter)].title;
     const float side = 20, space = 10, h = 40;
-    const float widest = std::min(rect.w - 32, std::max(bar_->rect.w, 480.0f));
+    // Over the picture beside the fullscreen side panel, like the bar (VF-02).
+    const float left = side_->visible ? side_->rect.Right() : rect.x;
+    const float widest = std::min(rect.Right() - left - 32, std::max(bar_->rect.w, 480.0f));
     const float cw = chapter.empty() ? 0.0f : gfx::Text::Get().Measure(chapter, TextStyle::Body).width + 2;
     const float sep = chapter.empty() ? 0.0f : space * 2 + 1;
     const float chapterW = std::min(cw, std::floor((widest - 2 * side - sep) * 0.4f));
-    const float titleW = std::min(gfx::Text::Get().Measure(title, TextStyle::BodyStrong).width + 2,
-                                  widest - 2 * side - sep - chapterW);
+    const float titleNatural = gfx::Text::Get().Measure(title, TextStyle::BodyStrong).width + 2;
+    const float titleW = std::min(titleNatural, widest - 2 * side - sep - chapterW);
     const float w = std::round(titleW + sep + chapterW + 2 * side);
-    const Rect r{std::round(rect.Cx() - w / 2), rect.y + kFloatMargin - (1 - k) * 10, w, h};
+    const Rect r{std::round((left + rect.Right()) / 2 - w / 2), rect.y + kFloatMargin - (1 - k) * 10, w, h};
+    topInfo_ = r;
+    if (titleNatural <= titleW + 0.5f && cw <= chapterW + 0.5f) topTip_.clear();
+    else if (!TipIs(topTip_, title, chapter)) topTip_ = chapter.empty() ? title : title + L"\n" + chapter;
     p.PushOpacity(k);
     p.Shadow(r, 14, 18, 6, 0.40f);
     p.Fill(r, P().bgChrome, 14);

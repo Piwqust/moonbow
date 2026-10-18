@@ -36,6 +36,10 @@
     { "check": "text-trunc", "type": "ItemGrid|QueueList|ChapterList|BookmarkList|MenuPopup|ChoiceList|AddonsList", "severity": "low", "reason": "A list or grid paints many items; per-item tooltips are not in the dump, so an ellipsized item title is only a candidate (check the hover tooltip)." },
     { "check": "zero-size", "type": "ItemGrid", "reason": "An empty grid keeps its place in the layout at zero height; it has no items to click." },
     { "check": "hitmap-odd", "context": "onboarding.*", "region": "^HTCAPTION", "reason": "The frameless first-run window drags by its whole background; its controls answer HTCLIENT (no hitmap finding over them)." },
-    { "check": "hitmap-odd", "context": "pip.*", "region": "^HTCAPTION", "reason": "In picture-in-picture the whole video is the drag handle (HTCAPTION) except the overlay buttons, which answer HTCLIENT." }
+    { "check": "hitmap-odd", "context": "pip.*", "region": "^HTCAPTION", "reason": "In picture-in-picture the whole video is the drag handle (HTCAPTION) except the overlay buttons, which answer HTCLIENT." },
+    { "check": "hitmap", "context": "pip.*", "type": "VideoArea", "reason": "r5-leftovers: the same PiP design as the hitmap-odd rule above: the borderless PiP window drags by its video (HTCAPTION, there is no title bar), the overlay buttons answer HTCLIENT." },
+    { "check": "text-trunc", "type": "MusicView", "reason": "r5-leftovers: the music view paints its title lines itself; when one is cut, a hover widget over both lines (its child; the tip is the title, then artist · album) carries the full text (PV-15). The check only looks for a tip on the painting widget." },
+    { "check": "text-clip", "type": "MenuPopup", "reason": "r5-leftovers: a menu taller than the window scrolls (menu-context at 1024x640 and 720x440); the row at the cut edge is clipped by the menu's viewport under its fade cue, verified by crop (menu-context.min). Not a cut glyph in a static box." },
+    { "check": "overlap-cross", "type": "MusicView", "context": ".*fullscreen.*", "reason": "r5-leftovers: in fullscreen the music view is the full-screen surface the floating bar sits on (like VideoArea, notCarrier); its text boxes (title and artist, y 1100-1158 at 2560x1440) are far from the bar (y 1368), verified by the capture." }
   ]
 }

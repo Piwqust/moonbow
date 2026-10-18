@@ -983,6 +983,7 @@ void ScrollView::FadeBarStep() {
 }
 
 void ScrollView::ScrollIntoView(const Rect& r) {
+    if (!Scrollable()) return;
     const float top = offset_.Target();
     if (r.y < rect.y)
         ScrollTo(top - (rect.y - r.y) - 8);
@@ -991,7 +992,7 @@ void ScrollView::ScrollIntoView(const Rect& r) {
 }
 
 bool ScrollView::OnWheel(const WheelEvent& e) {
-    if (e.horizontal || MaxOffset() <= 0) return false;
+    if (e.horizontal || !Scrollable()) return false;
     ScrollTo(offset_.Target() - e.delta * 96.0f);
     return true;
 }
@@ -1008,7 +1009,7 @@ Widget* ScrollView::HitTest(float x, float y) {
     if (!visible || !rect.Contains(x, y)) return nullptr;
     // The scrollbar strip takes the pointer only where the thumb is, or while the bar is shown
     // (paging clicks): otherwise the right edge of every row stayed dead (no click, no menu).
-    if (MaxOffset() > 0 && x >= rect.Right() - 14) {
+    if (Scrollable() && x >= rect.Right() - 14) {
         const Rect thumb = ThumbRect();
         if (barVisible_.Get() > 0.5f || dragging_ || (y >= thumb.y - 6 && y < thumb.Bottom() + 6)) return this;
     }
@@ -1018,7 +1019,7 @@ Widget* ScrollView::HitTest(float x, float y) {
 }
 
 bool ScrollView::OnMouseDown(const MouseEvent& e) {
-    if (MaxOffset() <= 0 || e.x < rect.Right() - 14) return false;
+    if (!Scrollable() || e.x < rect.Right() - 14) return false;
     const Rect thumb = ThumbRect();
     if (!thumb.Contains(e.x, e.y) && !(e.y >= thumb.y && e.y < thumb.Bottom())) {
         // Click on the track pages toward the click.
@@ -1032,7 +1033,7 @@ bool ScrollView::OnMouseDown(const MouseEvent& e) {
 }
 
 bool ScrollView::OnMouseMove(const MouseEvent& e) {
-    const bool over = MaxOffset() > 0 && e.x >= rect.Right() - 14;
+    const bool over = Scrollable() && e.x >= rect.Right() - 14;
     if (over != overBar_) {
         overBar_ = over;
         if (over) barVisible_.To(1, 80);
@@ -1058,10 +1059,29 @@ void ScrollView::OnMouseLeave() {
 }
 
 void ScrollView::PaintOver(Painter& p) {
+    if (!Scrollable()) return;
+    const float max = MaxOffset();
+    const float off = offset_.Get();
+    Color bg;
+    for (const Widget* w = Parent(); w; w = w->Parent())
+        if (w->Backdrop(bg)) {
+            // Stacked bands, no gradient brush: 7 fills of 4 DIP per edge (as the menu's fade),
+            // densest at the cut edge.
+            constexpr int kSteps = 7;
+            constexpr float kCueH = 28, kBand = kCueH / kSteps;
+            for (int i = 0; i < kSteps; ++i) {
+                const float t = static_cast<float>(i + 1) / kSteps;
+                const Color band = bg.Fade(0.92f * t * t);
+                if (off < max - 1) p.Fill({rect.x, rect.Bottom() - kCueH + kBand * static_cast<float>(i), rect.w, kBand}, band);
+                if (off > 1) p.Fill({rect.x, rect.y + kBand * static_cast<float>(kSteps - 1 - i), rect.w, kBand}, band);
+            }
+            break;
+        }
+    // The resting thumb: half as wide as the full one, which covers it while scrolling.
+    const Rect thumb = ThumbRect();
+    p.Fill({rect.Right() - 5, thumb.y, 2, thumb.h}, P().lineStrong, 1);
     const float k = std::max(barVisible_.Get(), overBar_ ? 1.0f : 0.0f);
     if (k <= 0.01f) return;
-    const Rect thumb = ThumbRect();
-    if (thumb.Empty()) return;
     p.Fill(thumb, (overBar_ || dragging_ ? P().textTertiary : P().lineStrong).Fade(k), thumb.w / 2);
 }
 
@@ -1071,6 +1091,12 @@ void Panel::Paint(Painter& p) {
     if (shadow) p.Shadow(rect, radius);
     if (fill) p.Fill(rect, fill(), radius);
     if (border) p.Stroke(rect, border(), radius);
+}
+
+bool Panel::Backdrop(Color& out) const {
+    if (!fill) return false;
+    out = fill();
+    return true;
 }
 
 // --- Menu -------------------------------------------------------------------------------
