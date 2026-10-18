@@ -76,9 +76,8 @@ private:
     float ring_[kFftSize] = {};  // mono, ring_[head_] is the oldest
     int head_ = 0;
     int fresh_ = 0;        // samples since the last analysis
-    float freshPeak_ = 0;  // their loudest, for the waveform column
     float scopeGain_ = 1;
-    double lastAnalysis_ = 0, lastTaken_ = 0;
+    double lastAnalysis_ = 0;
     float bandsDb_[kBands] = {};
     float linear_[kFftSize] = {};
     VisualFrame work_;

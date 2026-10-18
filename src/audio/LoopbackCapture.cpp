@@ -150,7 +150,6 @@ void LoopbackCapture::Run() {
         if (!started_) {
             std::memset(ring_, 0, sizeof ring_);
             fresh_ = 0;
-            freshPeak_ = 0;
             lastAnalysis_ = NowSeconds();
             postedAt = 0;
             posted_ = false;

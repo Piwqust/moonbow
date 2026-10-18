@@ -162,7 +162,7 @@ void Crossfader::Run() {
             hard = stop_;
         }
         // Cancelled in the middle of the handoff: no jump in either instance.
-        if (!hard && (mainGain_ < 1 || helperGain_ > 0)) Settle(0.1);
+        if (!hard && outcome != Outcome::Done && (mainGain_ < 1 || helperGain_ > 0)) Settle(0.1);
         SetMainGain(1);
     }
     if (helper_) {
