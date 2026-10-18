@@ -89,7 +89,6 @@ public:
     // --- rendering -------------------------------------------------------------------
     void RequestRender();
     void RequestLayout();
-    void RenderNow();
     // DIP-to-pixel factor: the monitor's DPI / 96, times the --scale test override.
     float Scale() const { return static_cast<float>(dpi_) / 96.0f * ScaleOverride(); }
     UINT Dpi() const { return dpi_; }  // the monitor's real DPI (window frame metrics)
@@ -99,10 +98,10 @@ public:
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the
     // device and attaches every window's surface.
     static constexpr UINT kDeviceReadyMessage = WM_APP + 42;
-    // Debug aid: sending or posting this to any host window writes its widget tree (type, rect,
-    // state, the text it shows) to %TEMP%\lumen-tree-<pid>-<hwnd>.txt, and for the main window
-    // also to %TEMP%\lumen-tree-<pid>.txt. Handled synchronously: SendMessage returns once the
-    // file is written. See tools/dev/dump-tree.ps1 for the format.
+    // Debug aid, --automation runs only: sending or posting this to a host window writes its
+    // widget tree (type, rect, state, the text it shows) to %TEMP%\lumen-tree-<pid>-<hwnd>.txt,
+    // and for the main window also to %TEMP%\lumen-tree-<pid>.txt. Handled synchronously:
+    // SendMessage returns once the file is written. See tools/dev/dump-tree.ps1 for the format.
     static constexpr UINT kDumpTreeMessage = WM_APP + 43;
     // Any thread may post this to ask the window for a repaint.
     static constexpr UINT kRepaintMessage = WM_APP + 44;
@@ -147,7 +146,6 @@ public:
     std::function<float(float h)> toastTop;
     // Text shown in the overlay while files are dragged over the window.
     std::wstring dropHint;
-    std::function<void(bool active)> onActivate;
 
     // Every live host, e.g. to repaint all windows after a theme change.
     static const std::vector<Host*>& All();
@@ -241,6 +239,7 @@ private:
     bool ncHover_ = false;
     bool cursorHidden_ = false;
     bool active_ = true;
+    Widget* wheeled_ = nullptr;  // took the last wheel notch; hover is re-hit while it scrolls
 
     std::vector<TextRecord>* textSink_ = nullptr;  // set while DumpTree draws its frame
     bool renderPending_ = false;

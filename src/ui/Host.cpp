@@ -281,6 +281,7 @@ void Host::Forget(Widget* w) {
     if (focus_ == w) focus_ = nullptr;
     if (tooltipFor_ == w) tooltipFor_ = nullptr;
     if (tooltipWidget_ == w) tooltipWidget_ = nullptr;
+    if (wheeled_ == w) wheeled_ = nullptr;
     for (Popup& p : popups_)
         if (p.previousFocus == w) p.previousFocus = nullptr;
 }
@@ -314,22 +315,24 @@ bool Host::Create(const HostOptions& options) {
         if (GetMonitorInfoW(MonitorFromWindow(options.owner, MONITOR_DEFAULTTONEAREST), &mi)) work = mi.rcWork;
     }
     // Never larger than the work area (minus a margin), as the Settings window already did by hand.
-    const int margin = static_cast<int>(std::lround(24 * Scale()));
-    const int w = std::max(static_cast<int>(std::lround(options.minWidth * Scale())),
-                           std::min(static_cast<int>(std::lround(options.width * Scale())),
-                                    static_cast<int>(work.right - work.left) - margin));
-    const int h = std::max(static_cast<int>(std::lround(options.minHeight * Scale())),
-                           std::min(static_cast<int>(std::lround(options.height * Scale())),
-                                    static_cast<int>(work.bottom - work.top) - margin));
-    int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
-    if (options.center) {
+    int x = CW_USEDEFAULT, y = CW_USEDEFAULT, w = 0, h = 0;
+    auto place = [&] {
+        const int margin = static_cast<int>(std::lround(24 * Scale()));
+        w = std::max(static_cast<int>(std::lround(options.minWidth * Scale())),
+                     std::min(static_cast<int>(std::lround(options.width * Scale())),
+                              static_cast<int>(work.right - work.left) - margin));
+        h = std::max(static_cast<int>(std::lround(options.minHeight * Scale())),
+                     std::min(static_cast<int>(std::lround(options.height * Scale())),
+                              static_cast<int>(work.bottom - work.top) - margin));
+        if (!options.center) return;
         RECT ref = work;
         if (options.owner) GetWindowRect(options.owner, &ref);
         x = ref.left + (ref.right - ref.left - w) / 2;
         y = ref.top + (ref.bottom - ref.top - h) / 2;
         x = std::clamp(x, static_cast<int>(work.left), std::max<int>(work.left, work.right - w));
         y = std::clamp(y, static_cast<int>(work.top), std::max<int>(work.top, work.bottom - h));
-    }
+    };
+    place();
 
     hwnd_ = CreateWindowExW(exStyle, kHostClass, options.title.c_str(), style, x, y, w, h, options.owner, nullptr,
                             inst, this);
@@ -338,12 +341,15 @@ bool Host::Create(const HostOptions& options) {
         const BOOL cloak = TRUE;
         DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     }
+    // A window opens at its monitor's DPI without a WM_DPICHANGED (Settings over a main window on
+    // a monitor scaled unlike the primary one): its size is worked out again at that DPI. With
+    // --scale it may be bigger than the monitor; CreateWindowEx clamped it to the default max
+    // track size (WM_GETMINMAXINFO comes before this host is attached).
     const UINT actual = GetDpiForWindow(hwnd_);
-    // With --scale the window may be bigger than the monitor; CreateWindowEx clamped it to the
-    // default max track size (WM_GETMINMAXINFO comes before this host is attached).
     if (actual != dpi_ || g_scaleOverride != 1.0f) {
         dpi_ = actual;
-        SetWindowPos(hwnd_, nullptr, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER);
+        place();
+        SetWindowPos(hwnd_, nullptr, x, y, w, h, SWP_NOZORDER | (options.center ? 0u : SWP_NOMOVE));
     }
     ApplyDwmAttributes();
     // No SWP_FRAMECHANGED here: WM_NCCALCSIZE already ran during CreateWindowExW with
@@ -382,7 +388,7 @@ void Host::OnDeviceReady() {
     if (!hwnd_) return;
     surface_.Attach(hwnd_, RenderDpi());
     RequestLayout();
-    RenderNow();
+    Render();
 }
 
 void Host::Show(int cmd) {
@@ -482,8 +488,9 @@ Widget* Host::ShowPopup(std::unique_ptr<Widget> content, const PopupOptions& opt
         CollectFocusable(raw, focusables);
         SetFocus(focusables.empty() ? nullptr : focusables.front(), false);
     }
-    if (pressed_ && !raw->IsAncestorOf(pressed_)) {
-        // The click that opened the popup must not "click" something under it on release.
+    if (pressed_ && !options.passthrough && !raw->IsAncestorOf(pressed_)) {
+        // The click that opened the popup must not "click" something under it on release. A
+        // toast or tooltip that comes up meanwhile takes no input: the click still lands.
         pressed_ = nullptr;
     }
     UpdateHot(mouse_.x, mouse_.y);
@@ -623,10 +630,6 @@ void Host::RequestLayout() {
     RequestRender();
 }
 
-void Host::RenderNow() {
-    Render();
-}
-
 void Host::Post(std::function<void()> fn) {
     posted_.push_back(std::move(fn));
     PostMessageW(hwnd_, WM_APP_POST, 0, 0);
@@ -685,6 +688,13 @@ struct FrameStats {
 };
 FrameStats g_frameStats;
 
+// A device lost and recreated (in Surface::Begin or End) leaves every window's surface on the old
+// one: all of them redraw, not only the one that met the loss.
+void RedrawAllIfDeviceChanged(uint32_t generation) {
+    if (gfx::Gpu::Get().Generation() == generation) return;
+    for (Host* h : Host::All()) h->RequestLayout();
+}
+
 }  // namespace
 
 void Host::Render() {
@@ -696,10 +706,25 @@ void Host::Render() {
     const double t0 = AnimFloat::Now();
     const bool animating = AnimFloat::TickAll(t0);
     if (layoutDirty_ || animating) DoLayout();
+    if (wheeled_) {
+        // Rows scrolled by the wheel move under a pointer that stays put: hover and the tooltip
+        // follow the row now under it (no WM_MOUSEMOVE comes), until the smooth scroll ends.
+        Widget* scroller = wheeled_;
+        if (!animating) wheeled_ = nullptr;
+        if (mouseInside_ && !capture_) {
+            UpdateHot(mouse_.x, mouse_.y);
+            if (hot_ && hot_ != scroller && scroller->IsAncestorOf(hot_))
+                hot_->OnMouseMove({mouse_.x, mouse_.y, MouseButton::Left, CurrentMods()});
+        }
+    }
     const double t1 = AnimFloat::Now();
 
+    const uint32_t generation = gfx::Gpu::Get().Generation();
     ID2D1DeviceContext5* ctx = surface_.Begin();
-    if (!ctx) return;
+    if (!ctx) {
+        RedrawAllIfDeviceChanged(generation);
+        return;
+    }
     {
         Painter p(ctx);
         if (textSink_) p.RecordText(textSink_);
@@ -726,10 +751,12 @@ void Host::Render() {
     } else {
         RequestLayout();
     }
+    RedrawAllIfDeviceChanged(generation);
     g_frameStats.Add(t1 - t0, t2 - t1, AnimFloat::Now() - t2);
     gfx::Text::Get().EndFrame();
-    // Tooltips set or cleared while painting or laying out (grid items, a collapsed rail).
-    if (hot_ || tooltipFor_) UpdateTooltip();
+    // Tooltips set or cleared while painting or laying out (grid items, a collapsed rail), and a
+    // bubble left behind by a widget that was destroyed.
+    if (hot_ || tooltipFor_ || tooltipWidget_) UpdateTooltip();
     if (AnimFloat::AnyActive()) RequestRender();
 }
 
@@ -921,6 +948,12 @@ void Host::MoveFocus(bool backwards) {
     if (!scope) return;
     std::vector<Widget*> list;
     CollectFocusable(scope, list);
+    // Popups that take input but not the focus (a toast's action button) come after the window's
+    // controls: Tab reaches them, and Shift+Tab with nothing focused goes straight to them.
+    if (scope == root_.get())
+        for (const Popup& p : popups_)
+            if (!p.options.passthrough && !p.options.focusContent && !p.options.modal)
+                CollectFocusable(p.content.get(), list);
     if (list.empty()) return;
     auto it = std::find(list.begin(), list.end(), focus_);
     size_t i = 0;
@@ -977,7 +1010,8 @@ void Host::UpdateTooltip() {
     // them, and one whose tooltip was cleared (the expanded rail) or that moved loses the bubble.
     const bool moved = tooltipFor_ && (tooltipFor_->rect.x != tooltipRect_.x || tooltipFor_->rect.y != tooltipRect_.y ||
                                        tooltipFor_->rect.w != tooltipRect_.w || tooltipFor_->rect.h != tooltipRect_.h);
-    if (target == tooltipFor_ && !moved && (!target || target->tooltip == tooltipText_)) return;
+    if (target == tooltipFor_ && !moved && (!target || target->tooltip == tooltipText_) && (target || !tooltipWidget_))
+        return;
     HideTooltip();
     if (!target || pressed_) return;
     tooltipFor_ = target;
@@ -1436,7 +1470,10 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                          CurrentMods()};
             HideTooltip();
             for (Widget* w = HitTestAll(e.x, e.y); w; w = w->Parent())
-                if (w->IsEnabled() && w->OnWheel(e)) break;
+                if (w->IsEnabled() && w->OnWheel(e)) {
+                    wheeled_ = w;
+                    break;
+                }
             RequestRender();
             return 0;
         }
@@ -1524,8 +1561,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATE:
             active_ = LOWORD(wp) != WA_INACTIVE;
             if (!active_) HideTooltip();
-            if (onActivate) onActivate(active_);
-            RequestRender();
+            RequestRender();  // also restarts a focused text box's caret blink (TextBox::Paint)
             break;
 
         case WM_ERASEBKGND:
@@ -1596,6 +1632,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case kDumpTreeMessage:
+            if (!g_automation) break;  // any process could otherwise have a window write files
             WriteTreeDump();
             return TRUE;
 
