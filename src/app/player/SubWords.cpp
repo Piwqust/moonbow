@@ -116,7 +116,14 @@ void SubtitleWords::Reevaluate(bool inLayout) {
     // Shown while mpv would show the line (the user didn't hide subtitles) and it has words.
     const bool userVisible = mpvVisible_ || hid_;
     const bool known = textKnown_ && visibilityKnown_;
-    if (armed && known && !inLayout) Rebuild();
+    if (armed && known && !inLayout) {
+        const Rect before = bounds_;
+        Rebuild();
+        // PlayerView arranges the overlay at Bounds() in its layout: bigger words, a lift over
+        // the bar or a new line while paused need one, or clicks keep the old area.
+        if (bounds_.x != before.x || bounds_.y != before.y || bounds_.w != before.w || bounds_.h != before.h)
+            InvalidateLayout();
+    }
     const bool show = armed && known && userVisible && !words_.empty();
     if (!(stepping && !PS().paused)) SetMpvHidden(show);
 
