@@ -339,6 +339,9 @@ void App::LoadUiState() {
     auto doc = json::Parse(text, &error);
     if (!doc || !doc->IsObject()) {
         BackupCorruptFile(DataFilePath(L"ui.json"));
+        // Only the layout is lost; someone with a settings file has been through onboarding.
+        if (GetFileAttributesW(DataFilePath(L"settings.json").c_str()) != INVALID_FILE_ATTRIBUTES)
+            ui_["onboarded"] = "1";
         return;
     }
     for (const auto& [k, v] : doc->AsObject())
@@ -465,9 +468,21 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     InitDialogs();
     // Data files that could not be parsed were kept as *.corrupt-<time>.json (core/Paths.h).
     if (std::vector<std::wstring> bad = TakeCorruptFileNotices(); !bad.empty()) {
+        static const std::pair<const wchar_t*, const wchar_t*> kWhat[] = {
+            {L"history.json", L"watch history"},  {L"playlists.json", L"playlists"},
+            {L"bookmarks.json", L"bookmarks"},    {L"favorites.json", L"favorites"},
+            {L"library.json", L"library folders"}, {L"ui.json", L"window layout"},
+            {L"settings.json", L"settings"},
+        };
         std::wstring names;
-        for (const std::wstring& n : bad) names += (names.empty() ? L"" : L", ") + n;
-        ShowToast(main_.get(), Fmt(Tr(L"Couldn't read {0}. A copy was kept and the data starts anew."), {names}),
+        for (const std::wstring& n : bad) {
+            std::wstring what = n;
+            for (const auto& [file, label] : kWhat)
+                if (_wcsicmp(n.c_str(), file) == 0) what = Tr(label);
+            names += (names.empty() ? L"" : L", ") + what;
+        }
+        ShowToast(main_.get(),
+                  Fmt(Tr(L"Damaged file replaced: {0}. A backup is in the data folder."), {names}),
                   "info", 8000);
     }
     if (UiValue("onboarded") != "1") {

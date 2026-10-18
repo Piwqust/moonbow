@@ -7,6 +7,7 @@
 #include "app/MainWindow.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerOverlays.h"
 #include "gfx/Text.h"
@@ -77,15 +78,18 @@ void ShowVideoContextMenu(Host* host, Point at) {
     items.push_back(Item(L"Hide UI", Action::HideUI, "ui"));
 
     MenuItem playback{Tr(L"Playback"), L"", "playback"};
+    // In their own submenu, so typing "speed" in the menu finds them.
+    MenuItem speed{Tr(L"Speed")};
     for (double sp : {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0}) {
         wchar_t buf[32];
         swprintf_s(buf, L"%g×", sp);
-        MenuItem m{buf};
+        MenuItem m{panel::LocalDecimal(buf)};
         m.radio = true;
         m.checked = std::abs(s.speed - sp) < 0.01;
         m.action = [sp] { TheApp().player().SetSpeed(sp); };
-        playback.submenu.push_back(std::move(m));
+        speed.submenu.push_back(std::move(m));
     }
+    playback.submenu.push_back(std::move(speed));
     playback.submenu.push_back(MenuItem::Separator());
     // Text-only groups: a menu group has icons on all of its items or on none.
     playback.submenu.push_back(Item(L"Next chapter", Action::NextChapter));

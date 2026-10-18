@@ -237,7 +237,12 @@ void Toggle::OnClick() {
 
 namespace {
 std::wstring g_toggleOn = L"ON", g_toggleOff = L"OFF";
+std::wstring g_menuNoMatch = L"Nothing found";
 }  // namespace
+
+void SetMenuNoMatchCaption(std::wstring text) {
+    g_menuNoMatch = std::move(text);
+}
 
 void SetToggleCaptions(std::wstring on, std::wstring off) {
     g_toggleOn = std::move(on);
@@ -256,11 +261,16 @@ void Toggle::Paint(Painter& p) {
 
     const float knobW = 26, knobH = 22;
     const float x = box.x + 4 + (box.w - 8 - knobW) * k;
-    p.Fill({x, box.y + 4, knobW, knobH}, Color::Mix(c.lineStrong, c.accent, k), 3);
-    const Rect textOff{box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
-    const Rect textOn{box.x + 4, box.y, box.w - 8 - knobW, box.h};
-    if (k < 0.99f) p.Text(g_toggleOff, textOff, TextStyle::Micro, c.textTertiary.Fade(1 - k), HAlign::Center);
-    if (k > 0.01f) p.Text(g_toggleOn, textOn, TextStyle::Micro, c.accent.Fade(k), HAlign::Center);
+    // Disabled: no white knob or label, so a switch that can't be used never outshines live ones.
+    const bool live = IsEnabled();
+    const Color knobOn = live ? c.accent : c.textDisabled, textOn = live ? c.accent : c.textDisabled;
+    p.Fill({x, box.y + 4, knobW, knobH}, Color::Mix(c.lineStrong, knobOn, k), 3);
+    const Rect textOffRect{box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
+    const Rect textOnRect{box.x + 4, box.y, box.w - 8 - knobW, box.h};
+    if (k < 0.99f)
+        p.Text(g_toggleOff, textOffRect, TextStyle::Micro, (live ? c.textTertiary : c.textDisabled).Fade(1 - k),
+               HAlign::Center);
+    if (k > 0.01f) p.Text(g_toggleOn, textOnRect, TextStyle::Micro, textOn.Fade(k), HAlign::Center);
 }
 
 // --- Checkbox -------------------------------------------------------------------------------
@@ -977,6 +987,7 @@ public:
         focusable = true;
         hasIcons_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return !m.icon.empty(); });
         hasChecks_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return m.checked; });
+        Flatten(items_, L"");
         Refilter();
     }
 
@@ -986,21 +997,22 @@ public:
         return m;
     }
 
-    // The size stays that of the full list while filtering, so the menu doesn't jump.
+    // The width is at least that of the full list (the menu only grows sideways, for submenu
+    // matches with their path); the height follows the matches.
     Size MeasureContent(float, float availH) override {
-        float w = minWidth_, h = kMenuPad * 2;
-        for (const MenuItem& m : items_) {
-            if (m.separator) {
-                h += kMenuSepH;
-                continue;
-            }
+        float w = minWidth_;
+        auto fit = [&](const MenuItem& m) {
+            if (m.separator) return;
             float iw = (hasIcons_ ? 52.0f : 16.0f) + gfx::Text::Get().Measure(m.label, TextStyle::Body).width + 16;
             if (!m.shortcut.empty()) iw += 32 + gfx::Text::Get().Measure(m.shortcut, TextStyle::Body).width;
-            if (!m.submenu.empty() || hasChecks_) iw += 32;
+            if (!m.submenu.empty() || hasChecks_ || m.checked) iw += 32;
             w = std::max(w, iw);
-            h += kMenuItemH;
-        }
-        return {std::min(w, 480.0f), std::min(h, availH)};
+        };
+        for (const MenuItem& m : items_) fit(m);
+        if (!filter_.empty())
+            for (int i : visible_) fit(At(i));
+        float h = kMenuPad * 2 + HeaderH() + (visible_.empty() ? kMenuItemH : ContentH());
+        return {std::min(w, 560.0f), std::min(h, availH)};
     }
 
     int IndexAt(float y) const {
@@ -1008,7 +1020,7 @@ public:
         float cy = Top();
         for (int i : visible_) {
             const float h = RowH(i);
-            if (y >= cy && y < cy + h) return items_[static_cast<size_t>(i)].separator ? -1 : i;
+            if (y >= cy && y < cy + h) return At(i).separator ? -1 : i;
             cy += h;
         }
         return -1;
@@ -1035,13 +1047,13 @@ public:
                    VAlign::Center, gfx::kTextEllipsis);
             p.Fill({rect.x + 12, row.Bottom() + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
             if (visible_.empty())
-                p.Text(L"\u2014", {row.x + 48, row.Bottom() + kMenuSepH, row.w - 48, kMenuItemH}, TextStyle::Body,
-                       c.textTertiary, HAlign::Leading, VAlign::Center, 0);
+                p.Text(g_menuNoMatch, {row.x + 12, row.Bottom() + kMenuSepH, row.w - 24, kMenuItemH}, TextStyle::Body,
+                       c.textTertiary, HAlign::Leading, VAlign::Center, gfx::kTextEllipsis);
         }
         p.PushClip({rect.x, rect.y + kMenuPad + HeaderH(), rect.w, rect.h - kMenuPad * 2 - HeaderH()});
         float cy = Top();
         for (int i : visible_) {
-            const MenuItem& m = items_[static_cast<size_t>(i)];
+            const MenuItem& m = At(i);
             if (m.separator) {
                 p.Fill({rect.x + 12, cy + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
                 cy += kMenuSepH;
@@ -1119,7 +1131,7 @@ public:
             if (pos >= n) pos = delta > 0 ? -1 : n;
             for (int k = 0; k < n; ++k) {
                 pos = (pos + delta + n) % n;
-                const MenuItem& m = items_[static_cast<size_t>(visible_[static_cast<size_t>(pos)])];
+                const MenuItem& m = At(visible_[static_cast<size_t>(pos)]);
                 if (!m.separator && m.enabled) break;
             }
             SetHighlight(visible_[static_cast<size_t>(pos)], true);
@@ -1146,7 +1158,7 @@ public:
                 Refilter();
                 return true;
             case VK_RIGHT:
-                if (highlight_ >= 0 && !items_[static_cast<size_t>(highlight_)].submenu.empty()) OpenSubmenu(highlight_, true);
+                if (highlight_ >= 0 && !At(highlight_).submenu.empty()) OpenSubmenu(highlight_, true);
                 return true;
             case VK_LEFT:
                 if (parentMenu_) {
@@ -1172,8 +1184,28 @@ public:
     }
 
 private:
+    const MenuItem& At(int i) const {
+        const size_t n = items_.size();
+        return static_cast<size_t>(i) < n ? items_[static_cast<size_t>(i)] : flat_[static_cast<size_t>(i) - n];
+    }
+
+    // Leaf commands of the submenus, labelled with their path, for the filter.
+    void Flatten(const std::vector<MenuItem>& items, const std::wstring& prefix) {
+        for (const MenuItem& m : items) {
+            if (m.separator) continue;
+            if (!m.submenu.empty()) {
+                Flatten(m.submenu, prefix + m.label + L" \u203A ");
+            } else if (!prefix.empty()) {
+                MenuItem copy = m;
+                copy.label = prefix + m.label;
+                copy.icon.clear();
+                flat_.push_back(std::move(copy));
+            }
+        }
+    }
+
     float HeaderH() const { return filter_.empty() ? 0.0f : kMenuItemH + kMenuSepH; }
-    float RowH(int i) const { return items_[static_cast<size_t>(i)].separator ? kMenuSepH : kMenuItemH; }
+    float RowH(int i) const { return At(i).separator ? kMenuSepH : kMenuItemH; }
     float Top() const { return rect.y + kMenuPad + HeaderH() - scroll_; }
     float ContentH() const {
         float h = 0;
@@ -1195,11 +1227,16 @@ private:
             const MenuItem& m = items_[i];
             if (filter_.empty() || (!m.separator && Matches(m.label, filter_))) visible_.push_back(static_cast<int>(i));
         }
+        // Typing also finds commands inside submenus ("Playback › Speed › 1.5×").
+        if (!filter_.empty())
+            for (size_t i = 0; i < flat_.size(); ++i)
+                if (Matches(flat_[i].label, filter_)) visible_.push_back(static_cast<int>(items_.size() + i));
         scroll_ = 0;
+        InvalidateLayout();  // the height follows the matches
         if (!filter_.empty()) {
             int first = -1;
             for (int i : visible_)
-                if (items_[static_cast<size_t>(i)].enabled) {
+                if (At(i).enabled) {
                     first = i;
                     break;
                 }
@@ -1229,7 +1266,7 @@ private:
             host->ClosePopup(child_);
             child_ = nullptr;
         }
-        if (i >= 0 && !items_[static_cast<size_t>(i)].submenu.empty() && items_[static_cast<size_t>(i)].enabled) {
+        if (i >= 0 && !At(i).submenu.empty() && At(i).enabled) {
             if (submenuTimer_ && host) host->CancelTimer(submenuTimer_);
             submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i] {
                 submenuTimer_ = 0;
@@ -1241,7 +1278,7 @@ private:
     void OpenSubmenu(int i, bool focus) {
         Host* host = GetHost();
         if (!host || child_) return;
-        auto sub = std::make_unique<MenuPopup>(items_[static_cast<size_t>(i)].submenu, 180.0f, this);
+        auto sub = std::make_unique<MenuPopup>(At(i).submenu, 180.0f, this);
         MenuPopup* raw = sub.get();
         PopupOptions o;
         o.anchor = ItemRect(i).Offset(0, -kMenuPad);
@@ -1257,7 +1294,7 @@ private:
 
     void Activate(int i) {
         if (i < 0 || i >= static_cast<int>(items_.size())) return;
-        const MenuItem& m = items_[static_cast<size_t>(i)];
+        const MenuItem& m = At(i);
         if (m.separator || !m.enabled) return;
         if (!m.submenu.empty()) {
             OpenSubmenu(i, true);
@@ -1270,7 +1307,8 @@ private:
     }
 
     std::vector<MenuItem> items_;
-    std::vector<int> visible_;  // indices into items_ that match the query, in order
+    std::vector<MenuItem> flat_;  // submenu commands with their path (see Flatten)
+    std::vector<int> visible_;    // matching indices: items_, then flat_ (items_.size() + j)
     std::wstring filter_;
     float minWidth_;
     MenuPopup* parentMenu_;
@@ -1413,8 +1451,13 @@ private:
     std::string icon_;
 };
 
-Widget*& CurrentToast(Host* host) {
-    static std::map<Host*, Widget*> toasts;
+struct ToastSlot {
+    Widget* widget = nullptr;
+    uint64_t id = 0;  // the timer closes only its own toast, never one reusing the same address
+};
+
+ToastSlot& CurrentToast(Host* host) {
+    static std::map<Host*, ToastSlot> toasts;
     return toasts[host];
 }
 
@@ -1422,31 +1465,34 @@ Widget*& CurrentToast(Host* host) {
 
 void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms) {
     if (!host) return;
-    Widget*& current = CurrentToast(host);
-    if (current && host->IsPopupOpen(current)) host->ClosePopup(current);
+    static uint64_t nextId = 1;
+    ToastSlot& current = CurrentToast(host);
+    if (current.widget && host->IsPopupOpen(current.widget)) host->ClosePopup(current.widget);
     auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon));
     const Size s = bubble->Measure(600, 40);
     PopupOptions o;
     o.place = Place::At;
-    o.anchor = {(host->ClientSize().w - s.w) / 2, 56, 0, 0};
+    const float y = host->toastTop ? host->toastTop(s.h) : 56.0f;
+    o.anchor = {(host->ClientSize().w - s.w) / 2, y, 0, 0};
     o.passthrough = true;
     o.focusContent = false;
     o.dismissOnOutside = false;
     o.dismissOnEscape = false;
-    Widget* raw = host->ShowPopup(std::move(bubble), o);
-    current = raw;
-    host->StartTimer(ms, [host, raw] {
-        Widget*& cur = CurrentToast(host);
-        if (cur == raw) cur = nullptr;
-        if (host->IsPopupOpen(raw)) host->ClosePopup(raw);
+    const uint64_t id = nextId++;
+    current = {host->ShowPopup(std::move(bubble), o), id};
+    host->StartTimer(ms, [host, id] {
+        ToastSlot& cur = CurrentToast(host);
+        if (cur.id != id) return;  // replaced meanwhile; ShowToast closed this one already
+        if (cur.widget && host->IsPopupOpen(cur.widget)) host->ClosePopup(cur.widget);
+        cur = {};
     });
 }
 
 void DismissToast(Host* host) {
     if (!host) return;
-    Widget*& current = CurrentToast(host);
-    if (current && host->IsPopupOpen(current)) host->ClosePopup(current);
-    current = nullptr;
+    ToastSlot& current = CurrentToast(host);
+    if (current.widget && host->IsPopupOpen(current.widget)) host->ClosePopup(current.widget);
+    current = {};
 }
 
 }  // namespace ui

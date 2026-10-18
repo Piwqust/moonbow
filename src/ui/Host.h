@@ -127,6 +127,8 @@ public:
     std::function<bool()> onCloseRequest;                     // false cancels closing
     std::function<void()> onDestroyed;
     std::function<void(std::vector<std::wstring>)> onDropFiles;
+    // Top edge (DIPs) for a toast of height h; default 56 (below the title bar).
+    std::function<float(float h)> toastTop;
     // Text shown in the overlay while files are dragged over the window.
     std::wstring dropHint;
     std::function<void(bool active)> onActivate;

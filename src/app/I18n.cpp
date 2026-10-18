@@ -41,6 +41,7 @@ const std::unordered_map<std::wstring_view, const wchar_t*>& RussianMap() {
 void SetLanguage(Language lang) {
     g_language = lang;
     ui::SetToggleCaptions(Tr(L"ON"), Tr(L"OFF"));
+    ui::SetMenuNoMatchCaption(Tr(L"Nothing found"));
 }
 
 Language CurrentLanguage() {

@@ -123,6 +123,8 @@ private:
 
 // The captions inside every Toggle track ("ON"/"OFF"); the app sets translated ones.
 void SetToggleCaptions(std::wstring on, std::wstring off);
+// Shown by a menu whose typed filter matches nothing.
+void SetMenuNoMatchCaption(std::wstring text);
 
 class Checkbox : public Widget {
 public:

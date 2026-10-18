@@ -110,6 +110,9 @@ bool MainWindow::Create() {
     if (!video_) return false;
 
     BuildUi();
+    // Over video toasts sit at the top; in the library below its header, so they never cover
+    // back/forward, the search or the "⋯" button.
+    toastTop = [](float) { return TheApp().PlayerShown() ? 56.0f : 122.0f; };
 
     onKey = [this](const KeyEvent& e) {
         const bool arrow = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_LEFT || e.key == VK_RIGHT;

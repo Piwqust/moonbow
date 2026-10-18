@@ -191,6 +191,8 @@ void ChangeSpeed(double delta, bool reset = false) {
     TheApp().player().SetSpeed(next);
     wchar_t buf[48];
     swprintf_s(buf, L"%s %g×", Tr(L"Speed"), next);
+    for (wchar_t* c = buf; *c; ++c)  // decimal comma in Russian, as everywhere else
+        if (*c == L'.' && CurrentLanguage() == Language::Russian) *c = L',';
     Toast(buf, "speed");
 }
 
