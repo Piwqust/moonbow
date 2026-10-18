@@ -1286,6 +1286,14 @@ void TestEpisodesAndOrder() {
     CHECK(!library::HeaderMatchesExtension(L"empty.mp4", mp4, 0));
     CHECK(library::HeaderMatchesExtension(L"notes.txt", text, 3));     // not media: nothing to judge
     CHECK(library::HeaderMatchesExtension(L"clip.rmvb", text, sizeof(text)));  // no rule for this container
+    // A mislabelled file (an MP3 named .mkv) is still media; text and empty files are not.
+    const unsigned char id3[] = {'I', 'D', '3', 4, 0, 0, 0, 0, 0, 0x22, 'T', 'S'};
+    CHECK(!library::HeaderMatchesExtension(L"song.mkv", id3, sizeof(id3)));
+    CHECK(library::HeaderLooksLikeMedia(id3, sizeof(id3)));
+    CHECK(library::HeaderLooksLikeMedia(mp4, sizeof(mp4)));
+    CHECK(library::HeaderLooksLikeMedia(mkv, sizeof(mkv)));
+    CHECK(!library::HeaderLooksLikeMedia(text, 12));
+    CHECK(!library::HeaderLooksLikeMedia(mp4, 0));
 
     CHECK(library::ParseDiscNumber(L"2/2") == 2);
     CHECK(library::ParseDiscNumber(L" 1 / 3") == 1);

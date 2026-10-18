@@ -296,6 +296,18 @@ bool HeaderMatchesExtension(std::wstring_view path, const unsigned char* h, size
     return true;
 }
 
+bool HeaderLooksLikeMedia(const unsigned char* h, size_t n) {
+    auto at = [&](size_t off, const char* magic, size_t len) { return n >= off + len && memcmp(h + off, magic, len) == 0; };
+    if (n < 4) return false;
+    return at(4, "ftyp", 4) || at(4, "moov", 4) || at(4, "mdat", 4) ||  // MP4 / MOV
+           at(0, "\x1A\x45\xDF\xA3", 4) ||                                  // Matroska / WebM
+           at(0, "RIFF", 4) || at(0, "RF64", 4) ||                            // AVI / WAV
+           at(0, "fLaC", 4) || at(0, "OggS", 4) || at(0, "ID3", 3) ||          // FLAC, Ogg, tagged MP3
+           at(0, "\x30\x26\xB2\x75", 4) ||                                  // ASF (WMV / WMA)
+           at(0, "FLV", 3) || at(0, "\x00\x00\x01\xBA", 4) ||                 // FLV, MPEG-PS
+           (h[0] == 0xFF && (h[1] & 0xE0) == 0xE0);                            // MPEG audio / ADTS frame
+}
+
 static std::wstring SubtitleMatchKey(const std::wstring& path) {
     std::wstring out;
     for (wchar_t c : StemOf(path))

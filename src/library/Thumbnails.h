@@ -122,4 +122,8 @@ private:
 // calling thread must have COM initialized. Null when the shell has no thumbnail.
 std::shared_ptr<ThumbnailBitmap> ExtractThumbnail(const std::wstring& path, int size);
 
+// Image source for the frame of a video at a moment ("<path>|<seconds>"), for Request/Cached like a
+// path: Continue Watching shows where playback stopped, not the shell's own frame.
+std::wstring FramePath(const std::wstring& path, double seconds);
+
 }  // namespace library

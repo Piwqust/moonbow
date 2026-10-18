@@ -179,7 +179,9 @@ void ReadMetadata(MediaItem& it) {
     unsigned char head[16];
     size_t got = 0;
     const bool headRead = ReadHead(it.path, head, sizeof(head), &got);
-    it.damaged = headRead && !HeaderMatchesExtension(it.path, head, got);
+    // A header that doesn't fit the extension is damage only when it is no media at all: mpv
+    // sniffs the content, so an MP3 named .mkv plays.
+    it.damaged = headRead && !HeaderMatchesExtension(it.path, head, got) && !HeaderLooksLikeMedia(head, got);
     IPropertyStore* store = nullptr;
     if (FAILED(SHGetPropertyStoreFromParsingName(it.path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store)))) {
         // The MP4 handler refuses files whose index is cut off (an interrupted download).
@@ -609,7 +611,9 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
         for (size_t i = 0; i < snap->items.size(); ++i) {
             MediaItem& it = snap->items[i];
             auto c = cache.find(PathKey(it.path));
-            if (c != cache.end() && c->second.size == it.size && c->second.mtime == it.mtime) {
+            // Files marked damaged are few and are checked again (the rule may have changed since
+            // the cache was written); everything else comes from the cache.
+            if (c != cache.end() && c->second.size == it.size && c->second.mtime == it.mtime && !c->second.damaged) {
                 it.duration = c->second.duration;
                 it.title = std::move(c->second.title);
                 it.artist = std::move(c->second.artist);
