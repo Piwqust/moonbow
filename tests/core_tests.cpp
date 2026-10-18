@@ -1550,6 +1550,12 @@ void TestPlayerEpisodes() {
     CHECK(ep::KindOf(L"Operation") == ep::ChapterKind::Other);
     CHECK(ep::KindOf(L"Chapter 2") == ep::ChapterKind::Other);
     CHECK(ep::KindOf(L"Edward") == ep::ChapterKind::Other);
+    // "OP" and "ED" are whole titles, maybe numbered; inside other words they mean something else.
+    CHECK(ep::KindOf(L"OP 2") == ep::ChapterKind::Intro && ep::KindOf(L"02 - OP") == ep::ChapterKind::Intro);
+    CHECK(ep::KindOf(L"[ED]") == ep::ChapterKind::Credits);
+    CHECK(ep::KindOf(L"Sonata Op. 27") == ep::ChapterKind::Other);
+    CHECK(ep::KindOf(L"Ed's Story") == ep::ChapterKind::Other);
+    CHECK(ep::KindOf(L"Ed Sheeran") == ep::ChapterKind::Other);
 }
 
 void TestLibraryScan() {
@@ -2803,6 +2809,7 @@ void TestSubtitleText() {
     CHECK(words(L"שלום, עולם") == V({L"שלום", L"עולם"}));
     CHECK(words(L"مرحبا بالعالم!") == V({L"مرحبا", L"بالعالم"}));
     CHECK(IsRtl(L"«שלום»") && IsRtl(L"مرحبا") && !IsRtl(L"Hello שלום") && !IsRtl(L"123"));
+    CHECK(!IsRtl(L"\xFEFFHello") && IsRtl(L"\xFEFC"));  // a BOM is no letter; U+FEFC is Arabic
 
     const std::wstring t = L"New York,\nNew York";
     const auto spans = SegmentWords(t);
