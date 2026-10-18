@@ -173,6 +173,7 @@ private:
     // Automation runs never touch the clipboard or the browser: what would have been copied or
     // opened shows in the tree dump instead.
     std::wstring lastCopy_, lastUrl_;
+    int builds_ = 0, buildUs_ = 0;  // layouts made and the last one's time (tree dump)
 
     ScopedConnection playerConn_, screenConn_;
     Config::Token styleToken_ = 0, enabledToken_ = 0;

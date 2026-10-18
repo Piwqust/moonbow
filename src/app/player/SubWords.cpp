@@ -437,6 +437,8 @@ void SubtitleWords::Rebuild() {
     bounds_ = {};
     IDWriteFactory5* dw = gfx::Gpu::Get().DWrite();
     if (!dw || video_.Empty()) return;
+    LARGE_INTEGER t0{}, t1{}, freq{};
+    QueryPerformanceCounter(&t0);
 
     // Where mpv draws: in the window (with "Show subtitles in the black bars") or in the picture.
     Rect pic = video_;
@@ -653,6 +655,10 @@ void SubtitleWords::Rebuild() {
         focus_ = anchor_ = FirstWord();
         selA_ = selB_ = focus_;
     }
+    QueryPerformanceCounter(&t1);
+    QueryPerformanceFrequency(&freq);
+    buildUs_ = static_cast<int>((t1.QuadPart - t0.QuadPart) * 1000000 / std::max<LONGLONG>(1, freq.QuadPart));
+    ++builds_;
     Invalidate();
 }
 
@@ -863,6 +869,7 @@ void SubtitleWords::ResetInteraction() {
     menu_ = nullptr;
     hover_ = anchor_ = selA_ = selB_ = focus_ = pressed_ = -1;
     dragging_ = clickPending_ = false;
+    cursor = IDC_ARROW;
     if (keyboard_) {
         keyboard_ = false;
         focusable = false;
@@ -1066,8 +1073,9 @@ void SubtitleWords::Lookup(const char* key, const std::wstring& text) {
 }
 
 void SubtitleWords::DebugInfo(std::string& out) const {
-    out += " words=" + std::to_string(words_.size());
-    if (hid_) out += " mpv-hidden";
+    out += " words=" + std::to_string(words_.size()) + " builds=" + std::to_string(builds_) +
+           " build-us=" + std::to_string(buildUs_);
+    if (hid_) out += " mpv-subs-off";  // not "hidden": the dump tools read that word as invisible
     if (keyboard_) out += " keyboard focus=" + std::to_string(focus_);
     if (hover_ >= 0) out += " hover=" + std::to_string(hover_);
     if (selA_ >= 0) out += " sel=" + std::to_string(std::min(selA_, selB_)) + "-" + std::to_string(std::max(selA_, selB_));
