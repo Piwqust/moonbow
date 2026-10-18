@@ -275,6 +275,14 @@ void App::RestoreWindowPlacement() {
 }
 
 void App::FlushStores() {
+    if (RetryClaimDataDir()) {
+        // The first instance has exited: start saving, from what it left on disk.
+        history_.Load();
+        playlists_.Load();
+        bookmarks_.Load();
+        favorites_.Load();
+        libraryChanged.Emit();
+    }
     SaveWindowPlacement();
     SaveHistoryPosition();
     config_.Flush();

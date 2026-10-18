@@ -1,4 +1,5 @@
 #include "Json.h"
+#include "Paths.h"
 
 #include <windows.h>
 #include <shlobj.h>
@@ -601,6 +602,10 @@ bool ReadFileUtf8(const std::wstring& path, std::string* out) {
 }
 
 bool WriteFileAtomic(const std::wstring& path, std::string_view data) {
+    if (DataDirReadOnly() && IsInDataDir(path)) {  // another Lumen owns the data folder
+        SetLastError(ERROR_ACCESS_DENIED);
+        return false;
+    }
     size_t slash = path.find_last_of(L"\\/");
     if (slash != std::wstring::npos && slash > 0) {
         std::wstring dir = path.substr(0, slash);

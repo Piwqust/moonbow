@@ -4,7 +4,9 @@
 #include <shlobj.h>
 #include <shlwapi.h>
 
+#include <atomic>
 #include <cwchar>
+#include <functional>
 #include <mutex>
 
 namespace {
@@ -13,6 +15,13 @@ std::mutex g_mutex;
 std::wstring g_override;
 std::wstring g_cached;
 std::vector<std::wstring> g_corrupt;  // guarded by g_mutex
+HANDLE g_dataMutex = nullptr;          // UI thread only (a mutex belongs to the thread owning it)
+std::atomic<bool> g_dataReadOnly{false};
+
+std::wstring UpperPath(std::wstring s) {
+    if (!s.empty()) CharUpperBuffW(s.data(), static_cast<DWORD>(s.size()));
+    return s;
+}
 
 }  // namespace
 
@@ -49,6 +58,35 @@ void SetDataDirForTests(const std::wstring& dir) {
 bool DataDirOverridden() {
     std::lock_guard lock(g_mutex);
     return !g_override.empty();
+}
+
+void ClaimDataDir() {
+    if (g_dataMutex) return;
+    // Per folder, so test instances with their own --data-dir never block each other.
+    const std::wstring dir = UpperPath(DataDir());
+    if (dir.empty()) return;
+    wchar_t name[64];
+    swprintf_s(name, L"Lumen.Data.%016llx", static_cast<unsigned long long>(std::hash<std::wstring>{}(dir)));
+    g_dataMutex = CreateMutexW(nullptr, TRUE, name);
+    g_dataReadOnly = g_dataMutex && GetLastError() == ERROR_ALREADY_EXISTS;  // not owned then
+}
+
+bool RetryClaimDataDir() {
+    if (!g_dataReadOnly || !g_dataMutex) return false;
+    const DWORD r = WaitForSingleObject(g_dataMutex, 0);
+    if (r != WAIT_OBJECT_0 && r != WAIT_ABANDONED) return false;
+    g_dataReadOnly = false;
+    return true;
+}
+
+bool DataDirReadOnly() {
+    return g_dataReadOnly;
+}
+
+bool IsInDataDir(const std::wstring& path) {
+    const std::wstring dir = UpperPath(DataDir());
+    return !dir.empty() && path.size() > dir.size() && (path[dir.size()] == L'\\' || path[dir.size()] == L'/') &&
+           UpperPath(path.substr(0, dir.size())) == dir;
 }
 
 std::wstring DataFileDisplayPath(std::wstring_view name) {

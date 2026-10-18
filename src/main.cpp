@@ -107,6 +107,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         CloseHandle(mutex);
         return 0;
     }
+    // Always, also with --new-instance: two writers on one data folder wipe each other's saves.
+    if (!gallery) ClaimDataDir();
 
     // The GPU driver takes ~150 ms to load: start it now, alongside OLE, fonts, settings and the
     // window, instead of after the window is shown.
