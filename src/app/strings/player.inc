@@ -106,6 +106,8 @@
 {L"Seek forward 10 s", L"Вперёд на 10 с"},
 {L"Seek backward 10 s", L"Назад на 10 с"},
 {L"Seek forward 1 min", L"Вперёд на 1 мин"},
+{L"Seek forward 5 min", L"Вперёд на 5 мин"},
+{L"Seek backward 5 min", L"Назад на 5 мин"},
 {L"Seek backward 1 min", L"Назад на 1 мин"},
 {L"Seek forward 3 s", L"Вперёд на 3 с"},
 {L"Seek backward 3 s", L"Назад на 3 с"},

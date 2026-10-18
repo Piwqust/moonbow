@@ -932,8 +932,8 @@ void BuildApp(Builder& b) {
     b.Number("controls.skipVeryShort", L"Very short skip", L"Очень короткий", 1, 3600, 1, 3).Unit(L"s", L"с");
     b.Number("controls.skipShort", L"Short skip", L"Короткий", 1, 3600, 1, 10).Unit(L"s", L"с");
     b.Number("controls.skipMedium", L"Medium skip", L"Средний", 1, 3600, 1, 60).Unit(L"s", L"с");
-    b.Number("controls.skipLong", L"Long skip", L"Длинный", 1, 3600, 1, 300).Unit(L"s", L"с")
-        .Hidden();  // not implemented yet: needs its own Action (app/Actions.h)
+    b.Number("controls.skipLong", L"Long skip (Ctrl+Shift+arrows)", L"Длинный (Ctrl+Shift+стрелки)", 1, 3600, 1, 300)
+        .Unit(L"s", L"с");
 
     b.Sec("mouse", L"Mouse", L"Мышь");
     b.Pick("controls.singleClick", L"Single click on the video", L"Одиночный щелчок по видео",

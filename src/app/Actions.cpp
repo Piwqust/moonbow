@@ -104,6 +104,8 @@ const std::vector<ActionInfo>& Table() {
         {Action::JumpTo70, "playback.jump_70", L"Jump to 70%", L"Jump to position", {}},
         {Action::JumpTo80, "playback.jump_80", L"Jump to 80%", L"Jump to position", {}},
         {Action::JumpTo90, "playback.jump_90", L"Jump to 90%", L"Jump to position", {}},
+        {Action::SeekForwardXL, "playback.seek_forward_xl", L"Seek forward 5 min", L"Playback", {{VK_RIGHT, kCtrlShift}}},
+        {Action::SeekBackwardXL, "playback.seek_backward_xl", L"Seek backward 5 min", L"Playback", {{VK_LEFT, kCtrlShift}}},
     };
     return table;
 }
@@ -298,6 +300,8 @@ bool Enabled(Action a) {
         case Action::Record:
         case Action::SeekForward:
         case Action::SeekBackward:
+        case Action::SeekForwardXL:
+        case Action::SeekBackwardXL:
         case Action::CloseMedia:
         case Action::AddBookmark:
         case Action::ShowInfo:
@@ -352,6 +356,8 @@ void Run(Action a) {
         case Action::SeekBackwardLong: SeekBy(-Skip("controls.skipMedium", 60)); break;
         case Action::SeekForwardShort: SeekBy(Skip("controls.skipVeryShort", 3)); break;
         case Action::SeekBackwardShort: SeekBy(-Skip("controls.skipVeryShort", 3)); break;
+        case Action::SeekForwardXL: SeekBy(Skip("controls.skipLong", 300)); break;
+        case Action::SeekBackwardXL: SeekBy(-Skip("controls.skipLong", 300)); break;
         case Action::FrameStep: p.FrameStep(false); break;
         case Action::FrameBackStep: p.FrameStep(true); break;
         case Action::SpeedUp: ChangeSpeed(+1); break;
