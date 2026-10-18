@@ -12,6 +12,7 @@
 #include "../src/library/MediaTypes.h"
 #include "../src/library/Playlists.h"
 #include "../src/library/Thumbnails.h"
+#include "../src/app/player/Episodes.h"
 
 #include <windows.h>
 #include <objbase.h>
@@ -1079,6 +1080,37 @@ std::shared_ptr<const library::Snapshot> ScanAndWait(library::MediaLibrary& lib,
     return snap;
 }
 
+// The player's "Next episode" card and "Skip intro" button (src/app/player/Episodes.h).
+void TestPlayerEpisodes() {
+    namespace ep = app::episodes;
+    CHECK(ep::IsNext(L"D:\\TV\\Show.S01E02.1080p.mkv", L"D:\\TV\\Show.S01E03.1080p.mkv"));
+    CHECK(ep::IsNext(L"D:\\TV\\Show.S01E09.mkv", L"D:\\TV\\Show.S02E01.mkv"));
+    CHECK(ep::IsNext(L"D:\\TV\\Show 1x02.mkv", L"D:\\TV\\Show 1x03.mkv"));
+    CHECK(ep::IsNext(L"D:\\TV\\S01E01.mkv", L"D:\\TV\\S01E02.mkv"));        // no show name: same folder
+    CHECK(!ep::IsNext(L"D:\\TV\\S01E01.mkv", L"D:\\Other\\S01E02.mkv"));
+    CHECK(!ep::IsNext(L"D:\\TV\\Show.S01E02.mkv", L"D:\\TV\\Other.S01E03.mkv"));
+    CHECK(!ep::IsNext(L"D:\\TV\\Show.S01E02.mkv", L"D:\\TV\\Show.S01E04.mkv"));
+    CHECK(!ep::IsNext(L"D:\\Clips\\Clip 1920x1080.mkv", L"D:\\Clips\\Clip 1920x1081.mkv"));
+    const std::vector<std::wstring> folder = {L"D:\\TV\\Show.S01E01.mkv", L"D:\\TV\\Show.S02E01.mkv",
+                                              L"D:\\TV\\Show.S01E02.mkv", L"D:\\TV\\Show.S01E03.mkv"};
+    CHECK(ep::FindNext(folder[0], folder) == 2);   // S01E02 before S02E01
+    CHECK(ep::FindNext(folder[3], folder) == 1);   // no S01E04: the season ended, S02E01 follows
+    CHECK(ep::FindNext(folder[1], folder) == -1);
+    CHECK(ep::FindNext(L"D:\\TV\\Movie.mkv", folder) == -1);
+    CHECK(ep::Label(ep::Parse(L"D:\\TV\\Show.s1e3.mkv")) == L"S01E03");
+
+    CHECK(ep::KindOf(L"Opening") == ep::ChapterKind::Intro);
+    CHECK(ep::KindOf(L"OP1") == ep::ChapterKind::Intro);
+    CHECK(ep::KindOf(L"Opening Credits") == ep::ChapterKind::Intro);
+    CHECK(ep::KindOf(L"Заставка") == ep::ChapterKind::Intro);
+    CHECK(ep::KindOf(L"End Credits") == ep::ChapterKind::Credits);
+    CHECK(ep::KindOf(L"ED") == ep::ChapterKind::Credits);
+    CHECK(ep::KindOf(L"ТИТРЫ") == ep::ChapterKind::Credits);
+    CHECK(ep::KindOf(L"Operation") == ep::ChapterKind::Other);
+    CHECK(ep::KindOf(L"Chapter 2") == ep::ChapterKind::Other);
+    CHECK(ep::KindOf(L"Edward") == ep::ChapterKind::Other);
+}
+
 void TestLibraryScan() {
     FreshDataDir(L"library");
     std::wstring root = MakeDir(L"lib\\Медиа");
@@ -1348,6 +1380,7 @@ const TestCase kTests[] = {
     {"bookmarks_favorites", TestBookmarksFavorites},
     {"media_types", TestMediaTypes},
     {"episodes_order", TestEpisodesAndOrder},
+    {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},
     {"thumbnails", TestThumbnails},

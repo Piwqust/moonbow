@@ -157,6 +157,7 @@ public:
         width = Length::Px(126);
         height = Length::Px(32);
         Bind(this, kChangeVolume);
+        onContextMenu = [](const MouseEvent&) { Run(Action::Mute); };
     }
     Rect Wedge() const { return collapsed_ ? Rect{} : Rect{rect.x + 36, rect.Cy() - 9, 86, 18}; }
     // Narrow windows keep only the speaker (wheel still changes the volume), so the
@@ -295,6 +296,25 @@ private:
     PanelKind kind_;
 };
 
+// The speed popover button; the wheel steps the speed and a right click goes back to 1×.
+class SpeedButton : public PanelButton {
+public:
+    SpeedButton() : PanelButton("speed", L"Playback speed", PanelKind::Speed) {
+        onContextMenu = [](const MouseEvent&) { Run(Action::SpeedReset); };
+    }
+    bool OnWheel(const WheelEvent& e) override {
+        if (!PS().fileLoaded || e.delta == 0) return false;
+        Run(e.delta > 0 ? Action::SpeedUp : Action::SpeedDown);
+        return true;
+    }
+    void Paint(Painter& p) override {
+        wchar_t buf[96];
+        swprintf_s(buf, L"%s %g× · %s", Tr(L"Speed"), PS().speed, Tr(L"scroll to change, right-click for 1×"));
+        tooltip = buf;
+        PanelButton::Paint(p);
+    }
+};
+
 class InfoLabel : public Widget, PlayerBound {
 public:
     explicit InfoLabel(ControlId id) : id_(id) {
@@ -417,7 +437,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
             d->pad = {6, 0, 6, 0};
             return d;
         }
-        case ControlId::Speed: return std::make_unique<PanelButton>("speed", L"Playback speed", PanelKind::Speed);
+        case ControlId::Speed: return std::make_unique<SpeedButton>();
         case ControlId::Forward10: return button("forward-10-sec", L"Forward 10s", Action::SeekForward);
         case ControlId::Backward10: return button("backward-10-sec", L"Backward 10s", Action::SeekBackward);
         case ControlId::Forward15: {

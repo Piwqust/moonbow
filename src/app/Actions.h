@@ -20,10 +20,10 @@ enum class Action : int {
     CycleSubtitles, ToggleSubtitles, SubtitleDelayUp, SubtitleDelayDown, SubtitleBigger, SubtitleSmaller,
     // Video
     Fullscreen, ExitFullscreen, HideUI, PictureInPicture, Snapshot, Record, ZoomIn, ZoomOut, ZoomReset,
-    CycleAspect, Rotate, Deinterlace,
+    CycleAspect, Rotate, Deinterlace, ToggleStats,
     // Media & navigation
     OpenFile, OpenFolder, OpenNetwork, OpenSubtitles, CloseMedia, GoHome, ToggleSidebar, TogglePlaylist,
-    Search, Back, Forward, AddBookmark, ToggleFavorite, ShowInfo,
+    Search, Back, Forward, AddBookmark, ToggleFavorite, ShowInfo, ShowInExplorer,
     // App
     Settings, KeyboardShortcuts, CustomizePlayer, Quit,
     Count,

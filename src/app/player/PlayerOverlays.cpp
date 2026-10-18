@@ -1,0 +1,498 @@
+#include "app/player/PlayerOverlays.h"
+
+#include "Util.h"
+#include "app/App.h"
+#include "app/I18n.h"
+#include "app/MainWindow.h"
+#include "app/library/LibraryCommon.h"
+#include "app/player/Episodes.h"
+#include "app/player/LiveState.h"
+#include "gfx/Text.h"
+
+#include <cmath>
+#include <cstring>
+#include <mutex>
+#include <thread>
+
+namespace app {
+
+using namespace ui;
+
+namespace {
+
+const PlayerState& PS() {
+    return TheApp().player().State();
+}
+
+const mpv_node* NodeGet(const mpv_node* map, const char* key) {
+    if (!map || map->format != MPV_FORMAT_NODE_MAP) return nullptr;
+    for (int i = 0; i < map->u.list->num; ++i)
+        if (std::strcmp(map->u.list->keys[i], key) == 0) return &map->u.list->values[i];
+    return nullptr;
+}
+
+std::string NodeStr(const mpv_node* n) {
+    return n && n->format == MPV_FORMAT_STRING && n->u.string ? n->u.string : "";
+}
+
+double NodeNum(const mpv_node* n) {
+    if (!n) return NAN;
+    if (n->format == MPV_FORMAT_DOUBLE) return n->u.double_;
+    if (n->format == MPV_FORMAT_INT64) return static_cast<double>(n->u.int64);
+    return NAN;
+}
+
+std::wstring Num(double v, int decimals) {
+    if (std::isnan(v)) return L"—";
+    wchar_t buf[32];
+    swprintf_s(buf, L"%.*f", decimals, v);
+    return buf;
+}
+
+std::wstring Rate(double bitsPerSecond) {
+    if (std::isnan(bitsPerSecond) || bitsPerSecond <= 0) return L"—";
+    if (bitsPerSecond >= 1e6) return Fmt(Tr(L"{0} Mb/s"), {Num(bitsPerSecond / 1e6, 1)});
+    return Fmt(Tr(L"{0} kb/s"), {Num(bitsPerSecond / 1e3, 0)});
+}
+
+std::wstring W(const std::string& s) {
+    return Utf8ToWide(s);
+}
+
+constexpr float kStatsPad = 12, kStatsLine = 18;
+
+}  // namespace
+
+// --- StatsOverlay ---------------------------------------------------------------------------
+
+struct StatsOverlay::Values {
+    std::string format, hwdec, vo, pixfmt, hwPixfmt, matrix, levels, primaries, gamma, audioCodec;
+    double w = NAN, h = NAN, dw = NAN, dh = NAN, maxLuma = NAN, maxCll = NAN, maxFall = NAN;
+    double containerFps = NAN, estimatedFps = NAN, displayFps = NAN;
+    double drops = NAN, decoderDrops = NAN, videoRate = NAN, audioRate = NAN, cache = NAN, avsync = NAN;
+    double sampleRate = NAN, channels = NAN;
+};
+
+StatsOverlay::StatsOverlay(MainWindow* window, std::function<void()> repaint)
+    : window_(window), repaint_(std::move(repaint)), v_(std::make_unique<Values>()) {
+    // Shown before mpv was ready: start observing once it is.
+    playerConn_ = Connect(TheApp().playerChanged, [this](unsigned) {
+        if (shown_ && observers_.empty() && TheApp().player().Ready()) Observe();
+    });
+}
+
+StatsOverlay::~StatsOverlay() {
+    Unobserve();
+}
+
+void StatsOverlay::SetShown(bool shown) {
+    if (shown == shown_) return;
+    shown_ = shown;
+    if (shown) {
+        *v_ = Values{};
+        Observe();
+        Rebuild();
+    } else {
+        Unobserve();
+        lines_.clear();
+    }
+    repaint_();
+}
+
+void StatsOverlay::Observe() {
+    Player& p = TheApp().player();
+    if (!p.Ready() || !observers_.empty()) return;
+    auto str = [this, &p](const char* name, std::string Values::*field) {
+        observers_.push_back(p.Observe(name, MPV_FORMAT_STRING, [this, field](const mpv_event_property& e) {
+            const char* s = e.format == MPV_FORMAT_STRING && e.data ? *static_cast<char**>(e.data) : nullptr;
+            (*v_).*field = s ? s : "";
+            dirty_ = true;
+        }));
+    };
+    auto num = [this, &p](const char* name, double Values::*field) {
+        observers_.push_back(p.Observe(name, MPV_FORMAT_DOUBLE, [this, field](const mpv_event_property& e) {
+            (*v_).*field = e.format == MPV_FORMAT_DOUBLE && e.data ? *static_cast<double*>(e.data) : NAN;
+            dirty_ = true;
+        }));
+    };
+    str("video-format", &Values::format);
+    str("hwdec-current", &Values::hwdec);
+    str("current-vo", &Values::vo);
+    str("audio-codec-name", &Values::audioCodec);
+    num("container-fps", &Values::containerFps);
+    num("estimated-vf-fps", &Values::estimatedFps);
+    num("display-fps", &Values::displayFps);
+    num("frame-drop-count", &Values::drops);
+    num("decoder-frame-drop-count", &Values::decoderDrops);
+    num("video-bitrate", &Values::videoRate);
+    num("audio-bitrate", &Values::audioRate);
+    num("demuxer-cache-duration", &Values::cache);
+    num("avsync", &Values::avsync);
+    observers_.push_back(p.Observe("video-params", MPV_FORMAT_NODE, [this](const mpv_event_property& e) {
+        const mpv_node* n = e.format == MPV_FORMAT_NODE ? static_cast<const mpv_node*>(e.data) : nullptr;
+        Values& v = *v_;
+        v.pixfmt = NodeStr(NodeGet(n, "pixelformat"));
+        v.hwPixfmt = NodeStr(NodeGet(n, "hw-pixelformat"));
+        v.matrix = NodeStr(NodeGet(n, "colormatrix"));
+        v.levels = NodeStr(NodeGet(n, "colorlevels"));
+        v.primaries = NodeStr(NodeGet(n, "primaries"));
+        v.gamma = NodeStr(NodeGet(n, "gamma"));
+        v.w = NodeNum(NodeGet(n, "w"));
+        v.h = NodeNum(NodeGet(n, "h"));
+        v.dw = NodeNum(NodeGet(n, "dw"));
+        v.dh = NodeNum(NodeGet(n, "dh"));
+        v.maxLuma = NodeNum(NodeGet(n, "max-luma"));
+        v.maxCll = NodeNum(NodeGet(n, "max-cll"));
+        v.maxFall = NodeNum(NodeGet(n, "max-fall"));
+        dirty_ = true;
+    }));
+    num("audio-params/samplerate", &Values::sampleRate);
+    num("audio-params/channel-count", &Values::channels);
+    // Values like avsync change every frame: repaint on a slow clock instead of per event.
+    timer_ = window_->StartTimer(500, [this] {
+        if (!dirty_) return;
+        dirty_ = false;
+        Rebuild();
+        repaint_();
+    }, true);
+}
+
+void StatsOverlay::Unobserve() {
+    Player& p = TheApp().player();
+    for (uint64_t id : observers_) p.Unobserve(id);
+    observers_.clear();
+    if (timer_) window_->CancelTimer(timer_);
+    timer_ = 0;
+}
+
+void StatsOverlay::Rebuild() {
+    const Values& v = *v_;
+    lines_.clear();
+    // Decoder: format and hardware decoding; "-copy" modes bring every frame back to RAM.
+    std::wstring dec = v.format.empty() ? L"—" : W(v.format);
+    if (v.hwdec.empty() || v.hwdec == "no")
+        dec += std::wstring(L" · ") + Tr(L"software");
+    else if (v.hwdec.size() > 5 && v.hwdec.compare(v.hwdec.size() - 5, 5, "-copy") == 0)
+        dec += L" · " + W(v.hwdec) + L" (" + Tr(L"copies frames to RAM") + L")";
+    else
+        dec += L" · " + W(v.hwdec) + L" (" + Tr(L"zero-copy") + L")";
+    lines_.push_back({Tr(L"Decoder"), dec});
+
+    std::wstring out = v.vo.empty() ? L"—" : W(v.vo);
+    if (!std::isnan(v.w) && !std::isnan(v.h)) {
+        out += L" · " + Num(v.w, 0) + L"×" + Num(v.h, 0);
+        if (!std::isnan(v.dw) && !std::isnan(v.dh) && (v.dw != v.w || v.dh != v.h))
+            out += L" → " + Num(v.dw, 0) + L"×" + Num(v.dh, 0);
+    }
+    if (!v.pixfmt.empty()) out += L" · " + W(v.pixfmt);
+    if (!v.hwPixfmt.empty()) out += L" (" + W(v.hwPixfmt) + L")";
+    lines_.push_back({Tr(L"Output"), out});
+
+    if (!v.matrix.empty() || !v.primaries.empty()) {
+        std::wstring c;
+        for (const std::string* s : {&v.matrix, &v.primaries, &v.gamma, &v.levels})
+            if (!s->empty()) c += (c.empty() ? L"" : L" · ") + W(*s);
+        lines_.push_back({Tr(L"Color"), c});
+    }
+    const bool hdr = v.gamma == "pq" || v.gamma == "hlg" || (!std::isnan(v.maxCll) && v.maxCll > 0);
+    if (hdr) {
+        std::wstring h = v.gamma == "hlg" ? L"HLG" : L"PQ";
+        if (!std::isnan(v.maxLuma) && v.maxLuma > 0) h += L" · " + Fmt(Tr(L"mastering {0} nits"), {Num(v.maxLuma, 0)});
+        if (!std::isnan(v.maxCll) && v.maxCll > 0) h += L" · MaxCLL " + Num(v.maxCll, 0);
+        if (!std::isnan(v.maxFall) && v.maxFall > 0) h += L" · MaxFALL " + Num(v.maxFall, 0);
+        lines_.push_back({L"HDR", h});
+    }
+    lines_.push_back({Tr(L"Frame rate"), Fmt(Tr(L"{0} file · {1} estimated · {2} display"),
+                                             {Num(v.containerFps, 3), Num(v.estimatedFps, 2), Num(v.displayFps, 2)})});
+    lines_.push_back({Tr(L"Dropped frames"),
+                      Fmt(Tr(L"{0} output · {1} decoder"), {Num(v.drops, 0), Num(v.decoderDrops, 0)})});
+    lines_.push_back({Tr(L"Bitrate"), Fmt(Tr(L"video {0} · audio {1}"), {Rate(v.videoRate), Rate(v.audioRate)})});
+    lines_.push_back({Tr(L"Cache"), std::isnan(v.cache) ? L"—" : Fmt(Tr(L"{0} s ahead"), {Num(v.cache, 1)})});
+    std::wstring sync = L"—";
+    if (!std::isnan(v.avsync)) sync = (v.avsync >= 0 ? L"+" : L"") + Fmt(Tr(L"{0} ms"), {Num(v.avsync * 1000, 1)});
+    lines_.push_back({Tr(L"A/V sync"), sync});
+    if (!v.audioCodec.empty())
+        lines_.push_back({Tr(L"Audio"), Fmt(Tr(L"{0} · {1} kHz · {2} ch"),
+                                            {W(v.audioCodec), Num(v.sampleRate / 1000, 1), Num(v.channels, 0)})});
+
+    gfx::Text& t = gfx::Text::Get();
+    labelW_ = 0;
+    float valueW = t.Measure(Tr(L"Statistics"), TextStyle::SmallMedium).width + 90;
+    for (const auto& [label, value] : lines_) {
+        labelW_ = std::max(labelW_, t.Measure(label, TextStyle::Small).width);
+        valueW = std::max(valueW, t.Measure(value, TextStyle::MonoSmall).width);
+    }
+    width_ = kStatsPad * 2 + labelW_ + 16 + valueW;
+}
+
+void StatsOverlay::Paint(Painter& p, const Rect& video) {
+    if (!shown_ || lines_.empty() || video.Empty()) return;
+    const float h = kStatsPad * 2 + kStatsLine * static_cast<float>(lines_.size() + 1) + 4;
+    const Rect box{video.x + 12, video.y + 12, std::min(width_, video.w - 24), std::min(h, video.h - 24)};
+    p.PushClip(box);
+    p.Fill(box, P().bgMenu.Fade(0.88f), 6);
+    p.Stroke(box, P().line, 6);
+    float y = box.y + kStatsPad;
+    p.Text(Tr(L"Statistics"), {box.x + kStatsPad, y, box.w - 2 * kStatsPad, kStatsLine}, TextStyle::SmallMedium,
+           P().textPrimary);
+    p.Text(L"Ctrl+Shift+I", {box.x + kStatsPad, y, box.w - 2 * kStatsPad, kStatsLine}, TextStyle::Small,
+           P().textTertiary, HAlign::Trailing);
+    y += kStatsLine + 4;
+    for (const auto& [label, value] : lines_) {
+        p.Text(label, {box.x + kStatsPad, y, labelW_, kStatsLine}, TextStyle::Small, P().textTertiary);
+        const float vx = box.x + kStatsPad + labelW_ + 16;
+        p.Text(value, {vx, y, box.Right() - kStatsPad - vx, kStatsLine}, TextStyle::MonoSmall, P().textPrimary);
+        y += kStatsLine;
+    }
+    p.PopClip();
+}
+
+// --- NextEpisodeCard ------------------------------------------------------------------------
+
+// Lists the folder off the UI thread when the queue doesn't hold the next episode.
+struct NextEpisodeCard::FolderJob {
+    std::mutex mutex;
+    bool done = false;
+    std::wstring result;
+};
+
+NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
+    dir = Dir::Column;
+    gap = 10;
+    pad = Insets::All(16);
+    width = Length::Px(340);
+    interactive = true;  // clicks on the card don't reach the video
+    visible = false;
+    title_ = Add<Label>(L"", TextStyle::BodyMedium, Tone::Primary);
+    title_->width = Length::Grow();
+    name_ = Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
+    name_->width = Length::Grow();
+    auto* row = Add<Widget>();
+    row->dir = Dir::Row;
+    row->gap = 8;
+    auto* play = row->Add<Button>(Tr(L"Play now"), ButtonKind::Primary, "play");
+    play->id = "play-next";
+    play->onClick = [this] { PlayNext(); };
+    auto* cancel = row->Add<Button>(Tr(L"Cancel"), ButtonKind::Secondary);
+    cancel->id = "cancel-next";
+    cancel->onClick = [this] {
+        // Cancel = stay on this episode: no automatic switch at its end.
+        dismissed_ = true;
+        if (fromQueue_ || TheApp().config().GetString("playback.whenFinished") == "next") Live().SetStopAfter(true);
+        SetWanted(false);
+    };
+    playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) { OnPlayer(m); });
+    queueConn_ = Connect(TheApp().queue().changed, [this] {
+        if (serial_) Resolve();
+        Update();
+    });
+}
+
+NextEpisodeCard::~NextEpisodeCard() = default;
+
+void NextEpisodeCard::Paint(Painter& p) {
+    p.Shadow(rect, 12, 15, 8);
+    p.Fill(rect, P().bgMenu.Fade(0.96f), 12);
+    p.Stroke(rect, P().line, 12);
+}
+
+void NextEpisodeCard::SetWanted(bool wanted) {
+    if (wanted == wanted_) return;
+    wanted_ = wanted;
+    shownSecs_ = -1;
+    if (Parent()) Parent()->InvalidateLayout();
+}
+
+void NextEpisodeCard::OnPlayer(unsigned m) {
+    const PlayerState& s = PS();
+    if (s.fileLoaded && s.loadSerial != serial_) OnNewFile();
+    if (m & kChangeTracks) CarryLanguages();
+    if (m & (kChangeTime | kChangeChapters | kChangeState | kChangeFile | kChangeError)) Update();
+    if (m & kChangeEnd) OnEnded();
+}
+
+void NextEpisodeCard::OnNewFile() {
+    const PlayerState& s = PS();
+    serial_ = s.loadSerial;
+    const QueueItem* item = TheApp().queue().CurrentItem();
+    curPath_ = item ? item->path : s.path;
+    dismissed_ = false;
+    job_.reset();
+    Resolve();
+}
+
+void NextEpisodeCard::Resolve() {
+    nextPath_.clear();
+    fromQueue_ = false;
+    if (curPath_.empty() || lib::IsUrl(curPath_) || !episodes::Parse(curPath_).Valid()) return;
+    const PlayQueue& q = TheApp().queue();
+    const int ni = q.NextIndex(false);
+    if (ni >= 0 && ni != q.Current()) {
+        const std::wstring& next = q.Items()[static_cast<size_t>(ni)].path;
+        if (episodes::IsNext(curPath_, next)) {
+            nextPath_ = next;
+            fromQueue_ = true;
+        }
+        // Something else plays next (a playlist the user made): leave it alone.
+        return;
+    }
+    if (ni >= 0) return;  // repeating this one
+    if (!job_) {
+        job_ = std::make_shared<FolderJob>();
+        std::thread([job = job_, path = curPath_] {
+            const std::vector<std::wstring> siblings = ListSiblingMedia(path);
+            const int i = episodes::FindNext(path, siblings);
+            std::lock_guard<std::mutex> lock(job->mutex);
+            if (i >= 0) job->result = siblings[static_cast<size_t>(i)];
+            job->done = true;
+        }).detach();
+    }
+}
+
+void NextEpisodeCard::Update() {
+    const PlayerState& s = PS();
+    if (job_ && nextPath_.empty()) {
+        std::lock_guard<std::mutex> lock(job_->mutex);
+        if (job_->done) nextPath_ = job_->result;
+    }
+    bool want = false;
+    double left = 0;
+    if (s.fileLoaded && !nextPath_.empty() && !dismissed_ && s.duration > 60 && !s.eof) {
+        left = std::max(0.0, s.duration - s.position);
+        bool credits = false;
+        if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size())) {
+            const Chapter& c = s.chapters[static_cast<size_t>(s.chapter)];
+            credits = c.time > s.duration * 0.5 && episodes::KindOf(c.title) == episodes::ChapterKind::Credits;
+        }
+        want = left <= 30 || credits;
+    }
+    SetWanted(want);
+    if (!want) return;
+    const long long secs = static_cast<long long>(std::ceil(left - 1e-3));
+    if (secs == shownSecs_) return;
+    shownSecs_ = secs;
+    const episodes::Episode e = episodes::Parse(nextPath_);
+    title_->SetText(Fmt(Tr(L"Next episode: {0} · in {1} s"), {episodes::Label(e), std::to_wstring(secs)}));
+    name_->SetText(FileNameOf(nextPath_));
+}
+
+void NextEpisodeCard::PlayNext() {
+    if (nextPath_.empty()) return;
+    const std::wstring next = nextPath_;
+    SetWanted(false);
+    dismissed_ = true;
+    App& app = TheApp();
+    const int ni = app.queue().NextIndex(false);
+    if (ni >= 0 && app.queue().Items()[static_cast<size_t>(ni)].path == next)
+        app.PlayIndex(ni, false);
+    else
+        app.Open({next});  // a single local file brings its folder along as the queue
+}
+
+void NextEpisodeCard::OnEnded() {
+    // The queue moves on by itself; a next episode found only in the folder is ours to start,
+    // unless the app already did (End of queue > Play the next file in the folder).
+    if (fromQueue_ || nextPath_.empty() || dismissed_ || TheApp().config().GetBool("playback.stopAfterEach")) return;
+    const std::wstring ended = curPath_;
+    window_->Post([this, ended] {
+        const QueueItem* item = TheApp().queue().CurrentItem();
+        if (item && item->path == ended && curPath_ == ended && !dismissed_) PlayNext();
+    });
+}
+
+void NextEpisodeCard::CarryLanguages() {
+    const PlayerState& s = PS();
+    if (!s.fileLoaded || s.tracks.empty() || s.path.empty()) return;
+    if (s.path != carryPath_) {
+        const bool next = !carryPath_.empty() && episodes::IsNext(carryPath_, s.path);
+        carryPath_ = s.path;
+        if (next) {
+            Player& p = TheApp().player();
+            auto pick = [&s](const wchar_t* type, const std::wstring& lang, const std::wstring& title) -> const Track* {
+                const Track* best = nullptr;
+                for (const Track& t : s.tracks) {
+                    if (t.type != type || t.lang.empty() || _wcsicmp(t.lang.c_str(), lang.c_str()) != 0) continue;
+                    if (t.title == title) return &t;
+                    if (!best) best = &t;
+                }
+                return best;
+            };
+            if (!audioLang_.empty())
+                if (const Track* t = pick(L"audio", audioLang_, audioTitle_); t && !t->selected) p.SetTrack("aid", t->id);
+            bool anySub = false, subSelected = false;
+            for (const Track& t : s.tracks)
+                if (t.type == L"sub") {
+                    anySub = true;
+                    subSelected |= t.selected;
+                }
+            if (hadSubs_ && anySub) {
+                if (subsOff_) {
+                    if (subSelected) p.SetTrack("sid", 0);
+                } else if (!subLang_.empty()) {
+                    if (const Track* t = pick(L"sub", subLang_, subTitle_); t && !t->selected) p.SetTrack("sid", t->id);
+                }
+            }
+            return;  // the choice we just made comes back as the next track-list change
+        }
+    }
+    // Remember this file's choice.
+    bool anySub = false;
+    std::wstring sLang, sTitle;
+    bool sOn = false;
+    for (const Track& t : s.tracks) {
+        if (t.type == L"audio" && t.selected) {
+            audioLang_ = t.lang;
+            audioTitle_ = t.title;
+        } else if (t.type == L"sub") {
+            anySub = true;
+            if (t.selected && !sOn) {
+                sOn = true;
+                sLang = t.lang;
+                sTitle = t.title;
+            }
+        }
+    }
+    hadSubs_ = anySub;
+    subsOff_ = anySub && !sOn;
+    subLang_ = sLang;
+    subTitle_ = sTitle;
+}
+
+// --- SkipChapterButton ----------------------------------------------------------------------
+
+SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", ButtonKind::Secondary, "next"), card_(card) {
+    visible = false;
+    id = "skip-chapter";
+    onClick = [this] {
+        const PlayerState& s = PS();
+        if (s.chapter < 0 || s.chapter >= static_cast<int64_t>(s.chapters.size())) return;
+        const size_t next = static_cast<size_t>(s.chapter) + 1;
+        if (next < s.chapters.size())
+            TheApp().player().SeekAbsolute(s.chapters[next].time, true);
+        else if (card_ && card_->HasNext())
+            card_->PlayNext();
+        else
+            TheApp().player().SeekAbsolute(std::max(0.0, s.duration - 0.5), true);
+    };
+    playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+        if (m & (kChangeTime | kChangeChapters | kChangeFile | kChangeState)) Update();
+    });
+}
+
+void SkipChapterButton::Update() {
+    const PlayerState& s = PS();
+    int k = 0;
+    if (s.fileLoaded && !s.eof && s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size()))
+        k = static_cast<int>(episodes::KindOf(s.chapters[static_cast<size_t>(s.chapter)].title));
+    const bool want = k != 0 && !(card_ && card_->Wanted());
+    if (k != kind_) {
+        kind_ = k;
+        if (k == static_cast<int>(episodes::ChapterKind::Intro)) SetText(Tr(L"Skip intro"));
+        else if (k == static_cast<int>(episodes::ChapterKind::Credits)) SetText(Tr(L"Skip credits"));
+    }
+    if (want == wanted_) return;
+    wanted_ = want;
+    if (Parent()) Parent()->InvalidateLayout();
+}
+
+}  // namespace app

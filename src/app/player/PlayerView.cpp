@@ -8,6 +8,8 @@
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
 #include "app/player/PanelTabs.h"
+#include "app/player/PlayerOverlays.h"
+#include "gfx/Text.h"
 
 #include <cmath>
 
@@ -129,6 +131,10 @@ void ShowVideoContextMenu(Host* host, Point at) {
     items.push_back(audio);
     items.push_back(MenuItem::Separator());
     items.push_back(Item(L"Media information", Action::ShowInfo, "info"));
+    MenuItem stats = Item(L"Statistics", Action::ToggleStats, "wrench");
+    stats.checked = app.config().GetBool("general.developerMode");
+    items.push_back(stats);
+    items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
 
     MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
     subs.submenu = TrackItems(L"sub", "sid", true);
@@ -167,20 +173,32 @@ void ShowVideoContextMenu(Host* host, Point at) {
 }  // namespace
 
 // The video rectangle: a transparent hole the mpv child window shows through,
-// framed by the chrome color. Handles clicks, double clicks, wheel, menu.
+// framed by the chrome color. Handles clicks, double clicks, wheel, menu, and
+// press-and-hold for a temporary 2× speed.
 class PlayerView::VideoArea : public Widget {
 public:
-    explicit VideoArea(MainWindow* window) : window_(window) {
+    VideoArea(MainWindow* window, PlayerView* owner) : window_(window), owner_(owner) {
         interactive = true;
         onContextMenu = [this](const MouseEvent& e) { ShowVideoContextMenu(GetHost(), {e.x, e.y}); };
     }
+    ~VideoArea() override {
+        window_->CancelTimer(holdTimer_);
+        window_->CancelTimer(revealTimer_);
+        if (holding_) TheApp().player().SetSpeed(holdSpeed_);
+    }
+    bool Holding() const { return holding_; }
     bool OnMouseDown(const MouseEvent& e) override {
         // The click that closed a player popover doesn't also pause.
         if (e.button == MouseButton::Left && panel::PanelJustClosed()) return true;
         if (e.button == MouseButton::Left) {
-            // Settings > Controls > Mouse; play/pause by default, like MPC-HC (a double click undoes it).
-            pausedByClick_ = PS().fileLoaded && TheApp().config().GetString("controls.singleClick") == "playPause";
-            VideoSingleClick();
+            // The click acts on release, so that a long press can mean 2× instead.
+            down_ = true;
+            const PlayerState& s = PS();
+            if (s.fileLoaded && !s.paused && !s.eof)
+                holdTimer_ = window_->StartTimer(kHoldMs, [this] {
+                    holdTimer_ = 0;
+                    BeginHold();
+                });
         } else if (e.button == MouseButton::Middle) {
             Run(Action::Fullscreen);
         } else if (e.button == MouseButton::X1) {
@@ -190,7 +208,22 @@ public:
         }
         return true;
     }
+    bool OnMouseUp(const MouseEvent& e) override {
+        if (e.button != MouseButton::Left || !down_) return true;  // e.g. the release after a double click
+        down_ = false;
+        window_->CancelTimer(holdTimer_);
+        holdTimer_ = 0;
+        if (holding_) {
+            EndHold();
+            return true;
+        }
+        // Settings > Controls > Mouse; play/pause by default, like MPC-HC (a double click undoes it).
+        pausedByClick_ = PS().fileLoaded && TheApp().config().GetString("controls.singleClick") == "playPause";
+        VideoSingleClick();
+        return true;
+    }
     bool OnDoubleClick(const MouseEvent&) override {
+        down_ = false;
         if (window_->PictureInPicture()) return true;
         const bool undo = pausedByClick_ && TheApp().config().GetString("controls.doubleClick") != "none";
         pausedByClick_ = false;
@@ -198,9 +231,23 @@ public:
         VideoDoubleClick();
         return true;
     }
-    bool OnMouseMove(const MouseEvent&) override {
+    bool OnMouseMove(const MouseEvent& e) override {
         window_->PokeChrome();
+        // Near the bottom edge the floating bar stays up while the pointer rests there.
+        const bool nearBottom = window_->BarOverlays() && e.y >= rect.Bottom() - kRevealZone;
+        if (nearBottom && !revealTimer_) {
+            revealTimer_ = window_->StartTimer(500, [this] {
+                if (window_->Hot() == this && window_->BarOverlays()) window_->PokeChrome();
+            }, true);
+        } else if (!nearBottom && revealTimer_) {
+            window_->CancelTimer(revealTimer_);
+            revealTimer_ = 0;
+        }
         return false;
+    }
+    void OnMouseLeave() override {
+        window_->CancelTimer(revealTimer_);
+        revealTimer_ = 0;
     }
     bool OnWheel(const WheelEvent& e) override {
         VideoWheel(e.delta, e.horizontal);
@@ -209,8 +256,27 @@ public:
     Rect Inner(bool immersive) const { return immersive ? rect : Rect{rect.x + kVideoPad, rect.y, rect.w - 2 * kVideoPad, rect.h}; }
 
 private:
+    static constexpr UINT kHoldMs = 400;
+    static constexpr float kRevealZone = 120;
+    void BeginHold() {
+        const PlayerState& s = PS();
+        if (!down_ || !s.fileLoaded || s.paused) return;
+        holding_ = true;
+        holdSpeed_ = s.speed;
+        TheApp().player().SetSpeed(2.0);
+        owner_->Invalidate();
+    }
+    void EndHold() {
+        holding_ = false;
+        TheApp().player().SetSpeed(holdSpeed_);
+        owner_->Invalidate();
+    }
     MainWindow* window_;
+    PlayerView* owner_;
     bool pausedByClick_ = false;
+    bool down_ = false, holding_ = false;
+    double holdSpeed_ = 1;
+    UINT_PTR holdTimer_ = 0, revealTimer_ = 0;
 };
 
 // Shown instead of a black player when a file can't be opened.
@@ -280,22 +346,40 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     rail->SetCollapsed(true);
     side_->Add<LibraryPane>(true)->width = Length::Px(kSidePanel);
 
-    video_ = Add<VideoArea>(window);
+    video_ = Add<VideoArea>(window, this);
     music_ = AddChild(CreateMusicView());
     music_->visible = false;
     pip_ = AddChild(CreatePipOverlay(window));
     pip_->visible = false;
     error_ = Add<ErrorCard>();
     error_->visible = false;
+    nextEpisode_ = Add<NextEpisodeCard>(window);
+    skipChapter_ = Add<SkipChapterButton>(nextEpisode_);
     bar_ = Add<ControlBar>();
+    stats_ = std::make_unique<StatsOverlay>(window, [this] { Invalidate(); });
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
         if (m & (kChangeTracks | kChangeFile | kChangeState | kChangeError)) InvalidateLayout();
+        // The thin progress line repaints only when it grows by a pixel.
+        if ((m & kChangeTime) && thinShown_) {
+            const PlayerState& s = PS();
+            const int px = s.duration > 0 ? static_cast<int>(thinW_ * std::clamp(s.position / s.duration, 0.0, 1.0)) : 0;
+            if (px != thinPx_) Invalidate();
+        }
     });
+    screenConn_ = Connect(TheApp().screenChanged, [this] { UpdateStats(); });
+    configToken_ = TheApp().config().Subscribe("general.developerMode", [this](const std::string&) { UpdateStats(); });
 }
 
-PlayerView::~PlayerView() = default;
+PlayerView::~PlayerView() {
+    TheApp().config().Unsubscribe(configToken_);
+}
+
+void PlayerView::UpdateStats() {
+    stats_->SetShown(TheApp().config().GetBool("general.developerMode") && TheApp().PlayerShown() &&
+                     !window_->PictureInPicture());
+}
 
 void PlayerView::SetSidePanel(bool shown) {
     side_->visible = shown;
@@ -339,6 +423,21 @@ void PlayerView::OnLayout() {
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);
         error_->Arrange(v.Center(sz.w, sz.h));
     }
+
+    // Bottom-right of the picture, above a floating bar.
+    const Rect v = video_->Inner(immersive);
+    const float bottom = v.Bottom() - 20 - ((immersive || overlay) && bar_->visible ? barH : 0.0f);
+    nextEpisode_->visible = nextEpisode_->Wanted() && s.fileLoaded && !pip && v.w > 400;
+    if (nextEpisode_->visible) {
+        const Size sz = nextEpisode_->Measure(std::min(340.0f, v.w - 48), v.h);
+        nextEpisode_->Arrange({v.Right() - 24 - sz.w, bottom - sz.h, sz.w, sz.h});
+    }
+    skipChapter_->visible = skipChapter_->Wanted() && !nextEpisode_->visible && !pip;
+    if (skipChapter_->visible) {
+        const Size sz = skipChapter_->Measure(v.w, 40);
+        skipChapter_->Arrange({v.Right() - 24 - sz.w, bottom - sz.h, sz.w, sz.h});
+    }
+    UpdateStats();
 }
 
 void PlayerView::Paint(Painter& p) {
@@ -353,6 +452,35 @@ void PlayerView::Paint(Painter& p) {
 
 void PlayerView::PaintOver(Painter& p) {
     const PlayerState& s = PS();
+    const bool immersive = window_->IsFullscreen() || window_->UiHidden();
+    const Rect video = video_->Inner(immersive);
+    const bool pip = window_->PictureInPicture();
+    if (!pip) stats_->Paint(p, video);
+
+    if (video_->Holding()) {
+        const Rect badge{std::round(video.Cx() - 36), video.y + 20, 72, 32};
+        p.Fill(badge, P().bgMenu.Fade(0.9f), 16);
+        p.Icon("speed", {badge.x + 10, badge.y + 6, 20, 20}, P().textPrimary);
+        p.Text(L"2×", {badge.x + 34, badge.y, badge.w - 40, badge.h}, TextStyle::BodyStrong, P().textPrimary);
+    }
+
+    // Settings > Interface: a thin progress line along the bottom while the floating bar is hidden.
+    std::string thin = TheApp().config().GetString("interface.thinProgress");
+    if (thin.empty()) thin = "fullscreen";
+    const bool overlay = window_->BarOverlays() && s.hasVideo;
+    const float hidden = 1.0f - window_->ChromeOpacity();
+    thinShown_ = s.fileLoaded && s.duration > 0 && s.hasVideo && !pip && hidden > 0.01f &&
+                 (thin == "always" ? immersive || overlay : thin == "fullscreen" && window_->IsFullscreen());
+    if (thinShown_) {
+        const float scale = GetHost() ? GetHost()->Scale() : 1.0f;
+        thinW_ = video.w * scale;
+        const double k = std::clamp(s.position / s.duration, 0.0, 1.0);
+        thinPx_ = static_cast<int>(thinW_ * k);
+        const Rect track{video.x, video.Bottom() - 3, video.w, 3};
+        p.Fill(track, P().bgDeep.Fade(0.55f * hidden));
+        p.Fill({track.x, track.y, static_cast<float>(thinPx_) / scale, track.h}, P().accent.Fade(0.9f * hidden));
+    }
+
     if (s.buffering || (s.fileLoaded && s.bufferPercent > 0 && s.bufferPercent < 100 && s.paused && !s.eof)) {
         const Rect v = video_->Inner(window_->IsFullscreen() || window_->UiHidden());
         const std::wstring text = Fmt(Tr(L"Buffering {0}%"), static_cast<long long>(s.bufferPercent));
