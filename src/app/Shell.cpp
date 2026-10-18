@@ -195,7 +195,11 @@ void TitleBar::Refresh() {
     const QueueItem* item = app.queue().CurrentItem();
     const bool media = s.fileLoaded && item;
     std::wstring folder = media ? FolderNameOf(item->path) : std::wstring();
-    crumb_->visible = app.PlayerShown() && !folder.empty();
+    // Only what changed is laid out again: this also runs for every size change of the window.
+    bool changed = false;
+    const bool crumbShown = app.PlayerShown() && !folder.empty();
+    changed |= crumb_->visible != crumbShown;
+    crumb_->visible = crumbShown;
     crumbLabel_->SetText(folder);
     std::wstring title = media ? (s.title.empty() ? FileNameOf(item->path) : s.title) : std::wstring();
     if (media && _wcsicmp(title.c_str(), FileNameOf(item->path).c_str()) == 0) {
@@ -205,12 +209,20 @@ void TitleBar::Refresh() {
     if (media && !s.artist.empty() && !app.player().State().hasVideo) title += L" · " + s.artist;
     if (!app.config().GetBool("interface.titleFileName")) title.clear();
     title_->SetText(title.empty() ? L"Lumen" : title);
-    if (window_) window_->SetTitle(title.empty() ? L"Lumen" : title + L" — Lumen");
-    maxBtn_->icon = window_ && window_->IsWindowMaximized() ? "minimize" : "maximize";
-    maxBtn_->tooltip = window_ && window_->IsWindowMaximized() ? Tr(L"Restore") : Tr(L"Maximize");
-    if (window_ && window_->IsWindowMaximized() && gfx::Icons::Exists("window")) maxBtn_->icon = "window";
-    sidebarBtn_->icon = app.PlayerShown() ? "sidebar_left" : "collapse-sidebar";
-    InvalidateLayout();
+    std::wstring caption = title.empty() ? L"Lumen" : title + L" — Lumen";
+    if (window_ && caption != windowTitle_) {
+        windowTitle_ = std::move(caption);
+        window_->SetTitle(windowTitle_);
+    }
+    const bool maximized = window_ && window_->IsWindowMaximized();
+    std::string maxIcon = maximized ? "minimize" : "maximize";
+    if (maximized && gfx::Icons::Exists("window")) maxIcon = "window";
+    const std::string sideIcon = app.PlayerShown() ? "sidebar_left" : "collapse-sidebar";
+    changed |= maxBtn_->icon != maxIcon || sidebarBtn_->icon != sideIcon;
+    maxBtn_->icon = std::move(maxIcon);
+    maxBtn_->tooltip = maximized ? Tr(L"Restore") : Tr(L"Maximize");
+    sidebarBtn_->icon = sideIcon;
+    if (changed) InvalidateLayout();  // the labels' SetText lays out by itself when their text changes
 }
 
 void TitleBar::Paint(Painter& p) {
@@ -296,17 +308,137 @@ public:
         onClick = [this] {
             if (!last_) TheApp().Navigate(route_);
         };
-        maxW = 280;
     }
     bool Last() const { return last_; }
     void Paint(Painter& p) override {
         const Color c = last_ ? P().textPrimary : (IsHot() ? P().textPrimary : P().textSecondary);
         p.Text(text, rect, style, c);
+        PaintFocusRing(p, rect, 4);
     }
 
 private:
     Route route_;
     bool last_;
+};
+
+// "Videos › Shows › S01" in the library header. Parents that don't fit go into a "…" menu, the
+// nearest ones stay; the current page keeps all the room that is left before it is cut, and
+// every cut crumb shows its full name as a tooltip.
+class CrumbBar : public Widget {
+public:
+    CrumbBar() {
+        clipChildren = true;
+        pad = {8, 0, 8, 0};
+    }
+
+    void Set(std::vector<Crumb> crumbs, bool compact) {
+        ClearChildren();
+        crumbs_ = std::move(crumbs);
+        compact_ = compact;
+        buttons_.clear();
+        chevrons_.clear();
+        natural_.clear();
+        more_ = Add<LinkButton>(L"…", TextStyle::Large);
+        more_->tooltip = Tr(L"Show the full path");
+        more_->onClick = [this] { ShowHidden(); };
+        moreChevron_ = Add<IconView>("chevron_right", 16, Tone::Tertiary);
+        for (size_t i = 0; i < crumbs_.size(); ++i) {
+            chevrons_.push_back(i > 0 ? Add<IconView>("chevron_right", 16, Tone::Tertiary) : nullptr);
+            buttons_.push_back(Add<CrumbButton>(crumbs_[i].label, crumbs_[i].route, i + 1 == crumbs_.size()));
+            natural_.push_back(std::ceil(gfx::Text::Get().Measure(crumbs_[i].label, TextStyle::Large).width) + 1);
+        }
+        InvalidateLayout();
+    }
+
+    Size MeasureContent(float availW, float) override {
+        float w = pad.H();
+        for (size_t i = 0; i < natural_.size(); ++i) w += natural_[i] + (i > 0 ? kChevron + 2 * kGap : 0);
+        return {std::min(w, availW), 28};
+    }
+
+    void OnLayout() override {
+        const size_t n = buttons_.size();
+        if (!more_) return;
+        more_->visible = moreChevron_->visible = false;
+        if (n == 0) return;
+        const Rect in = rect.Inset(pad);
+        const float moreW = std::ceil(more_->Measure(kInf, kInf).w);
+        const float cur = natural_[n - 1];
+        // Width of everything before the current crumb with `hidden` parents in the menu and the
+        // visible ones capped at `cap`.
+        auto before = [&](size_t hidden, float cap) {
+            float w = hidden > 0 ? moreW + kChevron + 2 * kGap : 0.0f;
+            for (size_t i = hidden; i + 1 < n; ++i) w += std::min(natural_[i], cap) + kChevron + 2 * kGap;
+            return w;
+        };
+        size_t hidden = compact_ ? n - 1 : 0;  // the side panel names only the current page
+        float cap = kParentMax;
+        bool found = compact_;
+        for (size_t h = 0; h < n && !found; ++h)
+            for (float c : {kParentMax, kParentMin})
+                if (before(h, c) + cur <= in.w) {
+                    hidden = h;
+                    cap = c;
+                    found = true;
+                    break;
+                }
+        if (!found) {
+            hidden = n - 1;  // only "…" and the current page: the current page gets the rest
+            cap = kParentMin;
+        }
+        const float lead = compact_ ? 0.0f : before(hidden, cap);
+        const float curW = std::max(0.0f, std::min(cur, in.w - lead));
+
+        float x = in.x;
+        auto place = [&](Widget* w, float boxW) {
+            const float h = std::min(in.h, w->Measure(boxW, in.h).h);
+            w->visible = true;
+            w->Arrange({x, std::round(in.y + (in.h - h) / 2), boxW, h});
+            x += boxW + kGap;
+        };
+        if (hidden > 0 && !compact_) {
+            place(more_, moreW);
+            place(moreChevron_, kChevron);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            const bool show = i >= hidden;
+            buttons_[i]->visible = show;
+            if (chevrons_[i]) chevrons_[i]->visible = false;
+            if (!show) continue;
+            if (chevrons_[i] && i > hidden) {
+                place(chevrons_[i], kChevron);
+            }
+            const float w = i + 1 == n ? curW : std::min(natural_[i], cap);
+            place(buttons_[i], w);
+            buttons_[i]->tooltip = w + 0.5f < natural_[i] ? crumbs_[i].label : std::wstring();
+        }
+    }
+
+private:
+    static constexpr float kGap = 2, kChevron = 16;
+    // Parents first shrink to kParentMin, then move into the "…" menu; the current page keeps its
+    // whole name while anything else can give way.
+    static constexpr float kParentMax = 220, kParentMin = 110;
+
+    void ShowHidden() {
+        std::vector<MenuItem> items;
+        for (size_t i = 0; i < buttons_.size(); ++i) {
+            if (buttons_[i]->visible) break;
+            MenuItem m{crumbs_[i].label, L"", i == 0 ? SectionIcon(crumbs_[i].route.section) : "folder"};
+            const Route r = crumbs_[i].route;
+            m.action = [r] { TheApp().Navigate(r); };
+            items.push_back(std::move(m));
+        }
+        if (!items.empty()) ShowMenu(GetHost(), more_->rect, std::move(items), Place::Below, 260);
+    }
+
+    std::vector<Crumb> crumbs_;
+    bool compact_ = false;
+    LinkButton* more_ = nullptr;
+    IconView* moreChevron_ = nullptr;
+    std::vector<CrumbButton*> buttons_;
+    std::vector<IconView*> chevrons_;
+    std::vector<float> natural_;
 };
 
 }  // namespace
@@ -317,6 +449,10 @@ LibraryPane::LibraryPane(bool compact) : compact_(compact) {
     dir = Dir::Column;
     Build();
     routeConn_ = Connect(TheApp().routeChanged, [this] { ShowRoute(TheApp().route()); });
+    // Back/Forward come back to the same scroll offset and selection.
+    leaveConn_ = Connect(TheApp().routeLeaving, [this] {
+        if (view_ && route_ == TheApp().route()) TheApp().CurrentViewState(compact_) = view_->SaveState();
+    });
     // Header and page strings are translated when built: rebuild on a language switch.
     langConn_ = Connect(TheApp().languageChanged, [this] {
         headerConn_.Reset();
@@ -352,13 +488,8 @@ void LibraryPane::BuildHeader() {
     forward_ = header_->Add<IconButton>("arrow_right", Tr(L"Forward"));
     forward_->onClick = [] { TheApp().GoForward(); };
 
-    crumbs_ = header_->Add<Widget>();
-    crumbs_->dir = Dir::Row;
-    crumbs_->align = Align::Center;
-    crumbs_->gap = 2;
-    crumbs_->pad = {8, 0, 8, 0};
+    crumbs_ = header_->Add<CrumbBar>();
     crumbs_->width = Length::Grow();
-    crumbs_->clipChildren = true;
 
     count_ = header_->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
     count_->pad = {0, 0, 12, 0};
@@ -403,6 +534,8 @@ void LibraryPane::BuildHeader() {
 
 void LibraryPane::ShowRoute(const Route& route) {
     if (view_ && route == route_) return;
+    const Route from = route_;
+    const bool hadView = view_ != nullptr;
     route_ = route;
     headerConn_.Reset();
     body_->ClearChildren();
@@ -415,6 +548,16 @@ void LibraryPane::ShowRoute(const Route& route) {
         headerConn_ = Connect(view_->headerChanged, [this] { RefreshHeader(); });
     }
     search_->SetText(L"");
+    if (view_) {
+        ViewState st = TheApp().CurrentViewState(compact_);
+        // Up a level (a crumb, the "…" menu) to a page not seen before: select the folder we came from.
+        const bool folder = from.path.size() >= 2 && (from.path[1] == L':' || from.path.compare(0, 2, L"\\\\") == 0);
+        if (st.Empty() && hadView && folder && from.section == route.section && from.path.size() > route.path.size()) {
+            st.selPath = from.path;
+            st.within = true;
+        }
+        if (!st.Empty()) view_->RestoreState(st);
+    }
     RefreshHeader();
     // Arrow keys work on a page right after it opens (not in the player's side
     // panel, where the player keeps the keyboard, nor in the hidden library while the side
@@ -428,33 +571,24 @@ void LibraryPane::RefreshHeader() {
     App& app = TheApp();
     back_->enabled = app.CanGoBack();
     forward_->enabled = app.CanGoForward();
-    crumbs_->ClearChildren();
     if (view_) {
-        auto crumbs = view_->Breadcrumbs();
-        // Long paths collapse to "… › parent › current". The narrow side panel names only the
-        // current page (Back goes up).
-        const size_t keep = compact_ ? 1 : 4;
-        size_t start = crumbs.size() > keep ? crumbs.size() - keep : 0;
-        if (start > 0 && !compact_) crumbs_->Add<Label>(L"…", TextStyle::Large, Tone::Secondary);
-        for (size_t i = start; i < crumbs.size(); ++i) {
-            if (i > start || (start > 0 && !compact_)) crumbs_->Add<IconView>("chevron_right", 16, Tone::Tertiary);
-            const bool last = i + 1 == crumbs.size();
-            auto* crumb = crumbs_->Add<CrumbButton>(crumbs[i].label, crumbs[i].route, last);
-            // The current page takes the room that's left and ends with "…" instead of being cut.
-            if (last) crumb->width = Length::Grow();
-        }
+        static_cast<CrumbBar*>(crumbs_)->Set(view_->Breadcrumbs(), compact_);
         const long long n = view_->ItemCount();
         // The side panel is too narrow for crumbs and a count side by side.
         countWanted_ = n >= 0 && !compact_;
         count_->visible = countWanted_;
         count_->SetText(n >= 0 ? CountItems(n) : L"");
-        mode_->visible = view_->HasViewModes() && n != 0;  // nothing to sort or lay out on an empty page
+        // Nothing to sort or lay out on an empty page (its count is hidden: n is -1 there, not 0).
+        const bool content = n != 0 && !view_->IsEmpty();
+        mode_->visible = view_->HasViewModes() && content;
         mode_->icon = view_->GetViewMode() == ViewMode::Grid ? "list" : "grid";
         mode_->tooltip = view_->GetViewMode() == ViewMode::Grid ? Tr(L"List view") : Tr(L"Grid view");
-        sort_->visible = !view_->SortMenu().empty() && n != 0;
+        sort_->visible = !view_->SortMenu().empty() && content;
         search_->visible = view_->HasSearch() && (!compact_ || search_->visible);
         searchBtn_->visible = compact_ && view_->HasSearch();
         more_->visible = !view_->MoreMenu().empty();
+    } else {
+        static_cast<CrumbBar*>(crumbs_)->Set({}, compact_);
     }
     InvalidateLayout();
 }
@@ -469,12 +603,9 @@ void LibraryPane::FocusSearch() {
 
 void LibraryPane::OnLayout() {
     if (!compact_ && search_) search_->width = Length::Px(std::clamp(rect.w - 520.0f, 140.0f, 324.0f));
-    // In a tight header the current page keeps its name: parent crumbs get shorter and the item
-    // count steps aside (it was drawn over the chevron and the current crumb shrank to nothing).
+    // In a tight header the item count steps aside for the crumbs (CrumbBar keeps the current
+    // page readable by folding its parents into "…").
     const bool tight = !compact_ && rect.w < 900;
-    if (crumbs_)
-        for (auto& c : crumbs_->Children())
-            if (auto* crumb = dynamic_cast<CrumbButton*>(c.get()); crumb && !crumb->Last()) crumb->maxW = tight ? 110.0f : 280.0f;
     if (count_) count_->visible = countWanted_ && !tight;
     Widget::OnLayout();
 }

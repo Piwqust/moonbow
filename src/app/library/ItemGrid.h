@@ -37,6 +37,10 @@ struct Entry {
 
 enum class GridStyle : uint8_t { VideoCards, SquareCards, Rows, CompactRows };
 
+// Entries that would read the same (title, subtitle and album alike: "Clip" from two folders)
+// get their folder added to the subtitle, or the folder above it when those match too.
+void Disambiguate(std::vector<Entry>& entries);
+
 enum Columns : unsigned {
     kColSubtitle = 1u << 0,
     kColExtra = 1u << 1,
@@ -105,6 +109,7 @@ public:
     void OnMouseLeave() override;
     void OnFocusChanged(bool focused) override;
     void OnClick() override;
+    void DebugInfo(std::string& out) const override;
 
 private:
     struct RowCells {
@@ -128,6 +133,12 @@ private:
     int Navigate(int from, int dx, int dy) const;
     int DropIndexAt(float y) const;
     void UpdateHover(float x, float y);
+    // Paints one text of item `i`; for the hovered item it also notes whether the text was cut.
+    void ItemText(ui::Painter& p, int i, const std::wstring& text, const ui::Rect& box, ui::TextStyle style, ui::Color c,
+                  ui::HAlign h = ui::HAlign::Leading);
+    void ResetTip();
+    // Which columns a list row shows at this width (narrow lists drop the album, then the artist).
+    unsigned RowColumnsFor(float flex) const;
 
     std::vector<Entry> entries_;
     std::vector<ui::Rect> slots_;  // relative to the widget origin; empty rect = hidden
@@ -141,7 +152,12 @@ private:
     int hover_ = -1;
     bool hoverMore_ = false;
     int hoverHead_ = -1;
-    bool anyFavorite_ = false;  // rows keep the heart slot on every row, so the columns line up
+    // Tooltip of the hovered item (its full text when a part of it was cut), worked out while
+    // that item is painted: the key says for which item, list and width it is current.
+    bool collectTip_ = false, tipCut_ = false;
+    int tipIndex_ = -2;
+    uint64_t tipVersion_ = 0;
+    float tipW_ = -1;
     int press_ = -1;
     ui::Point pressAt_;
     bool dragging_ = false;

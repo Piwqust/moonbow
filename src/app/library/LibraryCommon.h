@@ -29,6 +29,8 @@ std::wstring CountEpisodes(long long n);  // "1 выпуск"
 // Tag labels for untagged songs: "Unknown artist" / "Unknown album".
 std::wstring ArtistLabel(const std::wstring& artist);
 std::wstring AlbumLabel(const std::wstring& album);
+// A search query quoted in a message: long pastes end with "…" after about 40 characters.
+std::wstring ShortQuery(const std::wstring& query);
 // False only for a local file that is gone. Network paths (\\server\share, mapped drives)
 // count as present without a look: with the NAS off, GetFileAttributesW blocks the UI thread
 // for the network timeout on every page rebuild.
@@ -91,6 +93,8 @@ std::vector<ui::MenuItem> MediaMenu(const std::wstring& path, std::vector<QueueI
                                     const std::wstring& queueName, bool goToFolder = true);
 
 // --- prompts ----------------------------------------------------------------------------
+// Both use the dialogs' frame (dlg::Frame): Cancel on the left, the action on the right. Every
+// confirm here removes something, so the keyboard starts on Cancel and Enter alone deletes nothing.
 void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const std::wstring& initial,
                     const std::wstring& okText, std::function<void(const std::wstring&)> done,
                     const std::wstring& placeholder = {});

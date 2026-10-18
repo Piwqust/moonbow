@@ -26,6 +26,7 @@ private:
     ui::IconButton* maxBtn_ = nullptr;
     ui::IconButton* fullBtn_ = nullptr;
     ui::IconButton* moreBtn_ = nullptr;
+    std::wstring windowTitle_;  // last text given to the window caption
     ScopedConnection playerConn_, routeConn_, screenConn_;
 };
 
@@ -78,7 +79,7 @@ private:
     ui::IconButton* more_ = nullptr;
     ui::Widget* body_ = nullptr;
     LibraryView* view_ = nullptr;
-    ScopedConnection headerConn_, routeConn_, langConn_;
+    ScopedConnection headerConn_, routeConn_, leaveConn_, langConn_;
 };
 
 }  // namespace app

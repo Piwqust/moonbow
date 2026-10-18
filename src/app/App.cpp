@@ -324,7 +324,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     {
         const std::string section = UiValue("library.section");
         if (section.size() == 1 && section[0] >= '0' && section[0] <= static_cast<char>('0' + static_cast<int>(Section::Recent)))
-            nav_[0].section = static_cast<Section>(section[0] - '0');
+            nav_[0].route.section = static_cast<Section>(section[0] - '0');
         routeChanged.Connect([this] { SetUiValue("library.section", std::to_string(static_cast<int>(route().section))); });
     }
     config_.Subscribe("", [this](const std::string& key) { OnConfigChanged(key); });
@@ -837,8 +837,9 @@ void App::Navigate(Route r) {
         routeChanged.Emit();
         return;
     }
+    routeLeaving.Emit();
     nav_.resize(static_cast<size_t>(historyPos_) + 1);
-    nav_.push_back(std::move(r));
+    nav_.push_back(NavEntry{std::move(r), {}});
     if (nav_.size() > 100) nav_.erase(nav_.begin());
     historyPos_ = static_cast<int>(nav_.size()) - 1;
     routeChanged.Emit();
@@ -846,12 +847,14 @@ void App::Navigate(Route r) {
 
 void App::GoBack() {
     if (!CanGoBack()) return;
+    routeLeaving.Emit();
     --historyPos_;
     routeChanged.Emit();
 }
 
 void App::GoForward() {
     if (!CanGoForward()) return;
+    routeLeaving.Emit();
     ++historyPos_;
     routeChanged.Emit();
 }

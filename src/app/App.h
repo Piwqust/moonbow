@@ -39,6 +39,16 @@ struct Route {
     bool operator==(const Route& o) const { return section == o.section && path == o.path; }
 };
 
+// Where a library page was left, kept with its history entry so Back and Forward return to the
+// same scroll offset and selection. `within`: select the entry that contains `selPath` (going up
+// from a folder selects the folder you came from).
+struct ViewState {
+    float scroll = -1;  // < 0 = none saved
+    std::wstring selPath, selTitle;
+    bool within = false;
+    bool Empty() const { return scroll < 0 && selPath.empty() && selTitle.empty(); }
+};
+
 const wchar_t* SectionName(Section s);  // English, translate with Tr()
 const char* SectionIcon(Section s);
 
@@ -97,12 +107,14 @@ public:
     bool HasMedia() const;
 
     // --- navigation ---------------------------------------------------------------
-    const Route& route() const { return nav_[static_cast<size_t>(historyPos_)]; }
+    const Route& route() const { return nav_[static_cast<size_t>(historyPos_)].route; }
     void Navigate(Route r);
     bool CanGoBack() const { return historyPos_ > 0; }
     bool CanGoForward() const { return historyPos_ + 1 < static_cast<int>(nav_.size()); }
     void GoBack();
     void GoForward();
+    // View state of the current history entry; [compact] = the player's side panel pane.
+    ViewState& CurrentViewState(bool compact) { return nav_[static_cast<size_t>(historyPos_)].state[compact ? 1 : 0]; }
 
     // Library vs. player screen. Showing the library while media plays keeps the mini player.
     void ShowPlayer(bool show);
@@ -122,6 +134,7 @@ public:
 
     // --- signals --------------------------------------------------------------------
     Signal<unsigned> playerChanged;  // PlayerChange mask
+    Signal<> routeLeaving;           // before the route changes: panes save their ViewState
     Signal<> routeChanged;
     Signal<> screenChanged;          // ShowPlayer toggled
     Signal<> libraryChanged;         // a scan published new results
@@ -170,7 +183,11 @@ private:
     Player player_;
     PlayQueue queue_;
     std::unique_ptr<MainWindow> main_;
-    std::vector<Route> nav_{Route{}};
+    struct NavEntry {
+        Route route;
+        ViewState state[2];
+    };
+    std::vector<NavEntry> nav_{NavEntry{}};
     int historyPos_ = 0;
     bool playerShown_ = false;
     std::wstring failedPath_, failedError_;

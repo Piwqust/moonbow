@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace ui {
 class Host;
@@ -17,8 +18,16 @@ void InitDialogs();
 void ShowCustomizePlayerDialog();
 void ShowKeyboardShortcutsDialog();
 void ShowNetworkStreamDialog();
-// Creates a playlist; `done` receives the new playlist id (empty if cancelled).
-void ShowNewPlaylistDialog(std::function<void(const std::string& playlistId)> done = {});
+// A file the New Playlist dialog starts with (the item "Add to Playlist › New Playlist…" was
+// opened on). Title and length are kept when it is added.
+struct NewPlaylistFile {
+    std::wstring path, title;
+    double duration = 0;
+};
+// Creates a playlist; `done` receives the new playlist id (empty if cancelled). `files` are listed
+// in the dialog (the user can remove them) and added on Create.
+void ShowNewPlaylistDialog(std::function<void(const std::string& playlistId)> done = {},
+                           std::vector<NewPlaylistFile> files = {});
 // "Add Subtitles to Playlist/Folder": pairs subtitle files with videos by name.
 void ShowAddSubtitlesDialog(const std::wstring& folderOrPlaylist = {});
 void ShowMediaInfoDialog();

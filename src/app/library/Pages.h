@@ -61,6 +61,13 @@ ui::Widget* GuardedHit(ItemGrid* grid, ui::Widget* hit);
 // The first page shown after start gets the keyboard when nothing has it (arrow keys move in
 // the grid instead of changing the volume). Not in the player's side panel.
 void TakeFreeFocus(LibraryView& view, bool compact, bool& done);
+// The selection of a grid as a ViewState (by path and title: the content may change meanwhile),
+// and the entry such a state names (-1 = none).
+void SaveSelection(const ItemGrid& grid, ViewState& st);
+int FindStateEntry(const ItemGrid& grid, const ViewState& st);
+// Selects the entry `st` names and scrolls to the saved offset (or brings the entry into view),
+// without animation. True when the entry was found.
+bool ApplyViewState(ItemGrid& grid, ui::ScrollView& scroll, const ViewState& st);
 
 struct HistoryInfo {
     double progress = -1;  // shown progress, < 0 none
@@ -80,7 +87,10 @@ public:
     ViewMode GetViewMode() const override { return list_ ? ViewMode::List : ViewMode::Grid; }
     void SetViewMode(ViewMode m) override;
     void SetFilter(const std::wstring& text) override;
+    bool IsEmpty() const override { return empty_ && empty_->visible; }
     ui::Widget* InitialFocus() override { return grid_; }
+    ViewState SaveState() const override;
+    void RestoreState(const ViewState& st) override;
     ui::Widget* HitTest(float x, float y) override;
     void OnLayout() override;
 
@@ -160,6 +170,8 @@ private:
     bool focusTaken_ = false;
     bool stale_ = false;  // a file started or stopped while the player screen hid the page
     SearchDebounce searchDebounce_;
+    ViewState pendingState_;  // RestoreState before the first layout: applied in OnLayout
+    bool restorePending_ = false;
 };
 
 std::unique_ptr<LibraryView> MakeHomePage(bool compact);

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <cwctype>
 #include <set>
 
@@ -852,7 +853,7 @@ void ShowNetworkStreamDialog() {
     validate();
 }
 
-void ShowNewPlaylistDialog(std::function<void(const std::string&)> done) {
+void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::vector<NewPlaylistFile> files) {
     MainWindow* w = TheApp().main();
     if (!w) {
         if (done) done({});
@@ -878,6 +879,13 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done) {
     AddSeparator(body);
     AddFieldHeader(body, Tr(L"Select Files"), Tr(L"These files will be added to the playlist."));
     auto* zone = body->Add<FileDropZone>();
+    // The files the dialog was opened for are listed (and can be removed) instead of being
+    // added silently after Create; their titles and lengths come along.
+    auto known = std::make_shared<std::map<std::wstring, NewPlaylistFile>>();
+    for (NewPlaylistFile& file : files) {
+        if (!known->emplace(library::PathKey(file.path), file).second) continue;
+        zone->files.push_back(file.path);
+    }
     Checkbox* addQueue = nullptr;
     const size_t queued = TheApp().queue().Items().size();
     if (queued > 0)
@@ -895,7 +903,7 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done) {
 
     // `done` runs exactly once: with the id on create, empty when cancelled.
     auto result = std::make_shared<std::string>();
-    auto submit = [f, name, cover, zone, addQueue, result] {
+    auto submit = [f, name, cover, zone, addQueue, result, known] {
         const std::wstring n = Trim(name->Text());
         if (n.empty()) return;
         auto& pl = TheApp().playlists();
@@ -903,7 +911,13 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done) {
         std::vector<library::PlaylistItem> items;
         if (addQueue && addQueue->Value())
             for (const QueueItem& q : TheApp().queue().Items()) items.push_back({q.path, q.title, q.duration});
-        for (const auto& p : zone->files) items.push_back({p, {}, 0});
+        for (const auto& p : zone->files) {
+            auto it = known->find(library::PathKey(p));
+            if (it != known->end())
+                items.push_back({p, it->second.title, it->second.duration});
+            else
+                items.push_back({p, {}, 0});
+        }
         if (!items.empty()) pl.Add(id, items);
         if (!cover->path.empty()) TheApp().SetUiValue("playlist.cover." + id, WideToUtf8(cover->path));
         *result = id;

@@ -3,8 +3,13 @@
 #include "app/App.h"
 #include "app/I18n.h"
 #include "app/library/LibraryCommon.h"
+#include "library/MediaTypes.h"
 
+#include <algorithm>
 #include <cmath>
+#include <map>
+#include <string_view>
+#include <unordered_map>
 
 namespace app::lib {
 
@@ -32,7 +37,13 @@ bool IsLabel(EntryKind k) {
     return k == EntryKind::Header || k == EntryKind::Columns;
 }
 
-constexpr float kColumnsH = 32, kTrackW = 28, kDurationW = 76;
+// The track column fits "#" with the sort arrow beside it.
+constexpr float kColumnsH = 32, kTrackW = 32, kDurationW = 76;
+// Narrow lists keep the title readable: below these widths of the text columns the album
+// column goes, then the artist (or details) column.
+constexpr float kExtraMinFlex = 420, kSubMinFlex = 240;
+// Cards stretch to fill the row, but past this factor of their design width one more column fits.
+constexpr float kCardMaxGrow = 1.25f;
 
 constexpr float kChipH = 20;
 
@@ -55,6 +66,64 @@ void PaintDamagedChip(Painter& p, const Rect& b, Color bg) {
 uint64_t g_keyActivateTick = 0;
 
 }  // namespace
+
+namespace {
+
+// The file or folder an entry stands for, to name its folder: albums carry their name as the
+// path, so their cover track is used.
+const std::wstring& LocationOf(const Entry& e) {
+    return e.kind == EntryKind::Album ? e.image : e.path;
+}
+
+}  // namespace
+
+void Disambiguate(std::vector<Entry>& v) {
+    auto eligible = [](const Entry& e) {
+        return (e.kind == EntryKind::Media || e.kind == EntryKind::Folder || e.kind == EntryKind::Album) && !e.title.empty();
+    };
+    // Titles that occur more than once; most lists have none, so this stays one hash pass.
+    std::unordered_map<std::wstring_view, int> seen;
+    seen.reserve(v.size());
+    bool any = false;
+    for (const Entry& e : v)
+        if (eligible(e)) any |= ++seen[std::wstring_view(e.title)] > 1;
+    if (!any) return;
+    std::map<std::wstring, std::vector<size_t>> groups;  // the full visible text -> entries
+    for (size_t i = 0; i < v.size(); ++i) {
+        const Entry& e = v[i];
+        const std::wstring& where = LocationOf(e);
+        if (!eligible(e) || where.empty() || IsUrl(where) || seen[std::wstring_view(e.title)] < 2) continue;
+        groups[e.title + L"\x1F" + e.subtitle + L"\x1F" + e.extra].push_back(i);
+    }
+    for (auto& [key, idx] : groups) {
+        if (idx.size() < 2) continue;
+        // The parent folder's name, else the two folders above the item, else the whole folder path.
+        auto label = [&](size_t i, int depth) {
+            std::wstring folder = library::ParentFolder(LocationOf(v[i]));
+            if (depth >= 3) return folder;
+            std::wstring out = library::FileNameOf(folder);
+            if (depth == 2) {
+                const std::wstring up = library::FileNameOf(library::ParentFolder(folder));
+                if (!up.empty()) out = up + L" › " + out;
+            }
+            return out;
+        };
+        for (int depth = 1; depth <= 3; ++depth) {
+            std::vector<std::wstring> labels;
+            for (size_t i : idx) labels.push_back(label(i, depth));
+            std::vector<std::wstring> sorted = labels;
+            std::sort(sorted.begin(), sorted.end());
+            const bool distinct = std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end();
+            if (!distinct && depth < 3) continue;
+            for (size_t k = 0; k < idx.size(); ++k) {
+                Entry& e = v[idx[k]];
+                if (labels[k].empty()) continue;
+                e.subtitle = e.subtitle.empty() ? labels[k] : e.subtitle + L" · " + labels[k];
+            }
+            break;
+        }
+    }
+}
 
 ItemGrid::ItemGrid() {
     created_ = GetTickCount64();
@@ -86,6 +155,7 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
         selTitle = entries_[static_cast<size_t>(selected_)].title;
     }
     entries_ = std::move(entries);
+    Disambiguate(entries_);
     selected_ = -1;
     if (!selPath.empty() || !selTitle.empty())
         for (size_t i = 0; i < entries_.size(); ++i)
@@ -97,10 +167,13 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
     hoverHead_ = -1;
     press_ = -1;
     dragging_ = false;
-    anyFavorite_ = false;
-    for (const Entry& e : entries_) anyFavorite_ |= e.favorite;
     ++version_;
+    ResetTip();
     InvalidateLayout();
+}
+
+void ItemGrid::DebugInfo(std::string& out) const {
+    if (selected_ >= 0) out += " selected=" + std::to_string(selected_);
 }
 
 void ItemGrid::SetStyle(GridStyle s) {
@@ -133,16 +206,14 @@ void ItemGrid::Compute(float w) {
         int cols = std::max(1, static_cast<int>(std::floor((w + kCardGapX) / (minCard + kCardGapX))));
         const float narrowCard = style_ == GridStyle::VideoCards ? kVideoNarrowW : kSquareNarrowW;
         if (stretch && cols < 2 && w >= 2 * narrowCard + kCardGapX) cols = 2;
+        auto fill = [&](int c) { return (w - kCardGapX * static_cast<float>(c - 1)) / static_cast<float>(c); };
+        // Cards fill the row but stay near the design size: a wide window shows more of them,
+        // not a few huge ones (a 474-DIP card at 2560 px).
+        if (cols >= 2 || stretch)
+            while (fill(cols) > minCard * kCardMaxGrow && fill(cols + 1) >= narrowCard) ++cols;
         geo_.cols = cols;
-        // Fixed-size cards (Home) grow a little in wide windows instead of leaving most of a
-        // maximized window empty.
-        const float grow = std::clamp(w / 1500.0f, 1.0f, 1.5f);
-        if (!stretch && grow > 1) {
-            cols = std::max(1, static_cast<int>(std::floor((w + kCardGapX) / (minCard * grow + kCardGapX))));
-            geo_.cols = cols;
-        }
-        geo_.cardW = stretch ? (w - kCardGapX * static_cast<float>(cols - 1)) / static_cast<float>(cols)
-                             : std::floor(minCard * grow);
+        // Home's one-card rows in a narrow window keep the design size.
+        geo_.cardW = !stretch && cols == 1 ? minCard : std::floor(fill(cols));
         if (geo_.cardW > w) geo_.cardW = w;
         geo_.thumbH = style_ == GridStyle::VideoCards ? std::round(geo_.cardW * kVideoRatio) : std::round(geo_.cardW);
         bool subs = false;
@@ -353,10 +424,11 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         badge = std::to_wstring(e.count);
     if (e.damaged) {
         const float cw = std::min(DamagedChipWidth(p), t.w - 16);
-        PaintDamagedChip(p, {t.Right() - 8 - cw, t.Bottom() - 8 - kChipH, cw, kChipH}, c.bgBase.Fade(0.82f));
+        PaintDamagedChip(p, {t.Right() - 8 - cw, t.Bottom() - 12 - kChipH, cw, kChipH}, c.bgBase.Fade(0.82f));
     } else if (!badge.empty()) {
         const float tw = std::ceil(p.Measure(badge, TextStyle::MonoSmall).width);
-        const float bh = 20, by = t.Bottom() - 8 - bh - (e.progress > 0 ? 4 : 0);
+        // One height for every card, clear of the 4-DIP progress line, so a row's badges line up.
+        const float bh = 20, by = t.Bottom() - 12 - bh;
         const Rect b{t.Right() - 8 - tw - 12, by, tw + 12, bh};
         p.Fill(b, c.bgBase.Fade(0.82f), 4);
         p.Text(badge, b, TextStyle::MonoSmall, c.textPrimary, HAlign::Center, VAlign::Center, 0);
@@ -391,9 +463,9 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
 
     const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : (e.watched || e.damaged) ? c.textTertiary : c.textSecondary;
     const float ly = t.Bottom() + kLabelGap;
-    p.Text(e.title, {r.x, ly - 2, r.w, kLineH + 4}, TextStyle::Large, fg);
+    ItemText(p, i, e.title, {r.x, ly - 2, r.w, kLineH + 4}, TextStyle::Large, fg);
     if (!e.subtitle.empty())
-        p.Text(e.subtitle, {r.x, ly + kLineH + kSubGap - 2, r.w, kLineH + 4}, TextStyle::Large, c.textTertiary);
+        ItemText(p, i, e.subtitle, {r.x, ly + kLineH + kSubGap - 2, r.w, kLineH + 4}, TextStyle::Large, c.textTertiary);
 }
 
 Rect ItemGrid::MoreButtonRect(const Rect& slot) const {
@@ -447,15 +519,16 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     float x = compactRow ? t.Right() + 10 : cells.title.x;
     float right = r.Right();
     const bool menu = e.kind != EntryKind::Action && e.kind != EntryKind::Category && onMenu;
-    if (menu) {
-        if (hot || sel) {
-            const Rect mb = MoreButtonRect(r);
-            if (hot && hoverMore_) p.Fill(mb.Inset(-4), c.hover, 4);
-            p.Icon("more", mb, hot && hoverMore_ ? c.textPrimary : c.textSecondary);
-        }
-        right -= 36;
+    if (menu && (hot || sel)) {
+        const Rect mb = MoreButtonRect(r);
+        if (hot && hoverMore_) p.Fill(mb.Inset(-4), c.hover, 4);
+        p.Icon("more", mb, hot && hoverMore_ ? c.textPrimary : c.textSecondary);
     }
-    if (compact ? e.favorite : anyFavorite_) {
+    // Every row of a list with menus keeps the "⋯" slot, so counts and columns end at one edge.
+    if (onMenu) right -= 36;
+    // List rows always keep the heart slot: the columns don't jump when the first favourite is
+    // added, and counts and columns end at the same edge on every page (folders, streams, songs).
+    if (!compact || e.favorite) {
         if (e.favorite) p.Icon("favorite_active", {right - 16, r.Cy() - 8, 16, 16}, c.textSecondary);
         right -= 28;
     }
@@ -463,7 +536,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const TextStyle body = TextStyle::Body;
     auto cell = [&](const std::wstring& text, float w, TextStyle st, HAlign h) {
         if (w <= 0) return;
-        p.Text(text, {right - w, r.y, w, r.h}, st, c.textTertiary, h);
+        ItemText(p, i, text, {right - w, r.y, w, r.h}, st, c.textTertiary, h);
         right -= w + 16;
     };
 
@@ -472,11 +545,15 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
             cell(FormatDuration(e.duration), 56, TextStyle::MonoSmall, HAlign::Trailing);
         if (e.count >= 0 && e.kind != EntryKind::Media) cell(std::to_wstring(e.count), 40, TextStyle::Small, HAlign::Trailing);
         const float avail = right - x;
-        const float tw = std::min(avail, p.Measure(e.title, body).width + 1);
-        p.Text(e.title, {x, r.y, tw, r.h}, body, fg);
-        if (!e.subtitle.empty() && avail - tw > 40 && !(e.kind != EntryKind::Media && e.count >= 0)) {
+        const float natural = p.Measure(e.title, body).width + 1;
+        const float tw = std::min(avail, natural);
+        ItemText(p, i, e.title, {x, r.y, tw, r.h}, body, fg);
+        if (!e.subtitle.empty() && !(e.kind != EntryKind::Media && e.count >= 0)) {
             const std::wstring sub = L" · " + e.subtitle;
-            p.Text(sub, {x + tw, r.y, avail - tw, r.h}, body, c.textTertiary);
+            if (avail - tw > 40)
+                ItemText(p, i, sub, {x + tw, r.y, avail - tw, r.h}, body, c.textTertiary);
+            else if (collectTip_ && i == hover_)
+                tipCut_ = true;  // no room for the subtitle at all
         }
         if (dragSource) p.PopOpacity();
         return;
@@ -488,8 +565,9 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         const float reserved = ((columns & kColDate) && w > 720 ? 112.0f : 0.0f) +
                                ((columns & kColSize) && w > 600 ? 96.0f : 0.0f) + ((columns & kColDuration) ? 80.0f : 0.0f);
         // Categories carry their own noun ("8 songs", "3 artists").
+        const bool songs = e.kind == EntryKind::Album || e.kind == EntryKind::Artist || e.kind == EntryKind::Genre;
         const std::wstring count = e.kind == EntryKind::Category && !e.subtitle.empty() ? e.subtitle
-                                   : e.kind == EntryKind::Album                         ? CountSongs(e.count)
+                                   : songs                                              ? CountSongs(e.count)
                                                                                         : CountItems(e.count);
         if (e.count >= 0) p.Text(count, {right - 160, r.y, 160, r.h}, TextStyle::Body, c.textTertiary, HAlign::Trailing);
         right -= std::max(reserved, e.count >= 0 ? 176.0f : 0.0f);
@@ -506,9 +584,13 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
 
     const float flex = right - x;
+    const unsigned shown = RowColumnsFor(flex);
     // Counted rows (folders, categories) already show their count on the right.
-    const bool sub = (columns & kColSubtitle) != 0 && !(e.kind != EntryKind::Media && e.count >= 0);
-    const bool extra = (columns & kColExtra) != 0;
+    const bool sub = (shown & kColSubtitle) != 0 && !(e.kind != EntryKind::Media && e.count >= 0);
+    const bool extra = (shown & kColExtra) != 0;
+    if (collectTip_ && i == hover_ && (((columns & kColSubtitle) && !sub && !e.subtitle.empty() && e.count < 0) ||
+                                       ((columns & kColExtra) && !extra && !e.extra.empty())))
+        tipCut_ = true;  // a dropped column hid this row's artist or album
     float titleW = flex;
     if (sub && extra) titleW = flex * 0.44f;
     else if (sub || extra) titleW = flex * 0.6f;
@@ -516,19 +598,19 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         // The chip follows the title (shortened if needed), in the title's own column.
         const float cw = DamagedChipWidth(p);
         const float textW = std::min(std::ceil(p.Measure(e.title, body).width) + 1, std::max(0.0f, titleW - 16 - cw - 8));
-        p.Text(e.title, {x, r.y, textW, r.h}, body, fg);
+        ItemText(p, i, e.title, {x, r.y, textW, r.h}, body, fg);
         if (titleW - 16 >= cw) PaintDamagedChip(p, {x + textW + 8, r.Cy() - kChipH / 2, cw, kChipH}, c.bgCard);
     } else {
-        p.Text(e.title, {x, r.y, titleW - 16, r.h}, body, fg);
+        ItemText(p, i, e.title, {x, r.y, titleW - 16, r.h}, body, fg);
     }
     float cx = x + titleW;
     const float rest = flex - titleW;
     if (sub) {
         const float sw = extra ? rest / 2 : rest;
-        p.Text(e.subtitle, {cx, r.y, sw - 16, r.h}, body, c.textTertiary);
+        ItemText(p, i, e.subtitle, {cx, r.y, sw - 16, r.h}, body, c.textTertiary);
         cx += sw;
     }
-    if (extra) p.Text(e.extra, {cx, r.y, flex - (cx - x) - 16, r.h}, body, c.textTertiary);
+    if (extra) ItemText(p, i, e.extra, {cx, r.y, flex - (cx - x) - 16, r.h}, body, c.textTertiary);
     if (dragSource) p.PopOpacity();
 }
 
@@ -548,10 +630,8 @@ ItemGrid::RowCells ItemGrid::MediaCells(const Rect& r) const {
     }
     float right = r.Right();
     if (onMenu) right -= 36;
-    if (anyFavorite_) {
-        cells.heart = {right - 16, r.Cy() - 8, 16, 16};
-        right -= 28;
-    }
+    cells.heart = {right - 16, r.Cy() - 8, 16, 16};  // always reserved, see PaintRow
+    right -= 28;
     const float w = r.w;
     auto take = [&](Rect& out, float cw) {
         if (cw <= 0) return;
@@ -562,7 +642,8 @@ ItemGrid::RowCells ItemGrid::MediaCells(const Rect& r) const {
     if (columns & kColSize) take(cells.size, w > 600 ? 80.0f : 0.0f);
     if (columns & kColDuration) take(cells.duration, kDurationW);
     const float flex = right - x;
-    const bool sub = (columns & kColSubtitle) != 0, extra = (columns & kColExtra) != 0;
+    const unsigned shown = RowColumnsFor(flex);
+    const bool sub = (shown & kColSubtitle) != 0, extra = (shown & kColExtra) != 0;
     float titleW = flex;
     if (sub && extra) titleW = flex * 0.44f;
     else if (sub || extra) titleW = flex * 0.6f;
@@ -576,6 +657,13 @@ ItemGrid::RowCells ItemGrid::MediaCells(const Rect& r) const {
     }
     if (extra) cells.extra = {cx, r.y, flex - (cx - x) - 16, r.h};
     return cells;
+}
+
+unsigned ItemGrid::RowColumnsFor(float flex) const {
+    unsigned c = columns;
+    if (flex < kExtraMinFlex) c &= ~static_cast<unsigned>(kColExtra);
+    if (flex < kSubMinFlex) c &= ~static_cast<unsigned>(kColSubtitle);
+    return c;
 }
 
 int ItemGrid::HeadAt(int index, float x) const {
@@ -628,8 +716,12 @@ void ItemGrid::PaintHeader(Painter& p, int i, const Rect& r) {
     } else {
         const float h = 22;
         p.Text(e.title, {r.x, r.Bottom() - h - 8, r.w, h}, TextStyle::BodyMedium, P().textSecondary);
+        // The count ends where the rows' last column ends (before the "⋯" and heart slots).
+        float right = r.Right();
+        if (onMenu) right -= 36;
+        if (style_ != GridStyle::CompactRows) right -= 28;
         if (!e.subtitle.empty())
-            p.Text(e.subtitle, {r.x, r.Bottom() - h - 8, r.w, h}, TextStyle::Small, P().textTertiary, HAlign::Trailing);
+            p.Text(e.subtitle, {r.x, r.Bottom() - h - 8, right - r.x, h}, TextStyle::Small, P().textTertiary, HAlign::Trailing);
     }
 }
 
@@ -642,6 +734,9 @@ void ItemGrid::Paint(Painter& p) {
         UpdateHover(m.x, m.y);
     }
     const std::wstring now = NowPlayingPath();
+    const bool hotItem = IsHot() && hover_ >= 0 && !dragging_;
+    collectTip_ = hotItem && (hover_ != tipIndex_ || version_ != tipVersion_ || rect.w != tipW_);
+    tipCut_ = false;
     auto it = std::lower_bound(slots_.begin(), slots_.end(), top, [](const Rect& r, float v) { return r.Bottom() <= v; });
     for (; it != slots_.end() && it->y < bottom; ++it) {
         if (it->w <= 0) continue;
@@ -671,6 +766,35 @@ void ItemGrid::Paint(Painter& p) {
             y = height_;
         p.Fill({rect.x - 8, rect.y + y - 1, rect.w + 16, 2}, P().accent, 1);
     }
+    if (collectTip_) {
+        // The full title, subtitle and album of an item whose text was cut, shown by the host's
+        // tooltip after the usual hover delay.
+        collectTip_ = false;
+        tipIndex_ = hover_;
+        tipVersion_ = version_;
+        tipW_ = rect.w;
+        std::wstring tip;
+        if (tipCut_) {
+            const Entry& e = entries_[static_cast<size_t>(hover_)];
+            tip = e.title;
+            for (const std::wstring* part : {&e.subtitle, &e.extra})
+                if (!part->empty() && *part != e.title) tip += L"\n" + *part;
+        }
+        tooltip = std::move(tip);
+    } else if (!hotItem && !tooltip.empty()) {
+        ResetTip();
+    }
+}
+
+void ItemGrid::ItemText(Painter& p, int i, const std::wstring& text, const Rect& box, TextStyle style, Color c, HAlign h) {
+    p.Text(text, box, style, c, h);
+    if (collectTip_ && i == hover_ && !text.empty() && (box.w <= 0 || p.Measure(text, style).width > box.w + 0.5f))
+        tipCut_ = true;
+}
+
+void ItemGrid::ResetTip() {
+    tooltip.clear();
+    tipIndex_ = -2;
 }
 
 // --- input -----------------------------------------------------------------------------------
@@ -686,6 +810,7 @@ void ItemGrid::UpdateHover(float x, float y) {
         cursor = IDC_HAND;
         if (hover_ != -1) {
             hover_ = -1;
+            ResetTip();
             Invalidate();
         }
         return;
@@ -694,6 +819,7 @@ void ItemGrid::UpdateHover(float x, float y) {
     bool more = false;
     if (h >= 0 && !IsCardStyle(style_)) more = MoreButtonRect(ItemRect(h)).Inset(-4).Contains(x, y);
     if (h != hover_ || more != hoverMore_) {
+        if (h != hover_) ResetTip();  // worked out again when the new item is painted
         hover_ = h;
         hoverMore_ = more;
         // Actions and categories open on a single click, like links.
@@ -797,6 +923,7 @@ bool ItemGrid::OnDoubleClick(const MouseEvent& e) {
 
 void ItemGrid::OnMouseLeave() {
     hover_ = -1;
+    ResetTip();
     hoverHead_ = -1;
     hoverMore_ = false;
     Invalidate();

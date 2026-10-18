@@ -512,8 +512,11 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             *result = 0;
             return true;
         case WM_SIZE:
-        case WM_WINDOWPOSCHANGED:
             if (titleBar_) titleBar_->Refresh();
+            return false;
+        case WM_WINDOWPOSCHANGED:
+            // Dragging the window only moves it (SWP_NOSIZE): nothing to lay out or repaint.
+            if (titleBar_ && !(reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_NOSIZE)) titleBar_->Refresh();
             return false;
         default:
             return false;

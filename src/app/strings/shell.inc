@@ -18,6 +18,7 @@
 {L"Menu", L"Меню"},
 {L"Toggle sidebar", L"Боковая панель"},
 {L"Show in library", L"Показать в медиатеке"},
+{L"Show the full path", L"Показать весь путь"},
 {L"Minimize", L"Свернуть"},
 {L"Maximize", L"Развернуть"},
 {L"Restore", L"Восстановить"},
