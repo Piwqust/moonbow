@@ -52,6 +52,11 @@ const std::vector<std::pair<UINT, ui::Mods>>& Bindings(Action a);
 void Run(Action a);
 // Shows the on-screen messages that wait for mpv (new track, new chapter).
 void OnPlayerChangeForOsd(unsigned changes);
+// Mouse on the video, as set in Settings > Controls > Mouse. Each returns true when it
+// did something. `delta` is in wheel notches (positive = up/right).
+bool VideoSingleClick();
+bool VideoDoubleClick();
+bool VideoWheel(float delta, bool horizontal);
 // Speaker icon for a volume level ("close_value-none" when muted).
 const char* VolumeIcon(double volume, bool mute);
 bool Enabled(Action a);

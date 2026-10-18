@@ -586,7 +586,8 @@ void BuildApp(Builder& b) {
     b.Sec("diagnostics", L"Diagnostics", L"Диагностика");
     b.Toggle("general.developerMode", L"Developer mode", L"Режим разработчика", false)
         .Desc(L"Show technical details: decoder, frame drops and timing statistics over the video.",
-              L"Показывать технические подробности поверх видео: декодер, пропуски кадров, тайминги.");
+              L"Показывать технические подробности поверх видео: декодер, пропуски кадров, тайминги.")
+        .Hidden();  // not implemented yet
     b.Toggle("general.saveLog", L"Save a log", L"Сохранять журнал", false)
         .Desc(L"Write playback messages to a log file. Useful when reporting a problem.",
               L"Записывать сообщения воспроизведения в файл. Пригодится, если нужно сообщить о проблеме.")
@@ -613,7 +614,8 @@ void BuildApp(Builder& b) {
     b.Toggle("general.minorWarnings", L"Show minor warnings", L"Показывать мелкие предупреждения", false)
         .Desc(L"Also report harmless problems, such as a damaged frame that playback recovered from.",
               L"Сообщать и о безобидных проблемах — например, о повреждённом кадре, после которого "
-              L"воспроизведение восстановилось.");
+              L"воспроизведение восстановилось.")
+        .Hidden();  // not implemented yet
     b.Text("general.extraOptions", L"Additional command line options", L"Дополнительные параметры mpv")
         .Desc(L"Extra mpv options, for example --deband=yes --sub-ass-override=force. Applied at the next start.",
               L"Дополнительные параметры mpv, например --deband=yes --sub-ass-override=force. "
@@ -622,11 +624,13 @@ void BuildApp(Builder& b) {
     b.Pick("general.logFormat", L"Log format", L"Формат журнала",
            {{"text", L"Plain text", L"Обычный текст"}, {"timestamps", L"Text with timestamps", L"Текст с метками времени"}},
            "text")
-        .Desc(L"Layout of the lines in the log file.", L"Как оформлять строки в файле журнала.");
+        .Desc(L"Layout of the lines in the log file.", L"Как оформлять строки в файле журнала.")
+        .Hidden();  // not implemented yet
     b.Toggle("general.collectStats", L"Collect playback statistics", L"Собирать статистику воспроизведения", true)
         .Desc(L"Count plays and watch time on this computer to fill \"Frequent\" lists. Nothing leaves your device.",
               L"Считать запуски и время просмотра на этом компьютере для списка «Часто открываемые». "
-              L"Данные никуда не отправляются.");
+              L"Данные никуда не отправляются.")
+        .Hidden();  // not implemented yet
 
     // ===== Interface =====
     b.Cat("interface", "app", "interface", L"Interface", L"Интерфейс", L"Interface Settings", L"Настройки интерфейса");
@@ -634,16 +638,19 @@ void BuildApp(Builder& b) {
     b.Sec("skin", L"Skin", L"Скин");
     b.Toggle("interface.customSkin", L"Use a custom skin", L"Использовать свой скин", false)
         .Desc(L"Replace the built-in look with colors and sizes from a skin file.",
-              L"Заменить встроенное оформление цветами и размерами из файла скина.");
+              L"Заменить встроенное оформление цветами и размерами из файла скина.")
+        .Hidden();  // not implemented yet
     b.Path("interface.skinFile", L"Skin file", L"Файл скина", PathKind::File)
         .Desc(L"A Lumen skin (.json) that overrides design tokens.",
               L"Скин Lumen (.json), переопределяющий токены оформления.")
-        .When("interface.customSkin", "true");
+        .When("interface.customSkin", "true")
+        .Hidden();  // not implemented yet
 
     b.Sec("window", L"Window", L"Окно");
     b.Toggle("interface.embedVideo", L"Play video inside main window", L"Показывать видео в главном окне", true)
         .Desc(L"Show video in the library window instead of opening a separate player window.",
-              L"Показывать видео в окне медиатеки, а не в отдельном окне плеера.");
+              L"Показывать видео в окне медиатеки, а не в отдельном окне плеера.")
+        .Hidden();  // not implemented yet
     b.Pick("interface.autoResize", L"Resize window to fit video", L"Подгонять окно под видео",
            {{"never", L"Never", L"Никогда"},
             {"first", L"Only for the first video", L"Только для первого видео"},
@@ -670,7 +677,8 @@ void BuildApp(Builder& b) {
     b.Sec("controls", L"Playback Controls", L"Панель управления");
     b.Toggle("interface.compactMode", L"Start in compact mode", L"Запускать в компактном режиме", false)
         .Desc(L"Open with a small window and the minimal control bar.",
-              L"Открываться в маленьком окне с минимальной панелью управления.");
+              L"Открываться в маленьком окне с минимальной панелью управления.")
+        .Hidden();  // not implemented yet
     b.Pick("interface.autoHide", L"Auto-hide the controls", L"Скрывать панель управления",
            {{"never", L"Never", L"Никогда"},
             {"fullscreen", L"In fullscreen only", L"Только в полноэкранном режиме"},
@@ -730,19 +738,23 @@ void BuildApp(Builder& b) {
               L"Искать недостающие названия и обложки в интернете. Имена файлов передаются сервису метаданных.");
     b.Toggle("privacy.lastfmSubmit", L"Submit played tracks to last.fm", L"Отправлять прослушанное в last.fm", false)
         .Desc(L"Scrobble the songs you listen to your last.fm profile.",
-              L"Отмечать прослушанные песни в вашем профиле last.fm (скробблинг).");
+              L"Отмечать прослушанные песни в вашем профиле last.fm (скробблинг).")
+        .Hidden();  // not implemented yet
     b.Text("privacy.lastfmUser", L"Last.fm username", L"Имя пользователя Last.fm")
         .Desc(L"Your last.fm account name.", L"Имя вашей учётной записи last.fm.")
-        .When("privacy.lastfmSubmit", "true");
+        .When("privacy.lastfmSubmit", "true")
+        .Hidden();  // not implemented yet
     b.Text("privacy.lastfmPassword", L"Last.fm password", L"Пароль Last.fm")
         .Desc(L"Used once to obtain a session key; it is not sent anywhere else.",
               L"Нужен один раз для получения ключа сессии и больше никуда не передаётся.")
         .Secret()
-        .When("privacy.lastfmSubmit", "true");
+        .When("privacy.lastfmSubmit", "true")
+        .Hidden();  // not implemented yet
     b.Text("privacy.lastfmUrl", L"Last.fm submission URL", L"Адрес отправки Last.fm", "post.audioscrobbler.com")
         .Desc(L"Scrobbling server. Change it only for a compatible service such as Libre.fm.",
               L"Сервер скробблинга. Меняйте только для совместимого сервиса, например Libre.fm.")
-        .When("privacy.lastfmSubmit", "true");
+        .When("privacy.lastfmSubmit", "true")
+        .Hidden();  // not implemented yet
 
     // ===== Controls =====
     b.Cat("controls", "app", "hotkeys", L"Controls", L"Управление", L"Mouse, Keyboard & Remote Controls",
@@ -763,7 +775,8 @@ void BuildApp(Builder& b) {
     b.Number("controls.skipVeryShort", L"Very short skip", L"Очень короткий", 1, 3600, 1, 3).Unit(L"s", L"с");
     b.Number("controls.skipShort", L"Short skip", L"Короткий", 1, 3600, 1, 10).Unit(L"s", L"с");
     b.Number("controls.skipMedium", L"Medium skip", L"Средний", 1, 3600, 1, 60).Unit(L"s", L"с");
-    b.Number("controls.skipLong", L"Long skip", L"Длинный", 1, 3600, 1, 300).Unit(L"s", L"с");
+    b.Number("controls.skipLong", L"Long skip", L"Длинный", 1, 3600, 1, 300).Unit(L"s", L"с")
+        .Hidden();  // not implemented yet
 
     b.Sec("mouse", L"Mouse", L"Мышь");
     b.Pick("controls.singleClick", L"Single click on the video", L"Одиночный щелчок по видео",
@@ -785,14 +798,17 @@ void BuildApp(Builder& b) {
     b.Toggle("controls.reverseScroll", L"Reverse scroll direction", L"Обратное направление прокрутки", false);
 
     b.Sec("remotes", L"Remotes", L"Удалённое управление");
-    b.Toggle("controls.webRemote", L"Web remote control", L"Веб-пульт", false);
-    b.Number("controls.webRemotePort", L"Port", L"Порт", 1024, 65535, 1, 8080).When("controls.webRemote", "true");
+    b.Toggle("controls.webRemote", L"Web remote control", L"Веб-пульт", false)
+        .Hidden();  // not implemented yet
+    b.Number("controls.webRemotePort", L"Port", L"Порт", 1024, 65535, 1, 8080).When("controls.webRemote", "true")
+        .Hidden();  // not implemented yet
     b.inferred = true;
     b.Text("controls.webRemotePassword", L"Password", L"Пароль")
         .Secret()
         .Desc(L"Required to control Lumen from a browser on another device.",
               L"Нужен, чтобы управлять Lumen из браузера на другом устройстве.")
-        .When("controls.webRemote", "true");
+        .When("controls.webRemote", "true")
+        .Hidden();  // not implemented yet
 }
 
 void BuildMedia(Builder& b) {
@@ -820,7 +836,8 @@ void BuildMedia(Builder& b) {
     b.Toggle("playback.pauseOnAudioFocus", L"Pause when another app uses audio",
              L"Пауза, когда звук нужен другому приложению", false)
         .Desc(L"Pause during calls and other communication sessions, then continue afterwards.",
-              L"Ставить на паузу во время звонков и других сеансов связи и продолжать после них.");
+              L"Ставить на паузу во время звонков и других сеансов связи и продолжать после них.")
+        .Hidden();  // not implemented yet
 
     b.Sec("tracks", L"Tracks", L"Дорожки");
     b.Pick("playback.videoQuality", L"Preferred video quality", L"Предпочтительное качество",
@@ -836,7 +853,8 @@ void BuildMedia(Builder& b) {
         .Mpv("ytdl-format");
     b.Pick("playback.menuLanguage", L"Preferred menu language", L"Язык меню диска", LanguageChoices(false), "system")
         .Desc(L"Language for DVD and Blu-ray menus when the disc offers several.",
-              L"Язык меню DVD и Blu-ray, если на диске их несколько.");
+              L"Язык меню DVD и Blu-ray, если на диске их несколько.")
+        .Hidden();  // not implemented yet
     b.Number("playback.audioTrack", L"Default audio track", L"Аудиодорожка по умолчанию", 0, 99, 1, 0)
         .Desc(L"Track number to start with. 0 picks automatically by the preferred language.",
               L"С какой дорожки начинать. 0 — выбрать автоматически по предпочтительному языку.")
@@ -895,7 +913,8 @@ void BuildMedia(Builder& b) {
         .MpvBool("stop-screensaver");
     b.Toggle("video.wallpaper", L"Play video as desktop wallpaper", L"Видео вместо обоев рабочего стола", false)
         .Desc(L"Draw the video behind the desktop icons. Controls stay in the tray menu.",
-              L"Показывать видео под значками рабочего стола. Управление — через меню в трее.");
+              L"Показывать видео под значками рабочего стола. Управление — через меню в трее.")
+        .Hidden();  // not implemented yet
     b.inferred = true;
     b.Pick("video.hdr", L"HDR output", L"Вывод HDR",
            {{"auto", L"Auto", L"Авто"},
@@ -1218,7 +1237,8 @@ void BuildMedia(Builder& b) {
             {"waveform", L"Waveform", L"Волна", "", "waveform_twotone"}},
            "disabled")
         .Desc(L"Animation shown instead of the cover while music plays (components/Audio_Visualizer).",
-              L"Анимация вместо обложки во время воспроизведения музыки.");
+              L"Анимация вместо обложки во время воспроизведения музыки.")
+        .Hidden();  // not implemented yet
     b.Toggle("audio.pitchCorrection", L"Keep pitch when changing speed", L"Сохранять тон при смене скорости", true)
         .MpvBool("audio-pitch-correction");
 
@@ -1372,7 +1392,8 @@ void BuildMedia(Builder& b) {
               L"конфиденциальности.");
     b.Toggle("library.enabled", L"Use the media library", L"Использовать медиатеку", true)
         .Desc(L"Index your media folders for the Home, Video and Music pages.",
-              L"Индексировать папки с медиа для разделов «Главная», «Видео» и «Музыка».");
+              L"Индексировать папки с медиа для разделов «Главная», «Видео» и «Музыка».")
+        .Hidden();  // not implemented yet
 
     b.advanced = true;
     b.inferred = true;
@@ -1403,17 +1424,20 @@ void BuildSystem(Builder& b) {
         .MpvBuild("demuxer-max-bytes", BuildDemuxerMaxBytes);
     b.Number("network.cacheLocal", L"Local files", L"Локальные файлы", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
-        .When("network.buffering", "custom");
+        .When("network.buffering", "custom")
+        .Hidden();  // not implemented yet
     b.Number("network.cacheDisc", L"Discs", L"Диски", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
-        .When("network.buffering", "custom");
+        .When("network.buffering", "custom")
+        .Hidden();  // not implemented yet
     b.Number("network.cacheNetwork", L"Network streams", L"Сетевые потоки", 1000, 3600000, 500, 60000)
         .Unit(L"ms", L"мс")
         .When("network.buffering", "custom")
         .MpvBuild("cache-secs", BuildCacheSecs);
     b.Number("network.cacheLive", L"Live capture", L"Захват с устройств", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
-        .When("network.buffering", "custom");
+        .When("network.buffering", "custom")
+        .Hidden();  // not implemented yet
 
     b.Sec("proxy", L"Proxy", L"Прокси");
     b.Text("network.httpProxy", L"HTTP proxy", L"HTTP-прокси")
@@ -1439,7 +1463,8 @@ void BuildSystem(Builder& b) {
             {"compatible", L"Most compatible", L"Максимальная совместимость"}},
            "balanced")
         .Desc(L"Which TLS ciphers to offer. Most compatible also allows older servers.",
-              L"Какие шифры TLS предлагать. «Совместимость» подходит и для старых серверов.");
+              L"Какие шифры TLS предлагать. «Совместимость» подходит и для старых серверов.")
+        .Hidden();  // not implemented yet
 
     b.advanced = true;
     b.inferred = true;
@@ -1524,11 +1549,13 @@ void BuildSystem(Builder& b) {
             {"qsv", L"Intel Quick Sync", L"Intel Quick Sync"},
             {"amf", L"AMD AMF", L"AMD AMF"}},
            "auto")
-        .Desc(L"Video encoder for recording and streaming out.", L"Видеокодировщик для записи и трансляции.");
+        .Desc(L"Video encoder for recording and streaming out.", L"Видеокодировщик для записи и трансляции.")
+        .Hidden();  // not implemented yet
     b.Pick("performance.decoder", L"Decoder", L"Декодер",
            {{"auto", L"Automatic", L"Автоматически"}, {"software", L"Software only", L"Только программный"}}, "auto")
         .Desc(L"Software only ignores hardware decoding for troubleshooting.",
-              L"«Только программный» отключает аппаратное декодирование для диагностики.");
+              L"«Только программный» отключает аппаратное декодирование для диагностики.")
+        .Hidden();  // not implemented yet
     b.Pick("performance.clockSync", L"Clock synchronisation", L"Синхронизация",
            {{"default", L"Default", L"По умолчанию", "audio"},
             {"resample", L"Resample audio to the display", L"Подстройка звука под дисплей", "display-resample"},
@@ -1540,10 +1567,12 @@ void BuildSystem(Builder& b) {
     b.Number("performance.clockJitter", L"Clock jitter", L"Допустимый джиттер", 0, 60000, 100, 5000)
         .Unit(L"ms", L"мс")
         .Desc(L"Largest clock deviation tolerated for live streams before resynchronizing.",
-              L"Наибольшее отклонение часов в прямых трансляциях до пересинхронизации.");
+              L"Наибольшее отклонение часов в прямых трансляциях до пересинхронизации.")
+        .Hidden();  // not implemented yet
     b.Number("performance.clockAveraging", L"Clock reference averaging", L"Усреднение опорных часов", 1, 1000, 1, 40)
         .Desc(L"Number of clock samples averaged for live streams.",
-              L"Сколько отсчётов часов усреднять для прямых трансляций.");
+              L"Сколько отсчётов часов усреднять для прямых трансляций.")
+        .Hidden();  // not implemented yet
     b.inferred = true;
     b.Toggle("performance.interpolation", L"Frame interpolation", L"Интерполяция кадров", false)
         .Desc(L"Blend frames to remove judder when the video and display rates differ. Needs display sync.",
@@ -1572,22 +1601,29 @@ void BuildSystem(Builder& b) {
     b.Path("recording.folder", L"Save recordings to", L"Папка для записей", PathKind::Folder)
         .Hint(L"Videos\\Lumen", L"Видео\\Lumen")
         .Desc(L"Folder for recorded streams and clips.", L"Папка для записанных потоков и фрагментов.");
-    b.Toggle("recording.noReencode", L"Record without re-encoding when possible", L"Записывать без перекодирования", true);
+    b.Toggle("recording.noReencode", L"Record without re-encoding when possible", L"Записывать без перекодирования", true)
+        .Hidden();  // not implemented yet
 
     b.Sec("casting", L"Casting", L"Трансляция");
-    b.Toggle("recording.discoverCast", L"Discover cast devices", L"Искать устройства для трансляции", true);
+    b.Toggle("recording.discoverCast", L"Discover cast devices", L"Искать устройства для трансляции", true)
+        .Hidden();  // not implemented yet
     b.Pick("recording.castQuality", L"Cast quality", L"Качество трансляции",
            {{"auto", L"Automatic", L"Автоматически"}, {"high", L"High", L"Высокое"}, {"medium", L"Medium", L"Среднее"},
             {"low", L"Low", L"Низкое"}},
            "auto")
         .Desc(L"Lower quality needs less bandwidth on a slow Wi-Fi.",
-              L"Низкое качество требует меньше трафика при медленном Wi-Fi.");
+              L"Низкое качество требует меньше трафика при медленном Wi-Fi.")
+        .Hidden();  // not implemented yet
 
     b.Sec("streaming", L"Streaming", L"Стриминг");
-    b.Toggle("recording.playLocally", L"Play locally while streaming", L"Воспроизводить локально во время стриминга", true);
-    b.Toggle("recording.includeAudio", L"Include audio", L"Передавать звук", true);
-    b.Toggle("recording.includeVideo", L"Include video", L"Передавать видео", true);
-    b.Toggle("recording.includeSubtitles", L"Include subtitles", L"Передавать субтитры", true);
+    b.Toggle("recording.playLocally", L"Play locally while streaming", L"Воспроизводить локально во время стриминга", true)
+        .Hidden();  // not implemented yet
+    b.Toggle("recording.includeAudio", L"Include audio", L"Передавать звук", true)
+        .Hidden();  // not implemented yet
+    b.Toggle("recording.includeVideo", L"Include video", L"Передавать видео", true)
+        .Hidden();  // not implemented yet
+    b.Toggle("recording.includeSubtitles", L"Include subtitles", L"Передавать субтитры", true)
+        .Hidden();  // not implemented yet
     b.Pick("recording.preset", L"Encoding preset", L"Пресет кодирования",
            {{"ultrafast", L"Ultra fast", L"Сверхбыстрый"},
             {"superfast", L"Super fast", L"Очень быстрый"},
@@ -1600,7 +1636,8 @@ void BuildSystem(Builder& b) {
             {"veryslow", L"Very slow", L"Очень медленный"}},
            "medium")
         .Desc(L"Slower presets give better quality at the same bitrate but load the CPU more.",
-              L"Медленные пресеты дают лучшее качество при том же битрейте, но сильнее нагружают процессор.");
+              L"Медленные пресеты дают лучшее качество при том же битрейте, но сильнее нагружают процессор.")
+        .Hidden();  // not implemented yet
     b.Pick("recording.tune", L"Tuning", L"Оптимизация",
            {{"none", L"None", L"Нет"},
             {"film", L"Film", L"Фильм"},
@@ -1610,17 +1647,20 @@ void BuildSystem(Builder& b) {
             {"fastdecode", L"Fast decode", L"Быстрое декодирование"},
             {"zerolatency", L"Zero latency", L"Минимальная задержка"}},
            "none")
-        .Desc(L"Adjust the encoder for a kind of content.", L"Подстроить кодировщик под тип содержимого.");
+        .Desc(L"Adjust the encoder for a kind of content.", L"Подстроить кодировщик под тип содержимого.")
+        .Hidden();  // not implemented yet
 
     b.advanced = true;
     b.inferred = true;
     b.Pick("recording.container", L"Container", L"Контейнер",
            {{"mkv", L"Matroska (.mkv)", L"Matroska (.mkv)"}, {"mp4", L"MPEG-4 (.mp4)", L"MPEG-4 (.mp4)"},
             {"ts", L"MPEG-TS (.ts)", L"MPEG-TS (.ts)"}},
-           "mkv");
+           "mkv")
+        .Hidden();  // not implemented yet
     b.Number("recording.videoBitrate", L"Video bitrate", L"Битрейт видео", 0, 100000, 100, 0)
         .Unit(L"kbit/s", L"кбит/с")
-        .Desc(L"0 lets the encoder choose from the preset.", L"0 — кодировщик выбирает сам по пресету.");
+        .Desc(L"0 lets the encoder choose from the preset.", L"0 — кодировщик выбирает сам по пресету.")
+        .Hidden();  // not implemented yet
 
     // ===== Extensions =====
     b.Cat("extensions", "system", "plugins", L"Extensions", L"Расширения", L"Add-ons & Scripts", L"Дополнения и скрипты");

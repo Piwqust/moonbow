@@ -38,6 +38,10 @@ $p = Start-Process "$env:TEMP\lumen-qa\build-rN\Lumen.exe" -ArgumentList "--new-
 - Shortcut that does all of the above and prints the new PID:
   `tools\dev\launch.ps1 -DataDir <dir> -Exe <exe> [-Fresh] [-Library <folder>] [-Settings '{"key":value}'] [-Onboarding] [files...]`
   (startup volume is always forced to 0; `-Onboarding` keeps the first-run window).
+- `--automation` instances are **invisible by design**: every window is cloaked, has no taskbar button and
+  never takes focus, so the owner keeps working undisturbed. You cannot see the window on screen; always look
+  at it through `capture.ps1`, which still captures it fully (video, fullscreen, dialogs). Native Windows
+  dialogs are not cloaked, which is one more reason never to open them.
 
 Tools (in `C:\Users\wheny\Desktop\CODE\lumen-player\tools\dev\`), all take `-ProcessId <your pid>`:
 

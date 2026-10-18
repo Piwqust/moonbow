@@ -57,7 +57,7 @@ void Theme::Rebuild() {
         p.textPrimary = Color::Hex(0xEAEAEA);
         p.textSecondary = Color::Hex(0x8F8F8F);
         p.textTertiary = Color::Hex(0x6B6B6B);
-        p.textDisabled = Color::Hex(0x404040);
+        p.textDisabled = Color::Hex(0x5C5C5C);  // ~3:1 on bgBase: readable, clearly off
         p.scrim = Color::Hex(0x000000, 0.60f);
         p.shadow = Color::Hex(0x000000, 0.46f);
         p.videoBg = Color::Hex(0x000000);
@@ -78,7 +78,7 @@ void Theme::Rebuild() {
         p.textPrimary = Color::Hex(0x141414);
         p.textSecondary = Color::Hex(0x5C5C5C);
         p.textTertiary = Color::Hex(0x8A8A8A);
-        p.textDisabled = Color::Hex(0xBDBDBD);
+        p.textDisabled = Color::Hex(0x9A9A9A);
         p.scrim = Color::Hex(0x000000, 0.32f);
         p.shadow = Color::Hex(0x000000, 0.18f);
         p.videoBg = Color::Hex(0x000000);

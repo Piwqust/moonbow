@@ -1006,23 +1006,36 @@ void SettingRow::Build(std::wstring label, std::wstring description, std::unique
     Add<RowLabel>(std::move(label), std::move(description));
     if (control) AddChild(std::move(control));
     enabled = Cfg().IsEnabled(item);
+    UpdateDisabledHint();
 }
 
 void SettingRow::Sync() {
     const bool on = Cfg().IsEnabled(item);
     if (on != enabled) {
         enabled = on;
+        UpdateDisabledHint();
         Invalidate();
     }
 }
 
-void SettingRow::Paint(Painter& p) {
-    if (!enabled) p.PushOpacity(0.38f);
+// Disabled rows rely on the controls' own disabled colours (text.disabled); an extra
+// row opacity made them unreadable. Hovering the label names the setting that unlocks it.
+void SettingRow::UpdateDisabledHint() {
+    if (Children().empty()) return;
+    Widget* label = Children().front().get();
+    label->tooltip.clear();
+    label->interactive = false;
+    if (enabled || !item.enabledWhen) return;
+    if (const Item* parent = settings::FindItem(item.enabledWhen->key)) {
+        label->tooltip = Fmt(Tr(L"Available when “{0}” is set"),
+                             {Lang() == settings::Lang::Ru ? parent->labelRu : parent->label});
+        label->interactive = true;
+    }
 }
 
-void SettingRow::PaintOver(Painter& p) {
-    if (!enabled) p.PopOpacity();
-}
+void SettingRow::Paint(Painter&) {}
+
+void SettingRow::PaintOver(Painter&) {}
 
 Size PadLabel::MeasureContent(float availW, float availH) {
     const Size s = Label::MeasureContent(std::max(0.0f, availW - pad.H()), availH);

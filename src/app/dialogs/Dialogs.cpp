@@ -522,7 +522,7 @@ void ShowKeyboardShortcutsDialog() {
     Frame* f = frame.get();
     auto* search = f->Toolbar()->Add<TextBox>(Tr(L"Search Keyboard Shortcuts..."), "search");
     search->width = Length::Grow();
-    search->background = P().bgRaised;
+    search->raised = true;
     auto* mode = f->Toolbar()->Add<FieldDropdown>(
         std::vector<Choice>{{Tr(L"All Fields"), "all"}, {Tr(L"Action"), "action"}, {Tr(L"Hotkey"), "key"}}, 0);
     mode->width = Length::Px(200);

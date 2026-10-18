@@ -6,6 +6,7 @@
 #include "app/I18n.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
+#include "ui/Host.h"
 
 #include <shellapi.h>
 #include <shobjidl.h>
@@ -171,7 +172,7 @@ struct SystemIntegration::Impl {
     }
 
     void SyncTray() {
-        if (!WantsTray()) {
+        if (!WantsTray() || ui::Host::Automation()) {
             RemoveTray();
             return;
         }
@@ -280,6 +281,7 @@ SystemIntegration::~SystemIntegration() = default;
 
 void SystemIntegration::Attach(HWND window) {
     impl_->hwnd = window;
+    if (ui::Host::Automation()) return;
     impl_->taskbarCreated = RegisterWindowMessageW(L"TaskbarButtonCreated");
     impl_->trayCreated = RegisterWindowMessageW(L"TaskbarCreated");
     // Let the (non-elevated or elevated) shell deliver it either way.

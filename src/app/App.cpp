@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <sstream>
 
 namespace app {
 
@@ -369,7 +370,7 @@ void App::RestoreWindowPlacement() {
     WINDOWPLACEMENT wp{sizeof(wp)};
     GetWindowPlacement(main_->Hwnd(), &wp);
     wp.rcNormalPosition = rc;
-    wp.showCmd = max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    wp.showCmd = ui::Host::Automation() ? SW_SHOWNOACTIVATE : max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
     wp.flags = 0;
     SetWindowPlacement(main_->Hwnd(), &wp);
 }
@@ -429,7 +430,18 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     Trace("window shown");
     // The GPU device (driver load) and libmpv start after the first paint.
     gfx::Gpu::Get().CreateDeviceAsync(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
-    player_.SetStartOptions(MpvOptions(config_));
+    {
+        auto options = MpvOptions(config_);
+        // general.extraOptions: "--deband=yes --sub-ass-override=force" (applied at start).
+        std::istringstream extra(config_.GetString("general.extraOptions"));
+        for (std::string tok; extra >> tok;) {
+            while (!tok.empty() && tok[0] == '-') tok.erase(0, 1);
+            const size_t eq = tok.find('=');
+            if (tok.empty()) continue;
+            options.emplace_back(tok.substr(0, eq), eq == std::string::npos ? "yes" : tok.substr(eq + 1));
+        }
+        player_.SetStartOptions(std::move(options));
+    }
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
@@ -501,8 +513,11 @@ void App::OnPlayerEvents() {
         if (failedPath_.empty()) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
     }
     if ((changes & kChangeFile) && s.fileLoaded) failedPath_.clear();
-    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && config_.GetBool("privacy.saveHistory"))
+    if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && s.loadSerial != recordedSerial_ &&
+        config_.GetBool("privacy.saveHistory")) {
+        recordedSerial_ = s.loadSerial;
         history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
+    }
     if ((changes & kChangeTime) && s.fileLoaded) {
         const double now = ui::AnimFloat::Now();
         if (now - lastHistorySave_ > 5000) {
@@ -514,6 +529,9 @@ void App::OnPlayerEvents() {
     if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
         fitPending_ = false;
         FitWindowToVideo();
+        if (config_.GetBool("video.startFullscreen") && s.hasVideo && main_ && !main_->IsFullscreen() &&
+            !main_->PictureInPicture() && playerShown_)
+            main_->SetFullscreen(true, config_.GetString("interface.fullscreenScreen") == "primary");
     }
     if (changes & kChangeVolume) config_.SetDouble("audio.lastVolume", std::round(s.volume));
     playerChanged.Emit(changes);
@@ -703,7 +721,8 @@ void App::PlayIndex(int index, bool showPlayer) {
         return;
     }
     player_.Open(item->path);
-    player_.SetPause(false);
+    // "Start playing as soon as a file opens"; the next item of a running queue always plays.
+    player_.SetPause(!config_.GetBool("playback.autoPlay") && !player_.State().fileLoaded);
     if (showPlayer || playerShown_) ShowPlayer(true);
 }
 
@@ -722,7 +741,8 @@ bool App::Next(bool userAction) {
 
 void App::Previous() {
     const double now = ui::AnimFloat::Now();
-    if (player_.State().fileLoaded && player_.State().position > 3 && now - lastRestart_ > 1500) {
+    const PlayerState& ps = player_.State();
+    if (ps.fileLoaded && ps.position > 3 && !ps.eof && now - lastRestart_ > 3000) {
         player_.SeekAbsolute(0, true);
         lastRestart_ = now;
         return;

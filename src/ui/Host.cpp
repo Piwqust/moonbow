@@ -86,6 +86,16 @@ void Host::SetAutomation(bool on) {
     g_automation = on;
 }
 
+bool Host::Automation() {
+    return g_automation;
+}
+
+void Host::Activate(HWND hwnd) {
+    if (g_automation || !hwnd) return;
+    if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+    SetForegroundWindow(hwnd);
+}
+
 // OLE drop target: shows the overlay while files hover and hands them over on drop.
 class DropTarget : public IDropTarget {
 public:
@@ -127,7 +137,7 @@ public:
         auto files = FilesFrom(data);
         if (!files.empty() && host_->onDropFiles) {
             *effect = DROPEFFECT_COPY;
-            SetForegroundWindow(host_->Hwnd());
+            Host::Activate(host_->Hwnd());
             // Run after the drag source returns (opening files may show dialogs).
             Host* host = host_;
             host->Post([host, files = std::move(files)]() mutable {
@@ -237,6 +247,7 @@ bool Host::Create(const HostOptions& options) {
     DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
     if (!options.resizable) style &= ~WS_MAXIMIZEBOX;
     DWORD exStyle = options.owner || !options.showInTaskbar ? 0 : WS_EX_APPWINDOW;
+    if (g_automation) exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
 
     RECT work;
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
@@ -259,6 +270,10 @@ bool Host::Create(const HostOptions& options) {
     hwnd_ = CreateWindowExW(exStyle, kHostClass, options.title.c_str(), style, x, y, w, h, options.owner, nullptr,
                             inst, this);
     if (!hwnd_) return false;
+    if (g_automation) {
+        const BOOL cloak = TRUE;
+        DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
+    }
     const UINT actual = GetDpiForWindow(hwnd_);
     if (actual != dpi_) {
         dpi_ = actual;
@@ -301,7 +316,12 @@ void Host::OnDeviceReady() {
 }
 
 void Host::Show(int cmd) {
-    ShowWindow(hwnd_, cmd);
+    if (g_automation) {
+        ShowWindow(hwnd_, cmd == SW_SHOWMAXIMIZED ? SW_MAXIMIZE : SW_SHOWNOACTIVATE);
+        SetWindowPos(hwnd_, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    } else {
+        ShowWindow(hwnd_, cmd);
+    }
     UpdateWindow(hwnd_);
 }
 
@@ -354,8 +374,9 @@ void Host::SetFullscreen(bool on, bool primaryScreen) {
             return;
         fullscreen_ = true;
         SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style & ~WS_OVERLAPPEDWINDOW));
-        SetWindowPos(hwnd_, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
-                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        SetWindowPos(hwnd_, g_automation ? HWND_BOTTOM : HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+                     mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
+                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED | (g_automation ? SWP_NOACTIVATE : 0u));
     } else {
         fullscreen_ = false;
         SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style | WS_OVERLAPPEDWINDOW));
@@ -827,6 +848,7 @@ void Host::UpdateTooltip() {
         const Rect& r = tooltipFor_->rect;
         // Prefer centering under small controls (icon buttons), like native tooltips.
         if (r.w < 80) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
+        if (tooltipFor_->tooltipBeside) o.anchor = {r.Right() + 8, r.Cy() - 14, 0, 0};
         o.place = Place::At;
         o.passthrough = true;
         o.focusContent = false;

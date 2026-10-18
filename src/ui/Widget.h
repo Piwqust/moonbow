@@ -94,6 +94,7 @@ public:
     bool focusable = false;    // reachable with Tab, receives keys
     NcRole ncRole = NcRole::None;
     std::wstring tooltip;
+    bool tooltipBeside = false;  // show the tooltip to the right (icon rails), not below
     LPCWSTR cursor = IDC_ARROW;
     std::string id;  // for debugging and tests
     Rect rect;
