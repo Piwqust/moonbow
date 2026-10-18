@@ -71,6 +71,7 @@ public:
 
 private:
     void Build(std::wstring label, std::wstring description, std::unique_ptr<ui::Widget> control, float minHeight);
+    void UpdateDisabledHint();
 };
 
 // ui::Label that honours `pad` (the stock one ignores it).

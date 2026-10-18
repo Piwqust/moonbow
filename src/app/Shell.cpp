@@ -355,7 +355,7 @@ void LibraryPane::BuildHeader() {
     search_ = header_->Add<TextBox>(Tr(L"Search"), "search");
     search_->width = Length::Px(compact_ ? 160.0f : 324.0f);
     search_->height = Length::Px(32);
-    search_->background = P().bgRaised;
+    search_->raised = true;
     search_->visible = !compact_;
     search_->onChange = [this](const std::wstring& text) {
         if (view_) view_->SetFilter(text);
