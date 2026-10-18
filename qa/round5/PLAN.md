@@ -19,7 +19,7 @@ Hibernation is off on this PC, so this command sleeps (S3). The sleep is the ver
 7. ✅ Hunters r5-player-eye (player-visual.md, PV-01…PV-18) and r5-settings-eye (settings-dialogs.md, SD-01…SD-22), both merged.
    - ⏳ Fixer r5-fix-settings: SD-01…SD-22 except SD-09/10, which went to r5-fix-audit.
    - ⏳ Fixer r5-fix-player: PV-01…PV-18, P-07, and the design gaps (a wider bar in fullscreen, a top title bar, the volume popup, the seek hover marker). P-13 (menu height) went to r5-fix-audit; P-06/18 (toggle caption) went to r5-fix-settings.
-8. ⏳ Hunter r5-library-eye: library, home, shell and the worst-case data. It starts after step 6, once the media is ready.
+8. ✅ (library.md merged, LB-01…LB-18 plus gaps; LB-01 = audit #1, done by r5-fix-audit) ☐ Fixer r5-fix-library: start AFTER r5-fix-audit is merged, since they share src/app/library/*, LibraryCommon and MediaLibrary. It covers LB-02…LB-18, re-checks W-12/W-13 and baseline #8/#10/#11, plus the "Продолжить просмотр" tile thumbnail (a frame from about 2:20) noted by r5-fix-flows. Hunter r5-library-eye: library, home, shell and the worst-case data. It starts after step 6, once the media is ready.
 9. ☐ Fixers for the steps 7–8 reports, split by disjoint files: player / library+shell / settings+dialogs+ui.
 10. ☐ Final verification: rebuild, the full sweep, the audit is clean (or every remaining finding is justified), tests and checks pass, and a few owner scenarios replayed. Rebuild build\Lumen.exe only when the owner's Lumen is not running.
 11. ☐ STATUS.md: a section "Раунд 5", README if needed, memory. Then the report to the owner, then sleep.
