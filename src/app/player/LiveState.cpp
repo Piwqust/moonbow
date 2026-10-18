@@ -97,11 +97,25 @@ HMONITOR VideoMonitor() {
     return w ? MonitorFromWindow(w->Hwnd(), MONITOR_DEFAULTTONEAREST) : nullptr;
 }
 
-// True when the config's vf chain has CPU filters (a deinterlacing method, deblocking...).
-bool ConfigCpuFilters() {
+// The config's vf chain: "@lumen:lavfi=[...]" with the CPU filters the user picked (a
+// deinterlacing method, deblocking...), empty when none.
+std::string ConfigVf() {
     for (const auto& [name, value] : MpvOptionFor(Cfg(), "performance.postprocessing"))
-        if (name == "vf") return !value.empty();
-    return false;
+        if (name == "vf") return value;
+    return {};
+}
+
+bool ConfigCpuFilters() {
+    return !ConfigVf().empty();
+}
+
+// The decoder hands out frames in RAM (copy-back or software decoding), or there is no video.
+// hwdec-current is empty while mpv re-creates the decoder after an hwdec change: not yet.
+bool FramesInRam() {
+    const PlayerState& s = Mpv().State();
+    const std::wstring& h = s.hwdec;
+    if (h.empty()) return !s.fileLoaded || !s.hasVideo;
+    return h == L"no" || (h.size() > 5 && h.compare(h.size() - 5, 5, L"-copy") == 0);
 }
 
 // The configured hwdec (performance.hwdec) as mpv gets it.
@@ -147,19 +161,14 @@ LiveState::LiveState() {
         }
         // hwdec-current and the HDR flag arrive as state changes.
         if (m & kChangeFile) ForgetDisplayHdr();
+        if (vfPending_ && (m & (kChangeState | kChangeFile)) && FramesInRam()) ApplyVideoFilters();
         if (m & (kChangeState | kChangeFile)) ApplyUpscaler();
     });
     LoadCropSetting();
-    // Config writes the whole vf/af chains when mapped settings change; put ours back on top.
+    // App leaves vf to us (ApplyVideoFilters); it writes the whole af chain, so put ours back on top.
     configToken_ = TheApp().config().Subscribe("", [this](const std::string& key) {
-        if (RewritesVf(key)) {
-            srFilter_.clear();  // gone with the old chain
-            ApplyVideoFilters();
-        }
-        if (key == "performance.hwdec") {
-            appliedHwdec_ = ConfigHwdec();  // what the app just set; adjust it for CPU filters
-            ApplyHwdec();
-        }
+        if (RewritesVf(key)) ApplyVideoFilters();
+        if (key == "performance.hwdec") ApplyHwdec();
         if (key.rfind("video.crop", 0) == 0) {
             LoadCropSetting();
             ApplyCrop();
@@ -335,18 +344,44 @@ void LiveState::RefreshDevices() {
 
 // --- video --------------------------------------------------------------------------------
 
-void LiveState::ApplyVideoFilters() {
+// The whole vf chain is set here (App leaves "vf" to us): the config's CPU filters, then flip
+// and colour effects, then the upscaler. A lavfi filter that gets a zero-copy d3d11 frame fails
+// for good ("Disabling filter ... because it has failed"), so CPU filters go in only after
+// hwdec-current reports frames in RAM; the playerChanged handler retries until then.
+void LiveState::ApplyVideoFilters(bool force) {
     if (!Mpv().Ready()) return;
-    Mpv().Command({"vf", "remove", "@lflip"});
-    if (flip == 1) Mpv().Command({"vf", "add", "@lflip:hflip"});
-    if (flip == 2) Mpv().Command({"vf", "add", "@lflip:vflip"});
-    Mpv().Command({"vf", "remove", "@lfx"});
+    std::string chain = ConfigVf();
+    auto add = [&chain](const std::string& f) { chain += (chain.empty() ? "" : ",") + f; };
+    if (flip == 1) add("@lflip:hflip");
+    if (flip == 2) add("@lflip:vflip");
     std::string fx;
     if (negate) fx = "negate";
     if (grayscale) fx += std::string(fx.empty() ? "" : ",") + "hue=s=0";
-    if (!fx.empty()) Mpv().Command({"vf", "add", "@lfx:lavfi=[" + fx + "]"});
-    ApplyHwdec();
-    ApplyUpscaler();
+    if (!fx.empty()) add("@lfx:lavfi=[" + fx + "]");
+    if (!chain.empty()) {
+        ApplyUpscaler();  // d3d11vpp takes D3D11 frames only: out before the frames move to RAM
+        ApplyHwdec();
+    }
+    vfPending_ = !chain.empty() && !force && !FramesInRam();
+    MainWindow* win = TheApp().main();
+    if (vfPending_) {
+        // The decoder normally reports copy-back within ~10 ms; never leave the filters out for good.
+        if (!vfTimer_ && win) vfTimer_ = win->StartTimer(1000, [this] {
+            vfTimer_ = 0;
+            if (vfPending_) ApplyVideoFilters(true);
+        });
+        return;
+    }
+    if (vfTimer_ && win) win->CancelTimer(vfTimer_);
+    vfTimer_ = 0;
+    if (chain.empty()) {
+        // Filters out first, then back to zero-copy and the upscaler.
+        Mpv().SetProperty("vf", srFilter_);
+        ApplyHwdec();
+        ApplyUpscaler();
+        return;
+    }
+    Mpv().SetProperty("vf", chain);
 }
 
 bool LiveState::CpuFilters() const {

@@ -6,6 +6,7 @@
 #include "../src/core/Json.h"
 #include "../src/core/Paths.h"
 #include "../src/core/SettingsSchema.h"
+#include "../src/core/ShellText.h"
 #include "../src/app/player/Lyrics.h"
 #include "../src/library/Bookmarks.h"
 #include "../src/library/History.h"
@@ -1894,6 +1895,36 @@ void TestPlayQueue() {
     CHECK(q.Items()[0].title == L"Tagged" && q.Items()[0].duration == 90);
 }
 
+void TestShellText() {
+    const std::wstring suffix = L" — Lumen";
+    CHECK(FitShellText(L"Short", suffix, 128) == L"Short — Lumen");
+    // Exactly full: 127 units + NUL.
+    const std::wstring exact(127 - suffix.size(), L'a');
+    CHECK(FitShellText(exact, suffix, 128) == exact + suffix);
+    // Too long: cut with an ellipsis, the suffix kept, the result fits.
+    const std::wstring longTitle(300, L'b');
+    std::wstring r = FitShellText(longTitle, suffix, 128);
+    CHECK(r.size() == 127);
+    CHECK(r.compare(r.size() - suffix.size(), suffix.size(), suffix) == 0);
+    CHECK(r[r.size() - suffix.size() - 1] == L'…');
+    // An emoji (surrogate pair) at the cut is dropped whole, never split.
+    std::wstring emoji(127 - suffix.size() - 2, L'c');
+    emoji += L"\U0001F600\U0001F600tail";
+    r = FitShellText(emoji, suffix, 128);
+    CHECK(r.size() <= 127);
+    for (size_t i = 0; i < r.size(); ++i) {
+        const bool high = r[i] >= 0xD800 && r[i] <= 0xDBFF;
+        if (high) CHECK(i + 1 < r.size() && r[i + 1] >= 0xDC00 && r[i + 1] <= 0xDFFF);
+    }
+    // No trailing space before the ellipsis.
+    r = FitShellText(std::wstring(118, L'd') + L"   " + std::wstring(50, L'e'), suffix, 128);
+    CHECK(r.find(L" …") == std::wstring::npos);
+    // A suffix that leaves no room: the text alone, cut to fit.
+    CHECK(FitShellText(L"abcdef", L"0123456789", 8).size() <= 7);
+    CHECK(FitShellText(L"abc", L"0123456789", 8) == L"abc");
+    CHECK(FitShellText(L"abc", L"x", 0).empty());
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -1926,6 +1957,7 @@ const TestCase kTests[] = {
     {"thumbnails", TestThumbnails},
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
+    {"shell_text", TestShellText},
 };
 
 }  // namespace

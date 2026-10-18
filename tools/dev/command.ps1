@@ -68,6 +68,9 @@
 #                         the reply lists the files. Same as tools\dev\dump-tree.ps1.
 #   state                 reply: route, player screen, file loaded, paused, queue size,
 #                         current index, fullscreen, pip, open popups (key=value lines)
+#   prop <name>           reply: <name>=<value>, an mpv property read as a string
+#                         (prop hwdec-current, prop vf, prop frame-drop-count); fails until
+#                         the player has started
 param([Parameter(Mandatory = $true)][int]$ProcessId, [Parameter(Mandatory = $true)][string]$Command,
       [int]$TimeoutMs = 10000, [switch]$Quiet)
 Add-Type @"

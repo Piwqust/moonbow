@@ -4,11 +4,13 @@
 #include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "core/ShellText.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
 #include "ui/Host.h"
 
 #include <shellapi.h>
+#include <windowsx.h>
 #include <shobjidl.h>
 #include <systemmediatransportcontrolsinterop.h>
 
@@ -103,6 +105,7 @@ struct SystemIntegration::Impl {
     double lastProgress = -1;
     UINT trayCreated = 0;  // "TaskbarCreated": Explorer restarted, add the icon again
     bool trayAdded = false;
+    bool trayV4 = false;  // NOTIFYICON_VERSION_4: callbacks carry the icon's anchor in wParam
     std::wstring trayTip, notifiedPath;
 
     ~Impl() {
@@ -182,11 +185,11 @@ struct SystemIntegration::Impl {
         nid.uCallbackMessage = WM_APP_TRAY;
         const int px = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(hwnd));
         nid.hIcon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1), IMAGE_ICON, px, px, 0));
-        wcsncpy_s(nid.szTip, trayTip.empty() ? L"Lumen" : trayTip.c_str(), _TRUNCATE);
+        wcscpy_s(nid.szTip, trayTip.empty() ? L"Lumen" : trayTip.c_str());
         trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
         if (trayAdded) {
             nid.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIconW(NIM_SETVERSION, &nid);
+            trayV4 = Shell_NotifyIconW(NIM_SETVERSION, &nid) != FALSE;
         }
         if (nid.hIcon) DestroyIcon(nid.hIcon);
     }
@@ -198,13 +201,14 @@ struct SystemIntegration::Impl {
         trayAdded = false;
     }
 
+    // `tip` fits szTip (FitShellText).
     void SetTrayTip(const std::wstring& tip) {
         if (tip == trayTip) return;
         trayTip = tip;
         if (!trayAdded) return;
         NOTIFYICONDATAW nid = TrayData();
         nid.uFlags = NIF_TIP | NIF_SHOWTIP;
-        wcsncpy_s(nid.szTip, tip.c_str(), _TRUNCATE);
+        wcscpy_s(nid.szTip, tip.c_str());
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 
@@ -215,8 +219,8 @@ struct SystemIntegration::Impl {
         NOTIFYICONDATAW nid = TrayData();
         nid.uFlags = NIF_INFO;
         nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND;
-        wcsncpy_s(nid.szInfoTitle, Tr(L"Now playing"), _TRUNCATE);
-        wcsncpy_s(nid.szInfo, text.c_str(), _TRUNCATE);
+        wcscpy_s(nid.szInfoTitle, FitShellText(Tr(L"Now playing"), {}, std::size(nid.szInfoTitle)).c_str());
+        wcscpy_s(nid.szInfo, FitShellText(text, {}, std::size(nid.szInfo)).c_str());
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 
@@ -225,7 +229,8 @@ struct SystemIntegration::Impl {
         SetForegroundWindow(hwnd);
     }
 
-    void TrayMenu() {
+    // `anchor`: where the shell asks for the menu (the icon, also for Shift+F10 / the menu key).
+    void TrayMenu(POINT anchor) {
         const PlayerState& s = TheApp().player().State();
         HMENU menu = CreatePopupMenu();
         const bool playing = s.fileLoaded && !s.paused;
@@ -238,11 +243,10 @@ struct SystemIntegration::Impl {
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, kTrayQuit, Tr(L"Quit"));
         SetMenuDefaultItem(menu, kTrayShow, FALSE);
-        POINT pt;
-        GetCursorPos(&pt);
         SetForegroundWindow(hwnd);  // so the menu closes when clicking elsewhere
         const UINT cmd = static_cast<UINT>(TrackPopupMenuEx(
-            menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, hwnd, nullptr));
+            menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, anchor.x, anchor.y, hwnd, nullptr));
+        PostMessageW(hwnd, WM_NULL, 0, 0);  // the menu opens again on the next click (KB135788)
         DestroyMenu(menu);
         switch (cmd) {
             case kTrayShow: ShowWindowFromTray(); break;
@@ -286,6 +290,8 @@ void SystemIntegration::Attach(HWND window) {
     impl_->trayCreated = RegisterWindowMessageW(L"TaskbarCreated");
     // Let the (non-elevated or elevated) shell deliver it either way.
     ChangeWindowMessageFilterEx(window, impl_->taskbarCreated, MSGFLT_ALLOW, nullptr);
+    ChangeWindowMessageFilterEx(window, impl_->trayCreated, MSGFLT_ALLOW, nullptr);
+    ChangeWindowMessageFilterEx(window, WM_APP_TRAY, MSGFLT_ALLOW, nullptr);
     ChangeWindowMessageFilterEx(window, WM_COMMAND, MSGFLT_ALLOW, nullptr);
     impl_->InitSmtc();
     impl_->SyncTray();
@@ -302,6 +308,17 @@ void SystemIntegration::SettingsChanged() {
 
 bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) {
     Impl& d = *impl_;
+    // Closing: the window is hidden and mpv is being destroyed on another thread. The tray icon
+    // goes at once ("Show Lumen" would bring back a dying window), and no tray, thumbnail-button
+    // or media-key command reaches the player.
+    if (TheApp().Quitting()) {
+        d.RemoveTray();
+        if (msg == WM_APP_TRAY || msg == WM_APP_SMTC || (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED)) {
+            *result = 0;
+            return true;
+        }
+        return false;
+    }
     if (msg == d.trayCreated && d.trayCreated) {
         d.trayAdded = false;
         d.SyncTray();
@@ -316,7 +333,12 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
                 else
                     d.ShowWindowFromTray();
                 break;
-            case WM_CONTEXTMENU: d.TrayMenu(); break;
+            case WM_CONTEXTMENU: {
+                POINT at{GET_X_LPARAM(wp), GET_Y_LPARAM(wp)};
+                if (!d.trayV4) GetCursorPos(&at);
+                d.TrayMenu(at);
+                break;
+            }
             default: break;
         }
         *result = 0;
@@ -389,7 +411,8 @@ void SystemIntegration::Update(unsigned changes) {
     if (changes & (kChangeFile | kChangeMeta)) {
         const QueueItem* item = app.queue().CurrentItem();
         std::wstring title = s.title.empty() && item ? FileNameOf(item->path) : s.title;
-        d.SetTrayTip(s.fileLoaded && !title.empty() ? title + L" — Lumen" : L"Lumen");
+        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" — Lumen", std::size(NOTIFYICONDATAW{}.szTip))
+                                                     : L"Lumen");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
             d.NotifyTrack(s.artist.empty() ? title : title + L"\n" + s.artist);

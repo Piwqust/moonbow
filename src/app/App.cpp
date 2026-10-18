@@ -207,8 +207,10 @@ void App::OnConfigChanged(const std::string& key) {
         library_.SetOptions({config_.GetBool("library.showHidden"), config_.GetBool("library.readTags")});
         library_.Rescan();
     }
-    // Settings mapped to mpv apply live as properties.
-    for (const auto& [name, value] : MpvOptionFor(config_, key)) player_.SetProperty(name.c_str(), value);
+    // Settings mapped to mpv apply live as properties. vf and hwdec are LiveState's: CPU filters
+    // need copy-back decoding first, in that order.
+    for (const auto& [name, value] : MpvOptionFor(config_, key))
+        if (name != "vf" && name != "hwdec") player_.SetProperty(name.c_str(), value);
 }
 
 std::string App::UiValue(const std::string& key, const std::string& fallback) const {
@@ -250,8 +252,10 @@ void App::SaveWindowPlacement() {
     WINDOWPLACEMENT wp{sizeof(wp)};
     if (!GetWindowPlacement(main_->Hwnd(), &wp)) return;
     const RECT& r = wp.rcNormalPosition;
+    // Minimized from maximized comes back maximized.
+    const bool max = wp.showCmd == SW_SHOWMAXIMIZED || (wp.showCmd == SW_SHOWMINIMIZED && (wp.flags & WPF_RESTORETOMAXIMIZED));
     char buf[96];
-    snprintf(buf, sizeof(buf), "%ld,%ld,%ld,%ld,%d", r.left, r.top, r.right, r.bottom, wp.showCmd == SW_SHOWMAXIMIZED ? 1 : 0);
+    snprintf(buf, sizeof(buf), "%ld,%ld,%ld,%ld,%d", r.left, r.top, r.right, r.bottom, max ? 1 : 0);
     SetUiValue("window.placement", buf);
 }
 
@@ -395,9 +399,13 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    Trace("close: message loop ended");
     FlushStores();
+    Trace("close: stores saved");
     ShutdownSeekPreview();
+    Trace("close: seek preview stopped");
     main_.reset();
+    Trace("close: window objects freed");
     return static_cast<int>(msg.wParam);
 }
 
@@ -411,6 +419,7 @@ void App::OnPlayerReady(bool ok) {
     }
     Trace("mpv ready");
     engineReady_ = true;
+    Live().Start();  // owns live vf and hwdec changes (OnConfigChanged skips them)
     if (pendingIndex_ >= 0) {
         const int i = pendingIndex_;
         pendingIndex_ = -1;
@@ -882,6 +891,12 @@ void App::ShowOnboarding() {
     app::ShowOnboarding({});
 }
 
+void App::BeginQuit() {
+    // The close hides the window first; the final FlushStores skips a hidden one.
+    SaveWindowPlacement();
+    quitting_ = true;
+}
+
 void App::Quit() {
     if (main_) main_->Close();
 }
@@ -1198,6 +1213,16 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
             "\nqueue=" + std::to_string(queue_.Items().size()) + "\ncurrent=" + std::to_string(queue_.Current()) +
             "\nfullscreen=" + (w->IsFullscreen() ? "1" : "0") + "\npip=" + (w->PictureInPicture() ? "1" : "0") +
             "\npopups=" + std::to_string(w->PopupCount()) + "\n";
+        return true;
+    }
+
+    if (verb == "prop") {
+        // Read-only: tests check mpv's own view (hwdec-current, vf, frame-drop-count...).
+        if (!engineReady_ || arg.empty()) {
+            r = engineReady_ ? "usage: prop <mpv property>" : "player not ready";
+            return false;
+        }
+        r = arg + "=" + player_.GetPropertyString(arg.c_str());
         return true;
     }
 

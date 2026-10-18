@@ -882,6 +882,9 @@ void MiniPlayer::Paint(Painter& p) {
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
     const std::wstring name = item ? (PS().title.empty() ? FileNameOf(item->path) : PS().title) : L"";
+    // A cut title stays readable in the card's tooltip.
+    const float titleW = compact_ ? std::max(0.0f, rect.Right() - 60 - v.Right() - 12) : rect.w - 24;
+    tooltip = gfx::Text::Get().Measure(name, TextStyle::Body).width > titleW ? name : std::wstring();
     if (compact_) {
         // Title and folder/artist between the thumbnail and the play button; seek bar below.
         const float x = v.Right() + 12, w = std::max(0.0f, rect.Right() - 60 - x);

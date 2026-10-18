@@ -284,6 +284,7 @@
 {L"Subtitles hidden", L"Субтитры скрыты"},
 {L"Subtitles shown", L"Субтитры показаны"},
 {L"Snapshot saved to {0}", L"Снимок сохранён в {0}"},
+{L"Can't save to {0}", L"Не удаётся сохранить в {0}"},
 {L"Audio: {0}", L"Аудио: {0}"},
 // track languages (Actions.cpp LanguageName)
 {L"Russian", L"Русский"},
