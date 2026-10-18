@@ -845,10 +845,12 @@ void LiveState::BeginFile(bool loaded) {
             fileOpts_ = *f;
             if (loaded) Store().Touch(filePath_);  // least recently used goes first; saved with the next write
         }
-    for (int k = 0; k < 3; ++k) trackBase_[k] = p.TrackChoices(k);
-    tracksTouched_[0] = fileOpts_.aid || fileOpts_.audioFile;
-    tracksTouched_[1] = fileOpts_.sid || fileOpts_.subFile;
-    tracksTouched_[2] = fileOpts_.secondarySid.has_value();
+    // Only a choice the user makes from now on changes the stored tracks: a sidecar that is gone
+    // stays remembered, mpv's pick in its place is not the user's.
+    for (int k = 0; k < 3; ++k) {
+        trackBase_[k] = p.TrackChoices(k);
+        tracksTouched_[k] = false;
+    }
     tracksTrusted_ = !loaded;
     trackFixPending_ = loaded && on && fileOpts_.HasTracks();
     lastSpeed_ = s.speed;
