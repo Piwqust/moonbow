@@ -167,6 +167,22 @@ bool LooksLikeUrl(const std::wstring& s) {
     return true;
 }
 
+// A page on a video site rather than a stream: mpv plays it only through yt-dlp.
+bool IsSiteLink(const std::wstring& url) {
+    std::wstring u = url;
+    for (auto& ch : u) ch = static_cast<wchar_t>(towlower(ch));
+    for (const wchar_t* h : {L"youtube.com/watch", L"youtube.com/shorts/", L"youtube.com/live/", L"youtube.com/playlist",
+                             L"youtu.be/", L"twitch.tv/", L"vimeo.com/", L"soundcloud.com/", L"dailymotion.com/video",
+                             L"rutube.ru/video", L"vkvideo.ru/", L"vk.com/video", L"bilibili.com/video"})
+        if (u.find(h) != std::wstring::npos) return true;
+    return false;
+}
+
+// yt-dlp.exe found and Settings > Network > "Open web pages with yt-dlp" on (see BuildYtdl).
+bool SiteLinksPlayable() {
+    return !YtDlpPath().empty() && TheApp().config().GetBool("network.ytdl");
+}
+
 // Splits the text area into links. `badLine` receives the first invalid line (1-based) or 0.
 std::vector<std::wstring> ParseLinks(const std::wstring& text, int* badLine) {
     std::vector<std::wstring> out;
@@ -179,7 +195,9 @@ std::vector<std::wstring> ParseLinks(const std::wstring& text, int* badLine) {
         ++line;
         std::wstring l = Trim(text.substr(start, end - start));
         if (!l.empty()) {
-            if (l.rfind(L"www.", 0) == 0) l = L"https://" + l;
+            // "www.site/..." and pasted "youtube.com/watch?v=..." come without a scheme.
+            if (l.rfind(L"www.", 0) == 0 || (l.find(L"://") == std::wstring::npos && IsSiteLink(l)))
+                l = L"https://" + l;
             if (LooksLikeUrl(l))
                 out.push_back(l);
             else if (!*badLine)
@@ -592,9 +610,7 @@ bool LooksLikeMediaUrl(const std::wstring& url) {
     for (const wchar_t* e : {L".m3u8", L".m3u", L".mp4", L".mkv", L".webm", L".mp3", L".aac", L".flac", L".ogg",
                              L".opus", L".ts", L".mpd", L".pls", L".mov", L".avi"})
         if (u.find(e) != std::wstring::npos) return true;
-    for (const wchar_t* h : {L"youtube.com/watch", L"youtu.be/", L"twitch.tv/", L"vimeo.com/", L"soundcloud.com/"})
-        if (u.find(h) != std::wstring::npos) return true;
-    return false;
+    return IsSiteLink(u);
 }
 
 }  // namespace
@@ -674,12 +690,19 @@ void ShowNetworkStreamDialog() {
         int bad = 0;
         const auto links = ParseLinks(urls->Text(), &bad);
         open->enabled = bad == 0 && !links.empty();
-        hintIcon->visible = bad != 0;
-        hint->tone = bad ? Tone::Primary : Tone::Tertiary;
+        const bool site = std::any_of(links.begin(), links.end(), IsSiteLink);
+        // Site links stay allowed without yt-dlp (some serve media directly), but say why they may fail.
+        const bool warn = bad != 0 || (site && !SiteLinksPlayable());
+        hintIcon->visible = warn;
+        hint->tone = warn ? Tone::Primary : Tone::Tertiary;
         hint->InvalidateLayout();
         if (bad)
             hint->SetText(Fmt(Tr(L"Line {0} is not a link. Links look like https://, rtsp:// or udp://"),
                               {std::to_wstring(bad)}));
+        else if (site && !SiteLinksPlayable())
+            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network)."));
+        else if (site && links.size() == 1)
+            hint->SetText(Tr(L"The video page opens through yt-dlp."));
         else if (links.size() > 1)
             hint->SetText(Fmt(Tr(L"{0} links will be opened as one queue."), {std::to_wstring(links.size())}));
         else

@@ -35,6 +35,8 @@ enum PropId : uint64_t {
     kPropMetadata,
     kPropHwdec,
     kPropGamma,
+    kPropVolumeMax,
+    kPropSpdif,
 };
 
 const mpv_node* MapGet(const mpv_node& map, const char* key) {
@@ -130,6 +132,7 @@ bool Player::InitOnWorker(int64_t wid) {
     Trace("mpv load dll");
     if (!api_.Load(ExeDir() + L"libmpv-2.dll", &error_)) return false;
     Trace("mpv dll loaded");
+    requestLog_ = reinterpret_cast<decltype(requestLog_)>(GetProcAddress(api_.module, "mpv_request_log_messages"));
 
     mpv_ = api_.mpv_create();
     if (!mpv_) {
@@ -232,6 +235,8 @@ bool Player::FinishStart(bool ok) {
         {kPropMetadata, "metadata", MPV_FORMAT_NODE},
         {kPropHwdec, "hwdec-current", MPV_FORMAT_STRING},
         {kPropGamma, "video-params/gamma", MPV_FORMAT_STRING},
+        {kPropVolumeMax, "volume-max", MPV_FORMAT_DOUBLE},
+        {kPropSpdif, "audio-spdif", MPV_FORMAT_STRING},
     };
     for (const auto& p : props) api_.mpv_observe_property(mpv_, p.id, p.name, p.format);
     api_.mpv_set_wakeup_callback(mpv_, &Player::Wakeup, this);
@@ -276,6 +281,25 @@ unsigned Player::ProcessEvents() {
                 state_.lastError.clear();
                 changes |= kChangeFile | kChangeState;
                 break;
+            case MPV_EVENT_LOG_MESSAGE: {
+                // On a device without passthrough mpv falls back to decoding the track, but then never
+                // restarts playback: the picture stays on its first frame until a seek. Seek in place.
+                // The audio filters failed on the undecoded data and mpv dropped them; set them again.
+                // The fallback itself is logged at verbose level, which makes every mpv module format its
+                // verbose lines (+2% of a core at 1080p), so wait for the error just before it instead.
+                // mpv falls back in the same call, before it reads these commands.
+                const auto* m = static_cast<const mpv_event_log_message*>(ev->data);
+                if (std::strcmp(m->prefix, "ao") == 0 &&
+                    std::strncmp(m->text, "Failed to initialize audio driver", 33) == 0) {
+                    Trace("passthrough unsupported, audio decoded instead");
+                    if (const std::string af = GetPropertyString("af"); !af.empty()) {
+                        SetString("af", "");
+                        SetString("af", af);
+                    }
+                    Cmd({"seek", "0", "relative+exact"});
+                }
+                break;
+            }
             case MPV_EVENT_END_FILE: {
                 auto* end = static_cast<mpv_event_end_file*>(ev->data);
                 if (end->reason == MPV_END_FILE_REASON_ERROR) {
@@ -331,6 +355,16 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
         case kPropCacheTime: state_.cacheTime = dbl(); return kChangeTime;
         case kPropChapter: state_.chapter = has ? i64() : -1; return kChangeChapters;
         case kPropHwdec: state_.hwdec = str(); return kChangeState;
+        case kPropVolumeMax: volumeMax_ = has ? dbl() : 100.0; return 0;
+        case kPropSpdif: {
+            // Only passthrough needs mpv's messages (see MPV_EVENT_LOG_MESSAGE).
+            const bool on = has && !str().empty();
+            if (on != spdifLog_ && requestLog_) {
+                spdifLog_ = on;
+                requestLog_(mpv_, on ? "error" : "no");
+            }
+            return 0;
+        }
         case kPropGamma: {
             const std::wstring g = str();
             state_.hdr = g == L"pq" || g == L"hlg";
@@ -507,7 +541,7 @@ void Player::FrameStep(bool back) {
 
 void Player::SetVolume(double volume) {
     if (volume < 0) volume = 0;
-    if (volume > 150) volume = 150;
+    if (volume > volumeMax_) volume = volumeMax_;  // audio.maxVolume
     state_.volume = volume;  // optimistic, so repeated wheel steps accumulate
     SetDouble("volume", volume);
 }

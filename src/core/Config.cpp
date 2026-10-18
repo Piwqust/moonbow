@@ -425,3 +425,46 @@ std::vector<MpvOption> ParseMpvArgs(std::string_view args) {
     }
     return out;
 }
+
+namespace {
+
+bool IsFile(const std::wstring& path) {
+    const DWORD a = GetFileAttributesW(path.c_str());
+    return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+std::wstring FindYtDlp() {
+    wchar_t exe[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        std::wstring dir(exe, n);
+        dir.resize(dir.find_last_of(L"\\/") + 1);
+        if (IsFile(dir + L"yt-dlp.exe")) return dir + L"yt-dlp.exe";
+    }
+    const DWORD len = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+    if (len == 0) return {};
+    std::wstring path(len, L'\0');
+    path.resize(GetEnvironmentVariableW(L"PATH", path.data(), len));
+    size_t start = 0;
+    while (start < path.size()) {
+        size_t end = path.find(L';', start);
+        if (end == std::wstring::npos) end = path.size();
+        std::wstring dir = path.substr(start, end - start);
+        start = end + 1;
+        if (dir.size() >= 2 && dir.front() == L'"' && dir.back() == L'"') dir = dir.substr(1, dir.size() - 2);
+        // A UNC folder or a mapped network drive can take seconds to answer when it is offline.
+        if (dir.size() < 3 || dir[1] != L':') continue;
+        const wchar_t root[] = {dir[0], L':', L'\\', 0};
+        if (GetDriveTypeW(root) != DRIVE_FIXED) continue;
+        if (dir.back() != L'\\' && dir.back() != L'/') dir += L'\\';
+        if (IsFile(dir + L"yt-dlp.exe")) return dir + L"yt-dlp.exe";
+    }
+    return {};
+}
+
+}  // namespace
+
+const std::wstring& YtDlpPath() {
+    static const std::wstring path = FindYtDlp();
+    return path;
+}

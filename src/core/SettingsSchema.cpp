@@ -162,17 +162,36 @@ std::optional<std::string> BuildPriority(const Config& c) {
     }
 }
 
-std::optional<std::string> BuildSubColor(const Config& c) {
-    std::string rgb = c.GetString("subtitles.color");  // "#RRGGBB", validated
-    if (rgb.size() != 7) rgb = "#FFFFFF";
-    double opacity = std::clamp(c.GetDouble("subtitles.opacity"), 0.0, 100.0);
-    int alpha = static_cast<int>(std::lround(opacity * 255.0 / 100.0));
+// "#RRGGBB" (validated) + opacity in percent -> mpv's "#AARRGGBB".
+std::string ArgbColor(std::string rgb, double opacity, const char* fallback) {
+    if (rgb.size() != 7) rgb = fallback;
+    int alpha = static_cast<int>(std::lround(std::clamp(opacity, 0.0, 100.0) * 255.0 / 100.0));
     static const char kHex[] = "0123456789ABCDEF";
     std::string out = "#";
     out += kHex[alpha >> 4];
     out += kHex[alpha & 15];
     out += rgb.substr(1);
     return out;
+}
+
+std::optional<std::string> BuildSubColor(const Config& c) {
+    return ArgbColor(c.GetString("subtitles.color"), c.GetDouble("subtitles.opacity"), "#FFFFFF");
+}
+
+// Box color for sub-border-style=background-box (and the shadow color in mpv's other styles).
+std::optional<std::string> BuildSubBackColor(const Config& c) {
+    return ArgbColor(c.GetString("subtitles.backColor"), c.GetDouble("subtitles.backOpacity"), "#000000");
+}
+
+std::optional<std::string> BuildSpdif(const Config& c) {
+    if (!c.GetBool("audio.passthrough")) return std::nullopt;
+    std::string codecs;
+    for (auto [key, codec] : {std::pair{"audio.spdifAc3", "ac3"}, std::pair{"audio.spdifEac3", "eac3"},
+                              std::pair{"audio.spdifDts", "dts"}, std::pair{"audio.spdifDtsHd", "dts-hd"},
+                              std::pair{"audio.spdifTrueHd", "truehd"}})
+        if (c.GetBool(key)) codecs += (codecs.empty() ? "" : ",") + std::string(codec);
+    if (codecs.empty()) return std::nullopt;
+    return codecs;
 }
 
 std::optional<std::string> BuildSubAuto(const Config& c) {
@@ -222,6 +241,30 @@ std::optional<std::string> BuildHttpProxy(const Config& c) {
     std::string user = proxy.substr(hostStart, at - hostStart);
     if (user.find(':') != std::string::npos) return proxy;
     return proxy.substr(0, hostStart) + user + ":" + password + proxy.substr(at);
+}
+
+// Read-ahead of files mpv does not cache (local files and discs); streams use cache-secs.
+std::optional<std::string> BuildReadahead(const Config& c) {
+    if (c.GetString("network.buffering") != "custom") return std::nullopt;
+    return Num(std::max(0.05, c.GetDouble("network.cacheLocal") / 1000.0));
+}
+
+std::optional<std::string> BuildYtdl(const Config& c) {
+    return c.GetBool("network.ytdl") && !YtDlpPath().empty() ? "yes" : "no";
+}
+
+// mpv keeps one script-opts list: the yt-dlp Lumen found, then the user's own options (so they
+// win). "%n%" quotes the path, which may contain commas.
+std::optional<std::string> BuildScriptOpts(const Config& c) {
+    std::string out;
+    if (c.GetBool("network.ytdl") && !YtDlpPath().empty()) {
+        const std::string path = json::ToUtf8(YtDlpPath());
+        out = "ytdl_hook-ytdl_path=%" + std::to_string(path.size()) + "%" + path;
+    }
+    const std::string user = c.GetString("extensions.scriptOpts");
+    if (!user.empty()) out += (out.empty() ? "" : ",") + user;
+    if (out.empty()) return std::nullopt;
+    return out;
 }
 
 std::optional<std::string> BuildDeinterlace(const Config& c) {
@@ -413,8 +456,13 @@ std::optional<std::string> BuildAf(const Config& c) {
                     ":release=" + Num(c.GetDouble("audio.compRelease")) + ":makeup=" + Num(makeup) +
                     ":knee=" + Num(knee) + ":detection=" + (c.GetDouble("audio.compRmsPeak") >= 0.5 ? "peak" : "rms"));
     }
-    if (c.GetBool("audio.normalize"))
-        f.push_back("loudnorm=I=" + Num(c.GetDouble("audio.targetLevel")) + ":TP=-1.5:LRA=11");
+    // After the equalizer, so normalization evens out the level the EQ changed but keeps its tone.
+    if (c.GetBool("audio.normalize")) {
+        if (c.GetString("audio.normalizeMode") == "dynamic")
+            f.push_back("dynaudnorm=f=150:g=15:p=0.95:m=10");  // ~1 s look-ahead: short frames, small window
+        else
+            f.push_back("loudnorm=I=" + Num(c.GetDouble("audio.targetLevel")) + ":TP=-1.5:LRA=11");
+    }
     if (c.GetBool("audio.stereoWiden")) {
         f.push_back("stereowiden=delay=" + Num(c.GetDouble("audio.widenDelay")) +
                     ":feedback=" + Num(c.GetDouble("audio.widenFeedback")) +
@@ -885,7 +933,7 @@ void BuildApp(Builder& b) {
     b.Number("controls.skipShort", L"Short skip", L"Короткий", 1, 3600, 1, 10).Unit(L"s", L"с");
     b.Number("controls.skipMedium", L"Medium skip", L"Средний", 1, 3600, 1, 60).Unit(L"s", L"с");
     b.Number("controls.skipLong", L"Long skip", L"Длинный", 1, 3600, 1, 300).Unit(L"s", L"с")
-        .Hidden();  // not implemented yet
+        .Hidden();  // not implemented yet: needs its own Action (app/Actions.h)
 
     b.Sec("mouse", L"Mouse", L"Мышь");
     b.Pick("controls.singleClick", L"Single click on the video", L"Одиночный щелчок по видео",
@@ -1280,10 +1328,42 @@ void BuildMedia(Builder& b) {
         .Desc(L"Number of speakers. Automatic matches the output device; other values downmix or upmix.",
               L"Количество колонок. «Автоматически» — как у устройства, иначе звук сводится или расширяется.")
         .Mpv("audio-channels");
+    b.inferred = true;
+    b.Toggle("audio.exclusive", L"Exclusive mode", L"Монопольный режим", false)
+        .Desc(L"Use the output device for Lumen alone (WASAPI exclusive): no Windows mixer, the file's own sample "
+              L"rate. Other apps are silent while Lumen plays.",
+              L"Занимать устройство вывода только для Lumen (монопольный WASAPI): без микшера Windows, с частотой "
+              L"самого файла. Другие приложения в это время не слышны.")
+        .MpvBool("audio-exclusive");
+    b.Toggle("audio.gapless", L"Gapless playback", L"Воспроизведение без пауз", true)
+        .Desc(L"Keep the sound device open between files, so the next song starts without a pause or a click.",
+              L"Не закрывать звуковое устройство между файлами, чтобы следующая песня начиналась без паузы и щелчка.")
+        .MpvBool("gapless-audio", "weak", "no")
+        .MpvBool("prefetch-playlist");  // opens the next queued file before this one ends
+    b.Toggle("audio.passthrough", L"Send surround sound to the receiver", L"Передавать объёмный звук на ресивер", false)
+        .Desc(L"Pass Dolby and DTS tracks undecoded over HDMI or S/PDIF and let the receiver decode them. Volume, the "
+              L"equalizer and effects do not apply to these tracks.",
+              L"Передавать дорожки Dolby и DTS по HDMI или S/PDIF без декодирования, их декодирует ресивер. "
+              L"Громкость, эквалайзер и эффекты к таким дорожкам не применяются.")
+        .MpvBuild("audio-spdif", BuildSpdif, "");
+    for (auto [key, en, def] : {std::tuple{"audio.spdifAc3", L"Dolby Digital (AC3)", true},
+                                std::tuple{"audio.spdifEac3", L"Dolby Digital Plus (E-AC3)", false},
+                                std::tuple{"audio.spdifDts", L"DTS", true},
+                                std::tuple{"audio.spdifDtsHd", L"DTS-HD", false},
+                                std::tuple{"audio.spdifTrueHd", L"Dolby TrueHD", false}}) {
+        b.Toggle(key, en, en, def)
+            .Desc(L"Turn on only the formats your receiver decodes; S/PDIF carries AC3 and DTS only.",
+                  L"Включайте только форматы, которые декодирует ресивер; по S/PDIF передаются только AC3 и DTS.")
+            .When("audio.passthrough", "true")
+            .MpvBuild("audio-spdif", BuildSpdif, "");
+    }
+    b.inferred = false;
 
     b.Sec("volume", L"Volume", L"Громкость");
-    b.Slider("audio.maxVolume", L"Maximum volume", L"Максимальная громкость", 100, 300, 25, 100)
+    b.Slider("audio.maxVolume", L"Maximum volume", L"Максимальная громкость", 100, 200, 25, 100)
         .Unit(L"%", L"%")
+        .Desc(L"Allow the volume above 100% for quiet files. Loud parts may distort.",
+              L"Разрешить громкость выше 100% для тихих файлов. Громкие места могут искажаться.")
         .Mpv("volume-max");
     b.Pick("audio.startupVolumeMode", L"Startup volume", L"Громкость при запуске",
            {{"remember", L"Remember last volume", L"Запоминать последнюю"},
@@ -1293,13 +1373,13 @@ void BuildMedia(Builder& b) {
         .Desc(L"Volume to use when Lumen starts.", L"С какой громкостью запускается Lumen.")
         .MpvBuild("volume", BuildStartupVolume)
         .Startup();
-    b.Number("audio.startupVolume", L"Always starts at:", L"Всегда начинать с:", 0, 300, 1, 100)
+    b.Number("audio.startupVolume", L"Always starts at:", L"Всегда начинать с:", 0, 200, 1, 100)
         .Unit(L"%", L"%")
         .Group("startupVolume")
         .When("audio.startupVolumeMode", "fixed")
         .MpvBuild("volume", BuildStartupVolume)
         .Startup();
-    b.Number("audio.lastVolume", L"Last volume", L"Последняя громкость", 0, 300, 1, 100)
+    b.Number("audio.lastVolume", L"Last volume", L"Последняя громкость", 0, 200, 1, 100)
         .Hidden()
         .MpvBuild("volume", BuildStartupVolume)
         .Startup();
@@ -1310,13 +1390,22 @@ void BuildMedia(Builder& b) {
 
     b.Sec("loudness", L"Loudness", L"Выравнивание громкости");
     b.Toggle("audio.normalize", L"Normalize loudness", L"Выравнивать громкость", false)
-        .Desc(L"Keep quiet and loud files at a similar level (EBU R128).",
-              L"Держать тихие и громкие файлы на одном уровне (EBU R128).")
+        .Desc(L"Keep quiet and loud files at a similar level. Works together with the equalizer.",
+              L"Держать тихие и громкие файлы на одном уровне. Работает вместе с эквалайзером.")
+        .MpvBuild("af", BuildAf);
+    b.Seg("audio.normalizeMode", L"Normalization", L"Способ выравнивания",
+          {{"ebu", L"EBU R128", L"EBU R128"}, {"dynamic", L"Dynamic", L"Динамический"}}, "ebu")
+        .Inferred()
+        .Desc(L"EBU R128 aims at a target loudness. Dynamic also lifts quiet passages within a file, like "
+              L"dialogue between loud scenes.",
+              L"EBU R128 приводит звук к целевой громкости. Динамический ещё и поднимает тихие места внутри файла, "
+              L"например диалоги между громкими сценами.")
+        .When("audio.normalize", "true")
         .MpvBuild("af", BuildAf);
     b.Number("audio.targetLevel", L"Target level", L"Целевой уровень", -40, -5, 1, -23)
         .Unit(L"LUFS", L"LUFS")
-        .Desc(L"Loudness to aim for. -23 is the broadcast standard, -16 is louder.",
-              L"К какой громкости стремиться. -23 — телевизионный стандарт, -16 — громче.")
+        .Desc(L"Loudness to aim for in EBU R128 mode. -23 is the broadcast standard, -16 is louder.",
+              L"К какой громкости стремиться в режиме EBU R128. -23 — телевизионный стандарт, -16 — громче.")
         .When("audio.normalize", "true")
         .MpvBuild("af", BuildAf);
     b.Toggle("audio.nightMode", L"Night mode", L"Ночной режим", false)
@@ -1473,6 +1562,14 @@ void BuildMedia(Builder& b) {
         .Desc(L"Pick the audio track in this language when a file has several.",
               L"Если в файле несколько дорожек, выбирать дорожку на этом языке.")
         .MpvBuild("alang", BuildAlang);
+    b.Toggle("audio.autoLoadFiles", L"Load audio tracks found next to the video",
+             L"Подключать звуковые дорожки рядом с видео", true)
+        .Inferred()
+        .Desc(L"Add audio files whose name starts like the video's, e.g. \"Movie.en.mka\" for \"Movie.mkv\", as "
+              L"extra audio tracks.",
+              L"Добавлять звуковые файлы, имя которых начинается как у видео, например «Фильм.ru.mka» для «Фильм.mkv», "
+              L"как дополнительные дорожки.")
+        .MpvBool("audio-file-auto", "fuzzy", "no");
 
     // ===== Subtitles =====
     b.Cat("subtitles", "media", "subtitles", L"Subtitles", L"Субтитры", L"Subtitle Defaults", L"Субтитры по умолчанию");
@@ -1567,11 +1664,48 @@ void BuildMedia(Builder& b) {
     b.Color("subtitles.outlineColor", L"Outline color", L"Цвет обводки", "#000000").Mpv("sub-outline-color");
     b.Toggle("subtitles.shadow", L"Shadow", L"Тень", true).MpvBool("sub-shadow-offset", "2", "0");
     b.inferred = true;
+    b.Pick("subtitles.background", L"Background", L"Подложка",
+           {{"none", L"None", L"Нет", "outline-and-shadow"},
+            {"lines", L"Box behind each line", L"Плашка под каждой строкой", "opaque-box"},
+            {"box", L"Box behind the text", L"Плашка под всем текстом", "background-box"}},
+           "none")
+        .Desc(L"Draw text on a box, like TV captions; easier to read on bright scenes. Each-line boxes use the "
+              L"outline color.",
+              L"Рисовать текст на плашке, как телевизионные титры: так его легче читать на светлом фоне. Плашки "
+              L"под строками берут цвет обводки.")
+        .Mpv("sub-border-style");
+    b.Color("subtitles.backColor", L"Box color", L"Цвет плашки", "#000000")
+        .When("subtitles.background", "box")
+        .MpvBuild("sub-back-color", BuildSubBackColor);
+    b.Slider("subtitles.backOpacity", L"Box opacity", L"Непрозрачность плашки", 0, 100, 5, 60)
+        .Unit(L"%", L"%")
+        .When("subtitles.background", "box")
+        .MpvBuild("sub-back-color", BuildSubBackColor);
+    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 0)
+        .Desc(L"Blur the edges of the text and its outline. 0 keeps them sharp.",
+              L"Размывать края текста и обводки. 0 — чёткие края.")
+        .Mpv("sub-blur");
     b.Slider("subtitles.position", L"Vertical position", L"Положение по вертикали", 0, 100, 1, 100)
         .Unit(L"%", L"%")
         .Desc(L"100% puts subtitles at the bottom edge, lower values move them up.",
               L"100% — у нижнего края, меньшие значения поднимают субтитры выше.")
         .Mpv("sub-pos");
+    b.Slider("subtitles.marginBottom", L"Distance from the bottom", L"Отступ снизу", 0, 150, 1, 22)
+        .Unit(L"px", L"пкс")
+        .Desc(L"Gap between subtitles and the bottom edge, in pixels of a 720p picture.",
+              L"Расстояние от субтитров до нижнего края в пикселях кадра 720p.")
+        .Mpv("sub-margin-y");
+    b.Toggle("subtitles.useBlackBars", L"Show subtitles in the black bars", L"Субтитры в чёрных полосах", true)
+        .Desc(L"When the video has black bars around it on screen, put subtitles there instead of over the picture.",
+              L"Если на экране вокруг видео есть чёрные полосы, показывать субтитры в них, а не поверх картинки.")
+        .MpvBool("sub-use-margins")
+        .MpvBool("sub-ass-force-margins");
+    b.Slider("subtitles.secondaryPosition", L"Secondary subtitles position", L"Положение вторых субтитров", 0, 100,
+             1, 0)
+        .Unit(L"%", L"%")
+        .Desc(L"Where the second subtitle track (chosen in the player) appears. 0% is the top edge.",
+              L"Где показывать вторые субтитры (выбираются в плеере). 0% — у верхнего края.")
+        .Mpv("secondary-sub-pos");
     b.Toggle("subtitles.assOverride", L"Apply this style to styled subtitles", L"Применять стиль к оформленным субтитрам",
              false)
         .Desc(L"Override fonts and colors of .ass subtitles. May break karaoke and signs.",
@@ -1648,8 +1782,10 @@ void BuildSystem(Builder& b) {
         .MpvBuild("demuxer-max-bytes", BuildDemuxerMaxBytes);
     b.Number("network.cacheLocal", L"Local files", L"Локальные файлы", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
+        .Desc(L"How far ahead to read files on this computer. Less uses less memory; 1000 is mpv's default.",
+              L"Насколько вперёд читать файлы с этого компьютера. Меньше — меньше памяти; 1000 — как в mpv.")
         .When("network.buffering", "custom")
-        .Hidden();  // not implemented yet
+        .MpvBuild("demuxer-readahead-secs", BuildReadahead, "1");
     b.Number("network.cacheDisc", L"Discs", L"Диски", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
         .When("network.buffering", "custom")
@@ -1703,10 +1839,26 @@ void BuildSystem(Builder& b) {
         .Hint(L"libmpv", L"libmpv")
         .Mpv("user-agent")
         .Reset("libmpv");
-    b.Toggle("network.ytdl", L"Open web pages with yt-dlp", L"Открывать веб-страницы через yt-dlp", false)
-        .Desc(L"Play YouTube and similar links. Requires yt-dlp.exe next to Lumen or on PATH.",
-              L"Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Lumen или в PATH.")
-        .MpvBool("ytdl");
+    {
+        const std::wstring& ytdlp = YtDlpPath();
+        b.Toggle("network.ytdl", L"Open web pages with yt-dlp", L"Открывать веб-страницы через yt-dlp", true)
+            .Desc(ytdlp.empty() ? W(L"Play YouTube and similar links. Requires yt-dlp.exe next to Lumen or on PATH.")
+                                : L"Play YouTube and similar links with " + ytdlp,
+                  ytdlp.empty() ? W(L"Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Lumen "
+                                    L"или в PATH.")
+                                : L"Воспроизводить ссылки YouTube и похожих сайтов через " + ytdlp)
+            .MpvBuild("ytdl", BuildYtdl, "no")
+            .MpvBuild("script-opts", BuildScriptOpts);
+        // Lumen never downloads yt-dlp; without it, say where to put it.
+        ItemRef missing = b.Info("network.ytdlMissing", L"For YouTube links, put yt-dlp.exe next to Lumen.exe",
+                                 L"Для ссылок YouTube положите yt-dlp.exe рядом с Lumen.exe", "hint")
+                              .Desc(L"yt-dlp.exe was not found next to Lumen.exe or on PATH. Download it from the "
+                                    L"yt-dlp project yourself, put it there and restart Lumen.",
+                                    L"yt-dlp.exe не найден ни рядом с Lumen.exe, ни в PATH. Скачайте его с сайта "
+                                    L"проекта yt-dlp, положите туда и перезапустите Lumen.")
+                              .When("network.ytdl", "true");
+        if (!ytdlp.empty()) missing.Hidden();
+    }
 
     // ===== Performance =====
     b.Cat("performance", "system", "preferences", L"Performance", L"Производительность", L"Performance Settings",
@@ -1908,7 +2060,7 @@ void BuildSystem(Builder& b) {
         .Desc(L"Options passed to scripts, e.g. osc-visibility=always,thumbfast-network=yes",
               L"Параметры для скриптов, например osc-visibility=always,thumbfast-network=yes")
         .When("extensions.loadOnStartup", "true")
-        .Mpv("script-opts");
+        .MpvBuild("script-opts", BuildScriptOpts);  // shares the list with network.ytdl
     b.Button("extensions.openFolder", L"Scripts folder", L"Папка скриптов", "open-scripts-folder", L"Open", L"Открыть");
 }
 
