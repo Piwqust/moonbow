@@ -207,8 +207,10 @@ void App::OnConfigChanged(const std::string& key) {
         library_.SetOptions({config_.GetBool("library.showHidden"), config_.GetBool("library.readTags")});
         library_.Rescan();
     }
-    // Settings mapped to mpv apply live as properties.
-    for (const auto& [name, value] : MpvOptionFor(config_, key)) player_.SetProperty(name.c_str(), value);
+    // Settings mapped to mpv apply live as properties. vf and hwdec are LiveState's: CPU filters
+    // need copy-back decoding first, in that order.
+    for (const auto& [name, value] : MpvOptionFor(config_, key))
+        if (name != "vf" && name != "hwdec") player_.SetProperty(name.c_str(), value);
 }
 
 std::string App::UiValue(const std::string& key, const std::string& fallback) const {
@@ -411,6 +413,7 @@ void App::OnPlayerReady(bool ok) {
     }
     Trace("mpv ready");
     engineReady_ = true;
+    Live().Start();  // owns live vf and hwdec changes (OnConfigChanged skips them)
     if (pendingIndex_ >= 0) {
         const int i = pendingIndex_;
         pendingIndex_ = -1;
@@ -1198,6 +1201,16 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
             "\nqueue=" + std::to_string(queue_.Items().size()) + "\ncurrent=" + std::to_string(queue_.Current()) +
             "\nfullscreen=" + (w->IsFullscreen() ? "1" : "0") + "\npip=" + (w->PictureInPicture() ? "1" : "0") +
             "\npopups=" + std::to_string(w->PopupCount()) + "\n";
+        return true;
+    }
+
+    if (verb == "prop") {
+        // Read-only: tests check mpv's own view (hwdec-current, vf, frame-drop-count...).
+        if (!engineReady_ || arg.empty()) {
+            r = engineReady_ ? "usage: prop <mpv property>" : "player not ready";
+            return false;
+        }
+        r = arg + "=" + player_.GetPropertyString(arg.c_str());
         return true;
     }
 

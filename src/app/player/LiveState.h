@@ -91,7 +91,7 @@ public:
 private:
     LiveState();
     void ObserveAll();
-    void ApplyVideoFilters();
+    void ApplyVideoFilters(bool force = false);  // force: don't wait for copy-back decoding
     void ApplyUpscaler();
     void ApplyHwdec();
     void LoadCropSetting();
@@ -113,6 +113,8 @@ private:
     int64_t areaW_ = 0, areaH_ = 0;  // video area (osd-dimensions), the upscaler's target
     uintptr_t areaTimer_ = 0;
     std::string appliedHwdec_;     // hwdec mpv runs with (copy-back while CPU filters are on)
+    bool vfPending_ = false;       // CPU filters wait for the decoder to switch to copy-back
+    uintptr_t vfTimer_ = 0;        // applies them anyway if it never reports that
 };
 
 inline LiveState& Live() {
