@@ -136,12 +136,12 @@ public:
     }
 
 private:
-    // Caller holds mu_.
+    // Caller holds mu_. While the idle worker is still closing its instance it is not joined
+    // here (that would block the UI thread on mpv_terminate_destroy): it rechecks for work after
+    // the close and carries on itself.
     void Wake() {
-        if (stop_ && !worker_.joinable()) return;
-        if (!running_) {
-            if (stop_) return;
-            if (worker_.joinable()) worker_.join();  // the previous worker shut down after idling
+        if (!running_ && !closing_ && !stop_) {
+            if (worker_.joinable()) worker_.join();  // already past Close(), only exiting
             if (!wake_) wake_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
             running_ = true;
             worker_ = std::thread([this] { Run(); });
@@ -205,27 +205,48 @@ private:
         return j;
     }
 
+    // Idle or exit: the cache and the request are dropped and the worker is marked not running
+    // under one lock, and only then the instance is closed, so a hover during the close starts
+    // from a clean state instead of meeting frames of a half-destroyed instance. Returns true when
+    // the worker should carry on (a hover arrived while closing).
+    bool ShutDownIdle() {
+        {
+            std::lock_guard lock(mu_);
+            grid_.clear();
+            lru_.clear();
+            failed_.clear();
+            rest_.reset();
+            restTime_ = -1;
+            path_.clear();
+            want_ = {};
+            hasWant_ = false;
+            wantAt_ = 0;
+            running_ = false;
+            closing_ = true;
+        }
+        const bool open = h_ != nullptr;
+        Close();
+        if (open) PreviewTrace(0, "preview instance closed");
+        std::lock_guard lock(mu_);
+        closing_ = false;
+        if (stop_ || !hasWant_) return false;
+        running_ = true;
+        return true;
+    }
+
     void Run() {
         for (;;) {
             Job job;
             double waitMs = 0;
+            bool idle = false;
             {
                 std::lock_guard lock(mu_);
                 if (!stop_) job = Next(NowMs(), &waitMs);
-                if (stop_ || (job.kind == Job::None && waitMs <= 0)) {
-                    // Idle (or exit): free the cache now, the instance below; the next hover starts anew.
-                    grid_.clear();
-                    lru_.clear();
-                    failed_.clear();
-                    rest_.reset();
-                    restTime_ = -1;
-                    path_.clear();
-                    want_ = {};
-                    hasWant_ = false;
-                    wantAt_ = 0;
-                    running_ = false;
-                    break;
-                }
+                idle = stop_ || (job.kind == Job::None && waitMs <= 0);
+            }
+            if (idle) {
+                if (ShutDownIdle()) continue;
+                break;
             }
             if (job.kind == Job::None) {
                 WaitForSingleObject(wake_, static_cast<DWORD>(std::clamp(waitMs, 1.0, kIdleMs)));
@@ -268,8 +289,6 @@ private:
             }
             if (MainWindow* w = TheApp().main()) PostMessageW(w->Hwnd(), ui::Host::kRepaintMessage, 0, 0);
         }
-        Close();
-        PreviewTrace(0, "preview instance closed");
     }
 
     bool Open() {
@@ -403,7 +422,7 @@ private:
     std::mutex mu_;
     std::thread worker_;
     HANDLE wake_ = nullptr;
-    bool stop_ = false, running_ = false;
+    bool stop_ = false, running_ = false, closing_ = false;
     // UI side (under mu_).
     std::wstring path_;
     Request want_;
