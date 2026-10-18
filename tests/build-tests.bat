@@ -33,7 +33,7 @@ if /i "%CONFIG%"=="debug" (
 )
 set "LIBS=user32.lib gdi32.lib shell32.lib shlwapi.lib ole32.lib propsys.lib uuid.lib"
 
-cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" "%ROOT%tests\core_tests.cpp" "%ROOT%src\core\*.cpp" "%ROOT%src\library\*.cpp" "%ROOT%src\app\player\Lyrics.cpp" /Fe"%OUT%\core_tests.exe" /link %LFLAGS% %LIBS% || exit /b 1
+cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" "%ROOT%tests\core_tests.cpp" "%ROOT%src\core\*.cpp" "%ROOT%src\library\*.cpp" "%ROOT%src\app\player\Lyrics.cpp" "%ROOT%src\app\PlayQueue.cpp" /Fe"%OUT%\core_tests.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 "%OUT%\core_tests.exe" %2
 exit /b %errorlevel%

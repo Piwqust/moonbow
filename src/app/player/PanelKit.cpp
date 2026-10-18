@@ -240,6 +240,7 @@ void Popover::OnLayout() {
     if (header) top += kHeaderH;
     float bottom = rect.Bottom();
     if (footer_) {
+        if (fitFooter) fitFooter(rect.h);
         const Size fs = footer_->Measure(rect.w, rect.h);
         footer_->Arrange({rect.x, bottom - fs.h, rect.w, fs.h});
         bottom -= fs.h;
@@ -666,7 +667,7 @@ void FlatButton::Paint(Painter& p) {
     PaintFocusRing(p, rect, 4);
     const Color fg = hot ? c.textSecondary : c.textTertiary;
     const float tw = gfx::Text::Get().Measure(text, TextStyle::Body).width;
-    const float iw = icon.empty() ? 0.0f : 26.0f;
+    const float iw = icon.empty() ? 0.0f : text.empty() ? 20.0f : 26.0f;
     const float x = std::round(rect.Cx() - (tw + iw) / 2);
     if (!icon.empty()) p.Icon(icon, {x, rect.Cy() - 10, 20, 20}, fg);
     p.Text(text, {x + iw, rect.y, tw + 2, rect.h}, TextStyle::Body, fg, HAlign::Leading, VAlign::Center, 0);

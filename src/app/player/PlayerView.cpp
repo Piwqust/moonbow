@@ -7,11 +7,13 @@
 #include "app/MainWindow.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerOverlays.h"
 #include "gfx/Text.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace app {
@@ -65,13 +67,30 @@ std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool all
     return items;
 }
 
+MenuItem SpeedMenu(std::initializer_list<double> speeds) {
+    MenuItem speed{Tr(L"Speed")};
+    for (double sp : speeds) {
+        wchar_t buf[32];
+        swprintf_s(buf, L"%g×", sp);
+        MenuItem m{panel::LocalDecimal(buf)};
+        m.radio = true;
+        m.checked = std::abs(PS().speed - sp) < 0.01;
+        m.action = [sp] { TheApp().player().SetSpeed(sp); };
+        speed.submenu.push_back(std::move(m));
+    }
+    return speed;
+}
+
+MenuItem PlayItem() {
+    const PlayerState& s = PS();
+    return Item(s.paused || !s.fileLoaded ? L"Play" : L"Pause", Action::PlayPause, s.paused || !s.fileLoaded ? "play" : "pause");
+}
+
 void ShowVideoContextMenu(Host* host, Point at) {
     App& app = TheApp();
     const PlayerState& s = PS();
     std::vector<MenuItem> items;
-    MenuItem play = Item(s.paused || !s.fileLoaded ? L"Play" : L"Pause", Action::PlayPause,
-                         s.paused || !s.fileLoaded ? "play" : "pause");
-    items.push_back(play);
+    items.push_back(PlayItem());
     items.push_back(Item(L"Stop", Action::Stop, "stop_twotone"));
     items.push_back(Item(L"Previous Item", Action::Previous, "previous_twotone"));
     items.push_back(Item(L"Next Item", Action::Next, "next_twotone"));
@@ -80,17 +99,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
 
     MenuItem playback{Tr(L"Playback"), L"", "playback"};
     // In their own submenu, so typing "speed" in the menu finds them.
-    MenuItem speed{Tr(L"Speed")};
-    for (double sp : {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0}) {
-        wchar_t buf[32];
-        swprintf_s(buf, L"%g×", sp);
-        MenuItem m{panel::LocalDecimal(buf)};
-        m.radio = true;
-        m.checked = std::abs(s.speed - sp) < 0.01;
-        m.action = [sp] { TheApp().player().SetSpeed(sp); };
-        speed.submenu.push_back(std::move(m));
-    }
-    playback.submenu.push_back(std::move(speed));
+    playback.submenu.push_back(SpeedMenu({0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0}));
     playback.submenu.push_back(MenuItem::Separator());
     // Text-only groups: a menu group has icons on all of its items or on none.
     playback.submenu.push_back(Item(L"Next chapter", Action::NextChapter));
@@ -176,6 +185,24 @@ void ShowVideoContextMenu(Host* host, Point at) {
 }
 
 }  // namespace
+
+void ShowPipContextMenu(Host* host, Point at) {
+    // Short: the PiP window is as small as 256x144 DIP and an in-window menu can't leave it.
+    std::vector<MenuItem> items;
+    items.push_back(PlayItem());
+    MenuItem audio{Tr(L"Audio"), L"", "audio"};
+    audio.submenu = TrackItems(L"audio", "aid", true);
+    items.push_back(std::move(audio));
+    MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
+    subs.submenu = TrackItems(L"sub", "sid", true);
+    items.push_back(std::move(subs));
+    MenuItem speed = SpeedMenu({0.5, 1.0, 1.25, 1.5, 2.0});
+    speed.icon = "speed";
+    items.push_back(std::move(speed));
+    items.push_back({Tr(L"Back to full window"), ShortcutText(Action::PictureInPicture), "open", false, true, false, false,
+                     [] { TheApp().main()->Post([] { TheApp().main()->SetPictureInPicture(false); }); }});
+    ShowContextMenu(host, at, std::move(items));
+}
 
 // The video rectangle: a transparent hole the mpv child window shows through,
 // framed by the chrome color. Handles clicks, double clicks, wheel, menu, and
@@ -359,7 +386,8 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     side_->visible = false;
     auto* rail = side_->Add<NavSidebar>();
     rail->SetCollapsed(true);
-    side_->Add<LibraryPane>(true)->width = Length::Px(kSidePanel);
+    sidePane_ = side_->Add<LibraryPane>(true);
+    sidePane_->width = Length::Px(kSidePanel);
 
     video_ = Add<VideoArea>(window, this);
     music_ = AddChild(CreateMusicView());
@@ -384,6 +412,10 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         }
     });
     screenConn_ = Connect(TheApp().screenChanged, [this] { UpdateStats(); });
+    // Subtitles shown, moved or resized: the skip / next-episode chips keep clear of them.
+    liveConn_ = Connect(Live().changed, [this] {
+        if (skipChapter_->visible || nextEpisode_->visible) InvalidateLayout();
+    });
     configToken_ = TheApp().config().Subscribe("general.developerMode", [this](const std::string&) { UpdateStats(); });
 }
 
@@ -407,6 +439,32 @@ Rect PlayerView::VideoRect() const {
     return video_->Inner(immersive);
 }
 
+// Height of the strip mpv draws two lines of subtitles in, from the bottom of a picture `h` DIP
+// tall; 0 while none are shown. mpv sizes them in pixels of a 720-line picture.
+float PlayerView::SubtitleBand(float h) const {
+    const PlayerState& s = PS();
+    const LiveValues& lv = Live().V();
+    const bool shown = lv.subVisible && std::any_of(s.tracks.begin(), s.tracks.end(), [](const Track& t) {
+        return t.selected && t.type == L"sub";
+    });
+    if (!shown || h <= 0) return 0;
+    const Config& c = TheApp().config();
+    static const std::pair<const char*, double> kSizes[] = {
+        {"smaller", 28}, {"small", 33}, {"large", 46}, {"larger", 54}, {"huge", 64}};
+    double size = 38;  // mpv's default sub-font-size ("auto")
+    const std::string pick = c.GetString("subtitles.size");
+    for (const auto& [name, px] : kSizes)
+        if (pick == name) size = px;
+    const double lines = 2.5 * size * (lv.subScale > 0 ? lv.subScale : 1);
+    const double margin = c.GetDouble("subtitles.marginBottom");
+    const double raised = std::clamp(100 - lv.subPos, 0.0, 100.0) / 100 * h;
+    if (c.GetString("subtitles.sizeMode") == "pixels") {
+        const float scale = GetHost() ? GetHost()->Scale() : 1.0f;
+        return static_cast<float>((lines + margin * h / 720) / scale + raised);
+    }
+    return static_cast<float>((lines + margin) / 720 * h + raised);
+}
+
 void PlayerView::OnLayout() {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
     const PlayerState& s = PS();
@@ -415,13 +473,16 @@ void PlayerView::OnLayout() {
     const bool pip = window_->PictureInPicture();
 
     float x = rect.x;
+    // At most 45% of a small window (800 DIP: 360 instead of 416), so the video stays usable.
+    const float sideW = std::min({kSideRail + kSidePanel, std::max(280.0f, std::floor(rect.w * 0.45f)), rect.w});
+    if (side_->visible) sidePane_->width = Length::Px(std::max(0.0f, sideW - kSideRail));
     if (side_->visible && !immersive) {
-        side_->Arrange({rect.x, rect.y, kSideRail + kSidePanel, rect.h - barH});
-        x += kSideRail + kSidePanel;
+        side_->Arrange({rect.x, rect.y, sideW, rect.h - barH});
+        x += sideW;
     } else if (side_->visible) {
         // Fullscreen: an opaque sheet along the whole left edge over the picture (it kept its
         // windowed rect before, with the video showing around it). The bar draws on top of it.
-        side_->Arrange({rect.x, rect.y, std::min(kSideRail + kSidePanel, rect.w), rect.h});
+        side_->Arrange({rect.x, rect.y, sideW, rect.h});
     }
     // A floating bar (fullscreen, or windowed auto-hide) leaves the whole height to the video.
     const bool overlay = window_->BarOverlays() && !audioOnly;
@@ -455,19 +516,19 @@ void PlayerView::OnLayout() {
         error_->Arrange(v.Center(sz.w, sz.h));
     }
 
-    // Bottom-right of the picture, above a floating bar.
+    // Bottom-right of the picture, above a floating bar and above the subtitle lines; top-right
+    // when that would put them in the upper half of a small picture.
     const Rect v = video_->Inner(immersive);
-    const float bottom = v.Bottom() - 20 - ((immersive || overlay) && bar_->visible ? barSpace : 0.0f);
+    const float bottom = std::min(v.Bottom() - 20 - ((immersive || overlay) && bar_->visible ? barSpace : 0.0f),
+                                  v.Bottom() - SubtitleBand(v.h) - 12);
+    auto place = [&](Widget* w, Size sz) {
+        const float top = bottom - sz.h < v.y + v.h * 0.5f ? v.y + (immersive ? 64.0f : 20.0f) : bottom - sz.h;
+        w->Arrange({v.Right() - 24 - sz.w, top, sz.w, sz.h});
+    };
     nextEpisode_->visible = nextEpisode_->Wanted() && s.fileLoaded && !pip && v.w > 400;
-    if (nextEpisode_->visible) {
-        const Size sz = nextEpisode_->Measure(std::min(340.0f, v.w - 48), v.h);
-        nextEpisode_->Arrange({v.Right() - 24 - sz.w, bottom - sz.h, sz.w, sz.h});
-    }
+    if (nextEpisode_->visible) place(nextEpisode_, nextEpisode_->Measure(std::min(340.0f, v.w - 48), v.h));
     skipChapter_->visible = skipChapter_->Wanted() && !nextEpisode_->visible && !pip;
-    if (skipChapter_->visible) {
-        const Size sz = skipChapter_->Measure(v.w, 40);
-        skipChapter_->Arrange({v.Right() - 24 - sz.w, bottom - sz.h, sz.w, sz.h});
-    }
+    if (skipChapter_->visible) place(skipChapter_, skipChapter_->Measure(v.w, 40));
     UpdateStats();
 }
 

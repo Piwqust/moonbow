@@ -50,6 +50,7 @@ public:
         next_->onClick = [] { Run(Action::Next); };
         seek_ = Add<SeekBar>();
         seek_->compact = true;
+        onContextMenu = [this](const MouseEvent& e) { ShowPipContextMenu(GetHost(), {e.x, e.y}); };
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeState | kChangeFile)) {
                 play_->icon = TheApp().player().State().paused ? "play" : "pause";

@@ -1,6 +1,7 @@
 #pragma once
 #include "Player.h"
 #include "app/ImageCache.h"
+#include "app/PlayQueue.h"
 #include "app/Signal.h"
 #include "app/SystemIntegration.h"
 #include "core/Config.h"
@@ -40,52 +41,6 @@ struct Route {
 
 const wchar_t* SectionName(Section s);  // English, translate with Tr()
 const char* SectionIcon(Section s);
-
-// --- play queue --------------------------------------------------------------------
-
-struct QueueItem {
-    std::wstring path;   // file path or URL
-    std::wstring title;  // optional display name
-    double duration = 0; // seconds, 0 if unknown
-};
-
-enum class Repeat : uint8_t { Off, All, One };
-
-class PlayQueue {
-public:
-    const std::vector<QueueItem>& Items() const { return items_; }
-    int Current() const { return current_; }
-    const QueueItem* CurrentItem() const;
-    bool Shuffle() const { return shuffle_; }
-    Repeat RepeatMode() const { return repeat_; }
-    std::wstring Name() const { return name_; }  // e.g. folder or playlist name
-
-    void Set(std::vector<QueueItem> items, int current, std::wstring name = {});
-    void Add(std::vector<QueueItem> items);           // append
-    void InsertNext(std::vector<QueueItem> items);    // after the current item
-    void Remove(int index);
-    void Move(int from, int to);
-    void Clear();
-    void SetCurrent(int index);
-    void SetShuffle(bool on);
-    void SetRepeat(Repeat r);
-
-    // Index of the item that plays after/before the current one, or -1.
-    int NextIndex(bool userAction) const;
-    int PrevIndex() const;
-    double TotalDuration() const;
-
-    Signal<> changed;
-
-private:
-    void Reshuffle();
-    std::vector<QueueItem> items_;
-    std::vector<int> order_;  // play order when shuffled
-    int current_ = -1;
-    bool shuffle_ = false;
-    Repeat repeat_ = Repeat::Off;
-    std::wstring name_;
-};
 
 // --- application ---------------------------------------------------------------------
 
@@ -130,6 +85,9 @@ public:
     // Hands the item that plays after the current one to mpv (gapless, prefetch), or none when
     // the queue stops there. Called whenever the queue or its options change.
     void SyncNextInPlayer(bool force = false);
+    // Takes an item out of the queue; removing the one that plays goes on to its successor
+    // (or stops at the end), so the player never keeps a file the queue no longer has.
+    void RemoveFromQueue(int index);
     void OpenFileDialog();
     void OpenFolderDialog();
     void OpenSubtitleDialog();
@@ -216,6 +174,7 @@ private:
     bool fittedOnce_ = false;
     bool quitting_ = false;
     int queuedIndex_ = -1;      // queue index of the file handed to Player::QueueNext
+    uint64_t infoSerial_ = 0;   // PlayerState::loadSerial whose title/duration the queue item has
     bool settingCurrent_ = false;  // PlayIndex/OnAdvanced move the queue; they sync mpv themselves
 };
 

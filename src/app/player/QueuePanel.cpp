@@ -150,12 +150,20 @@ public:
         }
     }
 
+    // The player's state describes this row only once mpv has this very file open (right after
+    // a move on it still holds the previous one's title and duration).
+    bool Playing(int i) const {
+        return i == TheApp().queue().Current() && PS().fileLoaded &&
+               PS().path == TheApp().queue().Items()[static_cast<size_t>(i)].path;
+    }
+
     double DurationOf(int i) const {
         const auto& items = TheApp().queue().Items();
         const QueueItem& item = items[static_cast<size_t>(i)];
-        if (i == TheApp().queue().Current() && PS().fileLoaded && PS().duration > 0) return PS().duration;
+        if (Playing(i) && PS().duration > 0) return PS().duration;
         if (item.duration > 0) return item.duration;
-        if (const library::MediaItem* m = TheApp().library().Current()->FindItem(item.path)) return m->duration;
+        if (const library::MediaItem* m = LibraryItem(i); m && m->duration > 0) return m->duration;
+        if (const library::HistoryEntry* h = TheApp().history().Find(item.path)) return h->duration;
         return 0;
     }
 
@@ -168,9 +176,11 @@ public:
         // Folder queues store the file name as the title: tags are better when known.
         const std::wstring file = FileNameOf(item.path);
         if (!item.title.empty() && item.title != file) return item.title;
-        if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().title.empty() && PS().title != file)
-            return PS().title;
         if (const library::MediaItem* m = LibraryItem(i); m && !m->title.empty() && m->title != file) return m->title;
+        // Tags seen when it played before (the playing file's land in item.title a second in, App.cpp).
+        if (const library::HistoryEntry* h = TheApp().history().Find(item.path);
+            h && !h->title.empty() && h->title != file && item.path.find(L"://") == std::wstring::npos)
+            return h->title;
         // Like the title bar: the file name without its extension.
         const size_t dot = file.find_last_of(L'.');
         return dot != std::wstring::npos && dot > 0 && item.path.find(L"://") == std::wstring::npos ? file.substr(0, dot)
@@ -179,7 +189,7 @@ public:
 
     // Artist of an audio item when its tags (or the playing file) know it.
     std::wstring ArtistOf(int i) const {
-        if (i == TheApp().queue().Current() && PS().fileLoaded && !PS().hasVideo) return PS().artist;
+        if (Playing(i) && !PS().hasVideo) return PS().artist;
         if (const library::MediaItem* m = LibraryItem(i); m && m->kind == library::MediaKind::Audio) return m->artist;
         return {};
     }
@@ -206,7 +216,7 @@ public:
         const std::wstring dur = d > 0 ? ClockTime(d) : L"";
         const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, ts).width + 4;
         const bool showRemove = hot && !compact_;
-        const float right = r.Right() - (showRemove ? 28.0f : 0.0f);
+        const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - (compact_ ? 6.0f : 10.0f);
         const Color fg = current ? c.accent : hot ? c.textPrimary : RowText();
         const float avail = std::max(0.0f, right - textX - dw - 10);
         const std::wstring title = TitleOf(i);
@@ -359,7 +369,7 @@ public:
 
     void Remove(int i) {
         if (i < 0 || i >= Count()) return;
-        TheApp().queue().Remove(i);
+        TheApp().RemoveFromQueue(i);
         hover_ = -1;
     }
 
