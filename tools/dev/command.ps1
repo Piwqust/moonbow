@@ -81,6 +81,7 @@ public static class LumenCmd {
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll", EntryPoint="GetWindowLongW")] public static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW")]
   public static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, ref COPYDATASTRUCT l, uint flags, uint ms, out IntPtr result);
@@ -108,6 +109,8 @@ public static class LumenCmd {
 "@
 $h = [LumenCmd]::FindMain([uint32]$ProcessId)
 if ($h -eq [IntPtr]::Zero) { throw "no main LumenHost window for process $ProcessId" }
+# Only --automation instances (WS_EX_NOACTIVATE windows, ui/Host.cpp) take commands; say so instead of waiting.
+if (([LumenCmd]::GetWindowLong($h, -20) -band 0x08000000) -eq 0) { throw "process $ProcessId is not a --automation instance" }
 $replyFile = Join-Path $env:TEMP "lumen-cmd-$ProcessId.txt"
 $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
 while ($true) {

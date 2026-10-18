@@ -19,8 +19,15 @@ $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 if (-not $ffmpeg) { throw "ffmpeg is not on PATH (where ffmpeg)" }
 # Bump when the content changes: an older set is rebuilt instead of being topped up.
 $version = "2"
+# A rebuild deletes -Out: only ever a folder inside %TEMP% that this script made (it has the stamp).
+$tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+$Out = [IO.Path]::GetFullPath($Out).TrimEnd('\')
+if (-not $Out.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "-Out must be a folder inside %TEMP%: $Out" }
 $stamp = Join-Path $Out ".worstcase-version"
-if ((Test-Path $Out) -and ($Force -or -not (Test-Path $stamp) -or (Get-Content -Raw $stamp).Trim() -ne $version)) { Remove-Item -Recurse -Force $Out }
+if ((Test-Path $Out) -and ($Force -or -not (Test-Path $stamp) -or (Get-Content -Raw $stamp).Trim() -ne $version)) {
+  if (Test-Path $stamp) { Remove-Item -Recurse -Force $Out }
+  elseif (Get-ChildItem -Force $Out | Select-Object -First 1) { throw "$Out is not a worst-case set (no .worstcase-version): not deleting it" }
+}
 New-Item -ItemType Directory -Force $Out | Out-Null
 $tmp = Join-Path (Split-Path -Parent $Out) ((Split-Path -Leaf $Out) + "-base")  # outside the library roots
 New-Item -ItemType Directory -Force $tmp | Out-Null
