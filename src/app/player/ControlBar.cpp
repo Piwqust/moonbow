@@ -577,7 +577,19 @@ void SeekBar::OnMouseLeave() {
 void SeekBar::Paint(Painter& p) {
     const PlayerState& s = TheApp().player().State();
     const Rect t = Track();
-    p.Fill(t, P().bgDeep, compact ? 3.0f : 3.0f);
+    // The unplayed track needs ~3:1 against the bar (WCAG 1.4.11). bgDeep does that only in the
+    // dark theme; in light it is #E6E6E6 on #EBEBEB, so the thin tracks take the volume wedge's
+    // "empty" tone and the tall one a groove with an outline of it.
+    const bool light = Theme::Get().Mode() == ThemeMode::Light;
+    const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
+    const bool thin = slim || compact;
+    const Color track = slim ? (light ? empty : P().lineStrong) : compact ? (light ? empty : P().bgDeep)
+                        : light ? P().lineStrong : P().bgDeep;
+    // Thin tracks show the played part in the accent itself: a dimmed accent would be darker than
+    // the grey of the rest.
+    const bool strongPlayed = slim || (compact && light);
+    p.Fill(t, track, 3.0f);
+    if (!thin && light) p.Stroke(t, empty, 3.0f);
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));
@@ -593,8 +605,8 @@ void SeekBar::Paint(Painter& p) {
             smooth = smooth * 0.55f + r * 0.45f;
             const float bh = std::round(4 + (t.h - 10) * smooth * smooth * 1.4f);
             const float bhc = std::min(bh, t.h - 6);
-            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc}, bx < playX ? P().accentMid : P().lineStrong,
-                   0.75f);
+            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc},
+                   bx < playX ? P().accentMid : light ? empty : P().lineStrong, 0.75f);
         }
         const float x = std::clamp(playX, t.x + 2, t.Right() - 2);
         p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);
@@ -605,7 +617,7 @@ void SeekBar::Paint(Painter& p) {
         const float kc = static_cast<float>(std::clamp(s.cacheTime / s.duration, 0.0, 1.0));
         p.Fill({t.x + t.w * k, t.Bottom() - 3, t.w * (kc - k), 3}, P().line, 1);
     }
-    p.Fill({t.x, t.y, t.w * k, t.h}, Color::Mix(P().bgDeep, P().accent, 0.32f), 3);
+    p.Fill({t.x, t.y, t.w * k, t.h}, strongPlayed ? P().accent : Color::Mix(track, P().accent, 0.32f), 3);
     // A-B loop range.
     const LiveValues& lv = LiveState::Get().V();
     if (!std::isnan(lv.abA)) {
@@ -617,8 +629,14 @@ void SeekBar::Paint(Painter& p) {
     }
     for (const Chapter& c : s.chapters) {
         if (c.time <= 0 || c.time >= s.duration) continue;  // a mark past the end would sit beyond the bar
-        const float cx = t.x + t.w * static_cast<float>(c.time / s.duration);
-        p.Fill({std::round(cx), t.y + (compact ? 0.0f : 6.0f), 1, compact ? t.h : t.h - 12}, P().lineStrong);
+        const float cx = std::round(t.x + t.w * static_cast<float>(c.time / s.duration));
+        if (slim)
+            // A 4-8 DIP track has no room for a tick inside it: a 2 DIP gap in the track (uosc).
+            p.Fill({cx - 1, t.y, 2, t.h}, P().bgChrome);
+        else if (compact)
+            p.Fill({cx, t.y, 1, t.h}, light ? P().bgPanel : P().lineStrong);
+        else
+            p.Fill({cx, t.y + 6, 1, t.h - 12}, light ? P().bgChrome : P().lineStrong);
     }
     const float x = std::clamp(t.x + t.w * k, t.x + 2, t.Right() - 2);
     if (slim)
@@ -644,6 +662,12 @@ void SeekBar::PaintOver(Painter& p) {
     const float at = dragging_ ? tr.x + tr.w * static_cast<float>(t / s.duration) : hoverX_;
     const Size client = GetHost() ? GetHost()->ClientSize() : Size{rect.Right(), rect.Bottom()};
     const Rect bounds{0, 0, client.w, client.h};
+    if (!dragging_) {
+        // Where a click would land, under the tip (uosc, YouTube): easier to aim on a wide bar.
+        const float hx = std::round(std::clamp(hoverX_, tr.x, tr.Right()));
+        const float grow = slim ? 4.0f : 0.0f;
+        p.Fill({hx - 1, tr.y - grow, 2, tr.h + 2 * grow}, P().textPrimary.Fade(0.7f), 1);
+    }
     PaintSeekPreview(p, tr, at, t, bounds);
     const Rect tip{ClampedLeft(at, w, tr, bounds), tr.y - 34, w, 26};
     p.Shadow(tip, 4, 8, 3, 0.3f);
@@ -710,15 +734,23 @@ void ControlBar::OnLayout() {
 }
 
 void ControlBar::Paint(Painter& p) {
+    // The bar and everything on it (buttons, seek bar, times, the seek tip in PaintOver) fade as
+    // one: the opacity multiplies every primitive until PaintOver pops it, no offscreen layer.
+    p.PushOpacity(opacity);
     if (floating) {
-        // Over the picture: a rounded, nearly opaque panel with a soft shadow, inset from the edges.
+        // Over the picture: a rounded, opaque panel with a soft shadow, inset from the edges. Opaque,
+        // so the picture's colours never show through it (no hue seam where the video changes).
         const float r = minimal_ ? 20.0f : 14.0f;
-        p.Shadow(rect, r, 18, 6, 0.40f * opacity);
-        p.Fill(rect, P().bgChrome.Fade(0.96f * opacity), r);
-        p.Stroke(rect, P().line.Fade(opacity), r);
+        p.Shadow(rect, r, 18, 6, 0.40f);
+        p.Fill(rect, P().bgChrome, r);
+        p.Stroke(rect, P().line, r);
         return;
     }
-    p.Fill(rect, P().bgChrome.Fade(opacity));
+    p.Fill(rect, P().bgChrome);
+}
+
+void ControlBar::PaintOver(Painter& p) {
+    p.PopOpacity();
 }
 
 }  // namespace app
