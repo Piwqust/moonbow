@@ -289,6 +289,7 @@ public:
         };
         maxW = 280;
     }
+    bool Last() const { return last_; }
     void Paint(Painter& p) override {
         const Color c = last_ ? P().textPrimary : (IsHot() ? P().textPrimary : P().textSecondary);
         p.Text(text, rect, style, c);
@@ -434,12 +435,13 @@ void LibraryPane::RefreshHeader() {
         }
         const long long n = view_->ItemCount();
         // The side panel is too narrow for crumbs and a count side by side.
-        count_->visible = n >= 0 && !compact_;
+        countWanted_ = n >= 0 && !compact_;
+        count_->visible = countWanted_;
         count_->SetText(n >= 0 ? CountItems(n) : L"");
-        mode_->visible = view_->HasViewModes();
+        mode_->visible = view_->HasViewModes() && n != 0;  // nothing to sort or lay out on an empty page
         mode_->icon = view_->GetViewMode() == ViewMode::Grid ? "list" : "grid";
         mode_->tooltip = view_->GetViewMode() == ViewMode::Grid ? Tr(L"List view") : Tr(L"Grid view");
-        sort_->visible = !view_->SortMenu().empty();
+        sort_->visible = !view_->SortMenu().empty() && n != 0;
         search_->visible = view_->HasSearch() && (!compact_ || search_->visible);
         searchBtn_->visible = compact_ && view_->HasSearch();
         more_->visible = !view_->MoreMenu().empty();
@@ -457,6 +459,13 @@ void LibraryPane::FocusSearch() {
 
 void LibraryPane::OnLayout() {
     if (!compact_ && search_) search_->width = Length::Px(std::clamp(rect.w - 520.0f, 140.0f, 324.0f));
+    // In a tight header the current page keeps its name: parent crumbs get shorter and the item
+    // count steps aside (it was drawn over the chevron and the current crumb shrank to nothing).
+    const bool tight = !compact_ && rect.w < 900;
+    if (crumbs_)
+        for (auto& c : crumbs_->Children())
+            if (auto* crumb = dynamic_cast<CrumbButton*>(c.get()); crumb && !crumb->Last()) crumb->maxW = tight ? 110.0f : 280.0f;
+    if (count_) count_->visible = countWanted_ && !tight;
     Widget::OnLayout();
 }
 

@@ -688,8 +688,17 @@ void ShowNetworkStreamDialog() {
 
     auto validate = [urls, hint, hintIcon, open] {
         int bad = 0;
-        const auto links = ParseLinks(urls->Text(), &bad);
+        const std::wstring text = urls->Text();
+        const auto links = ParseLinks(text, &bad);
         open->enabled = bad == 0 && !links.empty();
+        // The line being typed isn't an error yet ("h", "http", "rtsp:/"): only once it is long
+        // enough to have a scheme, or another line follows it.
+        if (bad != 0) {
+            const size_t lineStart = text.find_last_of(L'\n');
+            const std::wstring last = Trim(lineStart == std::wstring::npos ? text : text.substr(lineStart + 1));
+            const int lines = 1 + static_cast<int>(std::count(text.begin(), text.end(), L'\n'));
+            if (bad == lines && last.find(L"://") == std::wstring::npos && last.size() < 10) bad = 0;
+        }
         const bool site = std::any_of(links.begin(), links.end(), IsSiteLink);
         // Site links stay allowed without yt-dlp (some serve media directly), but say why they may fail.
         const bool warn = bad != 0 || (site && !SiteLinksPlayable());

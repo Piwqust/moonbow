@@ -911,7 +911,12 @@ Rect ScrollView::ThumbRect() const {
 
 Widget* ScrollView::HitTest(float x, float y) {
     if (!visible || !rect.Contains(x, y)) return nullptr;
-    if (MaxOffset() > 0 && x >= rect.Right() - 14) return this;
+    // The scrollbar strip takes the pointer only where the thumb is, or while the bar is shown
+    // (paging clicks): otherwise the right edge of every row stayed dead (no click, no menu).
+    if (MaxOffset() > 0 && x >= rect.Right() - 14) {
+        const Rect thumb = ThumbRect();
+        if (barVisible_.Get() > 0.5f || dragging_ || (y >= thumb.y - 6 && y < thumb.Bottom() + 6)) return this;
+    }
     for (auto it = Children().rbegin(); it != Children().rend(); ++it)
         if (Widget* hit = (*it)->HitTest(x, y)) return hit;
     return this;

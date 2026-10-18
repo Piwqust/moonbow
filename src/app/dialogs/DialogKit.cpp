@@ -422,10 +422,14 @@ Frame::Frame(std::wstring title, float w, float h) {
     close->focusable = false;  // Esc closes; keep Tab on the content
     close->onClick = [this] { Close(); };
 
-    body_ = Add<Widget>();
+    // The body scrolls when the window is shorter than the dialog (720x440 minimum): the header
+    // and the footer with its buttons stay reachable.
+    auto* scroll = Add<ScrollView>();
+    scroll->width = Length::Grow();
+    scroll->height = Length::Grow();
+    body_ = scroll->SetContent<Widget>();
     body_->dir = Dir::Column;
     body_->width = Length::Grow();
-    if (h > 0) body_->height = Length::Grow();
     body_->pad = {20, 22, 20, 22};
     body_->gap = 20;
 

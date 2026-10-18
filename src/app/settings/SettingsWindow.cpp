@@ -193,6 +193,25 @@ public:
 
     ~SettingsWindow() override { Detach(); }
 
+    // In a wide window the rows keep a readable width (label and control ~900 DIP apart at most):
+    // the side padding grows instead.
+    void FitPage() {
+        Widget* page = content_ ? content_->Content() : nullptr;
+        if (!page) return;
+        const float w = content_->rect.w > 0 ? content_->rect.w : ClientSize().w - 280;
+        const float side = 24 + std::max(0.0f, (w - 48 - kMaxPageW) / 2);
+        page->pad = {side, 20, side, 40};
+        page->InvalidateLayout();
+    }
+    void OnResize() override { FitPage(); }
+    void OnLayoutDone() override {
+        Widget* page = content_ ? content_->Content() : nullptr;
+        const float w = content_ ? content_->rect.w : 0;
+        const float side = 24 + std::max(0.0f, (w - 48 - kMaxPageW) / 2);
+        if (page && w > 0 && std::abs(page->pad.l - side) > 0.5f) FitPage();  // first layout after a build
+    }
+    static constexpr float kMaxPageW = 880;
+
     // Stops listening to the app; called when the window is destroyed.
     void Detach() {
         if (configToken_) Cfg().Unsubscribe(configToken_);
@@ -309,8 +328,8 @@ private:
         auto* page = content_->SetContent<Widget>();
         page->dir = Dir::Column;
         page->width = Length::Grow();
-        page->pad = {24, 20, 24, 40};
         page->gap = 20;
+        FitPage();
         if (!query_.empty())
             BuildSearch(page);
         else if (const Category* c = settings::FindCategory(category_))

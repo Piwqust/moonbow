@@ -926,7 +926,7 @@ void Host::UpdateTooltip() {
         o.dismissOnOutside = false;
         auto bubble = std::make_unique<TooltipBubble>(tooltipFor_->tooltip);
         Size s = bubble->Measure(400, 200);
-        if (r.w < 80) {
+        if (r.w < 80 && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
             o.anchor.x -= s.w / 2;
             // Controls along the bottom edge (the player bar): above them, not over the buttons.
             if (r.Bottom() + 6 + s.h > ClientSize().h - 8) o.anchor.y = r.y - 6 - s.h;
@@ -1212,6 +1212,19 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
             mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale());
             mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale());
+            // Maximized = the monitor's work area (plus the frame WM_NCCALCSIZE takes off), so the
+            // window never covers the taskbar, whatever the style (tool windows, custom frame).
+            MONITORINFO mi{sizeof(mi)};
+            if (options_.customFrame && !fullscreen_ &&
+                GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST), &mi)) {
+                const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
+                const int fx = GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad;
+                const int fy = GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad;
+                mmi->ptMaxPosition = {mi.rcWork.left - mi.rcMonitor.left - fx, mi.rcWork.top - mi.rcMonitor.top - fy};
+                mmi->ptMaxSize = {mi.rcWork.right - mi.rcWork.left + 2 * fx, mi.rcWork.bottom - mi.rcWork.top + 2 * fy};
+                mmi->ptMaxTrackSize = {std::max(mmi->ptMaxTrackSize.x, mmi->ptMaxSize.x),
+                                       std::max(mmi->ptMaxTrackSize.y, mmi->ptMaxSize.y)};
+            }
             return 0;
         }
 

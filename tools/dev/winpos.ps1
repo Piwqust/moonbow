@@ -1,6 +1,6 @@
 # Moves/resizes one of YOUR Lumen test windows (never other windows): -ProcessId N -Size 800,500 [-Pos 100,100]
-# or -Maximize / -Restore. Client pixels are what capture.ps1 and input.ps1 use.
-param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Size = "", [string]$Pos = "", [switch]$Maximize, [switch]$Restore)
+# or -Maximize / -Restore; -Title "Настройки" picks another window of the process by title.
+param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Title = "", [string]$Size = "", [string]$Pos = "", [switch]$Maximize, [switch]$Restore)
 if (-not ("LumenWin" -as [type])) {
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
@@ -12,12 +12,16 @@ public static class LumenWin {
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint c);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint f);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
-  public static IntPtr Find(uint pid) { IntPtr f = IntPtr.Zero;
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  public static IntPtr Find(uint pid, string title) { IntPtr f = IntPtr.Zero;
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (p == pid && c.ToString() == "LumenHost" && GetWindow(h, 4) == IntPtr.Zero) { f = h; return false; } return true; }, IntPtr.Zero); return f; }
+      if (p != pid || c.ToString() != "LumenHost") return true;
+      var t = new StringBuilder(256); GetWindowText(h, t, 256);
+      if (title.Length > 0 ? t.ToString().Contains(title) : GetWindow(h, 4) == IntPtr.Zero) { f = h; return false; }
+      return true; }, IntPtr.Zero); return f; }
 }
 "@ }
-$h = [LumenWin]::Find([uint32]$ProcessId)
+$h = [LumenWin]::Find([uint32]$ProcessId, $Title)
 if ($h -eq [IntPtr]::Zero) { throw "no Lumen window for $ProcessId" }
 if ($Maximize) { [LumenWin]::ShowWindow($h, 3) | Out-Null; return }   # SW_MAXIMIZE (no activation in automation: window is NOACTIVATE)
 if ($Restore) { [LumenWin]::ShowWindow($h, 9) | Out-Null; return }

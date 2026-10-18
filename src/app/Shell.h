@@ -56,6 +56,7 @@ public:
     void OnLayout() override;
 
 private:
+    bool countWanted_ = false;  // the view has a count (hidden anyway in a tight header)
     void Build();
     void BuildHeader();
     void RefreshHeader();
