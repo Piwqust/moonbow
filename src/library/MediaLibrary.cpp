@@ -161,6 +161,12 @@ void ReadMetadata(MediaItem& it) {
         it.title = PropString(store, PKEY_Title);
         it.artist = PropString(store, PKEY_Music_Artist);
         it.album = PropString(store, PKEY_Music_AlbumTitle);
+        PROPVARIANT n;
+        PropVariantInit(&n);
+        if (SUCCEEDED(store->GetValue(PKEY_Music_TrackNumber, &n)) && n.vt == VT_UI4) it.track = static_cast<int>(n.ulVal);
+        PropVariantClear(&n);
+        if (SUCCEEDED(store->GetValue(PKEY_Media_Year, &n)) && n.vt == VT_UI4) it.year = static_cast<int>(n.ulVal);
+        PropVariantClear(&n);
     }
     store->Release();
 }
@@ -170,6 +176,7 @@ struct CacheEntry {
     int64_t mtime = 0;
     double duration = 0;
     std::wstring title, artist, album;
+    int track = 0, year = 0;
 };
 
 std::unordered_map<std::wstring, CacheEntry> LoadCache() {
@@ -177,7 +184,8 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"library-cache.json"), &text)) return cache;
     std::optional<json::Value> doc = json::Parse(text);
-    if (!doc) return cache;
+    // Version 2 added track numbers and years: older caches are read again from the files.
+    if (!doc || doc->GetInt("version") < 2) return cache;
     const json::Value* items = doc->Find("items");
     if (!items) return cache;
     for (const json::Value& e : items->AsArray()) {
@@ -188,6 +196,8 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
         c.title = e.GetWString("t");
         c.artist = e.GetWString("a");
         c.album = e.GetWString("l");
+        c.track = static_cast<int>(e.GetInt("n"));
+        c.year = static_cast<int>(e.GetInt("y"));
         cache.emplace(PathKey(e.GetWString("p")), std::move(c));
     }
     return cache;
@@ -206,10 +216,12 @@ void SaveCache(const Snapshot& s) {
         if (!it.title.empty()) e.Set("t", json::ToUtf8(it.title));
         if (!it.artist.empty()) e.Set("a", json::ToUtf8(it.artist));
         if (!it.album.empty()) e.Set("l", json::ToUtf8(it.album));
+        if (it.track > 0) e.Set("n", it.track);
+        if (it.year > 0) e.Set("y", it.year);
         items.Push(std::move(e));
     }
     json::Value doc = json::Value::MakeObject();
-    doc.Set("version", 1);
+    doc.Set("version", 2);
     doc.Set("items", std::move(items));
     json::WriteFileAtomic(DataFilePath(L"library-cache.json"), json::Serialize(doc));
 }
@@ -467,6 +479,8 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
                 it.title = std::move(c->second.title);
                 it.artist = std::move(c->second.artist);
                 it.album = std::move(c->second.album);
+                it.track = c->second.track;
+                it.year = c->second.year;
             } else if (!it.offline) {
                 pending.push_back(i);
             }

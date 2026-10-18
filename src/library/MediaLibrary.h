@@ -37,6 +37,8 @@ struct MediaItem {
     std::wstring title;     // tags, may be empty
     std::wstring artist;
     std::wstring album;
+    int track = 0;  // track number tag, 0 = none
+    int year = 0;   // release year tag, 0 = none
     bool offline = false;    // cloud placeholder (OneDrive etc.): content not on this disk
     std::wstring searchKey;  // SearchFold(name + title + artist + album)
 

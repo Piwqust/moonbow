@@ -222,7 +222,8 @@ public:
                 SortMenuItems(m, {{L"Title A-Z", "name"}, {L"Title Z-A", "name:desc"}, {L"Most Songs First", "count"}});
                 return m;
             default:
-                SortMenuItems(m, {{L"Title A-Z", "title"},
+                SortMenuItems(m, {{L"Track Number", "track"},
+                                  {L"Title A-Z", "title"},
                                   {L"Title Z-A", "title:desc"},
                                   {L"Artist A-Z", "artist"},
                                   {L"Artist Z-A", "artist:desc"},
@@ -289,7 +290,7 @@ protected:
                                                                  : SameText(GenreIndex::Get().GenreOf(m->path), arg_);
                     if (in) v.push_back(m);
                 }
-                BuildSongs(v, mode_ == MusicMode::Album ? "name" : "album");
+                BuildSongs(v, mode_ == MusicMode::Album ? "track" : "album");
                 break;
             }
         }

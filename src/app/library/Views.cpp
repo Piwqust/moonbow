@@ -504,6 +504,12 @@ void Page::SortMedia(std::vector<const library::MediaItem*>& items, const std::s
     } else if (k == "album") {
         library::SortItems(items, library::SortKey::Name);
         byText([](const library::MediaItem* m) -> const std::wstring& { return m->album; });
+    } else if (k == "track") {
+        library::SortItems(items, library::SortKey::Name);
+        std::stable_sort(items.begin(), items.end(), [&](const library::MediaItem* a, const library::MediaItem* b) {
+            if ((a->track > 0) != (b->track > 0)) return a->track > 0;  // numbered tracks first
+            return desc ? a->track > b->track : a->track < b->track;
+        });
     } else if (k == "unwatched" || k == "watched") {
         library::SortItems(items, library::SortKey::Name);
         const bool watchedFirst = k == "watched";
