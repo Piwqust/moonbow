@@ -7,8 +7,8 @@
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
 #include "app/player/ControlBar.h"
+#include "app/player/SubStyle.h"
 #include "app/player/SubText.h"
-#include "core/SettingsSchema.h"
 #include "ui/Host.h"
 
 #include <algorithm>
@@ -29,33 +29,6 @@ const PlayerState& PS() {
 
 const Config& Cfg() {
     return TheApp().config();
-}
-
-Color HexColor(const std::string& s, uint32_t fallback, float alpha) {
-    uint32_t v = fallback;
-    if (s.size() == 7 && s[0] == '#') {
-        uint32_t parsed = 0;
-        bool ok = true;
-        for (size_t i = 1; i < 7 && ok; ++i) {
-            const char c = s[i];
-            parsed <<= 4;
-            if (c >= '0' && c <= '9') parsed |= static_cast<uint32_t>(c - '0');
-            else if (c >= 'a' && c <= 'f') parsed |= static_cast<uint32_t>(c - 'a' + 10);
-            else if (c >= 'A' && c <= 'F') parsed |= static_cast<uint32_t>(c - 'A' + 10);
-            else ok = false;
-        }
-        if (ok) v = parsed;
-    }
-    return Color::Hex(v, std::clamp(alpha, 0.0f, 1.0f));
-}
-
-// The mpv value of a choice setting ("3" for outline "normal").
-double ChoiceNumber(const char* key, double fallback) {
-    const settings::Item* it = settings::FindItem(key);
-    if (!it) return fallback;
-    const settings::Choice* c = it->FindChoice(Cfg().GetString(key));
-    if (!c || c->mpv.empty()) return fallback;
-    return std::atof(c->mpv.c_str());
 }
 
 const Track* SelectedSub() {
@@ -337,24 +310,7 @@ void SubtitleWords::StartKeyboard() {
 // --- layout ----------------------------------------------------------------------------------
 
 void SubtitleWords::ReadStyle() {
-    Style s;
-    s.font = Cfg().GetWString("subtitles.font");
-    // mpv's generic families as libass resolves them on Windows.
-    if (s.font.empty() || _wcsicmp(s.font.c_str(), L"sans-serif") == 0) s.font = L"Arial";
-    else if (_wcsicmp(s.font.c_str(), L"serif") == 0) s.font = L"Times New Roman";
-    else if (_wcsicmp(s.font.c_str(), L"monospace") == 0) s.font = L"Consolas";
-    s.size = static_cast<float>(ChoiceNumber("subtitles.size", 38));
-    if (s.size <= 0) s.size = 38;
-    s.bold = Cfg().GetBool("subtitles.bold");
-    s.text = HexColor(Cfg().GetString("subtitles.color"), 0xFFFFFF,
-                      static_cast<float>(Cfg().GetDouble("subtitles.opacity") / 100.0));
-    s.outlineColor = HexColor(Cfg().GetString("subtitles.outlineColor"), 0x000000, 1);
-    s.back = HexColor(Cfg().GetString("subtitles.backColor"), 0x000000,
-                      static_cast<float>(Cfg().GetDouble("subtitles.backOpacity") / 100.0));
-    s.outline = static_cast<float>(ChoiceNumber("subtitles.outline", 3));
-    s.shadow = Cfg().GetBool("subtitles.shadow");
-    s.background = Cfg().GetString("subtitles.background");
-    style_ = std::move(s);
+    style_ = ReadSubtitleStyle(Cfg());
     for (Block& b : blocks_) b.scene.Reset();
 }
 

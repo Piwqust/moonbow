@@ -12,6 +12,7 @@
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerOverlays.h"
+#include "app/player/SubStyle.h"
 #include "app/player/SubWords.h"
 #include "gfx/Text.h"
 
@@ -511,13 +512,7 @@ float PlayerView::SubtitleBand(float h) const {
     });
     if (!shown || h <= 0) return 0;
     const Config& c = TheApp().config();
-    static const std::pair<const char*, double> kSizes[] = {
-        {"smaller", 28}, {"small", 33}, {"large", 46}, {"larger", 54}, {"huge", 64}};
-    double size = 38;  // mpv's default sub-font-size ("auto")
-    const std::string pick = c.GetString("subtitles.size");
-    for (const auto& [name, px] : kSizes)
-        if (pick == name) size = px;
-    const double lines = 2.5 * size * (lv.subScale > 0 ? lv.subScale : 1);
+    const double lines = 2.5 * SubtitleFontSize(c) * (lv.subScale > 0 ? lv.subScale : 1);
     const double margin = c.GetDouble("subtitles.marginBottom");
     const double raised = std::clamp(100 - lv.subPos, 0.0, 100.0) / 100 * h;
     if (c.GetString("subtitles.sizeMode") == "pixels") {

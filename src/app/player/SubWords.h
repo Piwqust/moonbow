@@ -8,6 +8,7 @@
 //
 // While playing it costs nothing: mpv properties are observed only while paused.
 #include "app/Signal.h"
+#include "app/player/SubStyle.h"
 #include "app/player/SubText.h"
 #include "core/Config.h"
 #include "gfx/Gpu.h"
@@ -65,15 +66,6 @@ public:
     void DebugInfo(std::string& out) const override;
 
 private:
-    struct Style {
-        std::wstring font;
-        float size = 38;  // mpv's sub-font-size: line height in pixels of a 720-line frame
-        bool bold = false;
-        ui::Color text, outlineColor, back;
-        float outline = 3;
-        bool shadow = true;
-        std::string background;  // none / lines / box
-    };
     // How one block is drawn, in window DIPs: from the Lumen style or the .ass script's style.
     struct Look {
         std::wstring font;
@@ -156,7 +148,7 @@ private:
     double stepUntil_ = 0;
     UINT_PTR stepTimer_ = 0;
 
-    Style style_;
+    SubtitleStyle style_;
     subtext::AssHeader header_;
     uint64_t headerKey_ = 0;  // the file and track header_ was read for
     bool assMode_ = false;    // a native .ass track drawn with its own styles
