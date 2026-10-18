@@ -398,9 +398,15 @@ void Host::SetFullscreen(bool on, bool primaryScreen) {
     } else {
         fullscreen_ = false;
         SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style | WS_OVERLAPPEDWINDOW));
-        SetWindowPlacement(hwnd_, &placement_);
+        // A window that was maximized is restored to its normal rect first and maximized again, so
+        // Windows computes the maximized rect for the captioned style.
+        const bool maximized = placement_.showCmd == SW_SHOWMAXIMIZED;
+        WINDOWPLACEMENT normal = placement_;
+        if (maximized) normal.showCmd = g_automation ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL;
+        SetWindowPlacement(hwnd_, &normal);
         SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        if (maximized) ShowWindow(hwnd_, SW_MAXIMIZE);
     }
     RequestLayout();
 }
@@ -920,8 +926,14 @@ void Host::UpdateTooltip() {
         o.dismissOnOutside = false;
         auto bubble = std::make_unique<TooltipBubble>(tooltipFor_->tooltip);
         Size s = bubble->Measure(400, 200);
-        if (r.w < 80) o.anchor.x -= s.w / 2;
-        tooltipWidget_ = ShowPopup(std::move(bubble), o);
+        if (r.w < 80) {
+            o.anchor.x -= s.w / 2;
+            // Controls along the bottom edge (the player bar): above them, not over the buttons.
+            if (r.Bottom() + 6 + s.h > ClientSize().h - 8) o.anchor.y = r.y - 6 - s.h;
+        }
+        Widget* target = tooltipFor_;
+        tooltipWidget_ = ShowPopup(std::move(bubble), o);  // (ShowPopup hides any tooltip first)
+        tooltipFor_ = target;
     });
 }
 
