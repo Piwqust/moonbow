@@ -9,6 +9,9 @@
 203 RCDATA "fonts/Inter-Medium.ttf"
 204 RCDATA "fonts/Inter-SemiBold.ttf"
 
+// GPU sharpening shader, written to <data>\cache\shaders by src/Player.cpp.
+LUMEN_CAS RCDATA "shaders/lumen-cas.glsl"
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 0,1,0,0
  PRODUCTVERSION 0,1,0,0

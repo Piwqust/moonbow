@@ -772,8 +772,65 @@ void TestConfigMpv() {
 
     c.SetDouble("subtitles.opacity", 50);
     CHECK(FindOption(MpvOptionFor(c, "subtitles.opacity"), "sub-color") == "#80FFFFFF");
+    // Zero-copy video: crop, sharpening and default deinterlacing never put a CPU filter in vf.
     c.SetString("video.crop", "16:9");
-    CHECK(FindOption(MpvOptions(c), "vf").find("crop=w='min(iw,ih*16/9)'") != std::string::npos);
+    c.SetDouble("video.sharpen", 5);
+    FindOption(MpvOptions(c), "vf", &found);
+    CHECK(!found);
+    CHECK(FindOption(MpvOptions(c), "glsl-shaders").find("cache\\shaders\\lumen-cas.glsl") != std::string::npos);
+    CHECK(FindOption(MpvOptionFor(c, "video.sharpen"), "glsl-shader-opts") == "lumen_cas_sharpness=0.5");
+    c.SetString("performance.vo", "gpu");  // legacy renderer: no shader parameters, CPU fallback
+    CHECK(FindOption(MpvOptions(c), "vf") == "@lumen:lavfi=[cas=strength=0.5]");
+    FindOption(MpvOptions(c), "glsl-shaders", &found);
+    CHECK(!found);
+    c.SetString("performance.vo", "gpu-next");
+    c.SetDouble("video.sharpen", 0);
+    CHECK(FindOption(MpvOptionFor(c, "video.sharpen"), "glsl-shaders").empty());  // reset clears the list
+    c.SetString("video.deinterlaceMethod", "bwdif");
+    CHECK(FindOption(MpvOptions(c), "vf") == "@lumen:lavfi=[bwdif=deint=interlaced]");
+    CHECK(FindOption(MpvOptions(c), "deinterlace") == "no");
+    c.SetString("video.deinterlaceMethod", "auto");
+    // User shaders: only plain names of files that exist in <data>\shaders.
+    {
+        const std::wstring shaders = DataDir() + L"\\shaders";
+        CreateDirectoryW(shaders.c_str(), nullptr);
+        json::WriteFileAtomic(shaders + L"\\FSRCNNX.glsl", "//!HOOK LUMA\n");
+        c.SetString("video.shaders", "FSRCNNX.glsl|missing.glsl|..\\settings.json");
+        const std::string list = FindOption(MpvOptionFor(c, "video.shaders"), "glsl-shaders");
+        CHECK_MSG(list.size() > 12 && list.compare(list.size() - 12, 12, "FSRCNNX.glsl") == 0, "%s", list.c_str());
+        CHECK(list.find(';') == std::string::npos && list.find("missing") == std::string::npos);
+        c.SetString("video.shaders", "");
+    }
+    // Quality presets and their way back to mpv's defaults.
+    c.SetString("video.quality", "fast");
+    opts = MpvOptions(c);
+    CHECK(FindOption(opts, "scale") == "bilinear" && FindOption(opts, "dither") == "no");
+    CHECK(FindOption(opts, "hdr-compute-peak") == "no");
+    c.SetString("video.upscaler", "ewa_lanczos");
+    CHECK(FindOption(MpvOptionFor(c, "video.upscaler"), "scale") == "ewa_lanczos");
+    c.SetString("video.upscaler", "auto");
+    c.SetString("video.quality", "balanced");
+    live = MpvOptionFor(c, "video.quality");
+    CHECK(FindOption(live, "scale") == "lanczos" && FindOption(live, "dscale") == "hermite");
+    CHECK(FindOption(live, "correct-downscaling") == "yes" && FindOption(live, "hdr-compute-peak") == "auto");
+    c.SetString("video.quality", "high");
+    CHECK(FindOption(MpvOptions(c), "scale") == "ewa_lanczossharp");
+    c.SetString("video.quality", "balanced");
+    FindOption(MpvOptions(c), "scale", &found);
+    CHECK(!found);  // mpv's own default
+    c.SetDouble("video.targetPeak", 400);
+    CHECK(FindOption(MpvOptions(c), "target-peak") == "400");
+    c.SetBool("video.deband", true);
+    CHECK(FindOption(MpvOptions(c), "deband") == "yes" && FindOption(MpvOptions(c), "deband-range") == "16");
+    // Smooth motion overrides the clock sync choice.
+    c.SetString("performance.clockSync", "vdrop");
+    CHECK(FindOption(MpvOptions(c), "video-sync") == "display-vdrop");
+    c.SetBool("video.smoothMotion", true);
+    live = MpvOptionFor(c, "video.smoothMotion");
+    CHECK(FindOption(live, "video-sync") == "display-resample" && FindOption(live, "interpolation") == "yes");
+    CHECK(FindOption(live, "tscale") == "oversample");
+    c.SetBool("video.smoothMotion", false);
+    CHECK(FindOption(MpvOptionFor(c, "video.smoothMotion"), "video-sync") == "display-vdrop");
     c.SetString("performance.hwdec", "off");
     CHECK(FindOption(MpvOptionFor(c, "performance.hwdec"), "hwdec") == "no");
     c.SetString("network.httpProxy", "http://me@proxy:3128");
