@@ -185,7 +185,13 @@ public:
 
         libConn_ = Connect(TheApp().libraryChanged, [this] { Rebuild(); });
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-            if (m & kChangeFile) Rebuild();
+            // Behind the player screen: rebuild when Home shows again (see Page).
+            if (!(m & kChangeFile)) return;
+            if (!compact_ && TheApp().PlayerShown()) stale_ = true;
+            else Rebuild();
+        });
+        screenConn_ = Connect(TheApp().screenChanged, [this] {
+            if (stale_ && !TheApp().PlayerShown()) Rebuild();
         });
         Rebuild();
     }
@@ -193,10 +199,12 @@ public:
     std::vector<Crumb> Breadcrumbs() const override { return {{Tr(L"Home"), Route{Section::Home, {}}}}; }
     long long ItemCount() const override { return count_; }
     void SetFilter(const std::wstring& text) override {
-        if (text == filter_) return;
-        filter_ = text;
-        Rebuild();
-        scroll_->ScrollTo(0, false);
+        searchDebounce_.Run(this, text, [this, text] {
+            if (text == filter_) return;
+            filter_ = text;
+            Rebuild();
+            scroll_->ScrollTo(0, false);
+        });
     }
     std::vector<MenuItem> MoreMenu() override {
         std::vector<MenuItem> m;
@@ -268,6 +276,7 @@ private:
     }
 
     void Rebuild() {
+        stale_ = false;
         App& app = TheApp();
         auto snap = app.library().Current();
         library::History& hist = app.history();
@@ -593,8 +602,10 @@ private:
     HomeSection* results_[4] = {};  // artists, albums, videos, music
     HomeSection *continue_ = nullptr, *listen_ = nullptr, *favorites_ = nullptr, *folders_ = nullptr,
                 *playlists_ = nullptr, *artists_ = nullptr, *added_ = nullptr, *addedMusic_ = nullptr;
-    ScopedConnection libConn_, playerConn_;
+    ScopedConnection libConn_, playerConn_, screenConn_;
     bool focusTaken_ = false;
+    bool stale_ = false;  // a file started or stopped while the player screen hid Home
+    SearchDebounce searchDebounce_;
 
     // The regular sections (not the search results).
     std::vector<HomeSection*> Sections() const {

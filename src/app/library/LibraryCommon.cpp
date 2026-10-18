@@ -12,6 +12,7 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 
+#include <algorithm>
 #include <cwchar>
 #include <cwctype>
 #include <unordered_set>
@@ -150,6 +151,27 @@ std::wstring ArtistLabel(const std::wstring& artist) {
 
 std::wstring AlbumLabel(const std::wstring& album) {
     return album.empty() ? std::wstring(Tr(L"Unknown album")) : album;
+}
+
+void SearchDebounce::Run(ui::Widget* owner, const std::wstring& text, std::function<void()> apply) {
+    Cancel();
+    ui::Host* host = owner ? owner->GetHost() : nullptr;
+    if (text.empty() || !host) {
+        apply();
+        return;
+    }
+    host_ = host;
+    timer_ = host->StartWorkTimer(150, [this, apply = std::move(apply)] {
+        timer_ = 0;
+        apply();
+    });
+}
+
+void SearchDebounce::Cancel() {
+    if (!timer_ || !host_) return;
+    const auto& hosts = ui::Host::All();
+    if (std::find(hosts.begin(), hosts.end(), host_) != hosts.end()) host_->CancelTimer(timer_);
+    timer_ = 0;
 }
 
 bool MaybeExists(const std::wstring& path) {
