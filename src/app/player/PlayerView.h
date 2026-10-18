@@ -28,6 +28,7 @@ public:
     ui::Rect VideoRect() const;
 
     void OnLayout() override;
+    float SubtitleBand(float h) const;
     void Paint(ui::Painter& p) override;
     void PaintOver(ui::Painter& p) override;
 
@@ -37,6 +38,7 @@ private:
     void UpdateStats();
     MainWindow* window_;
     ui::Widget* side_ = nullptr;
+    ui::Widget* sidePane_ = nullptr;  // the library pane next to the rail in side_
     ErrorCard* error_ = nullptr;
     VideoArea* video_ = nullptr;
     ui::Widget* music_ = nullptr;
@@ -50,13 +52,15 @@ private:
     float thinW_ = 0;
     int thinPx_ = -1;
     uint64_t configToken_ = 0;
-    ScopedConnection playerConn_, screenConn_;
+    ScopedConnection playerConn_, screenConn_, liveConn_;
 };
 
 // Built by the player module (MusicView.cpp): cover art, blurred backdrop, titles.
 std::unique_ptr<ui::Widget> CreateMusicView();
 // Hover controls of Picture in Picture mode (PipOverlay.cpp).
 std::unique_ptr<ui::Widget> CreatePipOverlay(MainWindow* window);
+// The compact right-click menu of Picture in Picture: play, audio, subtitles, speed, back.
+void ShowPipContextMenu(ui::Host* host, ui::Point at);
 
 // Library-mode mini player (bottom-right): small video, seek, title, controls on hover.
 class MiniPlayer : public ui::Widget {
