@@ -1,0 +1,24 @@
+{
+  "_doc": "Allowlist and type tables for tools/dev/ui-audit.py. inferInteractive/inferText/inferScroll are used only for v1 dumps (no flags); v2 dumps carry the flags. Every rule needs a reason.",
+  "minTarget": 24,
+  "resizeBorderDip": 8,
+  "titleBarDip": 40,
+  "maxButtonType": "CaptionButton",
+  "inferInteractive": [
+    "AccentPicker", "AccentSwatch", "AccentSwatches", "AddItem", "AdvancedExpander", "BarSlot", "BookmarkList",
+    "Button", "CardHeader", "ChapterList", "Checkbox", "Chip", "ChoiceCard", "ChoiceList", "ColorPalette", "CoverTile",
+    "DButton", "Dropdown", "ChoiceDropdown", "FieldDropdown", "EqBand", "Expander", "FileDropZone", "FlatButton", "Header",
+    "IconButton", "InfoIcon", "ItemGrid", "KeyChip", "KeyField", "LinkButton", "CrumbButton", "NavItem", "Option",
+    "PairRow", "PaletteCell", "PathField", "PlayButton", "PresetField", "QueueList", "Range", "SectionTitle", "SeekBar",
+    "Segmented", "ChoiceSegmented", "Slider", "SubRow", "TabBar", "TextArea", "TextBox", "SearchField", "SettingField",
+    "EditBox", "ValueBox", "ColorBox", "SliderValue", "EqValue", "AddonSearch", "TickSlider", "TimeLabel", "Toggle",
+    "BoolToggle", "ShaderToggle", "VolumeControl", "AddonsList", "ShortcutRow", "KeyCombo"
+  ],
+  "notInteractive": [],
+  "inferText": ["Label", "PadLabel", "ValueLabel", "NavGroupLabel", "RowLabel", "InfoLabel", "Title", "InfoLine"],
+  "inferScroll": ["ScrollView"],
+  "overlayTypes": [],
+  "notCarrier": [],
+  "notTarget": [],
+  "rules": []
+}
