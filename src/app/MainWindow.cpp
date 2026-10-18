@@ -95,6 +95,7 @@ bool MainWindow::Create() {
     o.height = 780;
     o.minWidth = 720;
     o.minHeight = 440;
+    o.mainWindow = true;
     if (!Host::Create(o)) return false;
 
     static bool registered = [] {

@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <typeinfo>
 #include <cmath>
+#include <unordered_map>
 
 namespace ui {
 
@@ -649,6 +650,7 @@ void Host::Render() {
     if (!ctx) return;
     {
         Painter p(ctx);
+        if (textSink_) p.RecordText(textSink_);
         PaintBackground(p);
         if (root_) root_->PaintTree(p);
         const Size client = ClientSize();
@@ -950,23 +952,171 @@ void Host::HideTooltip() {
     }
 }
 
-void Host::DumpTree(const std::wstring& path) const {
+// --- tree dump ---------------------------------------------------------------------------
+
+namespace {
+
+// `"..."` in UTF-8 with \" \\ \n \r \t escaped.
+void AppendQuoted(std::string& out, std::wstring_view s) {
+    std::wstring esc;
+    esc.reserve(s.size() + 2);
+    for (wchar_t ch : s) {
+        switch (ch) {
+            case L'"': esc += L"\\\""; break;
+            case L'\\': esc += L"\\\\"; break;
+            case L'\n': esc += L"\\n"; break;
+            case L'\r': esc += L"\\r"; break;
+            case L'\t': esc += L"\\t"; break;
+            default: esc += ch; break;
+        }
+    }
+    out += '"';
+    if (!esc.empty()) {
+        const int n = WideCharToMultiByte(CP_UTF8, 0, esc.data(), static_cast<int>(esc.size()), nullptr, 0, nullptr, nullptr);
+        const size_t at = out.size();
+        out.resize(at + static_cast<size_t>(n));
+        WideCharToMultiByte(CP_UTF8, 0, esc.data(), static_cast<int>(esc.size()), out.data() + at, n, nullptr, nullptr);
+    }
+    out += '"';
+}
+
+void AppendRect(std::string& out, const char* prefix, const Rect& r) {
+    char buf[96];
+    snprintf(buf, sizeof buf, "%s[%.0f,%.0f %.0fx%.0f]", prefix, r.x, r.y, r.w, r.h);
+    out += buf;
+}
+
+// ` text="..."` and what happened to it: ` trunc` (wider than its box: ellipsized or cut),
+// ` clip` (taller than its box), ` overflow` (glyphs outside the widget's rect), ` faded`
+// (transparent), ` box=[...]` (the box, when it is not the widget's rect).
+void AppendText(std::string& out, const TextRecord& t, const Rect& owner) {
+    out += " text=";
+    AppendQuoted(out, t.text);
+    gfx::Text& text = gfx::Text::Get();
+    // Natural size, measured here once: one unlimited line, or wrapped to the box.
+    float natW = 0, natH = 0;
+    if (IDWriteTextLayout* one = text.Layout(t.text, t.style, 100000.0f, 100000.0f, HAlign::Leading, VAlign::Top, 0)) {
+        DWRITE_TEXT_METRICS m{};
+        one->GetMetrics(&m);
+        natW = m.widthIncludingTrailingWhitespace;
+        natH = m.height;
+    }
+    const bool unbounded = t.box.w >= 10000;  // scrolled text (TextBox): judged against the clip
+    const bool wrap = (t.flags & gfx::kTextWrap) != 0;
+    bool trunc = false, clip = false;
+    float shownW = natW;
+    if (unbounded) {
+        trunc = t.halign == HAlign::Leading && (t.box.x < t.clip.x - 0.5f || t.box.x + natW > t.clip.Right() + 0.5f);
+    } else if (wrap) {
+        if (IDWriteTextLayout* wrapped = text.Layout(t.text, t.style, std::max(1.0f, t.box.w), 100000.0f,
+                                                     HAlign::Leading, VAlign::Top, gfx::kTextWrap)) {
+            DWRITE_TEXT_METRICS m{};
+            wrapped->GetMetrics(&m);
+            shownW = m.widthIncludingTrailingWhitespace;
+            natH = m.height;
+        }
+        trunc = shownW > t.box.w + 0.5f;
+        if (natH > t.box.h + 1.0f) (t.flags & gfx::kTextEllipsis ? trunc : clip) = true;
+    } else {
+        trunc = natW > t.box.w + 0.5f;
+        clip = natH > t.box.h + 1.0f;
+    }
+    if (trunc) out += " trunc";
+    if (clip) out += " clip";
+    if (!unbounded) {
+        // Horizontal extent of the glyphs; an ellipsized line fills its box.
+        const float w = (t.flags & gfx::kTextEllipsis) ? std::min(shownW, t.box.w) : shownW;
+        float x0 = t.box.x;
+        if (t.halign == HAlign::Center) x0 = t.box.Cx() - w / 2;
+        if (t.halign == HAlign::Trailing) x0 = t.box.Right() - w;
+        if (x0 < owner.x - 1.0f || x0 + w > owner.Right() + 1.0f) out += " overflow";
+    }
+    if (t.faded) out += " faded";
+    if (std::abs(t.box.x - owner.x) > 0.5f || std::abs(t.box.y - owner.y) > 0.5f || std::abs(t.box.w - owner.w) > 0.5f ||
+        std::abs(t.box.h - owner.h) > 0.5f)
+        AppendRect(out, " box=", unbounded ? t.box.Intersect(t.clip) : t.box);
+}
+
+}  // namespace
+
+bool Host::Idle() const {
+    return hwnd_ && !layoutDirty_ && !renderPending_ && posted_.empty() && !AnimFloat::AnyActive();
+}
+
+void Host::DumpTree(const std::wstring& path) {
+    // One real frame with text recording on, so the dump sees exactly what is on screen.
+    std::vector<TextRecord> texts;
+    if (hwnd_ && gfx::Gpu::Get().Ready() && !IsIconic(hwnd_)) {
+        textSink_ = &texts;
+        Render();
+        textSink_ = nullptr;
+    }
+    std::unordered_map<const Widget*, std::vector<const TextRecord*>> byOwner;
+    for (const TextRecord& t : texts) {
+        auto& list = byOwner[t.owner];
+        // Text drawn twice in one place (outlines, shadows) is listed once.
+        if (!list.empty() && list.back()->text == t.text && list.back()->box.x == t.box.x &&
+            list.back()->box.y == t.box.y)
+            continue;
+        list.push_back(&t);
+    }
+
     FILE* f = nullptr;
-    if (_wfopen_s(&f, path.c_str(), L"w") != 0 || !f) return;
+    if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return;
+    std::string line = "=== window title=";
+    wchar_t title[256] = {};
+    if (hwnd_) GetWindowTextW(hwnd_, title, static_cast<int>(std::size(title)));
+    AppendQuoted(line, title);
+    const Size client = hwnd_ ? ClientSize() : Size{};
+    char buf[256];
+    snprintf(buf, sizeof buf, " client=%.0fx%.0f scale=%g theme=%s fullscreen=%d maximized=%d hwnd=%llu main=%d dpi=%u\n",
+             client.w, client.h, Scale(), Theme::Get().Mode() == ThemeMode::Dark ? "dark" : "light", fullscreen_ ? 1 : 0,
+             hwnd_ && IsWindowMaximized() ? 1 : 0, static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwnd_)),
+             options_.mainWindow ? 1 : 0, dpi_);
+    line += buf;
+    fwrite(line.data(), 1, line.size(), f);
+
     std::function<void(const Widget*, int)> dump = [&](const Widget* w, int depth) {
         const char* name = typeid(*w).name();
         if (strncmp(name, "class ", 6) == 0) name += 6;
-        fprintf(f, "%*s%s%s%s [%.0f,%.0f %.0fx%.0f]%s%s\n", depth * 2, "", name, w->id.empty() ? "" : " #",
-                w->id.c_str(), w->rect.x, w->rect.y, w->rect.w, w->rect.h, w->visible ? "" : " hidden",
-                w->enabled ? "" : " disabled");
+        line.assign(static_cast<size_t>(depth) * 2, ' ');
+        line += name;
+        if (!w->id.empty()) line += " #" + w->id;
+        AppendRect(line, " ", w->rect);
+        if (!w->visible) line += " hidden";
+        if (!w->enabled) line += " disabled";
+        if (w->interactive) line += " interactive";
+        if (w == focus_) line += " focus";
+        if (w == hot_) line += " hot";
+        if (w == pressed_) line += " pressed";
+        w->DebugInfo(line);
+        if (auto it = byOwner.find(w); it != byOwner.end())
+            for (const TextRecord* t : it->second) AppendText(line, *t, w->rect);
+        if (!w->tooltip.empty()) {
+            line += " tip=";
+            AppendQuoted(line, w->tooltip);
+        }
+        line += '\n';
+        fwrite(line.data(), 1, line.size(), f);
         for (auto& c : w->Children()) dump(c.get(), depth + 1);
     };
     if (root_) dump(root_.get(), 0);
     for (const Popup& p : popups_) {
-        fprintf(f, "--- popup\n");
+        fputs("--- popup\n", f);
         dump(p.content.get(), 0);
     }
     fclose(f);
+}
+
+std::wstring Host::WriteTreeDump() {
+    wchar_t tmp[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmp);
+    const std::wstring base = std::wstring(tmp) + L"lumen-tree-" + std::to_wstring(GetCurrentProcessId());
+    const std::wstring path =
+        base + L"-" + std::to_wstring(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwnd_))) + L".txt";
+    DumpTree(path);
+    if (options_.mainWindow) CopyFileW(path.c_str(), (base + L".txt").c_str(), FALSE);
+    return path;
 }
 
 void Host::PaintBackground(Painter& p) {
@@ -1301,12 +1451,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (g_automation) g_automationMods = static_cast<unsigned>(wp);
             return 0;
 
-        case kDumpTreeMessage: {
-            wchar_t tmp[MAX_PATH];
-            GetTempPathW(MAX_PATH, tmp);
-            DumpTree(std::wstring(tmp) + L"lumen-tree-" + std::to_wstring(GetCurrentProcessId()) + L".txt");
-            return 0;
-        }
+        case kDumpTreeMessage:
+            WriteTreeDump();
+            return TRUE;
 
         case WM_APP_POST: {
             std::vector<std::function<void()>> tasks;

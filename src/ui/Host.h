@@ -23,6 +23,9 @@ struct HostOptions {
     HWND owner = nullptr;  // owned windows stay above their owner, no taskbar button
     bool center = true;
     bool showInTaskbar = true;
+    // The app's main window: --automation commands go to it and its tree dump is also written
+    // to the old %TEMP%\lumen-tree-<pid>.txt.
+    bool mainWindow = false;
 };
 
 // Where a popup appears relative to its anchor rect.
@@ -94,15 +97,23 @@ public:
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the
     // device and attaches every window's surface.
     static constexpr UINT kDeviceReadyMessage = WM_APP + 42;
-    // Debug aid: posting this writes the widget tree (type, rect, flags) to
-    // %TEMP%\lumen-tree-<pid>.txt. See tools/dev/dump-tree.ps1.
+    // Debug aid: sending or posting this to any host window writes its widget tree (type, rect,
+    // state, the text it shows) to %TEMP%\lumen-tree-<pid>-<hwnd>.txt, and for the main window
+    // also to %TEMP%\lumen-tree-<pid>.txt. Handled synchronously: SendMessage returns once the
+    // file is written. See tools/dev/dump-tree.ps1 for the format.
     static constexpr UINT kDumpTreeMessage = WM_APP + 43;
     // Any thread may post this to ask the window for a repaint.
     static constexpr UINT kRepaintMessage = WM_APP + 44;
     // --automation only: wParam = held modifiers (1 Ctrl, 2 Shift, 4 Alt) for the
     // keys and clicks that follow, since posted input doesn't change GetKeyState.
     static constexpr UINT kAutomationModsMessage = WM_APP + 45;
-    void DumpTree(const std::wstring& path) const;
+    // Draws one frame that records every text it paints, then writes the tree to `path`.
+    void DumpTree(const std::wstring& path);
+    // Writes the dump file(s) named above; returns the per-window path.
+    std::wstring WriteTreeDump();
+    bool IsMainWindow() const { return options_.mainWindow; }
+    // Nothing waits to be laid out, drawn or run, and no animation is running.
+    bool Idle() const;
     // Re-applies DWM attributes (dark title/border) and repaints after a theme change.
     void OnThemeChanged();
 
@@ -218,6 +229,7 @@ private:
     bool cursorHidden_ = false;
     bool active_ = true;
 
+    std::vector<TextRecord>* textSink_ = nullptr;  // set while DumpTree draws its frame
     bool renderPending_ = false;
     bool gpuPainted_ = false;  // a GPU frame is on screen: WM_PAINT skips the GDI skeleton
     bool layoutDirty_ = true;

@@ -53,6 +53,8 @@ void Painter::FillGeometry(ID2D1Geometry* g, Color c) {
 
 void Painter::Text(std::wstring_view text, const Rect& r, TextStyle style, Color c, HAlign h, VAlign v,
                    uint8_t flags) {
+    if (textSink_ && !text.empty())
+        textSink_->push_back({textOwner_, std::wstring(text), r, Clip(), style, h, flags, c.a * opacity_ < 0.05f});
     if (text.empty() || r.w <= 0 || c.a <= 0) return;
     IDWriteTextLayout* layout = gfx::Text::Get().Layout(text, style, r.w, r.h, h, v, flags);
     if (!layout) return;
