@@ -435,7 +435,7 @@ void Run(Action a) {
             break;
         case Action::Snapshot: {
             if (!s.fileLoaded) break;
-            p.Screenshot();
+            p.Screenshot({}, app.config().GetBool("video.screenshotSubtitles"));
             std::wstring dir = Utf8ToWide(app.config().GetString("video.screenshotDir"));
             if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
             Toast(Fmt(Tr(L"Snapshot saved to {0}"), {dir}), "snapshot");

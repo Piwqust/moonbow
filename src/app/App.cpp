@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <sstream>
 
 namespace app {
 
@@ -429,7 +430,18 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     Trace("window shown");
     // The GPU device (driver load) and libmpv start after the first paint.
     gfx::Gpu::Get().CreateDeviceAsync(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
-    player_.SetStartOptions(MpvOptions(config_));
+    {
+        auto options = MpvOptions(config_);
+        // general.extraOptions: "--deband=yes --sub-ass-override=force" (applied at start).
+        std::istringstream extra(config_.GetString("general.extraOptions"));
+        for (std::string tok; extra >> tok;) {
+            while (!tok.empty() && tok[0] == '-') tok.erase(0, 1);
+            const size_t eq = tok.find('=');
+            if (tok.empty()) continue;
+            options.emplace_back(tok.substr(0, eq), eq == std::string::npos ? "yes" : tok.substr(eq + 1));
+        }
+        player_.SetStartOptions(std::move(options));
+    }
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
@@ -517,6 +529,9 @@ void App::OnPlayerEvents() {
     if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
         fitPending_ = false;
         FitWindowToVideo();
+        if (config_.GetBool("video.startFullscreen") && s.hasVideo && main_ && !main_->IsFullscreen() &&
+            !main_->PictureInPicture() && playerShown_)
+            main_->SetFullscreen(true, config_.GetString("interface.fullscreenScreen") == "primary");
     }
     if (changes & kChangeVolume) config_.SetDouble("audio.lastVolume", std::round(s.volume));
     playerChanged.Emit(changes);
