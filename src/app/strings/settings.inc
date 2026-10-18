@@ -48,3 +48,11 @@
 {L"Add-ons load at the next start of Lumen", L"Дополнения загрузятся при следующем запуске Lumen"},
 {L"Available when “{0}” is set", L"Доступно, когда задано «{0}»"},
 {L"Enter a value from {0} to {1}", L"Введите значение от {0} до {1}"},
+// --- key presets
+{L"Key layout of another player", L"Раскладка клавиш другого плеера"},
+{L"YouTube keys", L"Клавиши YouTube"},
+{L"K, J, L, 0–9, Shift+, and Shift+., C", L"K, J, L, 0–9, Shift+, и Shift+., C"},
+{L"Use YouTube keys?", L"Включить клавиши YouTube?"},
+{L"K or Space plays and pauses, J and L seek 10 s, 0–9 jump to 0–90%, Shift+, and Shift+. change the speed, C turns subtitles on and off. Your other changes to shortcuts are reset.", L"K или пробел ставят на паузу и продолжают, J и L перематывают на 10 с, 0–9 переходят на 0–90%, Shift+, и Shift+. меняют скорость, C включает и выключает субтитры. Остальные изменения сочетаний сбросятся."},
+{L"Use YouTube keys", L"Включить"},
+{L"YouTube keys are on", L"Клавиши YouTube включены"},

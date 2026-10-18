@@ -1,6 +1,7 @@
 // Settings > Controls: keyboard shortcut editor built on app/Actions.h. Click a binding (or focus
 // it and press Enter) to record a new key: Esc cancels, Backspace clears. A key that is already
-// used elsewhere shows a warning with "Reassign".
+// used elsewhere shows a warning with "Reassign". A preset row on top switches the whole layout
+// (YouTube keys) after a confirmation.
 #include "app/Actions.h"
 #include "app/I18n.h"
 #include "app/settings/SettingsUi.h"
@@ -158,6 +159,28 @@ public:
         width = Length::Grow();
         pad = {0, 4, 0, 8};
         id = "shortcut-editor";
+        auto* presets = Add<Widget>();
+        presets->dir = Dir::Row;
+        presets->align = Align::Center;
+        presets->width = Length::Grow();
+        presets->gap = 12;
+        presets->pad = {0, 6, 0, 10};
+        auto* hint = presets->Add<Label>(Tr(L"Key layout of another player"), TextStyle::Body, Tone::Secondary);
+        hint->width = Length::Grow();
+        auto* youtube = presets->Add<Button>(Tr(L"YouTube keys"), ButtonKind::Secondary);
+        youtube->id = "preset-youtube";
+        youtube->tooltip = Tr(L"K, J, L, 0–9, Shift+, and Shift+., C");
+        youtube->onClick = [this] {
+            Host* host = GetHost();
+            Confirm(host, Tr(L"Use YouTube keys?"),
+                    Tr(L"K or Space plays and pauses, J and L seek 10 s, 0–9 jump to 0–90%, Shift+, and Shift+. change the speed, C turns subtitles on and off. Your other changes to shortcuts are reset."),
+                    Tr(L"Use YouTube keys"), [this, host] {
+                        ApplyKeyPreset("youtube");
+                        HideConflicts(nullptr);
+                        Sync();
+                        ShowToast(host, Tr(L"YouTube keys are on"), "hotkeys");
+                    });
+        };
         // Column titles.
         auto* head = Add<Widget>();
         head->dir = Dir::Row;

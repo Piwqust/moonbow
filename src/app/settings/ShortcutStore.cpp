@@ -256,6 +256,69 @@ void ResetAllBindings() {
     SaveKeyBindings();
 }
 
+namespace {
+
+struct PresetEntry {
+    Action action;
+    std::vector<KeyBinding> keys;  // replaces the action's bindings
+};
+
+const std::vector<PresetEntry>& YouTubePreset() {
+    constexpr ui::Mods none{}, shift{false, true, false}, ctrlShift{true, true, false};
+    static const std::vector<PresetEntry> preset = [&] {
+        std::vector<PresetEntry> p = {
+            {Action::PlayPause, {{'K', none}, {VK_SPACE, none}, {VK_MEDIA_PLAY_PAUSE, none}}},
+            {Action::SeekBackward, {{'J', none}, {VK_LEFT, none}}},
+            {Action::SeekForward, {{'L', none}, {VK_RIGHT, none}}},
+            {Action::SpeedDown, {{VK_OEM_COMMA, shift}, {VK_OEM_4, none}}},
+            {Action::SpeedUp, {{VK_OEM_PERIOD, shift}, {VK_OEM_6, none}}},
+            {Action::ToggleSubtitles, {{'C', none}, {'V', shift}}},
+            {Action::Next, {{'N', shift}, {VK_NEXT, none}, {VK_MEDIA_NEXT_TRACK, none}}},
+            {Action::Previous, {{'P', shift}, {VK_PRIOR, none}, {VK_MEDIA_PREV_TRACK, none}}},
+            {Action::PictureInPicture, {{'I', none}, {'P', ctrlShift}}},
+            // Moved off J, K and L.
+            {Action::AudioDelayDown, {{'J', shift}}},
+            {Action::AudioDelayUp, {{'K', shift}}},
+            {Action::ToggleRepeat, {{'R', none}}},
+        };
+        for (int i = 0; i < 10; ++i)
+            p.push_back({static_cast<Action>(static_cast<int>(Action::JumpTo0) + i),
+                         {{static_cast<UINT>('0' + i), none}, {static_cast<UINT>(VK_NUMPAD0 + i), none}}});
+        return p;
+    }();
+    return preset;
+}
+
+}  // namespace
+
+bool ApplyKeyPreset(std::string_view id) {
+    if (id != "youtube") return false;
+    const std::vector<PresetEntry>& preset = YouTubePreset();
+    for (const ActionInfo& info : AllActions())
+        if (info.action != Action::None) SetBindings(info.action, {});
+    // The preset's keys leave every action they are not assigned to.
+    for (const ActionInfo& info : AllActions()) {
+        if (info.action == Action::None) continue;
+        if (std::any_of(preset.begin(), preset.end(), [&](const PresetEntry& e) { return e.action == info.action; }))
+            continue;
+        std::vector<KeyBinding> keep;
+        for (const KeyBinding& k : ActiveBindings(info.action)) {
+            const bool taken = std::any_of(preset.begin(), preset.end(), [&](const PresetEntry& e) {
+                return std::any_of(e.keys.begin(), e.keys.end(), [&](const KeyBinding& p) { return SameBinding(p, k); });
+            });
+            if (!taken) keep.push_back(k);
+        }
+        if (keep.size() != ActiveBindings(info.action).size())
+            SetBindings(info.action, keep.empty() ? std::vector<KeyBinding>{{0, ui::Mods{}}} : keep);
+    }
+    for (const PresetEntry& e : preset) {
+        SetBindings(e.action, e.keys);
+        if (IsDefaultBinding(e.action)) SetBindings(e.action, {});
+    }
+    SaveKeyBindings();
+    return true;
+}
+
 void LoadKeyBindings() {
     Config& config = TheApp().config();
     Apply(config.Get(kKey));
