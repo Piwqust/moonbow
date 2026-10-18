@@ -38,6 +38,19 @@ inline bool FoldedContains(const std::wstring& foldedText, const std::wstring& f
     return foldedText.find(foldedQuery) != std::wstring::npos;
 }
 
+// "Show S01E02", "Show.1x02", "s1e2 Title" -> show "Show", season 1, episode 2. The show is the
+// text before the marker with dots/underscores read as spaces (empty when the name starts with it).
+struct EpisodeInfo {
+    std::wstring show;
+    int season = 0;
+    int episode = 0;
+};
+bool ParseEpisode(std::wstring_view name, EpisodeInfo* out);
+
+// False when the first bytes of a file clearly aren't the container its extension promises
+// (a text file named .mkv, an empty .mp4). Unknown extensions pass.
+bool HeaderMatchesExtension(std::wstring_view path, const unsigned char* head, size_t size);
+
 // Milliseconds since 1970-01-01 UTC.
 int64_t UnixMsNow();
 int64_t FileTimeToUnixMs(uint64_t fileTime100ns);

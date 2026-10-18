@@ -147,16 +147,44 @@ std::wstring PropString(IPropertyStore* store, REFPROPERTYKEY key) {
     return out;
 }
 
+// The first bytes of the file; false when it can't be opened (locked, gone).
+bool ReadHead(const std::wstring& path, unsigned char* buf, size_t cap, size_t* got) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD n = 0;
+    const BOOL ok = ReadFile(f, buf, static_cast<DWORD>(cap), &n, nullptr);
+    CloseHandle(f);
+    *got = n;
+    return ok != FALSE;
+}
+
+// Windows reads the length of every intact MP4/MOV; none means the index (moov) is missing.
+bool LengthAlwaysKnown(const std::wstring& path) {
+    const wchar_t* ext = PathFindExtensionW(path.c_str());
+    for (const wchar_t* e : {L".mp4", L".m4v", L".mov", L".m4a"})
+        if (_wcsicmp(ext, e) == 0) return true;
+    return false;
+}
+
 void ReadMetadata(MediaItem& it) {
     if (it.offline) return;  // reading would download the file from the cloud
+    unsigned char head[16];
+    size_t got = 0;
+    const bool headRead = ReadHead(it.path, head, sizeof(head), &got);
+    it.damaged = headRead && !HeaderMatchesExtension(it.path, head, got);
     IPropertyStore* store = nullptr;
-    if (FAILED(SHGetPropertyStoreFromParsingName(it.path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store))))
+    if (FAILED(SHGetPropertyStoreFromParsingName(it.path.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&store)))) {
+        // The MP4 handler refuses files whose index is cut off (an interrupted download).
+        if (headRead && LengthAlwaysKnown(it.path)) it.damaged = true;
         return;
+    }
     PROPVARIANT v;
     PropVariantInit(&v);
     if (SUCCEEDED(store->GetValue(PKEY_Media_Duration, &v)) && v.vt == VT_UI8)
         it.duration = static_cast<double>(v.uhVal.QuadPart) / 1e7;  // 100 ns units
     PropVariantClear(&v);
+    if (headRead && !(it.duration > 0) && LengthAlwaysKnown(it.path)) it.damaged = true;
     if (it.kind == MediaKind::Audio) {
         it.title = PropString(store, PKEY_Title);
         it.artist = PropString(store, PKEY_Music_Artist);
@@ -167,6 +195,8 @@ void ReadMetadata(MediaItem& it) {
         PropVariantClear(&n);
         if (SUCCEEDED(store->GetValue(PKEY_Media_Year, &n)) && n.vt == VT_UI4) it.year = static_cast<int>(n.ulVal);
         PropVariantClear(&n);
+        if (SUCCEEDED(store->GetValue(PKEY_Music_DiscNumber, &n)) && n.vt == VT_UI4) it.disc = static_cast<int>(n.ulVal);
+        PropVariantClear(&n);
     }
     store->Release();
 }
@@ -176,7 +206,8 @@ struct CacheEntry {
     int64_t mtime = 0;
     double duration = 0;
     std::wstring title, artist, album;
-    int track = 0, year = 0;
+    int track = 0, year = 0, disc = 0;
+    bool damaged = false;
 };
 
 std::unordered_map<std::wstring, CacheEntry> LoadCache() {
@@ -184,8 +215,9 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     std::string text;
     if (!json::ReadFileUtf8(DataFilePath(L"library-cache.json"), &text)) return cache;
     std::optional<json::Value> doc = json::Parse(text);
-    // Version 2 added track numbers and years: older caches are read again from the files.
-    if (!doc || doc->GetInt("version") < 2) return cache;
+    // Version 2 added track numbers and years, 3 disc numbers and the damaged flag: older caches
+    // are read again from the files.
+    if (!doc || doc->GetInt("version") < 3) return cache;
     const json::Value* items = doc->Find("items");
     if (!items) return cache;
     for (const json::Value& e : items->AsArray()) {
@@ -198,6 +230,8 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
         c.album = e.GetWString("l");
         c.track = static_cast<int>(e.GetInt("n"));
         c.year = static_cast<int>(e.GetInt("y"));
+        c.disc = static_cast<int>(e.GetInt("k"));
+        c.damaged = e.GetBool("b");
         cache.emplace(PathKey(e.GetWString("p")), std::move(c));
     }
     return cache;
@@ -218,10 +252,12 @@ void SaveCache(const Snapshot& s) {
         if (!it.album.empty()) e.Set("l", json::ToUtf8(it.album));
         if (it.track > 0) e.Set("n", it.track);
         if (it.year > 0) e.Set("y", it.year);
+        if (it.disc > 0) e.Set("k", it.disc);
+        if (it.damaged) e.Set("b", true);
         items.Push(std::move(e));
     }
     json::Value doc = json::Value::MakeObject();
-    doc.Set("version", 2);
+    doc.Set("version", 3);
     doc.Set("items", std::move(items));
     json::WriteFileAtomic(DataFilePath(L"library-cache.json"), json::Serialize(doc));
 }
@@ -329,6 +365,17 @@ void SortItems(std::vector<const MediaItem*>& items, SortKey key, bool descendin
             }
             case SortKey::Name:
                 return descending ? byName(b, a) : byName(a, b);
+            case SortKey::Track: {
+                const MediaItem* x = descending ? b : a;
+                const MediaItem* y = descending ? a : b;
+                if (x->album.empty() != y->album.empty()) return y->album.empty();  // untagged albums last
+                const int c = StrCmpLogicalW(x->album.c_str(), y->album.c_str());
+                if (c != 0) return c < 0;
+                if (x->disc != y->disc) return x->disc < y->disc;
+                if ((x->track > 0) != (y->track > 0)) return x->track > 0;  // numbered tracks first
+                if (x->track != y->track) return x->track < y->track;
+                return byName(x, y);
+            }
         }
         return byName(a, b);
     });
@@ -481,6 +528,8 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
                 it.album = std::move(c->second.album);
                 it.track = c->second.track;
                 it.year = c->second.year;
+                it.disc = c->second.disc;
+                it.damaged = c->second.damaged;
             } else if (!it.offline) {
                 pending.push_back(i);
             }

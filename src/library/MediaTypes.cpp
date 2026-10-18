@@ -2,7 +2,9 @@
 
 #include <windows.h>
 
+#include <cstring>
 #include <cwctype>
+#include <initializer_list>
 
 namespace library {
 
@@ -140,6 +142,102 @@ int64_t FileTimeToUnixMs(uint64_t t) {
     constexpr uint64_t kEpochDiff = 116444736000000000ULL;  // 1601 -> 1970 in 100 ns units
     if (t < kEpochDiff) return 0;
     return static_cast<int64_t>((t - kEpochDiff) / 10000);
+}
+
+// --- episodes --------------------------------------------------------------------------------
+
+namespace {
+
+bool IsDigit(wchar_t c) {
+    return c >= L'0' && c <= L'9';
+}
+bool IsAsciiLetter(wchar_t c) {
+    return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z');
+}
+
+// Reads 1..maxDigits digits at `i`; fails when more digits follow.
+bool ReadNumber(std::wstring_view s, size_t& i, size_t maxDigits, int* value) {
+    const size_t start = i;
+    int v = 0;
+    while (i < s.size() && IsDigit(s[i]) && i - start < maxDigits) v = v * 10 + (s[i++] - L'0');
+    if (i == start || (i < s.size() && IsDigit(s[i]))) return false;
+    *value = v;
+    return true;
+}
+
+std::wstring ShowName(std::wstring_view s) {
+    std::wstring out(s);
+    for (wchar_t& c : out)
+        if (c == L'.' || c == L'_') c = L' ';
+    auto junk = [](wchar_t c) {
+        return c == L' ' || c == L'-' || c == L'[' || c == L'(' || c == L'—' || c == L'–';
+    };
+    while (!out.empty() && junk(out.back())) out.pop_back();
+    size_t b = 0;
+    while (b < out.size() && junk(out[b])) ++b;
+    return out.substr(b);
+}
+
+}  // namespace
+
+bool ParseEpisode(std::wstring_view name, EpisodeInfo* out) {
+    for (size_t i = 0; i < name.size(); ++i) {
+        const bool boundary = i == 0 || !(IsAsciiLetter(name[i - 1]) || IsDigit(name[i - 1]));
+        if (!boundary) continue;
+        size_t j = i;
+        int season = 0, episode = 0;
+        if (name[i] == L'S' || name[i] == L's') {
+            // S01E02, s1e2, S01.E02
+            ++j;
+            if (!ReadNumber(name, j, 2, &season)) continue;
+            if (j < name.size() && (name[j] == L'.' || name[j] == L' ')) ++j;
+            if (j >= name.size() || (name[j] != L'E' && name[j] != L'e')) continue;
+            ++j;
+            if (!ReadNumber(name, j, 3, &episode)) continue;
+        } else if (IsDigit(name[i])) {
+            // 1x02, but not 1920x1080: the season has at most two digits.
+            if (!ReadNumber(name, j, 2, &season)) continue;
+            if (j >= name.size() || (name[j] != L'x' && name[j] != L'X')) continue;
+            ++j;
+            if (j >= name.size() || !IsDigit(name[j]) || !ReadNumber(name, j, 3, &episode)) continue;
+        } else {
+            continue;
+        }
+        // "2x03abc" is not a marker; "S01E02E03" (a double episode) is.
+        if (j < name.size() && IsAsciiLetter(name[j]) && name[j] != L'E' && name[j] != L'e') continue;
+        if (episode <= 0) continue;
+        if (out) {
+            out->show = ShowName(name.substr(0, i));
+            out->season = season;
+            out->episode = episode;
+        }
+        return true;
+    }
+    return false;
+}
+
+// --- header check ----------------------------------------------------------------------------
+
+bool HeaderMatchesExtension(std::wstring_view path, const unsigned char* h, size_t n) {
+    const std::wstring ext = ExtOf(path);
+    auto is = [&](std::initializer_list<const wchar_t*> list) {
+        for (const wchar_t* e : list)
+            if (ext == e) return true;
+        return false;
+    };
+    auto at = [&](size_t off, const char* magic, size_t len) { return n >= off + len && memcmp(h + off, magic, len) == 0; };
+    // No real container fits in 12 bytes: an empty or tiny "movie" is a placeholder or text.
+    if (n < 12) return KindOf(path) == MediaKind::Other;
+    if (is({L"mp4", L"m4v", L"m4a", L"m4b", L"mov", L"qt", L"3gp", L"3g2", L"f4v"}))
+        return at(4, "ftyp", 4) || at(4, "moov", 4) || at(4, "mdat", 4) || at(4, "free", 4) || at(4, "wide", 4) ||
+               at(4, "skip", 4);
+    if (is({L"mkv", L"webm", L"mka", L"mk3d"})) return at(0, "\x1A\x45\xDF\xA3", 4);
+    if (is({L"avi", L"wav"})) return at(0, "RIFF", 4) || at(0, "RF64", 4);
+    if (is({L"flac"})) return at(0, "fLaC", 4) || at(0, "ID3", 3);
+    if (is({L"ogg", L"oga", L"ogv", L"opus", L"spx"})) return at(0, "OggS", 4);
+    if (is({L"wmv", L"wma", L"asf"})) return at(0, "\x30\x26\xB2\x75", 4);
+    if (is({L"mp3"})) return at(0, "ID3", 3) || (h[0] == 0xFF && (h[1] & 0xE0) == 0xE0);
+    return true;
 }
 
 }  // namespace library
