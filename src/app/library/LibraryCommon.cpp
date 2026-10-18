@@ -476,8 +476,9 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
         while (!text.empty() && iswspace(text.back())) text.pop_back();
         while (!text.empty() && iswspace(text.front())) text.erase(text.begin());
         if (text.empty()) return;
+        auto run = done;  // the dialog (and this lambda) is gone after Close()
         raw->Close();
-        if (done) done(text);
+        if (run) run(text);
     };
     d->Footer()->Add<Button>(okText, ButtonKind::Primary)->onClick = ok;
     box->onSubmit = [ok](const std::wstring&) { ok(); };
@@ -499,8 +500,9 @@ void ShowConfirm(const std::wstring& title, const std::wstring& text, const std:
     d->Footer()->Add<Button>(Tr(L"Cancel"), ButtonKind::Ghost)->onClick = [raw] { raw->Close(); };
     auto* okBtn = d->Footer()->Add<Button>(okText, ButtonKind::Primary);
     okBtn->onClick = [raw, done] {
+        auto run = done;  // the dialog (and this lambda) is gone after Close()
         raw->Close();
-        if (done) done();
+        if (run) run();
     };
     ShowDialog(w, std::move(d));
     w->SetFocus(okBtn, true);

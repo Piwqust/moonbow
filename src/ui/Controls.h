@@ -378,7 +378,6 @@ public:
     Dialog(std::wstring title, int width);
     Widget* Body() const { return body_; }
     Widget* Footer() const { return footer_; }
-    std::function<void()> onClose;  // X button / Escape
     void Close();
     void Paint(Painter& p) override;
     bool OnKeyDown(const KeyEvent& e) override;

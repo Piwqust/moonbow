@@ -1435,9 +1435,6 @@ Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog) {
     o.scrim = true;
     o.dismissOnOutside = false;
     o.dismissOnEscape = true;
-    o.onDismiss = [raw] {
-        if (raw->onClose) raw->onClose();
-    };
     host->ShowPopup(std::move(dialog), o);
     return raw;
 }
