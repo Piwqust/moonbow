@@ -195,9 +195,14 @@ size_t MemoryCache::Count() const {
 }
 
 // The shared instances are never destroyed: detached net workers may still use them while
-// the process exits.
+// the process exits. The disk cache is first used on a net worker (every feature, not only
+// TMDB): expired answers are deleted then, once per session.
 DiskCache& SharedDisk() {
-    static DiskCache* disk = new DiskCache(OnlineDir().empty() ? std::wstring() : OnlineDir() + L"\\cache");
+    static DiskCache* disk = [] {
+        auto* d = new DiskCache(OnlineDir().empty() ? std::wstring() : OnlineDir() + L"\\cache");
+        d->Prune();
+        return d;
+    }();
     return *disk;
 }
 

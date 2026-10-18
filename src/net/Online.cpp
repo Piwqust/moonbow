@@ -12,6 +12,7 @@
 #include "ui/Host.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cwctype>
 #include <deque>
@@ -315,6 +316,8 @@ void EnsureLogin(std::function<void(const std::wstring& error)> done) {
                     s.credentials = creds;
                     s.base = l.baseUrl.empty() || ui::Host::Automation() ? std::wstring()
                                                                           : L"https://" + l.baseUrl + L"/api/v1";
+                    // The key and the token go to this host: only their own.
+                    if (!OsHostAllowed(s.base)) s.base.clear();
                     if (l.allowed >= 0 && s.quota < 0) s.quota = l.allowed;
                     done({});
                     return;
@@ -487,8 +490,10 @@ void DownloadSubtitle(const SubtitleResult& item, const std::wstring& videoPath,
                             ext = file.substr(dot);
                         }
                         std::wstring p = folder + L"\\" + file;
-                        for (int i = 2; GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES && i < 100; ++i)
+                        for (int i = 2; GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; ++i) {
+                            if (i == 100) return std::wstring();  // never replace the 99th copy
                             p = folder + L"\\" + stem + L"." + std::to_wstring(i) + ext;
+                        }
                         return p;
                     };
                     auto writable = [](const std::wstring& p) {
@@ -693,8 +698,6 @@ void MetaStore::Load() {
                 } while (FindNextFileW(h, &fd));
                 FindClose(h);
             }
-            // Old search answers would only take room.
-            SharedDisk().Prune();
         },
         [this, out, gen] {
             loading_ = false;
@@ -778,15 +781,17 @@ Lookup& Q() {
 
 void RunNext();
 
-void Finish(const std::wstring& key, uint64_t gen) {
+void Finish(uint64_t gen) {
     Q().busy = false;
-    if (gen == Store().Generation()) {
-        Store().Save();
+    const bool current = gen == Store().Generation();
+    if (current) {
         ChangedSignal().Emit();
         TheApp().images().Refresh();
     }
-    (void)key;
     RunNext();
+    // One save when the queue stops (empty, paused, offline), not one per file: a save builds the
+    // whole store on the UI thread.
+    if (current && !Q().busy) Store().Save();
 }
 
 void FetchImage(const char* size, const std::string& tmdbPath) {
@@ -804,6 +809,15 @@ void FetchImage(const char* size, const std::string& tmdbPath) {
         if (gen != Store().Generation()) return;
         ImageState& s = Store().Image(file);
         s.requested = false;
+        std::string type = resp.Header("content-type");
+        for (char& c : type) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (resp.Ok() && !resp.fromCache && type.rfind("image/", 0) != 0) {
+            // A 200 page instead of the picture (a captive portal): keepExisting would keep it
+            // for good, so it goes, and the next session asks again.
+            Async([file] { DeleteFileW(file.c_str()); });
+            s.requested = true;
+            return;
+        }
         if (resp.Ok()) {
             s.have = true;
             ChangedSignal().Emit();
@@ -823,7 +837,7 @@ void ApplyEpisode(const std::wstring& key, uint64_t gen, MetaMatch show, int sea
         NoteTmdbAnswer(resp);
         if (gen != Store().Generation()) return;
         MediaMeta* m = Store().Find(key);
-        if (!m) return Finish(key, gen);
+        if (!m) return Finish(gen);
         m->state = MediaMeta::State::Matched;
         m->manual = manual;
         m->tv = true;
@@ -846,7 +860,7 @@ void ApplyEpisode(const std::wstring& key, uint64_t gen, MetaMatch show, int sea
                 m->still = e.still;
             }
         if (resp.error != Error::None && !manual) m->state = MediaMeta::State::Failed;
-        Finish(key, gen);
+        Finish(gen);
     });
 }
 
@@ -865,9 +879,9 @@ void StartLookup(const std::wstring& key) {
     const uint64_t gen = Store().Generation();
     Send(std::move(r), [key, gen, g, tv](const Response& resp) {
         NoteTmdbAnswer(resp);
-        if (gen != Store().Generation()) return Finish(key, gen);
+        if (gen != Store().Generation()) return Finish(gen);
         MediaMeta* m = Store().Find(key);
-        if (!m) return Finish(key, gen);
+        if (!m) return Finish(gen);
         if (resp.error == Error::None && resp.status == 429 && ++Q().retries[key] <= 2) {
             // Back off and try this one again later (twice; then it waits for the next session).
             m->state = MediaMeta::State::Queued;
@@ -880,7 +894,7 @@ void StartLookup(const std::wstring& key) {
         if (!resp.Ok()) {
             // Offline, a timeout or a bad key: nothing is saved, the next session asks again.
             m->state = MediaMeta::State::Failed;
-            return Finish(key, gen);
+            return Finish(gen);
         }
         auto doc = json::Parse(resp.body);
         const std::vector<MetaMatch> results = doc ? ParseTmdbSearch(*doc, tv) : std::vector<MetaMatch>{};
@@ -888,7 +902,7 @@ void StartLookup(const std::wstring& key) {
         m->checked = UnixNow();
         if (pick < 0) {
             m->state = MediaMeta::State::NotFound;
-            return Finish(key, gen);
+            return Finish(gen);
         }
         const MetaMatch& best = results[static_cast<size_t>(pick)];
         if (tv) return ApplyEpisode(key, gen, best, g.season, g.episode, false);
@@ -901,7 +915,7 @@ void StartLookup(const std::wstring& key) {
         m->rating = best.rating;
         m->poster = best.poster;
         m->backdrop = best.backdrop;
-        Finish(key, gen);
+        Finish(gen);
     });
 }
 
@@ -1057,6 +1071,9 @@ void ClearAll() {
     SharedMemory().Clear();
     Q().queue.clear();
     Store().Clear();
+    // The empty store goes to disk after any save still in flight, which could otherwise land
+    // after the delete below and bring the data back.
+    Store().Save();
     Os().quota = -1;
     const std::wstring dir = OnlineDir();
     if (dir.empty()) return;

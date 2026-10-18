@@ -43,7 +43,7 @@ struct Request {
     size_t maxBytes = 4u << 20;  // larger bodies fail with TooLarge
     bool user = false;           // the user asked for it: tried even while offline
     // Cache: when `cacheKey` is set, a fresh entry answers without the network and a 2xx answer
-    // (or a 404 when cache404 > 0) is stored for `cacheTtl` seconds.
+    // that is JSON (or a 404 when cache404 > 0) is stored for `cacheTtl` seconds.
     std::string cacheKey;
     int64_t cacheTtl = 0;
     int64_t cache404 = 0;
