@@ -45,10 +45,13 @@ $scale = [LumenHit]::GetDpiForWindow($h) / 96.0
 $rc = New-Object LumenHit+RECT; [LumenHit]::GetClientRect($h, [ref]$rc) | Out-Null
 
 # Widget tree (rects are window DIPs); a hidden ancestor hides its subtree.
-[LumenHit]::PostMessage($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-Start-Sleep -Milliseconds 300
+# Sent, not posted: the dump file is complete when this returns (a fixed wait could read the old one).
+$sr = [IntPtr]::Zero
+if ([LumenHit]::SendMessageTimeout($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero, 2, 5000, [ref]$sr) -eq [IntPtr]::Zero) {
+  throw "window $($h.ToInt64()) did not answer the tree dump"
+}
 $nodes = @(); $hiddenDepth = -1; $popup = $false
-foreach ($line in Get-Content (Join-Path $env:TEMP "lumen-tree-$ProcessId.txt") -Encoding UTF8) {
+foreach ($line in Get-Content (Join-Path $env:TEMP "lumen-tree-$ProcessId-$($h.ToInt64()).txt") -Encoding UTF8) {
   # v2 header: the DIP scale, including the --scale test override.
   if ($line -match '^=== window .* scale=([\d.]+)') { $scale = [double]$matches[1]; continue }
   if ($line -eq "--- popup") { $popup = $true; $hiddenDepth = -1; continue }
