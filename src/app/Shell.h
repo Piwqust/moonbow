@@ -14,6 +14,7 @@ public:
     explicit TitleBar(MainWindow* window);
     ~TitleBar() override;
     void Paint(ui::Painter& p) override;
+    void OnLayout() override;
     void Refresh();
 
 private:

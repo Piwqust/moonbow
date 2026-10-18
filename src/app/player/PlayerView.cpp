@@ -211,6 +211,13 @@ void ShowVideoContextMenu(Host* host, Point at) {
     KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
 }
 
+// Whether text is a, or a + "\n" + b when b is not empty, without building that string per frame.
+bool TipIs(const std::wstring& text, const std::wstring& a, const std::wstring& b) {
+    if (b.empty()) return text == a;
+    return text.size() == a.size() + 1 + b.size() && text.compare(0, a.size(), a) == 0 && text[a.size()] == L'\n' &&
+           text.compare(a.size() + 1, b.size(), b) == 0;
+}
+
 }  // namespace
 
 void ShowPipContextMenu(Host* host, Point at) {
@@ -297,6 +304,8 @@ public:
     }
     bool OnMouseMove(const MouseEvent& e) override {
         window_->PointerMoved(e.x, e.y);
+        if (owner_->topTip_.empty() || !owner_->topInfo_.Contains(e.x, e.y)) tooltip.clear();
+        else if (tooltip != owner_->topTip_) tooltip = owner_->topTip_;
         // Near the bottom edge the floating bar stays up while the pointer rests there.
         const bool nearBottom = window_->BarOverlays() && e.y >= rect.Bottom() - kRevealZone;
         if (nearBottom && !revealTimer_) {
@@ -606,11 +615,16 @@ void PlayerView::Paint(Painter& p) {
 float PlayerView::PaintTopInfo(Painter& p) {
     const PlayerState& s = PS();
     const float k = window_->ChromeOpacity();
+    auto none = [this] {
+        topInfo_ = {};
+        video_->tooltip.clear();  // the panel went with the chrome: so does its tooltip
+        return 0.0f;
+    };
     if (!window_->IsFullscreen() || window_->PictureInPicture() || !s.fileLoaded || !bar_->visible || k <= 0.01f)
-        return 0;
+        return none();
     const QueueItem* item = TheApp().queue().CurrentItem();
     const std::wstring title = !s.title.empty() ? s.title : item ? FileNameOf(item->path) : std::wstring();
-    if (title.empty()) return 0;
+    if (title.empty()) return none();
     std::wstring chapter;
     if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size()))
         chapter = s.chapters[static_cast<size_t>(s.chapter)].title;
@@ -619,10 +633,13 @@ float PlayerView::PaintTopInfo(Painter& p) {
     const float cw = chapter.empty() ? 0.0f : gfx::Text::Get().Measure(chapter, TextStyle::Body).width + 2;
     const float sep = chapter.empty() ? 0.0f : space * 2 + 1;
     const float chapterW = std::min(cw, std::floor((widest - 2 * side - sep) * 0.4f));
-    const float titleW = std::min(gfx::Text::Get().Measure(title, TextStyle::BodyStrong).width + 2,
-                                  widest - 2 * side - sep - chapterW);
+    const float titleNatural = gfx::Text::Get().Measure(title, TextStyle::BodyStrong).width + 2;
+    const float titleW = std::min(titleNatural, widest - 2 * side - sep - chapterW);
     const float w = std::round(titleW + sep + chapterW + 2 * side);
     const Rect r{std::round(rect.Cx() - w / 2), rect.y + kFloatMargin - (1 - k) * 10, w, h};
+    topInfo_ = r;
+    if (titleNatural <= titleW + 0.5f && cw <= chapterW + 0.5f) topTip_.clear();
+    else if (!TipIs(topTip_, title, chapter)) topTip_ = chapter.empty() ? title : title + L"\n" + chapter;
     p.PushOpacity(k);
     p.Shadow(r, 14, 18, 6, 0.40f);
     p.Fill(r, P().bgChrome, 14);

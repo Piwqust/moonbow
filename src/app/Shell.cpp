@@ -229,6 +229,16 @@ void TitleBar::Paint(Painter& p) {
     p.Fill(rect, P().bgChrome);
 }
 
+void TitleBar::OnLayout() {
+    Widget::OnLayout();
+    // A long title (worst-case tags) is cut: the full text shows on hover. The label stays part of
+    // the caption, so it still drags the window (the host tracks tooltips over the caption).
+    const std::wstring& t = title_->Text();
+    const bool cut = !t.empty() && gfx::Text::Get().Measure(t, title_->style).width > title_->rect.w + 0.5f;
+    if (!cut) title_->tooltip.clear();
+    else if (title_->tooltip != t) title_->tooltip = t;
+}
+
 void TitleBar::ShowAppMenu() {
     std::vector<MenuItem> items;
     auto item = [](const wchar_t* label, const char* icon, Action a) {
