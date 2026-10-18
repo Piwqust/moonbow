@@ -215,6 +215,7 @@ private:
         e.icon = group == "radio" ? "streaming" : group == "podcasts" ? "audio" : "link";
         e.key = group;
         e.date = date;
+        e.favorite = Favorite(url);
         e.ref = static_cast<int>(queue_.size());
         queue_.push_back(MakeQueueItem(url, e.title));
         Push(std::move(e));
@@ -236,7 +237,7 @@ private:
             e.kind = EntryKind::Category;
             e.title = Tr(title);
             e.icon = icon;
-            e.subtitle = CountItems(static_cast<long long>(n));
+            e.subtitle = group == "radio" ? CountStations(static_cast<long long>(n)) : CountEpisodes(static_cast<long long>(n));
             e.count = list_ || compact_ ? static_cast<int>(n) : -1;
             AddRoute(std::move(e), Route{Section::Network, path});
         };

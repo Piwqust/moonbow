@@ -59,7 +59,7 @@ public:
     }
     void SetGridStyle(GridStyle s, int rows) {
         grid_->SetStyle(compact_ ? GridStyle::CompactRows : s);
-        grid_->maxRows = rows;
+        grid_->maxRows = compact_ && rows > 0 ? 3 : rows;
         grid_->stretch = rows == 0;
     }
     ItemGrid* Grid() const { return grid_; }
@@ -155,10 +155,13 @@ public:
         results_[1] = AddSection(L"Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
         continue_ = AddSection(L"Continue Watching", Route{Section::Recent, L"continue"}, GridStyle::VideoCards);
         listen_ = AddSection(L"Listen Again", Route{Section::Recent, L"audio"}, GridStyle::SquareCards);
+        favorites_ = AddSection(L"Favorites", Route{Section::Recent, L"favorites"}, GridStyle::VideoCards);
         folders_ = AddSection(L"Frequently Visited Folders", Route{Section::Videos, {}}, GridStyle::SquareCards);
         playlists_ = AddSection(L"Frequently Visited Playlists", Route{Section::Playlists, {}}, GridStyle::SquareCards);
         artists_ = AddSection(L"Frequently Listened Artists", Route{Section::Music, L"artists"}, GridStyle::SquareCards);
+        artists_->Grid()->roundImages = true;
         added_ = AddSection(L"Recently Added", Route{Section::Videos, {}}, GridStyle::VideoCards);
+        addedMusic_ = AddSection(L"Recently Added Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
         for (HomeSection* s : results_) s->SetGridStyle(s == results_[0] ? GridStyle::VideoCards : GridStyle::SquareCards, 0);
 
         empty_ = Add<EmptyState>();
@@ -194,17 +197,35 @@ public:
             if (auto* s = dynamic_cast<HomeSection*>(c.get()); s && s->visible) return s->Grid();
         return nullptr;
     }
+    Widget* HitTest(float x, float y) override {
+        auto* first = static_cast<ItemGrid*>(InitialFocus());
+        return GuardedHit(first ? first : continue_->Grid(), LibraryView::HitTest(x, y));
+    }
+    void OnLayout() override {
+        LibraryView::OnLayout();
+        TakeFreeFocus(*this, compact_, focusTaken_);
+    }
 
 private:
     HomeSection* AddSection(const wchar_t* title, Route more, GridStyle style) {
         return content_->Add<HomeSection>(Tr(title), std::move(more), compact_, style);
     }
 
-    static std::wstring TitleFor(const library::HistoryEntry& h, const library::MediaItem* m, bool fileName) {
-        if (m && m->kind == library::MediaKind::Audio) return m->DisplayTitle();
-        if (IsUrl(h.path)) return h.title.empty() ? h.path : h.title;
-        if (fileName) return FileNameOf(h.path);
-        return h.title.empty() ? FileNameOf(h.path) : h.title;
+    // A card for a file or stream that may or may not be in the library.
+    static Entry MediaCard(const std::wstring& path, const library::MediaItem* m, const library::HistoryEntry* h) {
+        Entry e;
+        e.kind = EntryKind::Media;
+        e.path = path;
+        const bool url = IsUrl(path);
+        e.audio = m ? m->kind == library::MediaKind::Audio
+                    : h ? h->kind == library::MediaKind::Audio : library::KindOf(path) != library::MediaKind::Video;
+        e.title = MediaTitle(path, m, h ? h->title : std::wstring());
+        if (e.audio) e.subtitle = m ? ArtistLabel(m->artist) : url ? std::wstring(Tr(L"Network stream")) : std::wstring();
+        if (!url && !(m && m->offline)) e.image = path;
+        e.icon = url ? "streaming" : e.audio ? "music" : "video";
+        e.duration = m && m->duration > 0 ? m->duration : h ? h->duration : 0;
+        e.favorite = TheApp().favorites().Contains(path);
+        return e;
     }
 
     void Rebuild() {
@@ -214,8 +235,7 @@ private:
         count_ = static_cast<long long>(snap->items.size());
 
         const bool searching = !filter_.empty();
-        for (HomeSection* s : {continue_, listen_, folders_, playlists_, artists_, added_, results_[0], results_[1]})
-            s->Clear();
+        for (HomeSection* s : All()) s->Clear();
 
         if (searching) {
             int n = 0;
@@ -225,14 +245,7 @@ private:
                 auto found = snap->Search(filter_, kind);
                 library::SortItems(found, library::SortKey::Name);
                 for (const library::MediaItem* m : found) {
-                    Entry e;
-                    e.kind = EntryKind::Media;
-                    e.path = m->path;
-                    e.audio = k == 1;
-                    e.title = k == 0 ? FileNameOf(m->path) : m->DisplayTitle();
-                    e.subtitle = k == 1 ? m->artist : std::wstring();
-                    if (!m->offline) e.image = m->path;
-                    e.duration = m->duration;
+                    Entry e = MediaCard(m->path, m, nullptr);
                     e.ref = s->AddQueue(MakeQueueItem(m->path, k == 1 ? m->DisplayTitle() : std::wstring(), m->duration));
                     s->AddEntry(std::move(e));
                     ++n;
@@ -240,7 +253,8 @@ private:
                 s->Title()->text = Fmt(Tr(k == 0 ? L"Videos · {0}" : L"Music · {0}"), static_cast<long long>(found.size()));
                 s->Commit(Tr(L"Search results"));
             }
-            for (HomeSection* s : {continue_, listen_, folders_, playlists_, artists_, added_}) s->Commit({});
+            for (HomeSection* s : Sections()) s->Commit({});
+            count_ = n;  // the header counts the results while searching
             empty_->visible = n == 0;
             if (n == 0)
                 empty_->Set("search", Tr(L"Nothing found"),
@@ -254,11 +268,9 @@ private:
         // Continue Watching: videos stopped halfway.
         for (const library::HistoryEntry& h : hist.ContinueWatching(20)) {
             const library::MediaItem* m = snap->FindItem(h.path);
-            Entry e;
-            e.kind = EntryKind::Media;
-            e.path = h.path;
-            e.title = TitleFor(h, m, true);
-            if (!IsUrl(h.path) && !(m && m->offline)) e.image = h.path;
+            Entry e = MediaCard(h.path, m, &h);
+            e.audio = false;
+            e.subtitle.clear();
             e.icon = IsUrl(h.path) ? "streaming" : "video";
             e.progress = h.Progress();
             e.duration = h.duration;
@@ -269,26 +281,47 @@ private:
 
         // Listen Again: recently played audio.
         std::map<std::wstring, uint32_t> artistPlays;
+        std::map<std::wstring, std::wstring> artistCover;  // artist -> a song with cover art
         for (const library::HistoryEntry& h : hist.Entries()) {
             if (h.kind != library::MediaKind::Audio) continue;
             const library::MediaItem* m = snap->FindItem(h.path);
-            if (m && !m->artist.empty()) artistPlays[m->artist] += std::max<uint32_t>(1, h.playCount);
+            if (m && !m->artist.empty()) {
+                artistPlays[m->artist] += std::max<uint32_t>(1, h.playCount);
+                if (!m->offline) artistCover.emplace(m->artist, m->path);
+            }
         }
         for (const library::HistoryEntry& h : hist.ListenAgain(20)) {
             const library::MediaItem* m = snap->FindItem(h.path);
-            Entry e;
-            e.kind = EntryKind::Media;
+            Entry e = MediaCard(h.path, m, &h);
             e.audio = true;
-            e.path = h.path;
-            e.title = m ? m->DisplayTitle() : (h.title.empty() ? library::StemOf(h.path) : h.title);
-            e.subtitle = m && !m->artist.empty() ? m->artist : (IsUrl(h.path) ? Tr(L"Network stream") : std::wstring());
-            if (!IsUrl(h.path) && !(m && m->offline)) e.image = h.path;
             e.icon = IsUrl(h.path) ? "streaming" : "music";
-            e.duration = h.duration;
-            e.ref = listen_->AddQueue(MakeQueueItem(h.path, e.title, h.duration));
+            e.ref = listen_->AddQueue(MakeQueueItem(h.path, e.title, e.duration));
             listen_->AddEntry(std::move(e));
         }
         listen_->Commit(Tr(L"Listen Again"));
+
+        // Favorites, latest first. Files that are gone from the disk are left out.
+        int favVideos = 0, favCount = 0;
+        const auto& favs = app.favorites().All();
+        for (auto it = favs.rbegin(); it != favs.rend() && favCount < 20; ++it) {
+            const std::wstring& path = *it;
+            const library::MediaItem* m = IsUrl(path) ? nullptr : snap->FindItem(path);
+            if (!m && !IsUrl(path) && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            const library::HistoryEntry* h = hist.Find(path);
+            Entry e = MediaCard(path, m, h);
+            e.favorite = false;  // every card here is one
+            if (!e.audio) {
+                ++favVideos;
+                const double p = h ? h->Progress() : 0.0;
+                if (p > 0.02) e.progress = std::min(1.0, p);
+                e.watched = p >= 0.95;
+            }
+            e.ref = favorites_->AddQueue(MakeQueueItem(path, e.audio ? e.title : std::wstring(), e.duration));
+            favorites_->AddEntry(std::move(e));
+            ++favCount;
+        }
+        favorites_->SetGridStyle(favVideos * 2 > favCount ? GridStyle::VideoCards : GridStyle::SquareCards, 1);
+        favorites_->Commit(Tr(L"Favorites"));
 
         // Frequently visited folders.
         for (const library::FolderStat& f : hist.FrequentFolders(10)) {
@@ -342,34 +375,46 @@ private:
             e.title = artists[i].first;
             e.subtitle = CountPlays(artists[i].second);
             e.icon = "artist";
+            if (auto c = artistCover.find(artists[i].first); c != artistCover.end()) e.image = c->second;
             artists_->AddEntry(std::move(e), Route{Section::Music, L"artist:" + artists[i].first});
         }
         artists_->Commit({});
 
-        // Recently added videos (newest files first).
+        // Recently added videos (newest files first). Files whose length couldn't be read are
+        // usually broken or not media at all: they don't open the Home page.
         auto vids = snap->Videos();
         library::SortItems(vids, library::SortKey::Date, true);
-        for (size_t i = 0; i < vids.size() && i < 20; ++i) {
+        for (size_t i = 0, n = 0; i < vids.size() && n < 20; ++i) {
             const library::MediaItem* m = vids[i];
-            Entry e;
-            e.kind = EntryKind::Media;
-            e.path = m->path;
-            e.title = FileNameOf(m->path);
-            if (!m->offline) e.image = m->path;
-            e.duration = m->duration;
+            if (!(m->duration > 0)) continue;
+            const library::HistoryEntry* h = hist.Find(m->path);
+            Entry e = MediaCard(m->path, m, nullptr);
             e.ref = added_->AddQueue(MakeQueueItem(m->path, {}, m->duration));
-            const double p = [&] {
-                const library::HistoryEntry* h = hist.Find(m->path);
-                return h ? h->Progress() : 0.0;
-            }();
+            const double p = h ? h->Progress() : 0.0;
             if (p > 0.02) e.progress = std::min(1.0, p);
             e.watched = p >= 0.95;
             added_->AddEntry(std::move(e));
+            ++n;
         }
         added_->Commit(Tr(L"Recently Added"));
 
+        // New music, when there's no listening history to show yet.
+        if (!listen_->visible) {
+            auto songs = snap->Music();
+            library::SortItems(songs, library::SortKey::Date, true);
+            for (size_t i = 0, n = 0; i < songs.size() && n < 20; ++i) {
+                const library::MediaItem* m = songs[i];
+                if (!(m->duration > 0)) continue;
+                Entry e = MediaCard(m->path, m, nullptr);
+                e.ref = addedMusic_->AddQueue(MakeQueueItem(m->path, m->DisplayTitle(), m->duration));
+                addedMusic_->AddEntry(std::move(e));
+                ++n;
+            }
+        }
+        addedMusic_->Commit(Tr(L"Recently Added Music"));
+
         bool any = false;
-        for (HomeSection* s : {continue_, listen_, folders_, playlists_, artists_, added_}) any |= s->visible;
+        for (HomeSection* s : Sections()) any |= s->visible;
         const bool scanning = app.library().Scanning();
         scan_->Update();
         if (!any) scan_->visible = false;  // the empty state says it already
@@ -403,9 +448,21 @@ private:
     ScanBadge* scan_ = nullptr;
     EmptyState* empty_ = nullptr;
     HomeSection* results_[2] = {};
-    HomeSection *continue_ = nullptr, *listen_ = nullptr, *folders_ = nullptr, *playlists_ = nullptr,
-                *artists_ = nullptr, *added_ = nullptr;
+    HomeSection *continue_ = nullptr, *listen_ = nullptr, *favorites_ = nullptr, *folders_ = nullptr,
+                *playlists_ = nullptr, *artists_ = nullptr, *added_ = nullptr, *addedMusic_ = nullptr;
     ScopedConnection libConn_, playerConn_;
+    bool focusTaken_ = false;
+
+    // The regular sections (not the search results).
+    std::vector<HomeSection*> Sections() const {
+        return {continue_, listen_, favorites_, folders_, playlists_, artists_, added_, addedMusic_};
+    }
+    std::vector<HomeSection*> All() const {
+        auto v = Sections();
+        v.push_back(results_[0]);
+        v.push_back(results_[1]);
+        return v;
+    }
 };
 
 }  // namespace

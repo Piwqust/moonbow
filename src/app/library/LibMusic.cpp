@@ -102,18 +102,14 @@ private:
 
 // --- helpers --------------------------------------------------------------------------------
 
+// Tags only, empty = unknown. Albums aren't guessed from folder names: the Songs list, the
+// album page and Artists then agree on what's untagged.
 std::wstring AlbumOf(const library::MediaItem& m) {
-    if (!m.album.empty()) return m.album;
-    const std::wstring f = FileNameOf(m.folder);
-    return f.empty() ? m.folder : f;
+    return m.album;
 }
 
 std::wstring ArtistOf(const library::MediaItem& m) {
-    return m.artist;  // empty = unknown
-}
-
-std::wstring ArtistLabel(const std::wstring& a) {
-    return a.empty() ? std::wstring(Tr(L"Unknown artist")) : a;
+    return m.artist;
 }
 
 std::wstring GenreLabel(const std::wstring& g) {
@@ -200,7 +196,7 @@ public:
             case MusicMode::Genres: c.push_back({Tr(L"Genres"), route_}); break;
             case MusicMode::Album:
                 c.push_back({Tr(L"Albums"), Route{Section::Music, L"albums"}});
-                c.push_back({arg_, route_});
+                c.push_back({AlbumLabel(arg_), route_});
                 break;
             case MusicMode::Artist:
                 c.push_back({Tr(L"Artists"), Route{Section::Music, L"artists"}});
@@ -264,6 +260,7 @@ protected:
     unsigned RowColumns() const override {
         if (mode_ == MusicMode::Albums || mode_ == MusicMode::Artists || mode_ == MusicMode::Genres || mode_ == MusicMode::Root)
             return kColSubtitle;
+        if (mode_ == MusicMode::Album) return kColSubtitle | kColDuration;  // every row has the same album
         return kColSubtitle | kColExtra | kColDuration;
     }
 
@@ -367,7 +364,7 @@ private:
 
     std::wstring Title() const {
         switch (mode_) {
-            case MusicMode::Album: return arg_;
+            case MusicMode::Album: return AlbumLabel(arg_);
             case MusicMode::Artist: return ArtistLabel(arg_);
             case MusicMode::Genre: return GenreLabel(arg_);
             case MusicMode::Songs: return Tr(L"Songs");
@@ -407,14 +404,17 @@ private:
     }
 
     void BuildRoot(const std::vector<const library::MediaItem*>& songs) {
-        if (compact_ || list_) {
+        if (songs.empty()) return;  // the empty state offers "Add folder"
+        // Same items in grid and list: the four categories and an "Add folder" tile/row, which
+        // leads the side panel's list (its design) and closes the page's grid.
+        auto addFolder = [&] {
             Entry add;
             add.kind = EntryKind::Action;
             add.title = Tr(L"Add folder");
             add.icon = "add";
             AddAction(std::move(add), [] { AddFolderToLibrary(); });
-        }
-        if (songs.empty()) return;
+        };
+        if (compact_) addFolder();
         auto cat = [&](const wchar_t* title, const char* icon, const wchar_t* path, std::wstring sub, int count) {
             Entry e;
             e.kind = EntryKind::Category;
@@ -430,11 +430,12 @@ private:
         const long long n = static_cast<long long>(songs.size());
         cat(L"Songs", "songs", L"songs", CountSongs(n), static_cast<int>(n));
         cat(L"Albums", "album", L"albums", CountAlbums(static_cast<long long>(albums.size())), static_cast<int>(albums.size()));
-        cat(L"Artists", "artist", L"artists", CountItems(static_cast<long long>(artists.size())), static_cast<int>(artists.size()));
+        cat(L"Artists", "artist", L"artists", CountArtists(static_cast<long long>(artists.size())),
+            static_cast<int>(artists.size()));
         const bool reading = GenreIndex::Get().Busy();
-        cat(L"Genres", "genre", L"genres", reading ? std::wstring(Tr(L"Reading tags…")) : CountItems(static_cast<long long>(genres.size())),
+        cat(L"Genres", "genre", L"genres", reading ? std::wstring(Tr(L"Reading tags…")) : CountGenres(static_cast<long long>(genres.size())),
             static_cast<int>(genres.size()));
-        // Compact rows show plain counts on the right; cards show the subtitle.
+        if (!compact_) addFolder();
     }
 
     void BuildSongs(std::vector<const library::MediaItem*> v, const std::string& defaultSort) {
@@ -442,7 +443,7 @@ private:
         for (const library::MediaItem* m : v)
             if (folded_.empty() || library::FoldedContains(m->searchKey, folded_)) filtered.push_back(m);
         SortMedia(filtered, SortValue(defaultSort));
-        for (const library::MediaItem* m : filtered) AddMedia(*m, false);
+        for (const library::MediaItem* m : filtered) AddMedia(*m);
     }
 
     void BuildGroups(std::vector<Group> groups, EntryKind kind, const char* icon, const wchar_t* prefix) {
@@ -457,15 +458,16 @@ private:
         for (Group& g : groups) {
             const std::wstring label = kind == EntryKind::Artist ? ArtistLabel(g.name)
                                        : kind == EntryKind::Genre ? GenreLabel(g.name)
-                                                                  : g.name;
+                                                                  : AlbumLabel(g.name);
             if (!Matches(label + L" " + g.artist)) continue;
             Entry e;
             e.kind = kind;
             e.title = label;
             e.path = g.name;  // raw key (empty = unknown)
             e.icon = icon;
-            if (kind == EntryKind::Album && (g.mixed || !g.artist.empty()))
-                e.subtitle = g.mixed ? std::wstring(Tr(L"Various artists")) : g.artist;
+            // Albums always name the artist (like the songs list), artists and genres count songs.
+            if (kind == EntryKind::Album)
+                e.subtitle = g.mixed ? std::wstring(Tr(L"Various artists")) : ArtistLabel(g.artist);
             else
                 e.subtitle = CountSongs(static_cast<long long>(g.songs.size()));
             if (list_ && kind == EntryKind::Album) e.count = static_cast<int>(g.songs.size());

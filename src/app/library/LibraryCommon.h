@@ -22,6 +22,16 @@ bool IsUrl(const std::wstring& path);
 std::wstring CountSongs(long long n);
 std::wstring CountPlays(long long n);
 std::wstring CountAlbums(long long n);
+std::wstring CountArtists(long long n);   // "3 исполнителя"
+std::wstring CountGenres(long long n);    // "2 жанра"
+std::wstring CountStations(long long n);  // "5 станций"
+std::wstring CountEpisodes(long long n);  // "1 выпуск"
+// Tag labels for untagged songs: "Unknown artist" / "Unknown album".
+std::wstring ArtistLabel(const std::wstring& artist);
+std::wstring AlbumLabel(const std::wstring& album);
+// Title shown for a file or stream: tags for songs, the file name without its extension for
+// videos and unknown files, the stored title (history, playlist) or the address for streams.
+std::wstring MediaTitle(const std::wstring& path, const library::MediaItem* item, const std::wstring& storedTitle = {});
 bool SamePath(const std::wstring& a, const std::wstring& b);
 // Current media of the player (empty when nothing is loaded).
 std::wstring NowPlayingPath();
