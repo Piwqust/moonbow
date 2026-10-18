@@ -193,6 +193,9 @@ public:
         if (e.button == MouseButton::Left) {
             // The click acts on release, so that a long press can mean 2× instead.
             down_ = true;
+            clickPending_ = false;
+            window_->CancelTimer(holdTimer_);
+            holdTimer_ = 0;
             const PlayerState& s = PS();
             if (s.fileLoaded && !s.paused && !s.eof)
                 holdTimer_ = window_->StartTimer(kHoldMs, [this] {
@@ -213,17 +216,21 @@ public:
         down_ = false;
         window_->CancelTimer(holdTimer_);
         holdTimer_ = 0;
-        if (holding_) {
-            EndHold();
-            return true;
-        }
+        if (holding_) EndHold();
+        else clickPending_ = true;
+        return true;
+    }
+    // Host calls this right after OnMouseUp, and only for a release over the video: a release
+    // elsewhere or a lost capture (Alt+Tab mid-press) is no click.
+    void OnClick() override {
+        if (!clickPending_) return;
+        clickPending_ = false;
         // Settings > Controls > Mouse; play/pause by default, like MPC-HC (a double click undoes it).
         pausedByClick_ = PS().fileLoaded && TheApp().config().GetString("controls.singleClick") == "playPause";
         VideoSingleClick();
-        return true;
     }
     bool OnDoubleClick(const MouseEvent&) override {
-        down_ = false;
+        down_ = clickPending_ = false;
         if (window_->PictureInPicture()) return true;
         const bool undo = pausedByClick_ && TheApp().config().GetString("controls.doubleClick") != "none";
         pausedByClick_ = false;
@@ -274,7 +281,7 @@ private:
     MainWindow* window_;
     PlayerView* owner_;
     bool pausedByClick_ = false;
-    bool down_ = false, holding_ = false;
+    bool down_ = false, holding_ = false, clickPending_ = false;
     double holdSpeed_ = 1;
     UINT_PTR holdTimer_ = 0, revealTimer_ = 0;
 };
