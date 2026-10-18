@@ -869,6 +869,13 @@ ScrollView::ScrollView() {
     height = Length::Grow();
 }
 
+ScrollView::~ScrollView() {
+    // A page can go away within 900 ms of a scroll: the hide timer must not fire on it.
+    if (!hideTimer_ || !timerHost_) return;
+    const auto& hosts = Host::All();
+    if (std::find(hosts.begin(), hosts.end(), timerHost_) != hosts.end()) timerHost_->CancelTimer(hideTimer_);
+}
+
 Size ScrollView::MeasureContent(float availW, float availH) {
     Widget* c = Content();
     if (!c) return {0, 0};
@@ -895,6 +902,7 @@ void ScrollView::ScrollTo(float y, bool animate) {
     Host* host = GetHost();
     if (host) {
         if (hideTimer_) host->CancelTimer(hideTimer_);
+        timerHost_ = host;
         hideTimer_ = host->StartTimer(900, [this] {
             hideTimer_ = 0;
             if (!dragging_ && !overBar_) barVisible_.To(0, 250);
@@ -1012,6 +1020,13 @@ public:
         hasChecks_ = std::any_of(items_.begin(), items_.end(), [](const MenuItem& m) { return m.checked; });
         Flatten(items_, L"");
         Refilter();
+    }
+
+    ~MenuPopup() override {
+        // Clicking an item within 180 ms of hovering a submenu row closes the menu first.
+        if (!submenuTimer_ || !timerHost_) return;
+        const auto& hosts = Host::All();
+        if (std::find(hosts.begin(), hosts.end(), timerHost_) != hosts.end()) timerHost_->CancelTimer(submenuTimer_);
     }
 
     MenuPopup* Root() {
@@ -1289,8 +1304,10 @@ private:
             host->ClosePopup(child_);
             child_ = nullptr;
         }
+        if (submenuTimer_ && host) host->CancelTimer(submenuTimer_);
+        submenuTimer_ = 0;
         if (i >= 0 && !At(i).submenu.empty() && At(i).enabled) {
-            if (submenuTimer_ && host) host->CancelTimer(submenuTimer_);
+            timerHost_ = host;
             submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i] {
                 submenuTimer_ = 0;
                 if (highlight_ == i) OpenSubmenu(i, false);
@@ -1340,6 +1357,7 @@ private:
     float scroll_ = 0;
     bool hasIcons_ = false, hasChecks_ = false;
     UINT_PTR submenuTimer_ = 0;
+    Host* timerHost_ = nullptr;
 };
 
 }  // namespace

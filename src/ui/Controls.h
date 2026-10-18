@@ -299,6 +299,7 @@ private:
 class ScrollView : public Widget {
 public:
     ScrollView();
+    ~ScrollView() override;
     template <class T, class... A>
     T* SetContent(A&&... args) {
         ClearChildren();
@@ -331,6 +332,7 @@ private:
     float dragStartY_ = 0, dragStartOffset_ = 0;
     bool overBar_ = false;
     UINT_PTR hideTimer_ = 0;
+    Host* timerHost_ = nullptr;
 };
 
 // A panel with a background color, optional border and corner radius.
