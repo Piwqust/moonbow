@@ -63,7 +63,7 @@ public:
         else PaintGeneratedArt(p, cover, Hash(path));
 
         std::wstring title = s.title.empty() ? (item ? FileNameOf(item->path) : L"") : s.title;
-        if (!s.artist.empty()) title += L" - " + s.artist;
+        if (!s.artist.empty()) title += L" · " + s.artist;
         // The view is always on the (dark) video background, also in the light theme, so the
         // text is light rather than the palette's text colors.
         const Color white = Color::Hex(0xFFFFFF);
