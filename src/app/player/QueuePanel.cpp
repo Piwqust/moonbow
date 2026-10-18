@@ -108,15 +108,24 @@ public:
         interactive = true;
         focusable = true;
         width = Length::Grow();
+        id = "queue-list";  // Panels.cpp gives it the keyboard when the queue opens
         pad = compact ? Insets{12, 0, 12, 12} : Insets{20, 0, 20, 20};
         queueConn_ = Connect(TheApp().queue().changed, [this] {
-            if (!dragging_) selected_ = std::min(selected_, static_cast<int>(TheApp().queue().Items().size()) - 1);
+            // The rows changed under a drag (a removal, a new queue): its indices mean nothing now.
+            dragging_ = false;
+            downIndex_ = -1;
+            selected_ = std::min(selected_, static_cast<int>(TheApp().queue().Items().size()) - 1);
+            rows_.clear();
             InvalidateLayout();
         });
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & (kChangeFile | kChangeMeta)) rows_.clear();
             if (m & (kChangeFile | kChangeMeta | kChangeState)) Invalidate();
         });
-        libConn_ = Connect(TheApp().libraryChanged, [this] { Invalidate(); });
+        libConn_ = Connect(TheApp().libraryChanged, [this] {
+            rows_.clear();
+            Invalidate();
+        });
         onContextMenu = [this](const MouseEvent& e) { ShowMenuAt(e); };
     }
 
@@ -157,10 +166,34 @@ public:
                PS().path == TheApp().queue().Items()[static_cast<size_t>(i)].path;
     }
 
-    double DurationOf(int i) const {
-        const auto& items = TheApp().queue().Items();
-        const QueueItem& item = items[static_cast<size_t>(i)];
+    // Title, artist and duration of each row, looked up in the library and the history once (a
+    // history lookup scans up to 500 entries) and kept until the queue, the library or the
+    // playing file's tags change.
+    struct RowInfo {
+        bool known = false;
+        std::wstring title, artist;
+        double duration = 0;
+    };
+    const RowInfo& Info(int i) {
+        const size_t n = TheApp().queue().Items().size();
+        if (rows_.size() != n) rows_.assign(n, RowInfo{});
+        RowInfo& r = rows_[static_cast<size_t>(i)];
+        if (!r.known) {
+            r.known = true;
+            r.title = TitleOf(i);
+            r.artist = ArtistOf(i);
+            r.duration = StoredDuration(i);
+        }
+        return r;
+    }
+
+    double DurationOf(int i) {
         if (Playing(i) && PS().duration > 0) return PS().duration;
+        return Info(i).duration;
+    }
+
+    double StoredDuration(int i) const {
+        const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
         if (item.duration > 0) return item.duration;
         if (const library::MediaItem* m = LibraryItem(i); m && m->duration > 0) return m->duration;
         if (const library::HistoryEntry* h = TheApp().history().Find(item.path)) return h->duration;
@@ -204,6 +237,9 @@ public:
         } else if (current) {
             p.Fill(r, c.accentFaint, 4);
         }
+        // The selection (what Enter plays and Del removes) shows after a mouse click too; dimmer
+        // while the keyboard is elsewhere.
+        if (!floating && i == selected_) p.Fill(r, IsFocused() ? c.bgSelected : c.bgSelected.Fade(0.5f), 4);
         if (!floating && hot) p.Fill(r, c.hover, 4);
         if (!floating && i == selected_ && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, 4);
         const float box = RowH();
@@ -215,12 +251,13 @@ public:
         const double d = DurationOf(i);
         const std::wstring dur = d > 0 ? ClockTime(d) : L"";
         const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, ts).width + 4;
-        const bool showRemove = hot && !compact_;
+        const bool showRemove = hot && !compact_ && !removeCold_;
         const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - (compact_ ? 6.0f : 10.0f);
         const Color fg = current ? c.accent : hot ? c.textPrimary : RowText();
         const float avail = std::max(0.0f, right - textX - dw - 10);
-        const std::wstring title = TitleOf(i);
-        const std::wstring artist = ArtistOf(i);
+        const RowInfo& info = Info(i);
+        const std::wstring& title = info.title;
+        const std::wstring& artist = Playing(i) && !PS().hasVideo ? PS().artist : info.artist;
         const float tw = std::min(avail, gfx::Text::Get().Measure(title, ts).width + 2);
         p.Text(title, {textX, r.y, artist.empty() ? avail : tw, r.h}, ts, fg);
         if (!artist.empty() && avail - tw > 40)
@@ -266,7 +303,7 @@ public:
     }
 
     void PaintOver(Painter& p) override {
-        if (!dragging_) return;
+        if (!dragging_ || dragFrom_ >= Count()) return;
         Rect r = RowRect(dragFrom_);
         r.y = std::clamp(dragY_ - grabDy_, rect.y + pad.t, RowRect(Count() - 1).y);
         PaintRow(p, dragFrom_, r, true);
@@ -281,11 +318,17 @@ public:
             Invalidate();
             return true;
         }
+        // After a removal the next row slides under the pointer: its "×" waits for a real move,
+        // so the second click of a double click doesn't remove that row too.
+        if (removeCold_ && (std::abs(e.x - removedAt_.x) >= 3 || std::abs(e.y - removedAt_.y) >= 3)) {
+            removeCold_ = false;
+            Invalidate();
+        }
         const int i = RowAt(e.y);
         const Rect r = i >= 0 ? RowRect(i) : Rect{};
         const bool inRow = i >= 0 && r.Contains(e.x, e.y);
         const bool handle = inRow && e.x < r.x + RowH() + 4;
-        const bool remove = inRow && !compact_ && e.x >= r.Right() - 28;
+        const bool remove = inRow && OnRemoveButton(i, e.x);
         const int h = inRow ? i : -1;
         if (h != hover_ || handle != hoverHandle_ || remove != hoverRemove_) {
             hover_ = h;
@@ -325,29 +368,49 @@ public:
     bool OnMouseUp(const MouseEvent& e) override {
         if (dragging_) {
             dragging_ = false;
+            // A lost capture (Alt+Tab, a dialog) cancels the drag, as in Explorer.
+            if (e.cancelled) {
+                selected_ = dragFrom_;
+                Invalidate();
+                return true;
+            }
             const int from = dragFrom_, to = dropIndex_;
             selected_ = to;
             if (from != to) TheApp().queue().Move(from, to);
             Invalidate();
             return true;
         }
+        // A single click only selects (OnMouseDown); the "×" acts on release.
         const int i = RowAt(e.y);
-        if (i >= 0 && i == downIndex_) {
-            if (!compact_ && e.x >= RowRect(i).Right() - 28) {
-                Remove(i);
-            } else if (i == TheApp().queue().Current() && PS().fileLoaded) {
-                if (PS().paused) TheApp().player().SetPause(false);
-            } else {
-                TheApp().PlayIndex(i);
-            }
+        if (!e.cancelled && i >= 0 && i == downIndex_ && OnRemoveButton(i, e.x)) {
+            Remove(i);
+            removeCold_ = true;
+            removedAt_ = {e.x, e.y};
         }
         downIndex_ = -1;
         return true;
     }
 
+    // A double click (or Enter) plays the row, as in VLC, MPC-HC and PotPlayer.
+    bool OnDoubleClick(const MouseEvent& e) override {
+        const int i = RowAt(e.y);
+        downIndex_ = -1;
+        if (i < 0 || !RowRect(i).Contains(e.x, e.y)) return true;
+        if (removeCold_ || OnRemoveButton(i, e.x) || e.x < RowRect(i).x + RowH() + 4) return true;
+        selected_ = i;
+        Play(i);
+        Invalidate();
+        return true;
+    }
+
     bool OnKeyDown(const KeyEvent& e) override {
+        const bool listKey = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_HOME || e.key == VK_END ||
+                             e.key == VK_RETURN || e.key == VK_DELETE;
+        // Mid-drag the rows are in flux, and an empty list has nothing to move to; the arrows
+        // still stay here instead of changing the volume.
+        if (dragging_) return listKey;
         const int n = Count();
-        if (n == 0) return false;
+        if (n == 0) return listKey && e.key != VK_RETURN;
         if (selected_ < 0) selected_ = std::max(0, TheApp().queue().Current());
         const bool move = e.mods.alt || e.mods.ctrl;
         int target = selected_;
@@ -356,7 +419,7 @@ public:
             case VK_DOWN: target = std::min(n - 1, selected_ + 1); break;
             case VK_HOME: target = 0; break;
             case VK_END: target = n - 1; break;
-            case VK_RETURN: TheApp().PlayIndex(selected_); return true;
+            case VK_RETURN: Play(selected_); return true;
             case VK_DELETE: Remove(selected_); return true;
             default: return false;
         }
@@ -373,9 +436,26 @@ public:
         hover_ = -1;
     }
 
+    // The playing row resumes if paused; another row starts playing.
+    static void Play(int i) {
+        if (i == TheApp().queue().Current() && PS().fileLoaded) {
+            if (PS().paused) TheApp().player().SetPause(false);
+        } else {
+            TheApp().PlayIndex(i);
+        }
+    }
+
+    // The keyboard starts on the playing row when nothing is selected yet.
+    void OnFocusChanged(bool focused) override {
+        if (focused && selected_ < 0 && Count() > 0) selected_ = std::max(0, TheApp().queue().Current());
+        Invalidate();
+    }
+
     int Selected() const { return selected_; }
 
 private:
+    bool OnRemoveButton(int i, float x) const { return !compact_ && !removeCold_ && x >= RowRect(i).Right() - 28; }
+
     void AutoScroll(float y) {
         ScrollView* sv = ScrollerOf(this);
         if (!sv) return;
@@ -402,6 +482,9 @@ private:
     bool compact_;
     int hover_ = -1, selected_ = -1, downIndex_ = -1;
     bool hoverHandle_ = false, hoverRemove_ = false;
+    bool removeCold_ = false;  // the "×" stays off until the pointer leaves where it removed a row
+    Point removedAt_{};
+    std::vector<RowInfo> rows_;
     bool dragging_ = false;
     int dragFrom_ = 0, dropIndex_ = 0;
     float dragY_ = 0, grabDy_ = 0;

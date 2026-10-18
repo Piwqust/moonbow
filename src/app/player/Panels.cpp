@@ -116,6 +116,19 @@ Rect PlaceAboveMini(float prefH) {
     return {m.x, std::round(bottom - h), m.w, h};
 }
 
+Widget* FindId(Widget* w, const char* id) {
+    if (w->id == id) return w;
+    for (auto& c : w->Children())
+        if (Widget* hit = FindId(c.get(), id)) return hit;
+    return nullptr;
+}
+
+// The queue list takes the keyboard (arrows move the selection, Del, Enter; Space still plays
+// and pauses); the other tabs leave it on the player (Space, arrows), and Tab walks into them.
+void FocusQueue(MainWindow* w, Popover* pop) {
+    w->SetFocus(pop ? FindId(pop, "queue-list") : nullptr);
+}
+
 std::unique_ptr<Popover> MakePopover(Group g, int tab) {
     auto pop = std::make_unique<Popover>();
     Popover* raw = pop.get();
@@ -160,14 +173,18 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
             break;
         case Group::None: break;
     }
-    pop->onTab = [g](int t) {
-        S().tab = t;
-        if (g == Group::Settings) S().settingsTab = t;
-        if (MainWindow* w = TheApp().main()) w->RequestRender();
+    pop->onTab = [g, raw](int t) {
+        PanelState& s = S();
+        s.tab = t;
+        if (g == Group::Settings) s.settingsTab = t;
+        MainWindow* w = TheApp().main();
+        if (!w) return;
+        // Not while the popover is being built (Open focuses it once it is shown).
+        if (s.pop == raw) FocusQueue(w, raw);
+        w->RequestRender();
     };
     return pop;
 }
-
 void Open(Group g, int tab) {
     MainWindow* w = TheApp().main();
     if (!w) return;
@@ -192,8 +209,7 @@ void Open(Group g, int tab) {
     s.group = g;
     s.tab = tab;
     s.pop = static_cast<Popover*>(w->ShowPopup(std::move(pop), o));
-    // Keep the keyboard on the player (Space, arrows); Tab walks into the panel.
-    w->SetFocus(nullptr);
+    FocusQueue(w, raw);
 }
 
 }  // namespace

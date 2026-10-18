@@ -1143,7 +1143,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (reinterpret_cast<HWND>(lp) != hwnd_ && capture_) {
                 Widget* t = capture_;
                 capture_ = nullptr;
-                MouseEvent e{mouse_.x, mouse_.y, MouseButton::Left, CurrentMods()};
+                MouseEvent e{mouse_.x, mouse_.y, MouseButton::Left, CurrentMods(), true};
                 t->OnMouseUp(e);
                 pressed_ = nullptr;
                 RequestRender();

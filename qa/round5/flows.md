@@ -122,6 +122,7 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 - **Actual.** At first focus is cleared (`Panels.cpp:202`, "keep the keyboard on the player"), so the keys go to the window shortcuts. Once the list has focus, the selection is painted only as a keyboard focus ring (`QueuePanel.cpp:208` requires `ShowFocusRing()`), so after mouse use it is invisible. Del then removes a row the user can't see.
 - **Evidence.** `c1-12-pair.png`, `c1-13-crop.png`: Del removed "Series S01E02", the row right-clicked earlier, with no selection visible.
 - **Fix.** Always paint the selected row, with a subtle fill when the list isn't focused. Give the list focus when the popover is opened on the Queue tab with Ctrl+L, but leave Space to play and pause.
+- **Fix (r5-fix-flows): fixed**, together with the single-click behaviour. In the queue (popover and mini-player queue) a single click selects the row, a double click or Enter plays it (the playing row resumes if paused), Del removes the selected row, Up/Down/Home/End move the selection, Ctrl/Alt+Up/Down move the row. The selected row is always filled (`bgSelected`, half strength while the list isn't focused). The list takes keyboard focus when the queue opens (Ctrl+L, the bar or mini-player button) or its tab is chosen (`Panels.cpp` `FocusQueue`), and when clicked; Space still reaches the window (play/pause), Left/Right still seek. Arrows are consumed by the list even when it is empty, so they never change the volume there. Drag-reorder by the handle is unchanged. Evidence (`%TEMP%\lumen-qa\r5ff\`, 5 videos, Ctrl+L): Down, Down, Up×3 then Down, Del: base `fl06-48280-keys.png` shows the "Громкость 15 %" toast and Del did nothing; fixed `fl06-32244-keys.png` / `-del.png`: no volume change, the selection moved and Del removed the selected row (`fl06-keys-strip.png`). Single click on "Chaptered Demo": base played the clicked row, fixed only selected it and kept playing Long Seek Test at 0:22; a double click then played it (`fl06-click-strip.png`).
 
 ### FL-07 (Fragile, confirmed): losing capture during a queue drag commits it
 - **Steps.**
@@ -132,6 +133,7 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 - **Evidence.** `c1-14-crop.png`: Series S01E01 moved from row 0 to row 2.
 - **Cause.** `Host.cpp:1129-1137` calls `OnMouseUp` on capture loss, and `QueueList::OnMouseUp` (`QueuePanel.cpp:325-333`) commits.
 - **Fix.** Pass a `cancelled` flag, or add `OnCaptureLost()`, and have `QueueList` drop the drag. The same applies to the slider drags.
+- **Fix (r5-fix-flows): fixed** for the queue. `MouseEvent` got `cancelled` (`src/ui/Widget.h`, one field), `Host`'s `WM_CAPTURECHANGED` path sets it, and `QueueList::OnMouseUp` drops the drag (and a pending "×" click) when it is set. The sliders in `src/ui/Controls.cpp` are another agent's file and were left alone; the seek bar keeps committing on capture loss, which only seeks. Evidence: handle of row 0 pressed at (896,186), moved 90 px, `WM_CAPTURECHANGED` (lParam 0) posted, then the release: base moved S01E01 to row 2, fixed put it back at row 0 (`fl07-strip.png`: mid-drag and after, base then fixed).
 
 ### FL-08 (Ugly, confirmed): the seek preview is pinned in small windows and calls `std::clamp` with lo > hi
 - **Steps.** At 720x440, hover the seek bar at its left end (252,412) and at its right end (421,412).
@@ -169,6 +171,7 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 - **Actual.** Row 3 moves up under the pointer and shows its "×" hot at once, so a double click deletes two rows.
 - **Evidence.** `c1-12-pair.png`, left: "Long Seek Test" with an armed "×".
 - **Fix.** After a removal, keep the remove button cold until the pointer moves. VLC and Spotify need a fresh hover.
+- **Fix (r5-fix-flows): fixed.** After "×" removes a row, every "×" stays hidden and inert until the pointer moves 3 DIP from where it clicked; a click there in the meantime only selects the row, and a double click on it does nothing. Evidence: two quick clicks on the "×" of row 0 without moving: base removed two rows (4 → 2), fixed removed one (3 → 2) and selected the next (`fl12-two-clicks.png`); a double click on "×": the next row shows no armed "×" (`fl12-strip.png`, the base shows it armed with its tooltip).
 
 ### FL-13 (Ugly, confirmed): end of the last file shows 0:07 / 0:08
 - **Steps.** Let the last item of the queue end (4K Mandelbrot, 8 s).
@@ -213,3 +216,10 @@ Two more things make queue editing in fullscreen feel broken even in the popover
 - Volume persistence: the launcher forces the startup volume to 0.
 - URL open: it would need a dialog.
 - The real cursor's visibility: under `--automation` the cursor isn't observable.
+
+## Audit items
+
+Items of `qa/AUDIT-PONYTAIL.md` in the player and queue code, taken by r5-fix-flows. Each was confirmed in the code or at runtime before the change.
+
+- **#16 (crash when dragging in the queue): fixed.** Confirmed at runtime: press the handle of the last row, Del: the base removed the row mid-drag and painted the floating row from past the end of the list (an empty row, `%TEMP%\lumen-qa\r5ff\fl16-pair.png`, left; out-of-bounds read, no crash in release). Now a queue change cancels the drag, `PaintOver` checks the index, and the list's keys are ignored (but consumed) mid-drag. Fixed: Del does nothing until the drag ends (`fl16-pair.png`, right).
+- **Per-row history scan in the queue: fixed.** Confirmed in code: every paint of every row called `History::Find` (normalizes and scans up to 500 entries) for the title and again for the duration. Row title, artist and stored duration are now cached per row and dropped when the queue, the library or the playing file's tags change (`QueuePanel.cpp` `RowInfo`).
