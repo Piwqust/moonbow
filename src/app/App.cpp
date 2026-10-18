@@ -1179,8 +1179,9 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
             r = "no enabled interactive widget for " + arg;
             return false;
         }
-        target->OnClick();
+        // The name first: a click that closes its own dialog destroys the widget.
         r = std::string("clicked ") + typeid(*target).name();
+        target->OnClick();
         return true;
     }
 
