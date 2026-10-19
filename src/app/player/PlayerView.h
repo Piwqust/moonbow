@@ -34,6 +34,8 @@ public:
 
     // Rect where the video is shown (window DIPs); empty when not visible.
     ui::Rect VideoRect() const;
+    // Where a toast centres: the video or music area left of an open popover.
+    ui::Rect ToastBand() const;
 
     void OnLayout() override;
     float SubtitleBand(float h) const;

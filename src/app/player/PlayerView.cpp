@@ -518,11 +518,16 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         if ((m & kChangeFile) && PS().fileLoaded && TheApp().PlayerShown() &&
             TheApp().UiValue("hint.shortcuts") != "1") {
             TheApp().SetUiValue("hint.shortcuts", "1");
-            ShowToast(window_,
-                      Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
-                          {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
-                           ShortcutText(Action::KeyboardShortcuts)}),
-                      "hotkeys", 8000);
+            // After the file's own messages (the languages picked, "Resuming from"): one toast
+            // replaces another, and this one shows only once.
+            window_->StartTimer(1800, [w = window_] {
+                if (!TheApp().PlayerShown()) return;
+                ShowToast(w,
+                          Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
+                              {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
+                               ShortcutText(Action::KeyboardShortcuts)}),
+                          "hotkeys", 8000);
+            });
         }
         if ((m & kChangeFile) || ((m & kChangeState) && PS().paused != menuPaused_)) CloseStaleMenu();
         menuPaused_ = PS().paused;
@@ -712,6 +717,14 @@ void PlayerView::OnLayout() {
     skipChapter_->visible = skipChapter_->Wanted() && !nextEpisode_->visible && !pip;
     if (skipChapter_->visible) place(skipChapter_, skipChapter_->Measure(v.w, 40));
     UpdateStats();
+}
+
+Rect PlayerView::ToastBand() const {
+    Rect a = video_->rect;
+    const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
+                       PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
+    if (panel && a.w - (panel::kPanelW + panel::kGap) >= 320) a.w -= panel::kPanelW + panel::kGap;
+    return a;
 }
 
 void PlayerView::Paint(Painter& p) {

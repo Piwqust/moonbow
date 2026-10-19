@@ -129,6 +129,7 @@ bool MainWindow::Create() {
         }
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
+    toastBand = [this] { return TheApp().PlayerShown() ? player_->ToastBand() : Rect{0, 0, ClientSize().w, 0}; };
     // A new base margin from Settings is what mpv has now; recompute the lift on top of it.
     subMarginToken_ = TheApp().config().Subscribe("subtitles.marginBottom", [this](const std::string&) {
         appliedSubMargin_ = -1;
