@@ -460,12 +460,15 @@ void Run(Action a) {
         case Action::None:
         case Action::Count: break;
         case Action::PlayPause:
-            if (s.fileLoaded)
+            if (s.fileLoaded) {
+                const double back = s.paused ? p.StopPosition() : 0;
                 p.TogglePause();
-            else if (app.queue().CurrentItem())
+                if (back >= 1) Toast(Fmt(Tr(L"Resuming from {0}"), {FormatTime(back, s.duration >= 3600)}), "play");
+            } else if (app.queue().CurrentItem()) {
                 app.PlayIndex(app.queue().Current());
-            else
+            } else {
                 app.OpenFileDialog();
+            }
             break;
         case Action::Stop:
             if (!s.fileLoaded) {

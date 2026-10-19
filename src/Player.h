@@ -147,6 +147,7 @@ public:
     // watch-later is written now and then left alone) until playback, a seek or another file.
     void StopAtStart();
     bool HoldsResumePoint() const { return holdResume_; }
+    double StopPosition() const { return holdResume_ ? stopPos_ : 0; }  // where Play will continue
     // The file to play when the current one ends, kept in mpv's playlist so mpv prefetches it
     // and plays it gaplessly (gapless-audio, prefetch-playlist). Empty = stop at the end.
     // Open() and Stop() forget it. When mpv starts it, ProcessEvents reports kChangeAdvance.
@@ -271,4 +272,5 @@ private:
     int64_t xfEntry_ = 0;
     bool signalTap_ = false;
     bool holdResume_ = false;  // StopAtStart
+    double stopPos_ = 0;       // the position Stop left
 };

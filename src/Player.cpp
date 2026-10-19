@@ -717,6 +717,12 @@ std::string Player::CopyBackHwdec(const std::string& hwdec) {
 
 void Player::TogglePause() {
     if (!state_.fileLoaded) return;
+    // Play after Stop continues where Stop was pressed: Stop shows 0:00 but loses nothing.
+    if (holdResume_ && state_.paused && stopPos_ >= 1) {
+        SeekAbsolute(stopPos_, true);
+        SetPause(false);
+        return;
+    }
     if (state_.eof && state_.paused) Cmd({"seek", "0", "absolute"});
     Cmd({"cycle", "pause"});
 }
@@ -728,6 +734,7 @@ void Player::SetPause(bool paused) {
 void Player::StopAtStart() {
     if (!state_.fileLoaded) return;
     SaveWatchLater();
+    stopPos_ = state_.position;
     SetPause(true);
     SeekAbsolute(0, true);
     holdResume_ = true;
