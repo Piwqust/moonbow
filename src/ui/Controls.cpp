@@ -382,8 +382,33 @@ bool Segmented::OnKeyDown(const KeyEvent& e) {
     if (i != selected_) {
         selected_ = i;
         if (onChange) onChange(i);
+        a11y::FocusChanged(GetHost());
     }
     return true;
+}
+
+Rect Segmented::SegmentRect(int i) const {
+    const float n = static_cast<float>(choices_.size());
+    const float segW = (rect.w - 4 - 2 * (n - 1)) / n;
+    return {rect.x + 2 + static_cast<float>(i) * (segW + 2), rect.y + 2, segW, rect.h - 4};
+}
+
+void Segmented::Describe(A11y& a) {
+    a.role = Role::Tab;
+    a.items = static_cast<int>(choices_.size());
+    a.item = [this](int i, A11y::Item& it) {
+        it.role = Role::TabItem;
+        it.name = choices_[static_cast<size_t>(i)].label;
+        it.rect = SegmentRect(i);
+        it.selected = i == selected_;
+    };
+    a.selectItem = [this](int i) {
+        if (i == selected_) return;
+        selected_ = i;
+        if (onChange) onChange(i);
+        Invalidate();
+    };
+    a.focusedItem = selected_;
 }
 
 void Segmented::Paint(Painter& p) {
@@ -392,10 +417,8 @@ void Segmented::Paint(Painter& p) {
     p.Fill(rect, live ? c.bgDeep : DisabledFill(), 5);
     PaintFocusRing(p, rect, 5);
     if (choices_.empty()) return;
-    const float n = static_cast<float>(choices_.size());
-    const float segW = (rect.w - 4 - 2 * (n - 1)) / n;
     for (size_t i = 0; i < choices_.size(); ++i) {
-        const Rect seg{rect.x + 2 + static_cast<float>(i) * (segW + 2), rect.y + 2, segW, rect.h - 4};
+        const Rect seg = SegmentRect(static_cast<int>(i));
         const bool sel = static_cast<int>(i) == selected_;
         const bool hot = live && IsHot() && static_cast<int>(i) == hoverIndex_;
         const bool dark = Theme::Get().Mode() == ThemeMode::Dark;
@@ -1355,6 +1378,27 @@ public:
         }
     }
 
+    void Describe(A11y& a) override {
+        a.role = Role::Menu;
+        a.items = static_cast<int>(visible_.size());
+        a.item = [this](int k, A11y::Item& it) {
+            const int i = visible_[static_cast<size_t>(k)];
+            const MenuItem& m = At(i);
+            if (m.separator) {
+                it.role = Role::Skip;
+                return;
+            }
+            it.role = Role::MenuItem;
+            it.name = m.label;
+            it.rect = ItemRect(i);
+            it.enabled = m.enabled;
+            if (hasChecks_ || m.checked) it.toggle = m.checked ? 1 : 0;
+        };
+        a.invokeItem = [this](int k) { Activate(visible_[static_cast<size_t>(k)]); };
+        const auto at = std::find(visible_.begin(), visible_.end(), highlight_);
+        if (highlight_ >= 0 && at != visible_.end()) a.focusedItem = static_cast<int>(at - visible_.begin());
+    }
+
     bool OnChar(wchar_t ch) override {
         if (ch < 0x20 || filter_.size() >= 40) return false;
         if (ch == L' ' && filter_.empty()) return false;
@@ -1465,6 +1509,7 @@ private:
         highlight_ = i;
         Invalidate();
         Host* host = GetHost();
+        if (IsFocused()) a11y::FocusChanged(host);
         if (child_ && host) {
             host->ClosePopup(child_);
             child_ = nullptr;

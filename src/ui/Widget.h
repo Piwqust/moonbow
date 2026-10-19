@@ -12,6 +12,7 @@
 namespace ui {
 
 class Host;
+struct A11y;
 
 // Size rule along one axis.
 struct Length {
@@ -153,6 +154,11 @@ public:
     // " on" or " icon=play" (UTF-8, each with a leading space) to the widget's dump line. The
     // text a widget shows is recorded from its Paint calls, so overrides don't repeat it.
     virtual void DebugInfo(std::string& out) const;
+
+    // --- accessibility ----------------------------------------------------------
+    // What UI Automation reports (ui/Accessibility.h); `a` arrives filled with the defaults for
+    // the class. Custom sliders, lists and tabs say what they are here.
+    virtual void Describe(A11y& /*a*/) {}
 
     // --- helpers ----------------------------------------------------------------
     void Invalidate() const;

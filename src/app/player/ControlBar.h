@@ -66,6 +66,7 @@ public:
     bool OnWheel(const ui::WheelEvent& e) override;
     void OnMouseLeave() override;
     void PaintOver(ui::Painter& p) override;
+    void Describe(ui::A11y& a) override;
 
 private:
     double TimeAt(float x) const;

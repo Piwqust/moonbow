@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/Accessibility.h"
 #include "ui/Anim.h"
 #include "ui/Host.h"
 #include "ui/Widget.h"
@@ -167,9 +168,11 @@ public:
     bool OnKeyDown(const KeyEvent& e) override;
     void OnMouseLeave() override { hoverIndex_ = -1; Invalidate(); }
     bool OnMouseMove(const MouseEvent& e) override;
+    void Describe(A11y& a) override;
 
 private:
     int IndexAt(float x) const;
+    Rect SegmentRect(int i) const;
     std::vector<Choice> choices_;
     int selected_;
     int hoverIndex_ = -1;

@@ -17,7 +17,7 @@ using gfx::TextStyle;
 using gfx::VAlign;
 
 // One Painter::Text call seen during a tree dump (Host::DumpTree): what a widget shows and
-// the box it gave the text. Never collected during normal frames.
+// the box it gave the text. Normal frames collect them only while a UI Automation client listens.
 struct TextRecord {
     const Widget* owner = nullptr;  // the widget whose Paint/PaintOver drew it
     std::wstring text;

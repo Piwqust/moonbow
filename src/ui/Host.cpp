@@ -2,6 +2,7 @@
 
 #include "Trace.h"
 #include "gfx/Text.h"
+#include "ui/Accessibility.h"
 #include "ui/Theme.h"
 
 #include <dwmapi.h>
@@ -268,6 +269,7 @@ Host::~Host() {
 
 void Host::ForgetWidget(Widget* w) {
     for (Host* h : Registry()) h->Forget(w);
+    a11y::Forget(w);
 }
 
 void Host::ForgetSubtree(Widget* w) {
@@ -495,6 +497,7 @@ Widget* Host::ShowPopup(std::unique_ptr<Widget> content, const PopupOptions& opt
     }
     UpdateHot(mouse_.x, mouse_.y);
     RequestRender();
+    a11y::StructureChanged(this);
     return raw;
 }
 
@@ -526,6 +529,7 @@ void Host::ClosePopupAt(size_t index) {
     if (onDismiss) onDismiss();
     UpdateHot(mouse_.x, mouse_.y);
     RequestRender();
+    a11y::StructureChanged(this);
 }
 
 void Host::CloseAllPopups() {
@@ -596,6 +600,7 @@ void Host::SetFocus(Widget* w, bool fromKeyboard) {
     if (old) old->OnFocusChanged(false);
     if (focus_) focus_->OnFocusChanged(true);
     RequestRender();
+    a11y::FocusChanged(this);
 }
 
 void Host::SetCapture(Widget* w) {
@@ -725,9 +730,12 @@ void Host::Render() {
         RedrawAllIfDeviceChanged(generation);
         return;
     }
+    // UI Automation names custom widgets by the texts they paint: recorded while a client listens.
+    std::vector<TextRecord> a11yTexts;
+    std::vector<TextRecord>* texts = textSink_ ? textSink_ : a11y::Recording() ? &a11yTexts : nullptr;
     {
         Painter p(ctx);
-        if (textSink_) p.RecordText(textSink_);
+        if (texts) p.RecordText(texts);
         PaintBackground(p);
         if (root_) root_->PaintTree(p);
         const Size client = ClientSize();
@@ -744,6 +752,7 @@ void Host::Render() {
         PaintDropOverlay(p);
     }
     OnFramePainted();
+    if (texts) a11y::TextsPainted(*texts);
     const double t2 = AnimFloat::Now();
     if (surface_.End()) {
         if (!gpuPainted_) Trace("first frame");
@@ -1631,6 +1640,12 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (g_automation) g_automationMods = static_cast<unsigned>(wp);
             return 0;
 
+        case WM_GETOBJECT:
+            if (!a11y::WantsRoot(lp)) break;
+            // A frame now records the texts that name the widgets (ui/Accessibility.cpp).
+            Render();
+            return a11y::ReturnRoot(this, wp, lp);
+
         case kDumpTreeMessage:
             if (!g_automation) break;  // any process could otherwise have a window write files
             WriteTreeDump();
@@ -1649,6 +1664,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case WM_DESTROY:
+            a11y::WindowDestroyed(hwnd_);
             RevokeDragDrop(hwnd_);
             if (dropTarget_) {
                 dropTarget_->Release();

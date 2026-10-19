@@ -848,6 +848,15 @@ bool TickSlider::OnKeyDown(const KeyEvent& e) {
     return true;
 }
 
+void TickSlider::Describe(A11y& a) {
+    a.role = Role::Slider;
+    a.min = item.min;
+    a.max = item.max;
+    a.now = value_;
+    a.step = item.step;
+    a.setRange = [this](double v) { Change(v, true); };
+}
+
 bool TickSlider::OnWheel(const WheelEvent& e) {
     if (!IsFocused()) return false;
     const double step = item.step > 0 ? item.step : (item.max - item.min) / 100;

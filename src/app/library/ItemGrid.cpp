@@ -184,6 +184,25 @@ void ItemGrid::DebugInfo(std::string& out) const {
     if (selected_ >= 0) out += " selected=" + std::to_string(selected_);
 }
 
+void ItemGrid::Describe(ui::A11y& a) {
+    a.role = ui::Role::List;
+    a.items = static_cast<int>(entries_.size());
+    a.item = [this](int i, ui::A11y::Item& it) {
+        const Entry& e = entries_[static_cast<size_t>(i)];
+        it.role = IsLabel(e.kind) ? ui::Role::Text : ui::Role::ListItem;
+        it.name = e.subtitle.empty() ? e.title : e.title + L", " + e.subtitle;
+        it.rect = ItemRect(i);
+        it.selected = i == selected_;
+    };
+    a.selectItem = [this](int i) { Select(i); };
+    a.invokeItem = [this](int i) {  // as a double click (Enter) would
+        if (!Selectable(i)) return;
+        Select(i, false);
+        if (onActivate) onActivate(i);
+    };
+    a.focusedItem = selected_;
+}
+
 void ItemGrid::SetStyle(GridStyle s) {
     if (style_ == s) return;
     style_ = s;
@@ -356,6 +375,7 @@ void ItemGrid::Select(int index, bool scrollIntoView) {
             s->ScrollIntoView(r);
         }
     if (changed && onSelectionChanged) onSelectionChanged(index);
+    if (changed && IsFocused()) ui::a11y::FocusChanged(GetHost());
     Invalidate();
 }
 

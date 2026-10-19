@@ -109,6 +109,7 @@ public:
     void OnFocusChanged(bool focused) override;
     void OnClick() override;
     void DebugInfo(std::string& out) const override;
+    void Describe(ui::A11y& a) override;
 
 private:
     struct RowCells {

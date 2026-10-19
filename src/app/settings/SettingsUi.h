@@ -119,6 +119,7 @@ public:
     bool OnKeyDown(const ui::KeyEvent& e) override;
     bool OnWheel(const ui::WheelEvent& e) override;
     bool OnDoubleClick(const ui::MouseEvent& e) override;
+    void Describe(ui::A11y& a) override;
     std::function<void(double)> onValue;  // live, while dragging
 
     const settings::Item& item;
