@@ -11,6 +11,10 @@ The method has four layers. Each one catches what the others miss.
 | 3. Worst-case data | the ways real libraries break "nice demo" layouts | `qa/make-worstcase.ps1` |
 | 4. Exploratory charters with timing and real-input fidelity | flows, interruptions, focus, animation, input routing | charters below |
 
+Code-level rules for visual bugs that only real media shows (opaque colors over pictures and the
+like) are in [../visual-rules.md](../visual-rules.md), with `tools/dev/check-colors.py`. Worst-case
+data includes a saturated cover, not only black or generated art.
+
 ## 1. Deterministic audits
 
 The widget tree (`dump-tree.ps1`) holds every widget's rect, flags and text. A script can check rules on it without guessing:

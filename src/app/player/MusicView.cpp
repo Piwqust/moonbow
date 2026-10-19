@@ -133,10 +133,10 @@ public:
         tooltip = Tr(L"Lyrics from LRCLIB. Save them as an .lrc file next to the song");
     }
     void Paint(Painter& p) override {
-        const Color bg = P().videoBg, white = Color::Hex(0xFFFFFF);
+        const Color white = Color::Hex(0xFFFFFF);
         const bool hot = IsHot() || IsPressed();
         if (hot) p.Fill(rect, white.WithAlpha(IsPressed() ? 0.14f : 0.08f), 4);
-        const Color c = Color::Mix(bg, white, hot ? 0.9f : 0.55f);
+        const Color c = white.Fade(hot ? 0.9f : 0.55f);
         p.Icon("save", {rect.x + 6, rect.Cy() - 10, 20, 20}, c);
         p.Text(Tr(L"LRCLIB · Save .lrc"), {rect.x + 32, rect.y, rect.w - 38, rect.h}, TextStyle::Small, c);
         PaintFocusRing(p, rect, 4);
@@ -269,9 +269,9 @@ public:
         const Color white = Color::Hex(0xFFFFFF);
         const Rect titleBox{left.x + 48, cover.Bottom() + 70, left.w - 96, 36};
         const Rect secondBox{left.x + 48, cover.Bottom() + 106, left.w - 96, 22};
-        p.Text(title, titleBox, TextStyle::Title, Color::Mix(c.videoBg, white, 0.8f), HAlign::Center);
+        p.Text(title, titleBox, TextStyle::Title, white.Fade(0.8f), HAlign::Center);
         if (!second.empty())
-            p.Text(second, secondBox, TextStyle::Body, Color::Mix(c.videoBg, white, 0.55f), HAlign::Center);
+            p.Text(second, secondBox, TextStyle::Body, white.Fade(0.55f), HAlign::Center);
         const bool cut = p.Measure(title, TextStyle::Title).width > titleBox.w ||
                          (!second.empty() && p.Measure(second, TextStyle::Body).width > secondBox.w);
         titleTip_->visible = cut;
@@ -297,7 +297,7 @@ public:
             if (oneLine && current_ >= 0)
                 p.Text(lyrics_.lines[static_cast<size_t>(current_)].text,
                        {left.x + 48, cover.Bottom() + (second.empty() ? 106.0f : 138.0f), left.w - 96, 24},
-                       TextStyle::Large, Color::Mix(c.videoBg, white, 0.9f), HAlign::Center);
+                       TextStyle::Large, white.Fade(0.9f), HAlign::Center);
         }
     }
 
@@ -417,15 +417,15 @@ private:
 
     // Monochrome on the video background, like the title (the view is dark in both themes).
     void PaintVisualizer(Painter& p, const Rect& left, const Rect& cover, ID2D1Bitmap* bmp) {
-        const Color bg = P().videoBg, white = Color::Hex(0xFFFFFF);
-        const Color fg = Color::Mix(bg, white, 0.86f), dim = Color::Mix(bg, white, 0.4f);
+        const Color white = Color::Hex(0xFFFFFF);
+        const Color fg = white.Fade(0.86f), dim = white.Fade(0.4f);
         // The bar styles take a wider band than the square cover, at the same height, so the
         // title below stays where it was.
         const float w = std::floor(std::min(left.w - 96, cover.w * 1.5f));
         const Rect band{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
         switch (style_) {
             case VizStyle::Spectrum: PaintSpectrum(p, band, fg, dim); break;
-            case VizStyle::Waveform: PaintWaveform(p, band, bg, white); break;
+            case VizStyle::Waveform: PaintWaveform(p, band, white); break;
             case VizStyle::Scope: PaintScope(p, band, fg, dim); break;
             case VizStyle::Spectrometer: PaintSpectrometer(p, cover, bmp, fg, dim); break;
             case VizStyle::Off: break;
@@ -448,7 +448,7 @@ private:
     }
 
     // The recent loudness scrolling to the left, mirrored around the middle; older columns fade.
-    void PaintWaveform(Painter& p, const Rect& r, Color bg, Color white) {
+    void PaintWaveform(Painter& p, const Rect& r, Color white) {
         constexpr int n = audio::kWaveColumns;
         const float step = r.w / n;
         const float bw = std::max(2.0f, std::round(step * 0.5f));
@@ -457,7 +457,7 @@ private:
             const float x = std::round(r.x + i * step + (step - bw) / 2);
             const float h = std::max(2.0f, std::round(frame_.wave[i] * r.h * 0.9f / 2) * 2);
             const float k = static_cast<float>(i) / (n - 1);
-            p.Fill({x, std::round(cy - h / 2), bw, h}, Color::Mix(bg, white, 0.22f + 0.64f * k * k), bw / 2);
+            p.Fill({x, std::round(cy - h / 2), bw, h}, white.Fade(0.22f + 0.64f * k * k), bw / 2);
         }
     }
 
@@ -720,7 +720,9 @@ private:
         if (box.w < 120 || box.h < 80) return;
         EnsureLayout(box.w);
         ID2D1DeviceContext5* ctx = p.Ctx();
-        const Color bg = P().videoBg, white = Color::Hex(0xFFFFFF);
+        // Translucent white, never a grey premixed with videoBg: the blurred cover shows under the
+        // text, and an opaque grey would sit on it as a dull patch (qa/visual-rules.md, rule 1).
+        const Color white = Color::Hex(0xFFFFFF);
         const bool synced = lyrics_.synced;
         const LyricsLook& k = look_;
         const float at = scroll_.Get();
@@ -761,8 +763,8 @@ private:
             if (synced && k.fill && static_cast<int>(i) == current_) {
                 const double sung = lyrics_.SungFraction(current_, SmoothTime());
                 filling = sung < 1;
-                PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), Color::Mix(bg, white, k.ahead), a, shown);
-            } else if (ID2D1SolidColorBrush* brush = LineBrush(ctx, Color::Mix(bg, white, a), shown)) {
+                PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), white.Fade(k.ahead), a, shown);
+            } else if (ID2D1SolidColorBrush* brush = LineBrush(ctx, white.Fade(a), shown)) {
                 ctx->DrawTextLayout({r.x, r.y}, layout, brush);
             }
             ctx->SetTransform(old);
