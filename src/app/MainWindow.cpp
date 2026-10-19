@@ -351,8 +351,9 @@ void MainWindow::PokeChrome() {
     chromeTimer_ = StartTimer(ChromeHideDelay(), [this] {
         chromeTimer_ = 0;
         if (!BarOverlays()) return;
-        // Keep the controls while the pointer is on them or a menu or panel is open (toasts don't count).
-        Widget* hot = Hot();
+        // Keep the controls while the pointer is on them or drags one (the seek bar held still above
+        // the bar), or a menu or panel is open (toasts don't count).
+        Widget* hot = Pressed() ? Pressed() : Hot();
         const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
         if (HasInteractivePopup() || overBar || TheApp().player().State().paused) {
             PokeChrome();
