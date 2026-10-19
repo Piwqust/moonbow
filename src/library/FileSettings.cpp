@@ -108,6 +108,7 @@ FileSettings::~FileSettings() {
 bool FileSettings::Load() {
     loaded_ = true;
     entries_.clear();
+    shows_.clear();
     dirty_ = false;
     readOnly_ = false;
     lastStamp_ = 0;
@@ -125,6 +126,17 @@ bool FileSettings::Load() {
         BackupCorruptFile(path);  // the next save would overwrite it
         return false;
     }
+    if (const json::Value* shows = doc->Find("shows"); shows && shows->IsArray())
+        for (const json::Value& v : shows->AsArray()) {
+            Show s;
+            s.used = std::max<int64_t>(0, v.GetInt("used"));
+            s.langs = {v.GetWString("audioLang"), v.GetWString("audioTitle"), v.GetWString("subLang"),
+                       v.GetWString("subTitle"), v.GetBool("subsOff")};
+            const std::wstring key = PathKey(v.GetWString("show"));
+            if (key.empty() || s.langs.Empty()) continue;
+            lastStamp_ = std::max(lastStamp_, s.used);
+            if (shows_.size() < kMaxShows) shows_[key] = std::move(s);
+        }
     if (!files) return true;
     entries_.reserve(std::min(files->size(), kMaxEntries + 1));
     for (const json::Value& v : files->AsArray()) {
@@ -162,6 +174,24 @@ bool FileSettings::Save() {
     json::Value doc = json::Value::MakeObject();
     doc.Set("version", 1);
     doc.Set("files", std::move(files));
+    if (!shows_.empty()) {
+        json::Value shows = json::Value::MakeArray();
+        for (const auto& [key, s] : shows_) {
+            json::Value v = json::Value::MakeObject();
+            v.Set("show", json::ToUtf8(key));
+            v.Set("used", s.used);
+            auto str = [&v](const char* name, const std::wstring& text) {
+                if (!text.empty()) v.Set(name, json::ToUtf8(text));
+            };
+            str("audioLang", s.langs.audioLang);
+            str("audioTitle", s.langs.audioTitle);
+            str("subLang", s.langs.subLang);
+            str("subTitle", s.langs.subTitle);
+            if (s.langs.subsOff) v.Set("subsOff", true);
+            shows.Push(std::move(v));
+        }
+        doc.Set("shows", std::move(shows));
+    }
     // Compact: up to 5000 files, and no one edits this by hand.
     if (!json::WriteFileAtomic(DataFilePath(kFile), json::Serialize(doc))) return false;
     dirty_ = false;
@@ -232,9 +262,34 @@ bool FileSettings::Remove(const std::wstring& path) {
 }
 
 void FileSettings::Clear() {
-    if (entries_.empty()) return;
+    if (entries_.empty() && shows_.empty()) return;
     entries_.clear();
+    shows_.clear();
     dirty_ = true;
+}
+
+const ShowLanguages* FileSettings::FindShow(const std::wstring& show) const {
+    auto it = show.empty() ? shows_.end() : shows_.find(PathKey(show));
+    return it == shows_.end() ? nullptr : &it->second.langs;
+}
+
+bool FileSettings::PutShow(const std::wstring& show, const ShowLanguages& langs) {
+    if (show.empty()) return false;
+    std::wstring key = PathKey(show);
+    auto it = shows_.find(key);
+    if (langs.Empty()) {
+        if (it == shows_.end()) return false;
+        shows_.erase(it);
+    } else {
+        if (it != shows_.end() && it->second.langs == langs) return false;
+        shows_[std::move(key)] = {NextStamp(), langs};
+        if (shows_.size() > kMaxShows)
+            shows_.erase(std::min_element(shows_.begin(), shows_.end(), [](const auto& a, const auto& b) {
+                return a.second.used < b.second.used;
+            }));
+    }
+    dirty_ = true;
+    return true;
 }
 
 }  // namespace library

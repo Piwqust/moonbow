@@ -1251,6 +1251,27 @@ void TestFileSettings() {
         CHECK(fs.Load() && fs.size() == 0);
     }
 
+    // A series' track languages outlive the session (the next episode opened from Explorer).
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && !fs.FindShow(L"show"));
+        const library::ShowLanguages ru{L"rus", L"Русский 660 Hz", L"rus", L"", false};
+        CHECK(fs.PutShow(L"show", ru) && !fs.PutShow(L"SHOW", ru) && !fs.PutShow(L"", ru));
+        CHECK(fs.PutShow(L"D:\\Сериал", {L"", L"", L"", L"", true}));  // subtitles off, sound as is
+        CHECK(fs.Flush() && fs.size() == 0);
+    }
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load());
+        const library::ShowLanguages* s = fs.FindShow(L"Show");
+        CHECK(s && s->audioLang == L"rus" && s->audioTitle == L"Русский 660 Hz" && s->subLang == L"rus" && !s->subsOff);
+        const library::ShowLanguages* o = fs.FindShow(L"d:\\сериал");
+        CHECK(o && o->subsOff && o->audioLang.empty());
+        CHECK(fs.PutShow(L"D:\\Сериал", {}) && !fs.FindShow(L"D:\\Сериал"));
+        fs.Clear();  // History > Clear forgets the shows too
+        CHECK(!fs.FindShow(L"show") && fs.Flush());
+    }
+
     // Values that would break mpv's "a=1,b=2" loadfile options are dropped; bad numbers too.
     WriteFile(file, R"({"version":1,"files":[
         {"path":"C:\\a.mkv","used":5,"aspect":"16:9,script=x.lua","zoomMode":"huge","deinterlace":"yes,vf=x",

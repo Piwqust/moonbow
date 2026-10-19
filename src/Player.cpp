@@ -792,8 +792,8 @@ void Player::CountTrackChoice(const char* prop) {
     if (p == "secondary-sid") ++trackChoices_[2];
 }
 
-void Player::SetTrack(const char* prop, int64_t id) {
-    CountTrackChoice(prop);
+void Player::SetTrack(const char* prop, int64_t id, bool quiet) {
+    if (!quiet) CountTrackChoice(prop);
     SetString(prop, id > 0 ? std::to_string(id) : "no");
 }
 
@@ -802,14 +802,14 @@ void Player::CycleTrack(const char* prop) {
     Cmd({"cycle", prop});
 }
 
-void Player::AddSubtitle(const std::wstring& path) {
-    CountTrackChoice("sid");
+void Player::AddSubtitle(const std::wstring& path, bool quiet) {
+    if (!quiet) CountTrackChoice("sid");
     const std::string p = WideToUtf8(path);
     Cmd({"sub-add", p.c_str(), "select"});
 }
 
-void Player::AddAudio(const std::wstring& path) {
-    CountTrackChoice("aid");
+void Player::AddAudio(const std::wstring& path, bool quiet) {
+    if (!quiet) CountTrackChoice("aid");
     const std::string p = WideToUtf8(path);
     Cmd({"audio-add", p.c_str(), "select"});
 }

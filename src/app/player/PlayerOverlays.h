@@ -44,7 +44,8 @@ private:
 
 // "Next episode: S01E03 · in 12 s" with Play now / Cancel over the last 30 seconds (or the
 // end credits chapter) of a series episode whose next file is in the queue or the folder.
-// Also carries the chosen audio and subtitle languages over to the next episode.
+// Also carries the chosen audio and subtitle languages over to the next episode, and keeps them
+// for the series (LiveState::RememberShowLanguages), so a later session opens with them too.
 class NextEpisodeCard : public ui::Widget {
 public:
     explicit NextEpisodeCard(MainWindow* window);
@@ -78,6 +79,7 @@ private:
     // Track choice of the file at carryPath_, applied to its next episode.
     std::wstring carryPath_, audioLang_, audioTitle_, subLang_, subTitle_;
     bool hadSubs_ = false, subsOff_ = false;
+    uint32_t choiceBase_[2] = {};  // Player::TrackChoices (audio, subtitles) when carryPath_ loaded
     ScopedConnection playerConn_, queueConn_;
 };
 

@@ -134,6 +134,7 @@ public:
     bool TracksConfirmed() const { return tracksSerial_ != 0 && tracksSerial_ == state_.loadSerial; }
     // Track choices made through Player (SetTrack, CycleTrack, AddAudio/AddSubtitle, SetProperty of
     // aid/sid/secondary-sid), counted per kind: 0 audio, 1 subtitles, 2 secondary subtitles.
+    // `quiet` picks are Lumen's own (restoring or carrying a choice): not counted.
     uint32_t TrackChoices(int kind) const { return kind >= 0 && kind < 3 ? trackChoices_[kind] : 0; }
 
     // Plays `path` from its watch-later resume point, if any.
@@ -168,10 +169,10 @@ public:
     void SetMute(bool mute);
     void ToggleMute();
     void SetSpeed(double speed);
-    void SetTrack(const char* prop, int64_t id);  // prop "aid"/"sid"/"vid", id 0 = off
+    void SetTrack(const char* prop, int64_t id, bool quiet = false);  // prop "aid"/"sid"/"vid", id 0 = off
     void CycleTrack(const char* prop);
-    void AddSubtitle(const std::wstring& path);
-    void AddAudio(const std::wstring& path);
+    void AddSubtitle(const std::wstring& path, bool quiet = false);
+    void AddAudio(const std::wstring& path, bool quiet = false);
     // withSubtitles: burn the visible subtitles into the image.
     void Screenshot(const std::wstring& file = {}, bool withSubtitles = true);
     // Starts writing the stream to `file` (empty stops). mpv "stream-record".
