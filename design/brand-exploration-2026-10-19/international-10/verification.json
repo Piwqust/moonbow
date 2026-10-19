@@ -1,0 +1,29 @@
+{
+  "checked": "2026-10-19",
+  "conceptCount": 10,
+  "imageCount": 10,
+  "imageSize": [
+    1586,
+    992
+  ],
+  "gallery": {
+    "desktopWidth": 1440,
+    "mobileWidth": 390,
+    "horizontalOverflow": false,
+    "imageLoadCount": 10,
+    "detailSelection": true,
+    "previousNext": true,
+    "comparePair": true,
+    "zoomDialog": true,
+    "escapeClose": true,
+    "consoleErrorsAfterFix": 0
+  },
+  "applicationSourceChangedByThisTask": false,
+  "notVerified": [
+    "trademark and domains",
+    "name recall with users",
+    "logo similarity",
+    "vector marks at 16–48 pixels",
+    "production implementation of proposed screens"
+  ]
+}

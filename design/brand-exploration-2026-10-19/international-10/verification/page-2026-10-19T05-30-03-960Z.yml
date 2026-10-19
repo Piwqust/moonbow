@@ -1,0 +1,156 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - text: PLAYER / INTERNATIONAL NAMES
+      - generic [ref=e5]: 19.10.2026
+    - heading "Десять имён. Десять характеров." [level=1] [ref=e6]: Десять имён.Десять характеров.
+    - generic [ref=e7]:
+      - paragraph [ref=e8]: Название, собственный знак и интерфейс одного плеера.Разные идеи — от небольшого персонажа до строгого инструмента.
+      - paragraph [ref=e9]: Визуальные концепты. Изображения экранов показывают направление дизайна. Названия фильмов и альбомов — демонстрационные.
+  - main [ref=e10]:
+    - navigation "Режим просмотра" [ref=e11]:
+      - group "Вид галереи" [ref=e12]:
+        - button "Все 10" [pressed] [ref=e13] [cursor=pointer]
+        - button "Крупно" [ref=e14] [cursor=pointer]
+        - button "Сравнить два" [ref=e15] [cursor=pointer]
+      - generic [ref=e16]: 10 направлений
+    - region "Десять направлений" [ref=e17]:
+      - article [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]: "01"
+          - heading "Plover" [level=2] [ref=e21]
+          - generic [ref=e22]: Персонаж
+        - button "Рассмотреть Plover" [ref=e23] [cursor=pointer]:
+          - 'img "Plover: знак и приложение"'
+        - generic [ref=e24]:
+          - paragraph [ref=e25]: "Небольшая птица с узнаваемым силуэтом: дружелюбный софт, который остаётся привычным спутником."
+          - generic [ref=e26]:
+            - generic [ref=e27]: Плавер · Plover Player
+            - button "Сравнить ↗" [ref=e28] [cursor=pointer]
+      - article [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]: "02"
+          - heading "Twill" [level=2] [ref=e32]
+          - generic [ref=e33]: Материал
+        - button "Рассмотреть Twill" [ref=e34] [cursor=pointer]:
+          - 'img "Twill: знак и приложение"'
+        - generic [ref=e35]:
+          - paragraph [ref=e36]: "Переплетение двух полос: видео и музыка собираются в одну систему."
+          - generic [ref=e37]:
+            - generic [ref=e38]: Твилл · Twill Player
+            - button "Сравнить ↗" [ref=e39] [cursor=pointer]
+      - article [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]: "03"
+          - heading "Quinby" [level=2] [ref=e43]
+          - generic [ref=e44]: Предмет и вкус
+        - button "Рассмотреть Quinby" [ref=e45] [cursor=pointer]:
+          - 'img "Quinby: знак и приложение"'
+        - generic [ref=e46]:
+          - paragraph [ref=e47]: "Выдуманное имя с чёткой круглой Q: дружелюбный самостоятельный бренд без привязки к одному медиаформату."
+          - generic [ref=e48]:
+            - generic [ref=e49]: Квинби · Quinby Player
+            - button "Сравнить ↗" [ref=e50] [cursor=pointer]
+      - article [ref=e51]:
+        - generic [ref=e52]:
+          - generic [ref=e53]: "04"
+          - heading "Cairn" [level=2] [ref=e54]
+          - generic [ref=e55]: Ориентир и порядок
+        - button "Рассмотреть Cairn" [ref=e56] [cursor=pointer]:
+          - 'img "Cairn: знак и приложение"'
+        - generic [ref=e57]:
+          - paragraph [ref=e58]: "Несколько простых элементов складываются в устойчивый ориентир: порядок в собственной медиатеке."
+          - generic [ref=e59]:
+            - generic [ref=e60]: Кэрн · Cairn Player
+            - button "Сравнить ↗" [ref=e61] [cursor=pointer]
+      - article [ref=e62]:
+        - generic [ref=e63]:
+          - generic [ref=e64]: "05"
+          - heading "Vennel" [level=2] [ref=e65]
+          - generic [ref=e66]: Геометрия и объединение
+        - button "Рассмотреть Vennel" [ref=e67] [cursor=pointer]:
+          - 'img "Vennel: знак и приложение"'
+        - generic [ref=e68]:
+          - paragraph [ref=e69]: Короткое ритмичное имя и знак общего пространства для изображения и звука.
+          - generic [ref=e70]:
+            - generic [ref=e71]: Веннел · Vennel Player
+            - button "Сравнить ↗" [ref=e72] [cursor=pointer]
+      - article [ref=e73]:
+        - generic [ref=e74]:
+          - generic [ref=e75]: "06"
+          - heading "Attic" [level=2] [ref=e76]
+          - generic [ref=e77]: Место и коллекция
+        - button "Рассмотреть Attic" [ref=e78] [cursor=pointer]:
+          - 'img "Attic: знак и приложение"'
+        - generic [ref=e79]:
+          - paragraph [ref=e80]: Своя комната с фильмами, музыкой и находками — медиа как личная коллекция.
+          - generic [ref=e81]:
+            - generic [ref=e82]: Аттик · Attic Player
+            - button "Сравнить ↗" [ref=e83] [cursor=pointer]
+      - article [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]: "07"
+          - heading "Fika" [level=2] [ref=e87]
+          - generic [ref=e88]: Ритуал и пауза
+        - button "Рассмотреть Fika" [ref=e89] [cursor=pointer]:
+          - 'img "Fika: знак и приложение"'
+        - generic [ref=e90]:
+          - paragraph [ref=e91]: Приложение для привычного момента отдыха; простое короткое слово без привязки к формату файла.
+          - generic [ref=e92]:
+            - generic [ref=e93]: Фика · Fika Player
+            - button "Сравнить ↗" [ref=e94] [cursor=pointer]
+      - article [ref=e95]:
+        - generic [ref=e96]:
+          - generic [ref=e97]: "08"
+          - heading "Oddly" [level=2] [ref=e98]
+          - generic [ref=e99]: Характер и типографика
+        - button "Рассмотреть Oddly" [ref=e100] [cursor=pointer]:
+          - 'img "Oddly: знак и приложение"'
+        - generic [ref=e101]:
+          - paragraph [ref=e102]: "Одна намеренная странность в строгой системе: приложение с характером, а не безликая оболочка."
+          - generic [ref=e103]:
+            - generic [ref=e104]: Одли · Oddly Player
+            - button "Сравнить ↗" [ref=e105] [cursor=pointer]
+      - article [ref=e106]:
+        - generic [ref=e107]:
+          - generic [ref=e108]: "09"
+          - heading "Sundot" [level=2] [ref=e109]
+          - generic [ref=e110]: Оптика и свет
+        - button "Рассмотреть Sundot" [ref=e111] [cursor=pointer]:
+          - 'img "Sundot: знак и приложение"'
+        - generic [ref=e112]:
+          - paragraph [ref=e113]: "Sun + dot: маленький узнаваемый световой знак, из которого вырастает вся визуальная система."
+          - generic [ref=e114]:
+            - generic [ref=e115]: Сандот · Sundot Player
+            - button "Сравнить ↗" [ref=e116] [cursor=pointer]
+      - article [ref=e117]:
+        - generic [ref=e118]:
+          - generic [ref=e119]: "10"
+          - heading "Whirr" [level=2] [ref=e120]
+          - generic [ref=e121]: Механика и движение
+        - button "Рассмотреть Whirr" [ref=e122] [cursor=pointer]:
+          - 'img "Whirr: знак и приложение"'
+        - generic [ref=e123]:
+          - paragraph [ref=e124]: "Короткое звукоподражание вращению: механический характер без ретро-скина всего приложения."
+          - generic [ref=e125]:
+            - generic [ref=e126]: Вёр · Whirr Player
+            - button "Сравнить ↗" [ref=e127] [cursor=pointer]
+    - generic [ref=e128]:
+      - generic [ref=e129]:
+        - generic [ref=e130]: Взгляд со стороны
+        - heading "С чего я бы продолжил" [level=2] [ref=e131]
+        - paragraph [ref=e132]:
+          - button "Quinby" [ref=e133] [cursor=pointer]
+          - text: — наиболее цельное сочетание имени и массового характера.
+          - button "Oddly" [ref=e134] [cursor=pointer]
+          - text: — самая заметная индивидуальность.
+          - button "Sundot" [ref=e135] [cursor=pointer]
+          - text: — более спокойный и универсальный маршрут между ними.
+      - generic [ref=e136]:
+        - generic [ref=e137]: Граница проверки
+        - heading "Что пока не подтверждено" [level=2] [ref=e138]
+        - paragraph [ref=e139]: Это поиск направления. Домены, товарные знаки, похожие логотипы, произношение на разных рынках и запоминаемость у людей требуют отдельной проверки. Известные совпадения с другим ПО указаны у каждого варианта.
+    - generic [ref=e140]:
+      - generic [ref=e141]: 10 отдельных генераций · 4 экрана текущего приложения в каждом запросе
+      - link "Разбор и источники ↗" [ref=e142] [cursor=pointer]:
+        - /url: README.md
