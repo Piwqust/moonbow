@@ -90,6 +90,8 @@ void ShowPlayerContextMenu(ui::Host* host, ui::Point at);
 // The queue pinned beside the music view: "left", "right" or "" (ui.json player.queueDock).
 std::string QueueDockSide();
 void SetQueueDockSide(const std::string& side);
+// Shows the lyrics in the music view again if the Lyrics pill hid them (MusicView.cpp).
+void ShowMusicLyrics();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
 

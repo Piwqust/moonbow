@@ -192,9 +192,13 @@ private:
     const wchar_t* label_;
 };
 
+class MusicView;
+MusicView* g_musicView = nullptr;  // the one music view (ShowMusicLyrics)
+
 class MusicView : public Widget {
 public:
     MusicView() {
+        g_musicView = this;
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeFile | kChangeMeta)) RefreshLyrics();
             if (m & kChangeTime) FollowTime();
@@ -232,6 +236,7 @@ public:
         queueBtn_->onClick = [this] { TogglePlayerPanel(PanelKind::Queue, queueBtn_->rect); };
     }
     ~MusicView() override {
+        if (g_musicView == this) g_musicView = nullptr;
         TheApp().config().Unsubscribe(vizToken_);
         TheApp().config().Unsubscribe(lyricsToken_);
         TheApp().player().SetSignalTap(false);
@@ -239,6 +244,10 @@ public:
         net::Cancel(onlineReq_);
     }
     void OnLayout() override {}  // titleTip_, source_ and the pills are placed by Paint
+    void ShowLyrics() {
+        lyricsOn_ = true;
+        Invalidate();
+    }
 
     void DebugInfo(std::string& out) const override {
         Widget::DebugInfo(out);
@@ -1210,6 +1219,10 @@ private:
 };
 
 }  // namespace
+
+void ShowMusicLyrics() {
+    if (g_musicView) g_musicView->ShowLyrics();
+}
 
 std::vector<MenuItem> LyricsStyleItems() {
     std::vector<MenuItem> items;

@@ -876,7 +876,8 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     overlay_->dir = Dir::None;
     auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
-    auto* expand = overlay_->Add<MiniOverlayButton>("open", L"Open player", Action::None, 28, 18);
+    // An upward chevron, as Spotify's and YouTube's mini players expand: "open" read as a new window.
+    auto* expand = overlay_->Add<MiniOverlayButton>("chevron_up", L"Open player", Action::None, 28, 18);
     expand->id = "expand";
     expand->onClick = [] { TheApp().ShowPlayer(true); };
     auto* prev = overlay_->Add<MiniOverlayButton>("previous", L"Previous", Action::Previous, 36, 24);
@@ -897,6 +898,13 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     auto* queue = Add<QueueButton>();
     queue->id = "queue";
     queue->onClick = [this] { TogglePlayerPanel(PanelKind::Queue, rect); };
+    // A song's lyrics are one click away from the library too: the player opens on them.
+    auto* lyrics = Add<IconButton>("subtitle-2", Tr(L"Lyrics"), 28, 20);
+    lyrics->id = "lyrics";
+    lyrics->onClick = [] {
+        TheApp().ShowPlayer(true);
+        ShowMusicLyrics();
+    };
     auto* seek = Add<SeekBar>();
     seek->compact = true;
     seek->id = "seek";
@@ -946,7 +954,7 @@ void MiniPlayer::OnLayout() {
             }
         }
         for (auto& c : Children()) {
-            if (c->id == "queue") c->visible = false;
+            if (c->id == "queue" || c->id == "lyrics") c->visible = false;
             if (c->id == "seek") c->Arrange({v.Right() + 10, rect.Bottom() - 24, rect.Right() - 60 - v.Right() - 10, 24});
         }
         return;
@@ -968,6 +976,11 @@ void MiniPlayer::OnLayout() {
         if (c->id == "queue") {
             c->visible = true;
             c->Arrange({rect.Right() - 8 - 28, rect.Bottom() - 8 - 28, 28, 28});
+        }
+        if (c->id == "lyrics") {
+            c->visible = !PS().hasVideo;
+            static_cast<IconButton*>(c.get())->tooltip = Tr(L"Lyrics");
+            c->Arrange({rect.Right() - 8 - 28 - 4 - 28, rect.Bottom() - 8 - 28, 28, 28});
         }
     }
 }
@@ -1046,7 +1059,7 @@ void MiniPlayer::Paint(Painter& p) {
     }
     if (!tags.artist.empty()) folder = tags.artist;
     p.Icon(tags.artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
-    p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
+    p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - (s.hasVideo ? 84.0f : 116.0f), 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
     // overlay buttons are children, so they paint on top of it. They get solid backings of
     // their own: through the scrim alone, light cover art (its title text) reads through the icons.
