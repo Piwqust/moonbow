@@ -42,7 +42,13 @@ std::vector<std::wstring> PickFiles(int kind) {
         {Tr(L"Subtitles"), L"*.srt;*.ass;*.ssa;*.vtt;*.sub;*.sup;*.idx;*.smi"},
         {Tr(L"All files"), L"*.*"},
     };
-    dlg->SetFileTypes(2, kind == 1 ? audio : kind == 2 ? subs : media);
+    const COMDLG_FILTERSPEC lyrics[] = {
+        {Tr(L"Lyrics"), L"*.lrc;*.txt"},
+        {Tr(L"All files"), L"*.*"},
+    };
+    // kind 3: one .lrc for the music view (MusicView.cpp)
+    if (kind == 3) dlg->SetOptions(opts | FOS_FORCEFILESYSTEM);
+    dlg->SetFileTypes(2, kind == 1 ? audio : kind == 2 ? subs : kind == 3 ? lyrics : media);
     if (FAILED(dlg->Show(w->Hwnd()))) return out;
     gfx::ComPtr<IShellItemArray> items;
     if (FAILED(dlg->GetResults(&items))) return out;

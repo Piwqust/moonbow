@@ -2,6 +2,7 @@
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/App.h"
+#include "app/Dialogs.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/player/LiveState.h"
@@ -170,6 +171,9 @@ ScrollView* ScrollerOf(Widget* w) {
     return nullptr;
 }
 
+void SaveQueueAsPlaylist();
+std::vector<MenuItem> AddToQueueItems();
+
 // Small icon button for list headers (24 DIP icons in a 30×28 hit box).
 IconButton* HeaderButton(Widget* parent, const char* icon, const wchar_t* tip, std::function<void()> click, int box = 30,
                          int iconSize = 24) {
@@ -189,7 +193,7 @@ public:
         width = Length::Grow();
         height = Length::Px(compact ? 40.0f : 68.0f);
         pad = compact ? Insets{20, 0, 14, 0} : Insets{28, 0, 18, 0};
-        gap = compact ? 4.0f : 6.0f;
+        gap = compact ? 4.0f : 2.0f;  // seven buttons in the queue: room for "4 items · 4:20"
         label_ = Add<Label>(L"", compact ? TextStyle::Small : TextStyle::Body, Tone::Tertiary);
         label_->width = Length::Grow();
         Refresh();
@@ -607,8 +611,18 @@ public:
 
     void Remove(int i) {
         if (i < 0 || i >= Count()) return;
+        const QueueItem item = TheApp().queue().Items()[static_cast<size_t>(i)];
+        const std::wstring title = Info(i).title;
         TheApp().RemoveFromQueue(i);
         hover_ = -1;
+        // Back where it was, without playing it again (a removed playing row stopped or moved on).
+        ShowToast(TheApp().main(), Fmt(Tr(L"“{0}” removed from the queue"), {title}), "remove", 5000, Tr(L"Undo"),
+                  [item, i] {
+                      PlayQueue& q = TheApp().queue();
+                      q.Add({item});
+                      const int last = static_cast<int>(q.Items().size()) - 1;
+                      q.Move(last, std::min(i, last));
+                  });
     }
 
     // The playing row resumes if paused; another row starts playing.
@@ -642,7 +656,16 @@ private:
 
     void ShowMenuAt(const MouseEvent& e) {
         const int i = RowAt(e.y);
-        if (i < 0) return;
+        if (i < 0) {
+            // The empty part of the list: what concerns the whole queue.
+            std::vector<MenuItem> items;
+            items.push_back({Tr(L"Save as playlist…"), L"", "save", false, Count() > 0, false, false,
+                             [] { SaveQueueAsPlaylist(); }});
+            items.push_back(MenuItem::Separator());
+            for (MenuItem& m : AddToQueueItems()) items.push_back(std::move(m));
+            ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
+            return;
+        }
         selected_ = i;
         std::vector<MenuItem> items;
         items.push_back({Tr(L"Play"), L"", "play", false, true, false, false, [i] { TheApp().PlayIndex(i); }});
@@ -731,6 +754,28 @@ void SortQueue(int mode) {
     q.Set(std::move(sorted), cur, q.Name());
 }
 
+void AddFilesToQueue();
+
+// "+" and the empty list's menu: the library (pick there, "Add to queue") or files from disk.
+std::vector<MenuItem> AddToQueueItems() {
+    std::vector<MenuItem> items;
+    items.push_back({Tr(L"From the library…"), L"", "songs", false, true, false, false, [] {
+        const bool song = library::KindOf(CurrentPath()) == library::MediaKind::Audio;
+        TheApp().ShowPlayer(false);
+        TheApp().Navigate(song ? Route{Section::Music, L"songs"} : Route{Section::Videos, {}});
+        ShowToast(TheApp().main(), Tr(L"Right-click what to add › Add to Queue"), "queue", 5000);
+    }});
+    items.push_back({Tr(L"Files…"), L"", "file", false, true, false, false, [] { AddFilesToQueue(); }});
+    return items;
+}
+
+void SaveQueueAsPlaylist() {
+    // The dialog starts with the queue ticked; the new list shows on the Playlists page.
+    ShowNewPlaylistDialog([](const std::string& id) {
+        if (!id.empty()) TheApp().libraryChanged.Emit();
+    });
+}
+
 void AddFilesToQueue() {
     std::vector<QueueItem> add;
     for (const std::wstring& f : PickFiles(0)) add.push_back({f, FileNameOf(f), 0});
@@ -815,10 +860,25 @@ public:
             // Nothing selected: clear everything except what is playing, in one change (one
             // Remove per row was O(n²) and froze a 5000-item queue for seconds).
             PlayQueue& q = TheApp().queue();
-            if (const QueueItem* cur = q.CurrentItem()) q.Set({*cur}, 0, q.Name());
+            if (q.Items().size() <= (q.CurrentItem() ? 1u : 0u)) return;  // nothing to clear
+            const std::vector<QueueItem> before = q.Items();
+            const int cur = q.Current();
+            const std::wstring name = q.Name();
+            if (const QueueItem* item = q.CurrentItem()) q.Set({*item}, 0, name);
             else q.Clear();
+            ShowToast(TheApp().main(), Tr(L"Queue cleared"), "remove", 5000, Tr(L"Undo"), [before, cur, name] {
+                // Only onto what the clear left: the playing item alone, or nothing.
+                PlayQueue& now = TheApp().queue();
+                const auto& left = now.Items();
+                const bool same = cur >= 0 ? left.size() == 1 && left[0].path == before[static_cast<size_t>(cur)].path
+                                           : left.empty();
+                if (same) now.Set(before, std::max(cur, 0), name);
+            });
         });
-        HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
+        HeaderButton(header_, "save", L"Save as playlist", [] { SaveQueueAsPlaylist(); });
+        add_ = HeaderButton(header_, "add", L"Add", [this] {
+            ShowMenu(GetHost(), add_->rect, AddToQueueItems(), Place::Below, 200);
+        });
         // Music: the queue can stay beside the cover (PlayerView's dock) instead of this popover.
         if (covers)
             HeaderButton(header_, "close", L"Unpin the queue", [] { SetQueueDockSide(""); });
@@ -838,6 +898,7 @@ public:
 private:
     ListHeader* header_;
     IconButton* sort_ = nullptr;
+    IconButton* add_ = nullptr;
     QueueList* list_;
     ScopedConnection conn_, playerConn_, libConn_;
 };

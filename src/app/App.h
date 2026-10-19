@@ -87,7 +87,8 @@ public:
     void Open(const std::vector<std::wstring>& paths);
     // Adds files, folders and playlists to the end of the queue (starts it when nothing plays).
     void Enqueue(const std::vector<std::wstring>& paths);
-    void PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name = {});
+    // `showPlayer` off: songs started from the library keep the page and play in the mini player.
+    void PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name = {}, bool showPlayer = true);
     // `showPlayer` = switch to the player screen (off for next/previous, so music
     // keeps playing in the mini player while the user browses the library).
     void PlayIndex(int index, bool showPlayer = true);

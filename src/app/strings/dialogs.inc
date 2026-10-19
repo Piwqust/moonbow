@@ -44,7 +44,7 @@
 {L"Playlist Details", L"Плейлист"},
 {L"The playlist will be saved and displayed with this title and thumbnail.",
  L"Плейлист сохранится и будет показан с этим названием и обложкой."},
-{L"e.g., Favorite Videos", L"например, Любимые видео"},
+{L"e.g., Evening", L"например, Вечер"},
 {L"Choose a thumbnail", L"Выбрать обложку"},
 {L"Select Files", L"Файлы"},
 {L"These files will be added to the playlist.", L"Эти файлы будут добавлены в плейлист."},
