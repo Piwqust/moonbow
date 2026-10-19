@@ -8,6 +8,7 @@
 #include "app/Shell.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
+#include "app/player/Episodes.h"
 #include "app/player/LiveState.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
@@ -1033,7 +1034,9 @@ void MiniPlayer::Paint(Painter& p) {
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
     const PlayingTags& tags = CurrentTags();
-    const std::wstring name = item ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : L"";
+    // An episode as the window names it ("Show — S01E02"): a container's title tag rarely says which.
+    const std::wstring episode = item && s.hasVideo ? episodes::Title(item->path) : L"";
+    const std::wstring name = !episode.empty() ? episode : item ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : L"";
     // A cut title stays readable in the card's tooltip.
     const float titleW = compact_ ? std::max(0.0f, rect.Right() - 60 - v.Right() - 12) : rect.w - 24;
     tooltip = gfx::Text::Get().Measure(name, TextStyle::Body).width > titleW ? name : std::wstring();
