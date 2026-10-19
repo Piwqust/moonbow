@@ -2489,6 +2489,38 @@ void TestThumbnails() {
     if (SUCCEEDED(com)) CoUninitialize();
 }
 
+void TestFolderOrder() {
+    using library::FileEntry;
+    const std::vector<FileEntry> files = {{L"C:/m/10.mp3", 300, 1, 5}, {L"C:/m/2.mp3", 100, 3, 9}, {L"C:/m/1.mp3", 200, 2, 9}};
+    auto order = [&](std::string_view key) {
+        std::vector<FileEntry> v = files;
+        library::SortFileEntries(v, key);
+        std::wstring out;
+        for (const FileEntry& f : v) out += f.path.substr(5, f.path.size() - 9) + L";";
+        return out;
+    };
+    CHECK(order("name") == L"1;2;10;");
+    CHECK(order("name:desc") == L"10;2;1;");
+    CHECK(order("date") == L"2;1;10;");
+    CHECK(order("date:desc") == L"10;1;2;");
+    CHECK(order("created") == L"10;1;2;");
+    CHECK(order("size:desc") == L"2;1;10;");  // a reversed sort reverses ties too, as Explorer does
+    CHECK(order("size") == L"10;1;2;");
+    CHECK(order("bogus") == L"1;2;10;");
+}
+
+void TestLyricsFill() {
+    const app::Lyrics l = app::ParseLyrics(L"[00:10.00]0123456789\n[00:11.00]next line\n[01:00.00]last");
+    CHECK(l.SungFraction(0, 9) == 0);
+    CHECK(std::abs(l.SungFraction(0, 10.5) - 0.5) < 1e-9);  // ends at the next line's stamp
+    CHECK(l.SungFraction(0, 12) == 1);
+    // A long pause after the line: the fill ends after 0.9 s + 0.075 s per character.
+    CHECK(std::abs(l.SungFraction(1, 11 + (0.9 + 0.675) / 2) - 0.5) < 1e-9);
+    CHECK(l.SungFraction(2, 1000) == 1);  // the last line
+    CHECK(l.SungFraction(-1, 10) == 0 && l.SungFraction(3, 10) == 0);
+    CHECK(app::ParseLyrics(L"plain words").SungFraction(0, 5) == 0);
+}
+
 void TestLyricsLrc() {
     // Several stamps per line, offset, ID tags, word stamps, CRLF, out-of-order lines.
     const app::Lyrics l = app::ParseLyrics(
@@ -3644,6 +3676,8 @@ const TestCase kTests[] = {
     {"library_tag_reader", TestLibraryTagReader},
     {"lyrics_embedded", TestEmbeddedLyrics},
     {"thumbnails", TestThumbnails},
+    {"folder_order", TestFolderOrder},
+    {"lyrics_fill", TestLyricsFill},
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
     {"shell_text", TestShellText},

@@ -117,6 +117,15 @@ private:
 // Duration sorts unknown durations last.
 void SortItems(std::vector<const MediaItem*>& items, SortKey key, bool descending = false);
 
+// A file as a folder listing gives it, for the queue built from a folder.
+struct FileEntry {
+    std::wstring path;
+    uint64_t modified = 0, created = 0, size = 0;  // FILETIME ticks, bytes
+};
+// order: "name", "date" (modified), "created" or "size", with ":desc" for the reverse; anything
+// else is "name". Ties and names go in natural order (Explorer's "file 2" before "file 10").
+void SortFileEntries(std::vector<FileEntry>& files, std::string_view order);
+
 // What a running scan has done, for the progress banner. Read from any thread.
 struct ScanProgress {
     bool scanning = false;

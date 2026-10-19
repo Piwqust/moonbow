@@ -1,5 +1,7 @@
 #include "Util.h"
 
+#include "library/MediaLibrary.h"
+
 #include <shlwapi.h>
 
 #include <algorithm>
@@ -50,25 +52,30 @@ bool IsMediaFile(const std::wstring& path) {
     return false;
 }
 
-std::vector<std::wstring> ListSiblingMedia(const std::wstring& path) {
+std::vector<std::wstring> ListSiblingMedia(const std::wstring& path, std::string_view order) {
     std::vector<std::wstring> files;
     size_t slash = path.find_last_of(L"\\/");
     if (slash == std::wstring::npos) return files;
     std::wstring dir = path.substr(0, slash + 1);
 
+    std::vector<library::FileEntry> found;
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileExW((dir + L"*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
                                 FIND_FIRST_EX_LARGE_FETCH);
     if (h == INVALID_HANDLE_VALUE) return files;
+    auto ticks = [](FILETIME t) { return (static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime; };
     do {
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
         std::wstring full = dir + fd.cFileName;
-        if (IsMediaFile(full)) files.push_back(std::move(full));
+        if (IsMediaFile(full))
+            found.push_back({std::move(full), ticks(fd.ftLastWriteTime), ticks(fd.ftCreationTime),
+                             (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow});
     } while (FindNextFileW(h, &fd));
     FindClose(h);
 
-    std::sort(files.begin(), files.end(),
-              [](const std::wstring& a, const std::wstring& b) { return StrCmpLogicalW(a.c_str(), b.c_str()) < 0; });
+    library::SortFileEntries(found, order);
+    files.reserve(found.size());
+    for (auto& f : found) files.push_back(std::move(f.path));
     return files;
 }
 

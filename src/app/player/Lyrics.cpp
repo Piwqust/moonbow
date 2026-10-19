@@ -106,6 +106,17 @@ int Lyrics::LineAt(double t) const {
     return static_cast<int>(it - lines.begin()) - 1;
 }
 
+double Lyrics::SungFraction(int line, double t) const {
+    if (!synced || line < 0 || line >= static_cast<int>(lines.size())) return 0;
+    const LyricLine& l = lines[static_cast<size_t>(line)];
+    // shortcut: line stamps only (the parser drops enhanced-LRC word stamps), so the fill is even
+    // across the line; keep the word stamps if lyrics with them become common.
+    double end = l.time + 0.9 + 0.075 * static_cast<double>(l.text.size());  // ~13 characters a second
+    if (static_cast<size_t>(line) + 1 < lines.size()) end = std::min(end, lines[static_cast<size_t>(line) + 1].time);
+    if (end <= l.time) return 1;
+    return std::clamp((t - l.time) / (end - l.time), 0.0, 1.0);
+}
+
 Lyrics ParseLyrics(std::wstring_view text) {
     Lyrics out;
     std::vector<LyricLine> timed;

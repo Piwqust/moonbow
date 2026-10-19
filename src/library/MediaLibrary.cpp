@@ -512,6 +512,21 @@ void SortItems(std::vector<const MediaItem*>& items, SortKey key, bool descendin
     });
 }
 
+void SortFileEntries(std::vector<FileEntry>& files, std::string_view order) {
+    const bool desc = order.size() > 5 && order.substr(order.size() - 5) == ":desc";
+    const std::string_view key = desc ? order.substr(0, order.size() - 5) : order;
+    const uint64_t FileEntry::*field = key == "date"      ? &FileEntry::modified
+                                       : key == "created" ? &FileEntry::created
+                                       : key == "size"    ? &FileEntry::size
+                                                          : nullptr;
+    std::stable_sort(files.begin(), files.end(), [&](const FileEntry& a, const FileEntry& b) {
+        const FileEntry& x = desc ? b : a;
+        const FileEntry& y = desc ? a : b;
+        if (field && x.*field != y.*field) return x.*field < y.*field;
+        return NaturalLess(x.path, y.path);
+    });
+}
+
 // --- MediaLibrary -------------------------------------------------------------------------------
 
 MediaLibrary::MediaLibrary() : current_(std::make_shared<Snapshot>()) {}

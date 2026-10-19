@@ -14,8 +14,9 @@ std::wstring FormatTime(double seconds, bool withHours);
 std::wstring FileNameOf(const std::wstring& path);
 bool IsMediaFile(const std::wstring& path);
 
-// Media files in the same folder as `path`, sorted like Explorer does.
-std::vector<std::wstring> ListSiblingMedia(const std::wstring& path);
+// Media files in the same folder as `path`, in `order` (library::SortFileEntries: "name" sorts
+// like Explorer's name column, "date:desc" newest first...).
+std::vector<std::wstring> ListSiblingMedia(const std::wstring& path, std::string_view order = "name");
 
 // Known folder + subfolder, created if missing. Empty string on failure.
 std::wstring KnownFolderPath(REFKNOWNFOLDERID id, const wchar_t* sub);

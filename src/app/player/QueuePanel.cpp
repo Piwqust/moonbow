@@ -639,6 +639,20 @@ void SortQueue(int mode) {
     auto name = [&](size_t i) { return items[i].title.empty() ? FileNameOf(items[i].path) : items[i].title; };
     if (mode == 2) {
         std::reverse(order.begin(), order.end());
+    } else if (mode >= 3) {
+        // 3: newest first, 4: oldest first, 5: largest first. URLs and missing files go last.
+        std::vector<uint64_t> v(items.size());
+        for (size_t i = 0; i < items.size(); ++i) {
+            WIN32_FILE_ATTRIBUTE_DATA d;
+            if (!GetFileAttributesExW(items[i].path.c_str(), GetFileExInfoStandard, &d)) continue;
+            const FILETIME t = d.ftLastWriteTime;
+            v[i] = mode == 5 ? (static_cast<uint64_t>(d.nFileSizeHigh) << 32) | d.nFileSizeLow
+                             : (static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime;
+        }
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            if ((v[a] == 0) != (v[b] == 0)) return v[b] == 0;
+            return mode == 4 ? v[a] < v[b] : v[a] > v[b];
+        });
     } else {
         std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
             const int c = CompareStringEx(LOCALE_NAME_USER_DEFAULT, SORT_DIGITSASNUMBERS | NORM_IGNORECASE,
@@ -720,6 +734,9 @@ public:
             std::vector<MenuItem> items;
             items.push_back({Tr(L"Sort by name"), L"", "", false, true, false, false, [] { SortQueue(0); }});
             items.push_back({Tr(L"Sort by name, descending"), L"", "", false, true, false, false, [] { SortQueue(1); }});
+            items.push_back({Tr(L"Newest first"), L"", "", false, true, false, false, [] { SortQueue(3); }});
+            items.push_back({Tr(L"Oldest first"), L"", "", false, true, false, false, [] { SortQueue(4); }});
+            items.push_back({Tr(L"Largest first"), L"", "", false, true, false, false, [] { SortQueue(5); }});
             items.push_back({Tr(L"Reverse order"), L"", "", false, true, false, false, [] { SortQueue(2); }});
             ShowMenu(GetHost(), sort_->rect, std::move(items), Place::Below, 220);
         });

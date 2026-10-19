@@ -23,6 +23,9 @@
 #include "gfx/Gpu.h"
 #include "ui/Controls.h"
 
+#include <exdisp.h>
+#include <propkey.h>
+#include <shlguid.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
 
@@ -66,6 +69,59 @@ const char* SectionIcon(Section s) {
 
 namespace {
 
+// The sort column of an open Explorer window that shows `dir` (where the file was most likely
+// double-clicked), as library::SortFileEntries takes it; empty when no window shows the folder.
+// Explorer's grouping is ignored: Downloads groups by the date it also sorts by.
+std::string ExplorerSortOrder(const std::wstring& dir) {
+    using gfx::ComPtr;
+    ComPtr<IShellWindows> windows;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows))))
+        return {};
+    long count = 0;
+    windows->get_Count(&count);
+    for (long i = 0; i < count && i < 64; ++i) {
+        VARIANT v{};
+        v.vt = VT_I4;
+        v.lVal = i;
+        ComPtr<IDispatch> disp;
+        ComPtr<IServiceProvider> sp;
+        ComPtr<IShellBrowser> browser;
+        ComPtr<IShellView> view;
+        ComPtr<IFolderView2> fv;
+        ComPtr<IShellItem> folder;
+        if (FAILED(windows->Item(v, &disp)) || !disp || FAILED(disp.As(&sp)) ||
+            FAILED(sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser))) ||
+            FAILED(browser->QueryActiveShellView(&view)) || FAILED(view.As(&fv)) ||
+            FAILED(fv->GetFolder(IID_PPV_ARGS(&folder))))
+            continue;
+        PWSTR shown = nullptr;
+        if (FAILED(folder->GetDisplayName(SIGDN_FILESYSPATH, &shown))) continue;
+        const bool same = _wcsicmp(shown, dir.c_str()) == 0;
+        CoTaskMemFree(shown);
+        SORTCOLUMN col{};
+        if (!same || FAILED(fv->GetSortColumns(&col, 1))) continue;
+        const char* key = IsEqualPropertyKey(col.propkey, PKEY_DateModified) ? "date"
+                          : IsEqualPropertyKey(col.propkey, PKEY_DateCreated) ? "created"
+                          : IsEqualPropertyKey(col.propkey, PKEY_Size)        ? "size"
+                                                                              : "name";
+        return std::string(key) + (col.direction == SORT_DESCENDING ? ":desc" : "");
+    }
+    return {};
+}
+
+// playback.folderOrder for the files of `dir` (a folder path without the trailing backslash).
+std::string FolderOrder(const Config& config, std::wstring dir) {
+    const std::string order = config.GetString("playback.folderOrder");
+    if (order != "explorer") return order;
+    if (!dir.empty() && dir.back() == L':') dir += L'\\';  // Explorer shows a drive as "C:\"
+    const std::string shown = ExplorerSortOrder(dir);
+    return shown.empty() ? "name" : shown;
+}
+
+std::wstring FolderOf(const std::wstring& path) {
+    const size_t slash = path.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
+}
 
 bool IsUrl(const std::wstring& s) {
     return s.find(L"://") != std::wstring::npos;
@@ -76,10 +132,10 @@ bool IsDirectory(const std::wstring& path) {
     return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-std::vector<std::wstring> MediaInFolder(const std::wstring& dir, bool recursive) {
+std::vector<std::wstring> MediaInFolder(const std::wstring& dir, bool recursive, const std::string& order) {
     std::wstring probe = dir;
     if (!probe.empty() && probe.back() != L'\\') probe += L'\\';
-    std::vector<std::wstring> out = ListSiblingMedia(probe + L"x");  // lists the folder of a path
+    std::vector<std::wstring> out = ListSiblingMedia(probe + L"x", order);  // lists the folder of a path
     if (!recursive) return out;
     std::vector<std::wstring> subdirs;
     WIN32_FIND_DATAW fd;
@@ -97,7 +153,7 @@ std::vector<std::wstring> MediaInFolder(const std::wstring& dir, bool recursive)
               [](const std::wstring& a, const std::wstring& b) { return StrCmpLogicalW(a.c_str(), b.c_str()) < 0; });
     for (const auto& sub : subdirs) {
         if (out.size() > 5000) break;
-        auto more = MediaInFolder(sub, true);
+        auto more = MediaInFolder(sub, true, order);
         out.insert(out.end(), more.begin(), more.end());
     }
     return out;
@@ -528,7 +584,7 @@ void App::OnPlaybackEnded() {
     const QueueItem* item = queue_.CurrentItem();
     if (finished == "next" && item && item->path.find(L"://") == std::wstring::npos) {
         // Continue with the file after this one in its folder.
-        const auto siblings = ListSiblingMedia(item->path);
+        const auto siblings = ListSiblingMedia(item->path, FolderOrder(config_, FolderOf(item->path)));
         for (size_t i = 0; i + 1 < siblings.size(); ++i)
             if (_wcsicmp(siblings[i].c_str(), item->path.c_str()) == 0) {
                 BuildFolderQueue(siblings[i + 1]);
@@ -628,7 +684,8 @@ void App::Enqueue(const std::vector<std::wstring>& paths) {
     std::vector<QueueItem> items;
     for (const auto& p : ExistingOnly(paths)) {
         if (!IsUrl(p) && IsDirectory(p)) {
-            for (const auto& f : MediaInFolder(p, config_.GetString("library.openFolder") != "folder"))
+            for (const auto& f : MediaInFolder(p, config_.GetString("library.openFolder") != "folder",
+                                               FolderOrder(config_, p)))
                 items.push_back(ItemFor(f));
         } else if (!IsUrl(p) && IsPlaylistFile(p)) {
             ReadPlaylistItems(p, &items);  // its tracks, not the .m3u as one line
@@ -653,7 +710,7 @@ void App::BuildFolderQueue(const std::wstring& file) {
         PlayQueueItems({ItemFor(file)}, 0);
         return;
     }
-    std::vector<std::wstring> siblings = ListSiblingMedia(file);
+    std::vector<std::wstring> siblings = ListSiblingMedia(file, FolderOrder(config_, FolderOf(file)));
     // Same kind only: a song doesn't pull the folder's videos into the queue (nor a film its .ac3).
     const bool audio = library::KindOf(file) == library::MediaKind::Audio;
     std::vector<QueueItem> items;
@@ -699,7 +756,8 @@ void App::Open(const std::vector<std::wstring>& paths) {
     if (paths.size() == 1 && !IsUrl(paths[0])) {
         if (IsDirectory(paths[0])) {
             std::vector<QueueItem> items;
-            for (const auto& f : MediaInFolder(paths[0], config_.GetString("library.openFolder") != "folder"))
+            for (const auto& f : MediaInFolder(paths[0], config_.GetString("library.openFolder") != "folder",
+                                               FolderOrder(config_, paths[0])))
                 items.push_back(ItemFor(f));
             if (items.empty()) {
                 ShowToast(main_.get(), Tr(L"No media files in this folder"), "folder");
@@ -714,7 +772,8 @@ void App::Open(const std::vector<std::wstring>& paths) {
     std::vector<QueueItem> items;
     for (const auto& p : paths) {
         if (!IsUrl(p) && IsDirectory(p))
-            for (const auto& f : MediaInFolder(p, config_.GetString("library.openFolder") != "folder"))
+            for (const auto& f : MediaInFolder(p, config_.GetString("library.openFolder") != "folder",
+                                               FolderOrder(config_, p)))
                 items.push_back(ItemFor(f));
         else
             items.push_back(ItemFor(p));

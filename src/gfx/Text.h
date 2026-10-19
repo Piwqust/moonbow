@@ -55,6 +55,9 @@ public:
     IDWriteTextLayout* Layout(std::wstring_view text, TextStyle style, float maxWidth, float maxHeight, HAlign h,
                               VAlign v, uint8_t flags);
     TextMetrics Measure(std::wstring_view text, TextStyle style, float maxWidth = 100000.0f, uint8_t flags = 0);
+    // A format in an installed font (empty: the bundled Inter) at any size, for text the user
+    // styles (song lyrics). Not cached: the caller keeps it. Null on failure.
+    ComPtr<IDWriteTextFormat> CustomFormat(const std::wstring& family, float size, DWRITE_FONT_WEIGHT weight);
 
     // Drops layouts not used for a few frames. Call once per frame.
     void EndFrame();

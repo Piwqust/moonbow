@@ -58,7 +58,6 @@ struct LyricsLoad {
 };
 
 constexpr float kWideLyrics = 980;  // narrower views show only the sung line under the title
-constexpr float kLineGap = 14;
 // Lines light up this much early: an exact seek to a stamp may land a frame before it.
 constexpr double kLead = 0.1;
 constexpr float kEdgeFade = 72;  // lyrics fade out over this much at the column's top and bottom
@@ -71,6 +70,57 @@ VizStyle VizStyleOf(const std::string& v) {
     if (v == "spectrum") return VizStyle::Spectrum;
     if (v == "waveform") return VizStyle::Waveform;
     return VizStyle::Off;
+}
+
+// How the lyrics column looks: audio.lyricsStyle picks a preset, the other audio.lyrics* settings
+// replace parts of it.
+struct LyricsLook {
+    std::wstring font;  // empty: Inter
+    float size = 20;
+    DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_REGULAR;
+    bool center = false;
+    float anchor = 0.42f;      // where the sung line sits, as a share of the column's height
+    int before = -1, after = -1;  // lines shown above / below the sung one; -1 = all
+    bool fill = false;         // karaoke: the sung line lights up as it is sung
+    float grow = 1;            // scale of the sung line
+    float sung = 0.96f, ahead = 0.62f, past = 0.46f;  // brightness of the sung line, lines to come, sung lines
+    float gap = 14;
+};
+
+LyricsLook ReadLyricsLook(const Config& c) {
+    LyricsLook k;
+    const std::string style = c.GetString("audio.lyricsStyle");
+    if (style == "spotify") {  // big bold lines; what is sung stays lit, what comes is dark
+        k.size = 28, k.weight = DWRITE_FONT_WEIGHT_BOLD, k.anchor = 0.32f;
+        k.sung = 1, k.ahead = 0.34f, k.past = 0.82f, k.gap = 18;
+    } else if (style == "apple") {  // big bold lines, the sung one fills word by word
+        k.size = 30, k.weight = DWRITE_FONT_WEIGHT_BOLD, k.anchor = 0.32f, k.fill = true;
+        k.sung = 1, k.ahead = 0.32f, k.past = 0.28f, k.gap = 24;
+    } else if (style == "yandex") {  // centered, the sung line larger than the rest
+        k.size = 24, k.weight = DWRITE_FONT_WEIGHT_SEMI_BOLD, k.center = true, k.anchor = 0.45f, k.grow = 1.2f;
+        k.sung = 1, k.ahead = 0.44f, k.past = 0.30f, k.gap = 18;
+    } else if (style == "karaoke") {  // the sung line and the next one, low on the screen
+        k.size = 34, k.weight = DWRITE_FONT_WEIGHT_BOLD, k.center = true, k.anchor = 0.6f, k.fill = true;
+        k.before = 0, k.after = 1, k.sung = 1, k.ahead = 0.5f, k.past = 0.3f, k.gap = 22;
+    }
+    k.font = Utf8ToWide(c.GetString("audio.lyricsFont"));
+    const std::string size = c.GetString("audio.lyricsSize");
+    k.size *= size == "small" ? 0.8f : size == "large" ? 1.25f : size == "huge" ? 1.6f : 1.0f;
+    k.gap *= size == "huge" ? 1.3f : 1.0f;
+    const std::string pos = c.GetString("audio.lyricsPosition");
+    if (pos == "top") k.anchor = 0.22f;
+    else if (pos == "center") k.anchor = 0.45f;
+    else if (pos == "bottom") k.anchor = 0.7f;
+    const std::string lines = c.GetString("audio.lyricsLines");
+    if (lines == "all") k.before = k.after = -1;
+    else if (lines == "near") k.before = k.after = 2;
+    else if (lines == "next") k.before = 0, k.after = 1;
+    else if (lines == "none") k.before = k.after = 0;
+    const std::string align = c.GetString("audio.lyricsAlign");
+    if (align != "auto") k.center = align == "center";
+    const std::string fill = c.GetString("audio.lyricsKaraoke");
+    if (fill != "auto") k.fill = fill == "on";
+    return k;
 }
 
 // Under lyrics that came from LRCLIB: the source, and a click saves them as .lrc next to the song
@@ -116,6 +166,13 @@ public:
             Invalidate();
         });
         ReadVisualizerSetting();
+        look_ = ReadLyricsLook(TheApp().config());
+        lyricsToken_ = TheApp().config().Subscribe("audio.lyrics", [this](const std::string&) {
+            look_ = ReadLyricsLook(TheApp().config());
+            format_.Reset();
+            layoutW_ = -1;
+            Invalidate();
+        });
         imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
         // Hover target for the full title when it is cut (placed by Paint, where the text goes).
         titleTip_ = Add<Widget>();
@@ -127,6 +184,7 @@ public:
     }
     ~MusicView() override {
         TheApp().config().Unsubscribe(vizToken_);
+        TheApp().config().Unsubscribe(lyricsToken_);
         TheApp().player().SetSignalTap(false);
         *alive_ = false;
         net::Cancel(onlineReq_);
@@ -259,13 +317,38 @@ public:
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
-        // Right click on lyrics from the internet: the save command; elsewhere the player's menu.
-        if (e.button == MouseButton::Right && online_ && box_.w > 0 && box_.Contains(e.x, e.y) && GetHost()) {
-            MenuItem save;
-            save.label = Tr(L"Save lyrics as .lrc next to the song");
-            save.icon = "save";
-            save.action = [this] { SaveOnlineLyrics(); };
-            ShowContextMenu(GetHost(), {e.x, e.y}, {save});
+        // Right click on the lyrics: their style (and the save command for lyrics from the
+        // internet); elsewhere the player's menu.
+        if (e.button == MouseButton::Right && box_.w > 0 && box_.Contains(e.x, e.y) && GetHost()) {
+            std::vector<MenuItem> items;
+            const std::string cur = TheApp().config().GetString("audio.lyricsStyle");
+            for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"lumen", L"Lumen"},
+                                               {"spotify", L"Like Spotify"},
+                                               {"apple", L"Like Apple Music"},
+                                               {"yandex", L"Like Yandex Music"},
+                                               {"karaoke", L"Karaoke"}}) {
+                MenuItem m;
+                m.label = Tr(label);
+                m.radio = true;
+                m.checked = cur == value;
+                const std::string v = value;
+                m.action = [v] { TheApp().config().SetString("audio.lyricsStyle", v); };
+                items.push_back(std::move(m));
+            }
+            items.push_back(MenuItem::Separator());
+            MenuItem more;
+            more.label = Tr(L"Lyrics settings…");
+            more.icon = "settings";
+            more.action = [] { TheApp().OpenSettings("audio"); };
+            items.push_back(std::move(more));
+            if (online_) {
+                MenuItem save;
+                save.label = Tr(L"Save lyrics as .lrc next to the song");
+                save.icon = "save";
+                save.action = [this] { SaveOnlineLyrics(); };
+                items.push_back(std::move(save));
+            }
+            ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
             return true;
         }
         if (e.button != MouseButton::Left) return false;
@@ -559,8 +642,13 @@ private:
     // Playback moved: when another line starts, glide the column to it.
     void FollowTime() {
         TakeLoadedLyrics();
+        const double pos = TheApp().player().State().position;
+        if (pos != stampPos_) {
+            stampPos_ = pos;
+            stampAt_ = AnimFloat::Now();
+        }
         if (!lyrics_.synced) return;
-        const int line = lyrics_.LineAt(TheApp().player().State().position + kLead);
+        const int line = lyrics_.LineAt(pos + kLead);
         if (line == current_) return;
         // Far jumps (a seek) move quicker than the next line coming up.
         const int dist = std::abs(line - current_);
@@ -571,28 +659,49 @@ private:
         Invalidate();
     }
 
+    // The playback position between mpv's time updates (a few a second), for a smooth fill.
+    double SmoothTime() const {
+        const PlayerState& s = TheApp().player().State();
+        if (!s.fileLoaded || s.paused || s.eof || s.idle) return s.position;
+        return s.position + std::clamp((AnimFloat::Now() - stampAt_) / 1000.0, 0.0, 0.3) * s.speed;
+    }
+
     void ClearHover() {
         if (hovered_ < 0) return;
         hovered_ = -1;
         cursor = IDC_ARROW;
     }
 
-    // Line heights for the column width; measured again only when the width or the lyrics change.
-    void EnsureLayout(Painter& p, float w) {
-        if (w == layoutW_) return;
+    // One layout per line in the look's font; made again only when the width, the look or the
+    // lyrics change. Lines are narrower by the sung line's growth, so it still fits when grown.
+    void EnsureLayout(float w) {
+        if (w == layoutW_ && format_) return;
         layoutW_ = w;
         const size_t n = lyrics_.lines.size();
         tops_.assign(n, 0);
         heights_.assign(n, 0);
         lineRects_.assign(n, Rect{});
-        const TextStyle style = TextStyle::Section;
-        const float blank = p.Measure(L"A", style).height * 0.6f;
+        layouts_.assign(n, nullptr);
+        if (!format_) format_ = gfx::Text::Get().CustomFormat(look_.font, look_.size, look_.weight);
+        if (!format_) return;
+        format_->SetTextAlignment(look_.center ? DWRITE_TEXT_ALIGNMENT_CENTER : DWRITE_TEXT_ALIGNMENT_LEADING);
+        format_->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        const bool synced = lyrics_.synced;
         float y = 0;
         for (size_t i = 0; i < n; ++i) {
+            // A pause in synced lyrics shows as dots; a stanza break in plain text stays blank.
             const std::wstring& t = lyrics_.lines[i].text;
-            heights_[i] = t.empty() ? blank : p.Measure(t, style, w, gfx::kTextWrap).height;
+            const std::wstring_view text = t.empty() && synced ? std::wstring_view(L"· · ·") : t;
+            heights_[i] = std::round(look_.size * 0.8f);
+            DWRITE_TEXT_METRICS m{};
+            if (!text.empty() &&
+                SUCCEEDED(gfx::Gpu::Get().DWrite()->CreateTextLayout(text.data(), static_cast<UINT32>(text.size()),
+                                                                     format_.Get(), w / look_.grow, 100000,
+                                                                     &layouts_[i])) &&
+                SUCCEEDED(layouts_[i]->GetMetrics(&m)))
+                heights_[i] = std::ceil(m.height);
             tops_[i] = y;
-            y += heights_[i] + (lyrics_.synced ? kLineGap : 4.0f);
+            y += heights_[i] + (synced ? look_.gap : 4.0f);
         }
         totalH_ = y;
     }
@@ -613,39 +722,128 @@ private:
 
     void PaintLyrics(Painter& p, const Rect& box) {
         if (box.w < 120 || box.h < 80) return;
-        EnsureLayout(p, box.w);
+        EnsureLayout(box.w);
+        ID2D1DeviceContext5* ctx = p.Ctx();
         const Color bg = P().videoBg, white = Color::Hex(0xFFFFFF);
         const bool synced = lyrics_.synced;
-        // Synced: the sung line sits a little above the middle. Unsynced: from the top (centered
-        // when it fits), moved only by the wheel.
-        const float offset = synced ? box.y + box.h * 0.42f - CenterAt(scroll_.Get())
+        const LyricsLook& k = look_;
+        const float at = scroll_.Get();
+        // Synced: the sung line sits where the look says. Unsynced: from the top (centered when
+        // it fits), moved only by the wheel.
+        const float offset = synced ? box.y + box.h * k.anchor - CenterAt(at)
                                     : box.y + (totalH_ <= box.h ? (box.h - totalH_) / 2 : -staticScroll_);
         p.PushClip(box);
         const bool masked = PushEdgeMask(p, box);
+        bool filling = false;
         for (size_t i = 0; i < lyrics_.lines.size(); ++i) {
-            const Rect r{box.x, std::round(offset + tops_[i]), box.w, heights_[i]};
+            const float lw = box.w / k.grow;
+            const Rect r{k.center ? box.x + (box.w - lw) / 2 : box.x, std::round(offset + tops_[i]), lw, heights_[i]};
             lineRects_[i] = {};
-            if (r.Bottom() < box.y || r.y > box.Bottom()) continue;
-            const LyricLine& line = lyrics_.lines[i];
-            float a = 0.72f;
+            IDWriteTextLayout* layout = layouts_[i].Get();
+            if (!layout || r.Bottom() < box.y || r.y > box.Bottom()) continue;
+            float a = 0.72f, shown = 1, grow = 1;
             if (synced) {
-                const int at = static_cast<int>(i);
-                const float d = static_cast<float>(std::abs(at - current_));
-                // Lines to come stay readable ahead (at least 40 %); sung ones step back further.
-                if (at == current_) a = 0.96f;
-                else if (at > current_) a = std::max(0.40f, 0.62f - 0.05f * d);
-                else a = std::max(0.24f, 0.46f - 0.06f * d);
-                if (at == hovered_) a = std::max(a, 0.78f);
-                if (line.time >= 0) lineRects_[i] = r;
+                const int line = static_cast<int>(i);
+                const float d = static_cast<float>(std::abs(line - current_));
+                // Lines to come stay readable ahead; sung ones step back further.
+                if (line == current_) a = k.sung;
+                else if (line > current_) a = std::max(k.ahead - 0.22f, k.ahead - 0.05f * d);
+                else a = std::max(k.past - 0.22f, k.past - 0.06f * d);
+                if (line == hovered_) a = std::max(a, 0.78f);
+                // Lines past the look's limit fade out while the column glides, not at once.
+                const float rel = static_cast<float>(line) - at;
+                const int limit = rel < 0 ? k.before : k.after;
+                if (limit >= 0) shown = std::clamp(static_cast<float>(limit) + 1 - std::abs(rel), 0.0f, 1.0f);
+                if (shown <= 0) continue;
+                grow = 1 + (k.grow - 1) * std::max(0.0f, 1 - std::abs(rel));
+                if (lyrics_.lines[i].time >= 0) lineRects_[i] = r;
             }
-            // A pause in synced lyrics shows as dots; a stanza break in plain text stays blank.
-            if (line.text.empty() && !synced) continue;
-            const std::wstring_view text = line.text.empty() ? std::wstring_view(L"\u00B7 \u00B7 \u00B7") : line.text;
-            p.Text(text, r, TextStyle::Section, Color::Mix(bg, white, a), HAlign::Leading, VAlign::Top,
-                   gfx::kTextWrap);
+            D2D1_MATRIX_3X2_F old;
+            ctx->GetTransform(&old);
+            if (grow != 1)
+                ctx->SetTransform(D2D1::Matrix3x2F::Scale(grow, grow, {k.center ? r.Cx() : r.x, r.Cy()}) * old);
+            if (synced && k.fill && static_cast<int>(i) == current_) {
+                const double sung = lyrics_.SungFraction(current_, SmoothTime());
+                filling = sung < 1;
+                PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), Color::Mix(bg, white, k.ahead), a, shown);
+            } else if (ID2D1SolidColorBrush* brush = LineBrush(ctx, Color::Mix(bg, white, a), shown)) {
+                ctx->DrawTextLayout({r.x, r.y}, layout, brush);
+            }
+            ctx->SetTransform(old);
         }
-        if (masked) p.Ctx()->PopLayer();
+        if (masked) ctx->PopLayer();
         p.PopClip();
+        if (filling) Invalidate();  // the next frame moves the fill on
+    }
+
+    // A line lit (white at `lit`) from the left up to `sung` of its words, with a soft edge,
+    // over its unlit color; wrapped parts fill one after another.
+    void PaintFill(ID2D1DeviceContext5* ctx, IDWriteTextLayout* layout, D2D1_POINT_2F o, float sung, Color unlit,
+                   float lit, float opacity) {
+        if (ID2D1SolidColorBrush* brush = LineBrush(ctx, unlit, opacity)) ctx->DrawTextLayout(o, layout, brush);
+        ID2D1LinearGradientBrush* edge = FillBrush(ctx);
+        if (!edge || sung <= 0) return;
+        edge->SetOpacity(lit * opacity);
+        UINT32 n = 0;
+        layout->GetLineMetrics(nullptr, 0, &n);
+        std::vector<DWRITE_LINE_METRICS> lines(n);
+        if (n == 0 || FAILED(layout->GetLineMetrics(lines.data(), n, &n))) return;
+        // Where each wrapped part's words start and end.
+        struct Part {
+            float x, w, y, h;
+        };
+        std::vector<Part> parts;
+        float total = 0, y = 0;
+        UINT32 pos = 0;
+        for (const DWRITE_LINE_METRICS& l : lines) {
+            DWRITE_HIT_TEST_METRICS hm[8];
+            UINT32 count = 0;
+            float x0 = 0, x1 = 0;
+            if (SUCCEEDED(layout->HitTestTextRange(pos, l.length - l.trailingWhitespaceLength, 0, 0, hm, 8, &count)) &&
+                count > 0) {
+                x0 = hm[0].left;
+                x1 = hm[0].left + hm[0].width;
+                for (UINT32 j = 1; j < count; ++j) {
+                    x0 = std::min(x0, hm[j].left);
+                    x1 = std::max(x1, hm[j].left + hm[j].width);
+                }
+            }
+            parts.push_back({x0, x1 - x0, y, l.height});
+            total += x1 - x0;
+            y += l.height;
+            pos += l.length;
+        }
+        // The soft edge runs past each part's end, so a finished part is lit to its last letter.
+        const float soft = look_.size * 0.8f;
+        float left = sung * (total + soft * static_cast<float>(parts.size()));
+        const float lineW = layout->GetMaxWidth();
+        for (const Part& part : parts) {
+            const float done = std::min(left, part.w + soft);
+            left -= done;
+            if (done <= 0) break;
+            const float edgeX = o.x + part.x + done;
+            edge->SetStartPoint({edgeX - soft, 0});
+            edge->SetEndPoint({edgeX, 0});
+            ctx->PushAxisAlignedClip(D2D1::RectF(o.x - soft, o.y + part.y, o.x + lineW + soft, o.y + part.y + part.h),
+                                     D2D1_ANTIALIAS_MODE_ALIASED);
+            ctx->DrawTextLayout(o, layout, edge);
+            ctx->PopAxisAlignedClip();
+        }
+    }
+
+    // White fading to clear from the start point to the end point (PaintFill moves them).
+    ID2D1LinearGradientBrush* FillBrush(ID2D1DeviceContext5* ctx) {
+        const uint32_t gen = gfx::Gpu::Get().Generation();
+        if (fill_ && fillGen_ == gen) return fill_.Get();
+        fill_.Reset();
+        fillGen_ = gen;
+        const D2D1_GRADIENT_STOP stops[] = {{0.0f, {1, 1, 1, 1}}, {1.0f, {1, 1, 1, 0}}};
+        gfx::ComPtr<ID2D1GradientStopCollection> coll;
+        if (FAILED(ctx->CreateGradientStopCollection(stops, 2, &coll)) ||
+            FAILED(ctx->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({0, 0}, {1, 0}), coll.Get(),
+                                                  &fill_)))
+            return nullptr;
+        return fill_.Get();
     }
 
     // A vertical opacity mask over the column: lines fade out toward its top and bottom edges
@@ -820,7 +1018,14 @@ private:
     float staticScroll_ = 0;
     float layoutW_ = -1, totalH_ = 0;
     std::vector<float> tops_, heights_;
+    std::vector<gfx::ComPtr<IDWriteTextLayout>> layouts_;  // EnsureLayout, one per line
     std::vector<Rect> lineRects_;  // where clickable synced lines were painted
+    LyricsLook look_;
+    gfx::ComPtr<IDWriteTextFormat> format_;  // the look's font; reset when it changes
+    Config::Token lyricsToken_ = 0;
+    double stampPos_ = -1, stampAt_ = 0;  // the last position mpv reported and when (SmoothTime)
+    gfx::ComPtr<ID2D1LinearGradientBrush> fill_;  // FillBrush
+    uint32_t fillGen_ = 0;
     Rect box_;
 
     ScopedConnection conn_, imagesConn_;

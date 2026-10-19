@@ -1152,6 +1152,18 @@ void BuildMedia(Builder& b) {
              true)
         .Desc(L"Opening one file queues the files next to it, like a series. Off: only that file plays.",
               L"Открытый файл ставит в очередь соседние файлы, как серии. Если выключено, играет только он.");
+    b.Pick("playback.folderOrder", L"Order of the folder's files", L"Порядок файлов папки",
+           {{"explorer", L"As in Explorer", L"Как в Проводнике"},
+            {"name", L"By name", L"По названию"},
+            {"name:desc", L"By name, descending", L"По названию, в обратном порядке"},
+            {"date:desc", L"Newest first", L"Сначала новые"},
+            {"date", L"Oldest first", L"Сначала старые"},
+            {"size:desc", L"Largest first", L"Сначала большие"}},
+           "explorer")
+        .Desc(L"The queue of an opened file or folder. \"As in Explorer\" takes the sorting of the open Explorer "
+              L"window showing that folder (date, size or name), otherwise by name.",
+              L"Очередь открытого файла или папки. «Как в Проводнике» берёт сортировку открытого окна Проводника с "
+              L"этой папкой (по дате, размеру или названию), а без такого окна — по названию.");
     b.Toggle("playback.stopAfterEach", L"Stop after each item", L"Останавливаться после каждого файла", false)
         .Desc(L"Pause at the end of every file instead of moving to the next one.",
               L"Ставить на паузу в конце каждого файла, а не переходить к следующему.");
@@ -1707,6 +1719,49 @@ void BuildMedia(Builder& b) {
     }
     b.Toggle("audio.pitchCorrection", L"Keep pitch when changing speed", L"Сохранять тон при смене скорости", true)
         .MpvBool("audio-pitch-correction");
+
+    // Read by the music view (app/player/MusicView.cpp); "auto" keeps what the style says.
+    b.Sec("lyrics", L"Lyrics", L"Тексты песен");
+    b.Pick("audio.lyricsStyle", L"Lyrics style", L"Стиль текста",
+           {{"lumen", L"Lumen", L"Lumen"},
+            {"spotify", L"Like Spotify", L"Как в Spotify"},
+            {"apple", L"Like Apple Music", L"Как в Apple Music"},
+            {"yandex", L"Like Yandex Music", L"Как в Яндекс Музыке"},
+            {"karaoke", L"Karaoke", L"Караоке"}},
+           "lumen")
+        .Desc(L"How synced lyrics follow the song next to the cover. The settings below change parts of the style.",
+              L"Как синхронный текст идёт за песней рядом с обложкой. Настройки ниже меняют части стиля.");
+    b.Text("audio.lyricsFont", L"Lyrics font", L"Шрифт текста")
+        .Hint(L"As in the style", L"Как в стиле")
+        .Desc(L"Any installed font, e.g. \"Segoe UI\" or \"Georgia\". Leave empty for the style's font.",
+              L"Любой установленный шрифт, например «Segoe UI» или «Georgia». Если пусто — шрифт стиля.");
+    b.Pick("audio.lyricsSize", L"Text size", L"Размер текста",
+           {{"auto", L"As in the style", L"Как в стиле"},
+            {"small", L"Small", L"Мелкий"},
+            {"large", L"Large", L"Крупный"},
+            {"huge", L"Huge", L"Огромный"}},
+           "auto");
+    b.Pick("audio.lyricsPosition", L"Sung line", L"Где поётся строка",
+           {{"auto", L"As in the style", L"Как в стиле"},
+            {"top", L"Near the top", L"Ближе к верху"},
+            {"center", L"In the middle", L"Посередине"},
+            {"bottom", L"Near the bottom", L"Ближе к низу"}},
+           "auto");
+    b.Pick("audio.lyricsLines", L"Other lines", L"Другие строки",
+           {{"auto", L"As in the style", L"Как в стиле"},
+            {"all", L"All lines", L"Все строки"},
+            {"near", L"Two above and below", L"По две сверху и снизу"},
+            {"next", L"Only the next line", L"Только следующая"},
+            {"none", L"Only the sung line", L"Только текущая"}},
+           "auto");
+    b.Pick("audio.lyricsAlign", L"Alignment", L"Выравнивание",
+           {{"auto", L"As in the style", L"Как в стиле"}, {"left", L"Left", L"По левому краю"},
+            {"center", L"Center", L"По центру"}},
+           "auto");
+    b.Pick("audio.lyricsKaraoke", L"Fill the line as it is sung", L"Заливать строку по мере пения",
+           {{"auto", L"As in the style", L"Как в стиле"}, {"on", L"On", L"Да"}, {"off", L"Off", L"Нет"}}, "auto")
+        .Desc(L"Karaoke: the sung line lights up from left to right.",
+              L"Караоке: текущая строка загорается слева направо.");
 
     b.Sec("languages", L"Languages", L"Языки");
     b.Pick("audio.language", L"Preferred audio language", L"Предпочтительный язык звука", LanguageChoices(true),

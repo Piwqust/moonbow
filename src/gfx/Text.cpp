@@ -199,6 +199,20 @@ TextMetrics Text::Measure(std::wstring_view text, TextStyle style, float maxWidt
     return m;
 }
 
+ComPtr<IDWriteTextFormat> Text::CustomFormat(const std::wstring& family, float size, DWRITE_FONT_WEIGHT weight) {
+    WaitReady();
+    const bool own = family.empty();
+    ComPtr<IDWriteTextFormat> format;
+    // A font that isn't installed falls back to DirectWrite's default, as everywhere in Windows.
+    if (FAILED(Gpu::Get().DWrite()->CreateTextFormat(own ? family_ : family.c_str(), own ? fonts_.Get() : nullptr,
+                                                     weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                                                     size, L"ru-ru", &format)))
+        return nullptr;
+    const float lh = std::round(size * 1.3f);
+    format->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, lh, std::round(lh * 0.8f));
+    return format;
+}
+
 void Text::EndFrame() {
     ++impl_->frame;
     // Every ~2 s of continuous drawing, drop layouts unused for 120 frames.

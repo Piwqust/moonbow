@@ -19,6 +19,9 @@ struct Lyrics {
     bool Empty() const { return lines.empty(); }
     // The line sung at `t` (the last one that started), -1 before the first or when unsynced.
     int LineAt(double t) const;
+    // How much of `line` is sung at `t`, 0..1, for the karaoke fill: it runs evenly from the line's
+    // stamp to the next one, at most about as long as the words take to sing. 0 when unsynced.
+    double SungFraction(int line, double t) const;
 };
 
 // LRC: "[mm:ss.xx]text" with any number of stamps per line ("[00:12.00][01:30.5]chorus"),
