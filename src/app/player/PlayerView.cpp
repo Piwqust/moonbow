@@ -172,7 +172,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
     video.submenu.push_back(Item(L"Snapshot", Action::Snapshot, "snapshot"));
     if (!music) items.push_back(video);
 
-    MenuItem audio{Tr(L"Audio"), L"", "audio"};
+    MenuItem audio{Tr(L"Audio"), L"", "audio-tracks"};
     audio.submenu = TrackItems(L"audio", "aid", true);
     audio.submenu.push_back(MenuItem::Separator());
     MenuItem mute = Item(L"Mute", Action::Mute);
@@ -271,7 +271,7 @@ void ShowPipContextMenu(Host* host, Point at) {
     // Short: the PiP window is as small as 256x144 DIP and an in-window menu can't leave it.
     std::vector<MenuItem> items;
     items.push_back(PlayItem());
-    MenuItem audio{Tr(L"Audio"), L"", "audio"};
+    MenuItem audio{Tr(L"Audio"), L"", "audio-tracks"};
     audio.submenu = TrackItems(L"audio", "aid", true);
     items.push_back(std::move(audio));
     MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};

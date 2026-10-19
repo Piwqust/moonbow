@@ -35,7 +35,7 @@ const std::vector<ControlInfo> kControls = {
     {ControlId::Time, "time", L"Current Time", "recent", true},
     {ControlId::Duration, "duration", L"Duration", "recent", true},
     {ControlId::Volume, "volume", L"Volume", "volume_value-high", true},
-    {ControlId::Audio, "audio", L"Audio Tracks", "audio", true},
+    {ControlId::Audio, "audio", L"Audio Tracks", "audio-tracks", true},
     {ControlId::Subtitles, "subtitles", L"Subtitles", "subtitles", true},
     {ControlId::Settings, "settings", L"Playback Settings", "playback-settings", true},
     {ControlId::Playlist, "playlist", L"Queue", "list", true},
