@@ -10,6 +10,8 @@ namespace ui {
 
 namespace {
 
+bool g_reducedMotion = false;
+
 std::vector<AnimFloat*>& ActiveList() {
     static std::vector<AnimFloat*> list;
     return list;
@@ -45,7 +47,7 @@ double AnimFloat::Now() {
 
 void AnimFloat::To(float target, float durationMs, Ease ease) {
     if (target == to_ && (active_ || value_ == target)) return;
-    if (durationMs <= 0) {
+    if (durationMs <= 0 || g_reducedMotion) {
         Set(target);
         return;
     }
@@ -87,6 +89,14 @@ bool AnimFloat::TickAll(double nowMs) {
 
 bool AnimFloat::AnyActive() {
     return !ActiveList().empty();
+}
+
+void AnimFloat::SetReducedMotion(bool on) {
+    g_reducedMotion = on;
+}
+
+bool AnimFloat::ReducedMotion() {
+    return g_reducedMotion;
 }
 
 }  // namespace ui

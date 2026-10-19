@@ -41,7 +41,7 @@ struct PopupOptions {
     bool dismissOnEscape = true;
     bool focusContent = true;        // move keyboard focus into the popup
     bool passthrough = false;        // ignores the mouse entirely (tooltips, toasts)
-    bool animate = true;             // short fade/slide in
+    bool animate = true;             // short fade/slide in (never when opened from the keyboard)
     // A click outside that lands on another enabled control (a bar button, the sidebar, a caption
     // button) closes the popup and also presses it. A click on a plain surface (the video) or on
     // the control that opened the popup only closes it, as with a menu. For panels, not menus.
@@ -164,6 +164,10 @@ public:
     // factor x its real scale (1.5 on a 100 % screen looks like 150 %). Set before any window.
     static void SetScaleOverride(float factor);
     static float ScaleOverride();
+    // Windows high contrast is on (SPI_GETHIGHCONTRAST). onHighContrastChanged runs when it
+    // changes (WM_SETTINGCHANGE), once for all windows.
+    static bool HighContrast();
+    static std::function<void()> onHighContrastChanged;
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
     // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
@@ -259,6 +263,7 @@ private:
     UINT_PTR tooltipTimer_ = 0;
     std::wstring tooltipText_;  // what the bubble (or its timer) shows: a change re-arms it
     Rect tooltipRect_;          // tooltipFor_'s rect then: the bubble goes when the widget moves
+    double tooltipHiddenAt_ = -1e9;  // AnimFloat::Now() when a shown bubble last went away
 
     std::map<UINT_PTR, std::pair<std::function<void()>, bool>> timers_;
     std::vector<UINT_PTR> workIds_;  // StartWorkTimer timers still pending

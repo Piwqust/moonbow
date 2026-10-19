@@ -115,6 +115,7 @@ void Skins::Start(Config& config) {
     config.Subscribe("interface.", [this](const std::string& key) {
         if (key == "interface.skin" || key == "interface.customSkin" || key == "interface.skinFile") Apply(false);
     });
+    ui::Host::onHighContrastChanged = [this] { Apply(false); };
     Apply(false);
 }
 
@@ -126,7 +127,9 @@ void Skins::Apply(bool reload) {
     if (!config_) return;
     const std::wstring file = config_->GetWString("interface.skinFile");
     const bool custom = config_->GetBool("interface.customSkin") && !file.empty();
-    const std::string id = config_->GetString("interface.skin");
+    std::string id = config_->GetString("interface.skin");
+    // Windows high contrast replaces the default look; a skin the user picked stays.
+    if (id == "lumen" && ui::Host::HighContrast()) id = "contrast";
     const std::string source = custom ? "file:" + json::ToUtf8(file) : "builtin:" + id;
     if (source == source_ && !reload) return;
     const bool first = source_.empty();
