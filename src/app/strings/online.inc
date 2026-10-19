@@ -26,10 +26,11 @@
 {L"Add .lrc file…", L"Добавить .lrc…"},
 {L"Can't search: the song has no title or artist tag", L"Искать не по чему: у песни нет тега с названием или исполнителем"},
 {L"Find lyrics online?", L"Найти текст в интернете?"},
-{L"The song's artist, title, album and length are sent to lrclib.net. Lumen will also search for the next songs without lyrics; you can turn this off in Settings > Network.",
- L"Исполнитель, название, альбом и длительность песни отправятся на lrclib.net. Для следующих песен без текста "
- L"Lumen тоже будет искать его сам, выключить это можно в «Настройки › Сеть»."},
-{L"Search online", L"Искать"},
+{L"The song's artist, title, album and length are sent to lrclib.net. “Always search” also looks up the next songs without lyrics; you can turn it off in Settings > Network.",
+ L"Исполнитель, название, альбом и длительность песни отправятся на lrclib.net. С «Всегда искать» Lumen будет сам "
+ L"искать текст и для следующих песен, выключить это можно в «Настройки › Сеть»."},
+{L"Find now", L"Найти сейчас"},
+{L"Always search", L"Всегда искать"},
 {L"LRCLIB has no lyrics for this song", L"В LRCLIB нет текста этой песни"},
 {L"No lyrics in this file", L"В этом файле нет текста"},
 // --- subtitles

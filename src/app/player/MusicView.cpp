@@ -610,7 +610,9 @@ private:
     // No .lrc and no tag (the local sources answered first): ask LRCLIB, when the user allowed it.
     void FetchOnline() {
         const PlayerState& s = TheApp().player().State();
-        if (!s.fileLoaded || !lyrics_.Empty() || pending_ || onlineSerial_ == serial_ || !net::online::LyricsOn()) return;
+        if (!s.fileLoaded || !lyrics_.Empty() || pending_ || onlineSerial_ == serial_ ||
+            (!net::online::LyricsOn() && !asked_))
+            return;
         const QueueItem* item = TheApp().queue().CurrentItem();
         net::online::TrackInfo t;
         t.path = item ? item->path : s.path;
@@ -638,7 +640,7 @@ private:
             SetLyrics(std::move(l));
             online_ = true;
             Invalidate();
-        });
+        }, asked_);
         // Asked; or nothing to ask with yet (tags may come with the next metadata change).
         if (onlineReq_) onlineSerial_ = serial_;
     }
@@ -674,8 +676,8 @@ private:
         ShowMenu(GetHost(), lyricsBtn_->rect, std::move(items), Place::Below, 240);
     }
 
-    // LRCLIB is off until the user allows it (privacy.fetchLyrics): the first search asks, and the
-    // yes turns the setting on for the songs after this one too.
+    // LRCLIB is off until the user allows it (privacy.fetchLyrics): the first search asks. "Find now"
+    // searches for this song only; "Always search" turns the setting on for the songs after it too.
     void FindOnline() {
         auto search = [this, alive = alive_] {
             if (!*alive) return;
@@ -691,9 +693,9 @@ private:
             return;
         }
         lib::ShowConfirm(Tr(L"Find lyrics online?"),
-                         Tr(L"The song's artist, title, album and length are sent to lrclib.net. Lumen will also "
-                            L"search for the next songs without lyrics; you can turn this off in Settings > Network."),
-                         Tr(L"Search online"), [search] {
+                         Tr(L"The song's artist, title, album and length are sent to lrclib.net. “Always search” "
+                            L"also looks up the next songs without lyrics; you can turn it off in Settings > Network."),
+                         Tr(L"Find now"), search, Tr(L"Always search"), [search] {
                              TheApp().config().SetBool("privacy.fetchLyrics", true);
                              search();
                          });

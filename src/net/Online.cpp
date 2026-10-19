@@ -165,8 +165,8 @@ app::Signal<>& Changed() {
 // LRCLIB
 // =============================================================================================
 
-uint64_t FetchLyrics(const TrackInfo& t, std::function<void(const LyricsAnswer&)> done) {
-    if (!LyricsOn() || t.artist.empty() || t.title.empty()) return 0;
+uint64_t FetchLyrics(const TrackInfo& t, std::function<void(const LyricsAnswer&)> done, bool once) {
+    if ((!LyricsOn() && !once) || t.artist.empty() || t.title.empty()) return 0;
     if (t.path.find(L"://") != std::wstring::npos) return 0;  // streams: their tags change per song
     Request r = Base(LrclibBase() + LrclibGetPath(t.artist, t.title, t.album, t.duration));
     r.timeoutMs = 20000;  // /api/get may look the song up elsewhere before it answers

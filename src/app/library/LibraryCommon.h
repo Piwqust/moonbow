@@ -110,11 +110,12 @@ std::vector<ui::MenuItem> MediaMenu(const std::wstring& path, SharedQueue queue,
 // --- prompts ----------------------------------------------------------------------------
 // Both use the dialogs' frame (dlg::Frame): Cancel on the left, the action on the right. Every
 // confirm here removes something, so the keyboard starts on Cancel and Enter alone deletes nothing.
+// `other` adds a second action left of the main one.
 void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const std::wstring& initial,
                     const std::wstring& okText, std::function<void(const std::wstring&)> done,
                     const std::wstring& placeholder = {});
 void ShowConfirm(const std::wstring& title, const std::wstring& text, const std::wstring& okText,
-                 std::function<void()> done);
+                 std::function<void()> done, const std::wstring& otherText = {}, std::function<void()> other = {});
 // With an action ("Undo") the toast stays 5 s and takes the click on its button.
 void Toast(const std::wstring& text, const char* icon = "info", const std::wstring& actionLabel = {},
            std::function<void()> action = {});
