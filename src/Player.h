@@ -31,6 +31,7 @@ struct Track {
     int channels = 0;   // audio: demux-channel-count, 0 when unknown
     bool selected = false;
     bool external = false;
+    bool isDefault = false;  // the file marks it as its default track
     std::wstring file;  // external-filename for external tracks
 
     std::wstring Label() const;  // Name() + " · codec" (menus, media info)

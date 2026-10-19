@@ -558,6 +558,22 @@ std::wstring ShowKey(const std::wstring& path) {
 
 }  // namespace
 
+// "S01E02 · Audio and subtitles: Russian" (without the episode for other files); 	ext is the
+// subtitles' language name or "off".
+void NextEpisodeCard::SayLanguages(const std::wstring& audioLang, const std::wstring& text) {
+    const std::wstring sound = audioLang.empty() ? L"" : LanguageName(audioLang);
+    std::wstring what;
+    if (!sound.empty() && sound == text) {
+        what = Fmt(Tr(L"Audio and subtitles: {0}"), {sound});
+    } else {
+        if (!sound.empty()) what = Fmt(Tr(L"Audio: {0}"), {sound});
+        if (!text.empty()) what += (what.empty() ? L"" : L" · ") + Fmt(Tr(L"Subtitles: {0}"), {text});
+    }
+    if (what.empty()) return;
+    const episodes::Episode e = episodes::Parse(PS().path);
+    ShowOsd(e.Valid() ? episodes::Label(e) + L" · " + what : what, "audio");
+}
+
 void NextEpisodeCard::CarryLanguages() {
     const PlayerState& s = PS();
     Player& p = TheApp().player();
@@ -606,17 +622,30 @@ void NextEpisodeCard::CarryLanguages() {
                 if (sub && !sub->selected) p.SetTrack("sid", sub->id, true);
             }
             // "S01E02 · Audio and subtitles: Russian": what the episode got from the one before.
-            const std::wstring sound = audio ? LanguageName(audio->lang) : L"";
-            const std::wstring text = subOff ? std::wstring(Tr(L"off")) : sub ? LanguageName(sub->lang) : L"";
-            std::wstring what;
-            if (!sound.empty() && sound == text) {
-                what = Fmt(Tr(L"Audio and subtitles: {0}"), {sound});
-            } else {
-                if (!sound.empty()) what = Fmt(Tr(L"Audio: {0}"), {sound});
-                if (!text.empty()) what += (what.empty() ? L"" : L" · ") + Fmt(Tr(L"Subtitles: {0}"), {text});
-            }
-            if (!what.empty()) ShowOsd(episodes::Label(episodes::Parse(s.path)) + L" · " + what, "audio");
+            SayLanguages(audio ? audio->lang : L"", subOff ? std::wstring(Tr(L"off")) : sub ? LanguageName(sub->lang) : L"");
             return;  // the choice we just made comes back as the next track-list change
+        }
+        // mpv picked by the language preference (Settings > Audio / Subtitles) rather than the file's
+        // own default track: say so once, or the first A switched away from it without a word.
+        if (!Live().FileSettingsStored().HasTracks()) {
+            // The file's own pick: its first default track (Matroska marks every track default
+            // unless told otherwise), else the first audio track; subtitles only when flagged.
+            const Track *audio = nullptr, *sub = nullptr, *ownAudio = nullptr, *ownSub = nullptr, *firstAudio = nullptr;
+            for (const Track& t : s.tracks) {
+                if (t.type == L"audio") {
+                    if (!firstAudio) firstAudio = &t;
+                    if (t.isDefault && !ownAudio) ownAudio = &t;
+                    if (t.selected) audio = &t;
+                } else if (t.type == L"sub" && !t.external) {
+                    if (t.isDefault && !ownSub) ownSub = &t;
+                    if (t.selected && !sub) sub = &t;
+                }
+            }
+            if (!ownAudio) ownAudio = firstAudio;
+            const bool byAudioPref = audio && audio != ownAudio && !audio->lang.empty();
+            const bool bySubPref = sub && sub != ownSub && !sub->lang.empty();
+            if (byAudioPref || bySubPref)
+                SayLanguages(byAudioPref ? audio->lang : L"", bySubPref ? LanguageName(sub->lang) : L"");
         }
     }
     // Remember this file's choice.

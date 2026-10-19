@@ -66,6 +66,7 @@ private:
     void OnEnded();
     bool AutoNext() const;  // the episode starts by itself when this one ends
     void CarryLanguages();
+    void SayLanguages(const std::wstring& audioLang, const std::wstring& text);
     void SetWanted(bool wanted);
 
     MainWindow* window_;
