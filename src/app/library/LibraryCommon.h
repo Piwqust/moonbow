@@ -115,7 +115,9 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
                     const std::wstring& placeholder = {});
 void ShowConfirm(const std::wstring& title, const std::wstring& text, const std::wstring& okText,
                  std::function<void()> done);
-void Toast(const std::wstring& text, const char* icon = "info");
+// With an action ("Undo") the toast stays 5 s and takes the click on its button.
+void Toast(const std::wstring& text, const char* icon = "info", const std::wstring& actionLabel = {},
+           std::function<void()> action = {});
 
 // --- small UI-state stores (ui.json) ------------------------------------------------------
 struct SavedStream {

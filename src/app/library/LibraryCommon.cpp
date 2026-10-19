@@ -632,8 +632,12 @@ void ShowConfirm(const std::wstring& title, const std::wstring& text, const std:
     w->SetFocus(cancel, true);  // with its ring: Enter and Space cancel, Tab reaches the action
 }
 
-void Toast(const std::wstring& text, const char* icon) {
-    if (TheApp().main()) ShowToast(TheApp().main(), text, icon ? icon : "");
+void Toast(const std::wstring& text, const char* icon, const std::wstring& actionLabel, std::function<void()> action) {
+    if (!TheApp().main()) return;
+    if (action)
+        ShowToast(TheApp().main(), text, icon ? icon : "", 5000, actionLabel, std::move(action));
+    else
+        ShowToast(TheApp().main(), text, icon ? icon : "");
 }
 
 // --- small stores ------------------------------------------------------------------------

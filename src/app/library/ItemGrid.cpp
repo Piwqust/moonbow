@@ -941,8 +941,10 @@ bool ItemGrid::OnMouseUp(const MouseEvent&) {
         dropAt_ = -1;
         press_ = -1;
         if (from >= 0 && to >= 0 && to != from && onMove) {
-            to = std::min(to, static_cast<int>(entries_.size()) - 1);
-            onMove(from, to);
+            const int last = static_cast<int>(entries_.size()) - 1;
+            to = std::min(to, last);
+            while (to < last && !Selectable(to)) ++to;  // above the column titles = before the first item
+            if (to != from) onMove(from, to);
         }
         Invalidate();
         return true;
