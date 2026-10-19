@@ -506,7 +506,7 @@ void App::OnPlayerReady(bool ok) {
     if (pendingIndex_ >= 0) {
         const int i = pendingIndex_;
         pendingIndex_ = -1;
-        PlayIndex(i);
+        PlayIndex(i, pendingShowPlayer_);
     } else if (!pendingOpen_.empty()) {
         auto files = std::move(pendingOpen_);
         pendingOpen_.clear();
@@ -807,6 +807,7 @@ void App::PlayIndex(int index, bool showPlayer) {
         // from the file's folder.
         pendingOpen_.clear();
         pendingIndex_ = queue_.Current();
+        pendingShowPlayer_ = showPlayer;
         return;
     }
     // A jump the user asked for: "replace" (it also drops the queued next file), then queue anew.

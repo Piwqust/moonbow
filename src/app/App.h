@@ -206,6 +206,7 @@ private:
     std::vector<std::wstring> forwarded_;  // files other launches handed over together (OnCopyData)
     double forwardedAt_ = 0;
     int pendingIndex_ = -1;  // PlayIndex before mpv was ready: the queue is built, play this item
+    bool pendingShowPlayer_ = true;  // that PlayIndex's showPlayer
     bool engineReady_ = false;
     bool fitPending_ = false;
     bool fittedOnce_ = false;
