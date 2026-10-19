@@ -367,9 +367,14 @@ void App::FlushStores() {
 void App::SaveHistoryPosition() {
     const PlayerState& s = player_.State();
     const QueueItem* item = queue_.CurrentItem();
-    if (!s.fileLoaded || !item || s.duration <= 0) return;
+    if (!s.fileLoaded || !item || s.duration <= 0 || player_.HoldsResumePoint()) return;
     if (!config_.GetBool("privacy.saveHistory") || !config_.GetBool("privacy.rememberPosition")) return;
     history_.UpdatePosition(item->path, s.position, s.duration);
+}
+
+void App::StopAtStart() {
+    SaveHistoryPosition();
+    player_.StopAtStart();
 }
 
 void App::OnLibraryScanned() {

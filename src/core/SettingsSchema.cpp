@@ -2446,23 +2446,24 @@ const std::vector<KeyActionGroup>& KeyActionGroups() {
 }
 
 const std::vector<KeyAction>& KeyActions() {
-    // Defaults keep the bindings Lumen already ships with (README.md) and take the rest from
-    // the Keyboard_Shortcuts frame. "Stop" is unassigned because S cycles subtitles in Lumen.
+    // Ids of the old shortcut table, kept only so that older settings.json files are read
+    // (ShortcutStore maps them onto app/Actions.cpp). The live keys are in Actions.cpp; the ones
+    // below repeat them (S stops, V cycles subtitles) or are empty where Lumen binds nothing.
     static const std::vector<KeyAction> actions = {
         {"fullscreen", "basic", L"Toggle fullscreen", L"Полный экран", L"F"},
         {"exitFullscreen", "basic", L"Exit fullscreen / close dialog", L"Выйти из полного экрана / закрыть окно", L"Esc"},
-        {"showTime", "basic", L"Show playback position and time", L"Показать позицию и время", L"T"},
-        {"showControls", "basic", L"Show interface controls in fullscreen", L"Показать панель в полноэкранном режиме", L"I"},
+        {"showTime", "basic", L"Show playback position and time", L"Показать позицию и время", L""},
+        {"showControls", "basic", L"Show interface controls in fullscreen", L"Показать панель в полноэкранном режиме", L""},
         {"openFile", "basic", L"Open file", L"Открыть файл", L"Ctrl+O"},
         {"closeFile", "basic", L"Close file", L"Закрыть файл", L"Ctrl+W"},
         {"settings", "basic", L"Settings", L"Настройки", L"Ctrl+P"},
-        {"screenshot", "basic", L"Take a screenshot", L"Сделать скриншот", L"Ctrl+S"},
+        {"screenshot", "basic", L"Take a screenshot", L"Сделать скриншот", L"Ctrl+Shift+S"},
 
         {"playPause", "playback", L"Play / pause", L"Пауза / продолжить", L"Space"},
-        {"stop", "playback", L"Stop playback", L"Остановить", L""},
+        {"stop", "playback", L"Stop playback", L"Остановить", L"S"},
         {"next", "playback", L"Next track", L"Следующий файл", L"PageDown"},
         {"previous", "playback", L"Previous track", L"Предыдущий файл", L"PageUp"},
-        {"nextProgram", "playback", L"Next program / Service ID", L"Следующая программа / Service ID", L"X"},
+        {"nextProgram", "playback", L"Next program / Service ID", L"Следующая программа / Service ID", L""},
         {"seekForward", "playback", L"Short skip forward", L"Короткий шаг вперёд", L"Right"},
         {"seekBackward", "playback", L"Short skip backward", L"Короткий шаг назад", L"Left"},
         {"seekForwardVeryShort", "playback", L"Very short skip forward", L"Очень короткий шаг вперёд", L"Shift+Right"},
@@ -2482,9 +2483,9 @@ const std::vector<KeyAction>& KeyActions() {
         {"mute", "audio", L"Mute", L"Без звука", L"M"},
         {"cycleAudio", "audio", L"Next audio track", L"Следующая аудиодорожка", L"A"},
 
-        {"cycleSubtitles", "subtitles", L"Next subtitle track", L"Следующие субтитры", L"S"},
-        {"subtitleDelayUp", "subtitles", L"Subtitle delay +100 ms", L"Задержка субтитров +100 мс", L"Ctrl+Shift+Up"},
-        {"subtitleDelayDown", "subtitles", L"Subtitle delay −100 ms", L"Задержка субтитров −100 мс", L"Ctrl+Shift+Down"},
+        {"cycleSubtitles", "subtitles", L"Next subtitle track", L"Следующие субтитры", L"V"},
+        {"subtitleDelayUp", "subtitles", L"Subtitle delay +50 ms", L"Задержка субтитров +50 мс", L"Shift+H"},
+        {"subtitleDelayDown", "subtitles", L"Subtitle delay −50 ms", L"Задержка субтитров −50 мс", L"Shift+G"},
     };
     return actions;
 }

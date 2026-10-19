@@ -446,8 +446,7 @@ void Run(Action a) {
                 app.StopPlayback();
                 break;
             }
-            p.SetPause(true);
-            p.SeekAbsolute(0, true);
+            app.StopAtStart();
             Toast(Tr(L"Stopped"), "stop");
             break;
         case Action::Previous: app.Previous(); break;

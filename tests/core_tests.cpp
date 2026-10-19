@@ -474,6 +474,9 @@ void TestSchema() {
         if (!a.defaultKey.empty()) CHECK_MSG(defaults.insert(a.defaultKey).second, "%s key reused", a.id.c_str());
         CHECK(FindKeyAction(a.id) == &a);
     }
+    // The old table repeats Lumen's own keys (README.md): S stops, V cycles subtitles.
+    CHECK(FindKeyAction("stop") && FindKeyAction("stop")->defaultKey == L"S");
+    CHECK(FindKeyAction("cycleSubtitles") && FindKeyAction("cycleSubtitles")->defaultKey == L"V");
 
     // A section heading is never repeated as the label of its first visible row (R3-09).
     for (const Category& c : cats)
@@ -553,6 +556,10 @@ void TestConfigValues() {
     auto kb = json::Parse(R"({"fullscreen":{"key":"Ctrl+F","junk":1},"nope":{"key":"X"},"mute":5})");
     CHECK(c.Set("controls.keyBindings", *kb));
     CHECK(json::Serialize(c.Get("controls.keyBindings")) == R"({"fullscreen":{"key":"Ctrl+F"}})");
+    // Files written before the action ids still load: ShortcutStore maps the old ids.
+    kb = json::Parse(R"({"stop":{"key":"Ctrl+S"},"cycleSubtitles":{"key":"S"}})");
+    CHECK(c.Set("controls.keyBindings", *kb));
+    CHECK(json::Serialize(c.Get("controls.keyBindings")) == R"({"stop":{"key":"Ctrl+S"},"cycleSubtitles":{"key":"S"}})");
 
     // enabledWhen.
     CHECK(!c.IsEnabled("general.logFile"));

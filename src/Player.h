@@ -139,6 +139,10 @@ public:
     // Plays `path` from its watch-later resume point, if any.
     void Open(const std::wstring& path);
     void Stop();
+    // The Stop command: pauses at 0:00 but keeps the resume point where the user stopped (mpv's
+    // watch-later is written now and then left alone) until playback, a seek or another file.
+    void StopAtStart();
+    bool HoldsResumePoint() const { return holdResume_; }
     // The file to play when the current one ends, kept in mpv's playlist so mpv prefetches it
     // and plays it gaplessly (gapless-audio, prefetch-playlist). Empty = stop at the end.
     // Open() and Stop() forget it. When mpv starts it, ProcessEvents reports kChangeAdvance.
@@ -262,4 +266,5 @@ private:
     uint64_t xfSerial_ = 0;   // the transition already tried (loadSerial, entry)
     int64_t xfEntry_ = 0;
     bool signalTap_ = false;
+    bool holdResume_ = false;  // StopAtStart
 };
