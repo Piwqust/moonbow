@@ -186,6 +186,9 @@ public:
         results_[2]->SetGridStyle(GridStyle::VideoCards, 0);
         // Songs are found by the dozen: list rows with artist and album read better than big covers.
         results_[3]->SetGridStyle(GridStyle::Rows, 0, kColSubtitle | kColExtra | kColDuration);
+        // Folders have no artwork: a short list of three, not tiles of one folder icon each, which ran
+        // off the bottom of a 1280×780 window under Continue Watching.
+        folders_->SetGridStyle(GridStyle::CompactRows, 3, 0);
 
         empty_ = Add<EmptyState>();
         empty_->visible = false;
