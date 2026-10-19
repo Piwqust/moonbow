@@ -462,6 +462,24 @@ private:
     ScopedConnection queueConn_;
 };
 
+// Dimmed while Next has nothing to play (no next item, no next episode found).
+class NextButton : public IconButton, PlayerBound {
+public:
+    NextButton() : IconButton("next", Tr(L"Next")) {
+        onClick = [] { Run(Action::Next); };
+        // kChangeTime: the folder search for the next episode ends a moment after the file loads.
+        Bind(this, kChangeState | kChangeFile | kChangeTime);
+        queueConn_ = Connect(TheApp().queue().changed, [this] { Invalidate(); });
+    }
+    void Paint(Painter& p) override {
+        enabled = Enabled(Action::Next);
+        IconButton::Paint(p);
+    }
+
+private:
+    ScopedConnection queueConn_;
+};
+
 class PanelButton : public IconButton {
 public:
     PanelButton(const char* icon, const wchar_t* tip, PanelKind kind) : IconButton(icon, Tr(tip)), kind_(kind) {
@@ -615,7 +633,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
     switch (id) {
         case ControlId::Previous: return button("previous", L"Previous", Action::Previous);
         case ControlId::PlayPause: return std::make_unique<PlayButton>();
-        case ControlId::Next: return button("next", L"Next", Action::Next);
+        case ControlId::Next: return std::make_unique<NextButton>();
         case ControlId::Time: return std::make_unique<TimeLabel>(false);
         case ControlId::Duration: return std::make_unique<TimeLabel>(true);
         case ControlId::Volume: return std::make_unique<VolumeControl>();

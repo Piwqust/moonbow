@@ -9,6 +9,7 @@
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
+#include "app/player/PlayerOverlays.h"
 #include "app/player/PlayerView.h"
 #include "app/player/SubWords.h"
 
@@ -415,7 +416,10 @@ bool Enabled(Action a) {
             return item && !lib::IsUrl(item->path);
         }
         case Action::Previous: return TheApp().queue().PrevIndex() >= 0 || s.fileLoaded;
-        case Action::Next: return TheApp().queue().NextIndex(true) >= 0;
+        case Action::Next: {
+            NextEpisodeCard* card = NextEpisodeCard::Instance();
+            return TheApp().queue().NextIndex(true) >= 0 || (card && card->HasNext());
+        }
         case Action::NextChapter:
         case Action::PreviousChapter: return !s.chapters.empty();
         case Action::JumpTo0: case Action::JumpTo10: case Action::JumpTo20: case Action::JumpTo30:
@@ -451,7 +455,12 @@ void Run(Action a) {
             break;
         case Action::Previous: app.Previous(); break;
         case Action::Next:
-            if (!app.Next(true)) Toast(Tr(L"End of the list"), "next");
+            if (app.Next(true)) break;
+            // A lone episode (the folder is not the queue): the episode the card found.
+            if (NextEpisodeCard* card = NextEpisodeCard::Instance(); card && card->HasNext())
+                card->PlayNext();
+            else
+                Toast(Tr(L"End of the list"), "next");
             break;
         case Action::SeekForward: SeekBy(Skip("controls.skipShort", 10)); break;
         case Action::SeekBackward: SeekBy(-Skip("controls.skipShort", 10)); break;

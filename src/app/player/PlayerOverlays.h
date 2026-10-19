@@ -49,8 +49,10 @@ class NextEpisodeCard : public ui::Widget {
 public:
     explicit NextEpisodeCard(MainWindow* window);
     ~NextEpisodeCard() override;
+    // The player's card: Next plays its episode when the queue has nothing after this file.
+    static NextEpisodeCard* Instance();
     bool Wanted() const { return wanted_; }
-    bool HasNext() const { return !nextPath_.empty(); }
+    bool HasNext();  // takes the folder search's result when it has just finished
     void PlayNext();
     void Paint(ui::Painter& p) override;
 

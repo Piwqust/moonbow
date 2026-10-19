@@ -366,7 +366,16 @@ struct NextEpisodeCard::FolderJob {
     std::wstring result;
 };
 
+namespace {
+NextEpisodeCard* g_card = nullptr;
+}
+
+NextEpisodeCard* NextEpisodeCard::Instance() {
+    return g_card;
+}
+
 NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
+    g_card = this;
     dir = Dir::Column;
     gap = 10;
     pad = Insets::All(16);
@@ -398,7 +407,17 @@ NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
     });
 }
 
-NextEpisodeCard::~NextEpisodeCard() = default;
+NextEpisodeCard::~NextEpisodeCard() {
+    if (g_card == this) g_card = nullptr;
+}
+
+bool NextEpisodeCard::HasNext() {
+    if (job_ && nextPath_.empty()) {
+        std::lock_guard<std::mutex> lock(job_->mutex);
+        if (job_->done) nextPath_ = job_->result;
+    }
+    return !nextPath_.empty();
+}
 
 void NextEpisodeCard::Paint(Painter& p) {
     p.Shadow(rect, 12, 15, 8);
@@ -464,13 +483,9 @@ void NextEpisodeCard::Resolve() {
 
 void NextEpisodeCard::Update() {
     const PlayerState& s = PS();
-    if (job_ && nextPath_.empty()) {
-        std::lock_guard<std::mutex> lock(job_->mutex);
-        if (job_->done) nextPath_ = job_->result;
-    }
     bool want = false;
     double left = 0;
-    if (s.fileLoaded && !nextPath_.empty() && !dismissed_ && s.duration > 60 && !s.eof) {
+    if (s.fileLoaded && HasNext() && !dismissed_ && s.duration > 60 && !s.eof) {
         left = std::max(0.0, s.duration - s.position);
         bool credits = false;
         if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size())) {
@@ -497,7 +512,7 @@ void NextEpisodeCard::Update() {
 }
 
 void NextEpisodeCard::PlayNext() {
-    if (nextPath_.empty()) return;
+    if (!HasNext()) return;
     const std::wstring next = nextPath_;
     SetWanted(false);
     dismissed_ = true;
