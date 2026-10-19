@@ -421,6 +421,13 @@ public:
         body_->halign = HAlign::Center;
         body_->wrap = true;
         body_->width = Length::Grow();
+        // mpv's own words help a bug report, not the person in front of the card: only on request.
+        more_ = Add<LinkButton>(Tr(L"More details"), TextStyle::Small);
+        more_->onClick = [this] {
+            more_->visible = false;
+            detail_->visible = true;
+            InvalidateLayout();
+        };
         detail_ = Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
         detail_->halign = HAlign::Center;
         detail_->width = Length::Grow();
@@ -443,7 +450,8 @@ public:
                            ? Tr(L"The stream is unavailable. Check the link and your connection.")
                            : Tr(L"The file is damaged or its format isn't supported."));
         detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
-        detail_->visible = !err.empty();
+        detail_->visible = false;
+        more_->visible = !err.empty();
         const int nextIndex = app.queue().NextIndex(true);
         next_->visible = nextIndex >= 0 && nextIndex != app.queue().Current();
         InvalidateLayout();
@@ -453,6 +461,7 @@ public:
 private:
     IconView* icon_;
     Label *title_, *body_, *detail_;
+    LinkButton* more_;
     Button *next_, *close_;
 };
 
