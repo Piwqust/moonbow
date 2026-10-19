@@ -18,6 +18,14 @@ using namespace ui;
 
 namespace {
 
+// The file this item opens is slow to show its first frame (App::SlowOpeningPath): the item stays
+// pressed until the player comes, so the click never looks ignored.
+bool Opening(const Entry& e) {
+    if (e.kind != EntryKind::Media) return false;
+    const std::wstring path = TheApp().SlowOpeningPath();
+    return !path.empty() && SamePath(e.path, path);
+}
+
 // Measurements from the Figma file (Player_6261-15078, 970-4028, sidebar_848-1996).
 constexpr float kVideoMinW = 316, kVideoRatio = 178.0f / 316.0f;
 constexpr float kSquareMinW = 200;
@@ -452,7 +460,8 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         if (t.w > tileW) t = {t.x, t.y, tileW, video ? std::round(tileW * kVideoRatio) : tileW};
     }
     const bool sel = i == selected_;
-    const bool pressed = hot && IsPressed();
+    const bool opening = Opening(e);
+    const bool pressed = (hot && IsPressed()) || opening;
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
 
     PaintThumb(p, e, t, kCardRadius, 48, dim);
@@ -515,9 +524,9 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Icon(paused ? "pause" : "waveform_twotone", t.Center(paused ? 24.0f : 30.0f, paused ? 24.0f : 30.0f), white,
                white.Fade(0.6f));
     }
-    if (hot) {
+    if (hot || opening) {
         p.Fill(t, pressed ? c.press : c.hover, kCardRadius);
-        if ((e.kind == EntryKind::Media || (e.kind == EntryKind::Album && onPlay)) && !now) {
+        if ((e.kind == EntryKind::Media || (e.kind == EntryKind::Album && onPlay)) && !now && !opening) {
             // On artwork, like the "now playing" chip: the same in both themes (the light theme's
             // black accent vanished on a dark cover), with a shadow that keeps it on a white one.
             const float rad = kPlayD / 2 + (hoverPlay_ ? 2.0f : 0.0f);
@@ -562,8 +571,8 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     // Selection keeps the full selected tone even without focus, so it never looks like hover.
     if (sel)
         p.Fill(bg, c.bgSelected, 6);
-    else if (hot)
-        p.Fill(bg, IsPressed() ? c.press : c.hover, 6);
+    else if (hot || Opening(e))
+        p.Fill(bg, IsPressed() || Opening(e) ? c.press : c.hover, 6);
     if (sel && ShowFocusRing()) p.Stroke(bg, c.accentMid, 6, 1.5f);
 
     const bool dragSource = dragging_ && i == press_;

@@ -656,17 +656,27 @@ void App::FitIfPending() {
 namespace {
 // The longest the screen waits for a file's first frame before it shows the player anyway.
 constexpr UINT kPlayerHoldMs = 700;
+// A wait shorter than this reads as instant; a longer one shows the clicked item pressed.
+constexpr UINT kSlowOpenMs = 150;
 }  // namespace
 
 void App::HoldPlayer() {
     holdSerial_ = player_.State().loadSerial;  // Open was just sent: this is the previous file's
     if (playerPending_ || !main_) return;
     playerPending_ = true;
+    holdStart_ = ui::AnimFloat::Now();
     holdTimer_ = main_->StartTimer(kPlayerHoldMs, [this] {
         holdTimer_ = 0;
         ShowPlayer(true);
     });
+    main_->StartTimer(kSlowOpenMs, [this] { main_->RequestRender(); });
     main_->RequestLayout();
+}
+
+std::wstring App::SlowOpeningPath() const {
+    const QueueItem* item = queue_.CurrentItem();
+    if (!playerPending_ || !item || ui::AnimFloat::Now() - holdStart_ < kSlowOpenMs - 1) return {};
+    return item->path;
 }
 
 void App::CheckPlayerHold() {

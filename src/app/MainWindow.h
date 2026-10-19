@@ -68,10 +68,10 @@ protected:
     void OnFramePainted() override;
     void PaintSkeleton(HDC dc) override;
     void PaintBackground(ui::Painter& p) override;
-    // Revealed once the first screen is complete (App::FirstScreenReady); a file given at launch
-    // may take longer, until its first frame.
-    bool ReadyToReveal() override;
-    UINT RevealCapMs() override;
+    // The content shows once the first screen is complete (App::FirstScreenReady); a file given at
+    // launch may take longer, until its first frame.
+    bool ContentReady() override;
+    UINT ContentCapMs() override;
 
 private:
     void BuildUi();
