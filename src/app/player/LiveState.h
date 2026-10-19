@@ -106,6 +106,11 @@ public:
     void ResetFileSettings();
     // Stores the last change for the playing file and writes the store now (the session ends).
     void FlushFileSettings();
+    // The languages chosen in a series (`show`: NextEpisodeCard's key), kept in the same store and
+    // under the same switches as the per-file settings; nullptr when off or nothing is stored.
+    // `path`: the episode playing, for privacy.excludePatterns.
+    const library::ShowLanguages* ShowLanguagesFor(const std::wstring& show, const std::wstring& path);
+    void RememberShowLanguages(const std::wstring& show, const std::wstring& path, const library::ShowLanguages& langs);
 
 private:
     LiveState();

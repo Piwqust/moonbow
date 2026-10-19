@@ -924,7 +924,8 @@ void LiveState::BeginFile(bool loaded) {
 }
 
 // The stored track ids must exist in this file (it may have been remuxed), and sidecar tracks are
-// found by their file, or added again when mpv did not load them by itself.
+// found by their file, or added again when mpv did not load them by itself. Quietly: these picks
+// put back the user's choice, they are not a new one (Player::TrackChoices).
 void LiveState::FixTracks() {
     Player& p = Mpv();
     if (!p.TracksConfirmed() && !tracksTrusted_) return;
@@ -944,29 +945,27 @@ void LiveState::FixTracks() {
     if (ConfigAid() != "no") {
         if (o.audioFile) {
             if (const Track* t = byFile(L"audio", *o.audioFile)) {
-                if (!t->selected) p.SetTrack("aid", t->id);
+                if (!t->selected) p.SetTrack("aid", t->id, true);
             } else {
-                p.AddAudio(*o.audioFile);  // a file that is gone only fails inside mpv
+                p.AddAudio(*o.audioFile, true);  // a file that is gone only fails inside mpv
             }
         } else if (o.aid && *o.aid > 0 && !byId(L"audio", *o.aid)) {
-            p.SetProperty("aid", std::string("auto"));
+            p.ApplySetting("aid", "auto");
         }
     }
     if (ConfigSid() != "no") {
         if (o.subFile) {
             if (const Track* t = byFile(L"sub", *o.subFile)) {
-                if (!t->selected) p.SetTrack("sid", t->id);
+                if (!t->selected) p.SetTrack("sid", t->id, true);
             } else {
-                p.AddSubtitle(*o.subFile);
+                p.AddSubtitle(*o.subFile, true);
             }
         } else if (o.sid && *o.sid > 0 && !byId(L"sub", *o.sid)) {
-            p.SetProperty("sid", std::string("auto"));
+            p.ApplySetting("sid", "auto");
         }
     }
     if (o.secondarySid && *o.secondarySid > 0 && !byId(L"sub", *o.secondarySid))
-        p.SetProperty("secondary-sid", std::string("no"));
-    // Our own picks are not the user's.
-    for (int k = 0; k < 3; ++k) trackBase_[k] = p.TrackChoices(k);
+        p.ApplySetting("secondary-sid", "no");
 }
 
 void LiveState::ScheduleCapture() {
@@ -1065,6 +1064,17 @@ void LiveState::LeaveFile() {
 void LiveState::FlushFileSettings() {
     CaptureNow();
     if (store_.Loaded()) store_.Flush();
+}
+
+const library::ShowLanguages* LiveState::ShowLanguagesFor(const std::wstring& show, const std::wstring& path) {
+    if (!FileSettingsOn() || ExcludedFromMemory(path)) return nullptr;
+    return Store().FindShow(show);
+}
+
+void LiveState::RememberShowLanguages(const std::wstring& show, const std::wstring& path,
+                                      const library::ShowLanguages& langs) {
+    if (!FileSettingsOn() || ExcludedFromMemory(path)) return;
+    if (Store().PutShow(show, langs)) ScheduleSave();
 }
 
 void LiveState::ScheduleSave() {

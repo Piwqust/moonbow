@@ -323,6 +323,7 @@
 {L"Snapshot saved to {0}", L"Снимок сохранён в {0}"},
 {L"Can't save to {0}", L"Не удаётся сохранить в {0}"},
 {L"Audio: {0}", L"Аудио: {0}"},
+{L"Audio {0}/{1}: {2}", L"Аудио {0}/{1}: {2}"},
 // track languages (Actions.cpp LanguageName)
 {L"Russian", L"Русский"},
 {L"Ukrainian", L"Украинский"},
@@ -357,8 +358,10 @@
 {L"Serbian", L"Сербский"},
 {L"Croatian", L"Хорватский"},
 {L"Subtitles: {0}", L"Субтитры: {0}"},
+{L"Subtitles {0}/{1}: {2}", L"Субтитры {0}/{1}: {2}"},
 {L"Chapter {0}/{1}", L"Глава {0}/{1}"},
 {L"Stopped", L"Остановлено"},
+{L"Resuming from {0}", L"Продолжаем с {0}"},
 {L"Volume: scroll to change, click to mute", L"Громкость: колесо меняет, клик выключает звук"},
 // --- player ux
 {L"Statistics", L"Статистика"},
@@ -388,6 +391,7 @@
 {L"{0} · {1} kHz · {2} ch", L"{0} · {1} кГц · {2} кан."},
 {L"Next episode: {0} · in {1} s", L"Следующая серия: {0} · через {1} с"},
 {L"Next episode: {0}", L"Следующая серия: {0}"},
+{L"Audio and subtitles: {0}", L"Звук и субтитры: {0}"},
 {L"Play now", L"Смотреть сейчас"},
 {L"Skip intro", L"Пропустить заставку"},
 {L"Skip credits", L"Пропустить титры"},

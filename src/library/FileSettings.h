@@ -42,9 +42,20 @@ struct FileOptions {
     bool operator==(const FileOptions&) const = default;
 };
 
+// The audio and subtitle languages last chosen in a series, so its other episodes open with
+// them, also in a later session (app/player NextEpisodeCard). Languages as the file names them
+// ("rus"); the track title tells two tracks of one language apart.
+struct ShowLanguages {
+    std::wstring audioLang, audioTitle, subLang, subTitle;
+    bool subsOff = false;
+    bool Empty() const { return audioLang.empty() && subLang.empty() && !subsOff; }
+    bool operator==(const ShowLanguages&) const = default;
+};
+
 class FileSettings {
 public:
     static constexpr size_t kMaxEntries = 5000;
+    static constexpr size_t kMaxShows = 500;
 
     FileSettings() = default;
     ~FileSettings();
@@ -65,8 +76,13 @@ public:
     // The file was opened: it becomes the most recently used (saved with the next write).
     void Touch(const std::wstring& path);
     bool Remove(const std::wstring& path);
-    void Clear();
+    void Clear();  // the files and the shows
     size_t size() const { return entries_.size(); }
+
+    // By the show's key (its name or folder, as the caller builds it; case-insensitive).
+    const ShowLanguages* FindShow(const std::wstring& show) const;
+    // Empty() removes it. Returns true when the stored value changed.
+    bool PutShow(const std::wstring& show, const ShowLanguages& langs);
 
 private:
     struct Entry {
@@ -77,7 +93,13 @@ private:
     int64_t NextStamp();
     void Evict();
 
+    struct Show {
+        int64_t used = 0;
+        ShowLanguages langs;
+    };
+
     std::unordered_map<std::wstring, Entry> entries_;  // by PathKey
+    std::unordered_map<std::wstring, Show> shows_;     // by PathKey of the show key
     int64_t lastStamp_ = 0;
     bool dirty_ = false;
     bool loaded_ = false;

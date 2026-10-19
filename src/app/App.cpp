@@ -248,6 +248,9 @@ void App::OnConfigChanged(const std::string& key) {
         SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
         system_.LanguageChanged();
         languageChanged.Emit();
+        // The preferred audio and subtitle languages default to the interface's ("app").
+        for (const char* k : {"audio.language", "subtitles.language"})
+            for (const auto& [name, value] : MpvOptionFor(config_, k)) player_.ApplySetting(name, value);
         return;
     }
     if (key == "playback.repeat") {
@@ -367,9 +370,14 @@ void App::FlushStores() {
 void App::SaveHistoryPosition() {
     const PlayerState& s = player_.State();
     const QueueItem* item = queue_.CurrentItem();
-    if (!s.fileLoaded || !item || s.duration <= 0) return;
+    if (!s.fileLoaded || !item || s.duration <= 0 || player_.HoldsResumePoint()) return;
     if (!config_.GetBool("privacy.saveHistory") || !config_.GetBool("privacy.rememberPosition")) return;
     history_.UpdatePosition(item->path, s.position, s.duration);
+}
+
+void App::StopAtStart() {
+    SaveHistoryPosition();
+    player_.StopAtStart();
 }
 
 void App::OnLibraryScanned() {
@@ -425,6 +433,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     // MpvOptions already expands general.extraOptions (quotes, --no-x) and puts it last.
     player_.SetStartOptions(MpvOptions(config_));
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
+    player_.onTrackChoice = OnTrackChoice;
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
     // Stores and the library scan load after the window is up.

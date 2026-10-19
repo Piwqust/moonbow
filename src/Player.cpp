@@ -369,6 +369,7 @@ unsigned Player::ProcessEvents() {
                 state_.fileLoaded = true;
                 ++state_.loadSerial;
                 settledSerial_ = state_.loadSerial;
+                holdResume_ = false;
                 loadedPath_ = startedPath_;
                 if (confirmTracks && getAsync_)
                     getAsync_(mpv_, kTracksReply + state_.loadSerial, "track-list", MPV_FORMAT_NODE);
@@ -433,7 +434,11 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
     switch (id) {
         case kPropTimePos: state_.position = dbl(); return kChangeTime;
         case kPropDuration: state_.duration = dbl(); return kChangeTime;
-        case kPropPause: state_.paused = flag(); SyncCrossfade(); return kChangeState;
+        case kPropPause:
+            state_.paused = flag();
+            if (!state_.paused) holdResume_ = false;
+            SyncCrossfade();
+            return kChangeState;
         case kPropVolume:
             state_.volume = has ? dbl() : 100.0;
             // Volume 0 from anywhere (the startup volume, a setting) becomes the tap's stand-in.
@@ -719,8 +724,17 @@ void Player::SetPause(bool paused) {
     SetProperty("pause", paused);
 }
 
+void Player::StopAtStart() {
+    if (!state_.fileLoaded) return;
+    SaveWatchLater();
+    SetPause(true);
+    SeekAbsolute(0, true);
+    holdResume_ = true;
+}
+
 void Player::SeekAbsolute(double seconds, bool exact) {
     if (!state_.fileLoaded) return;
+    holdResume_ = false;
     CancelCrossfade();
     std::string pos = std::to_string(seconds < 0 ? 0 : seconds);
     Cmd({"seek", pos.c_str(), exact ? "absolute+exact" : "absolute+keyframes"});
@@ -728,6 +742,7 @@ void Player::SeekAbsolute(double seconds, bool exact) {
 
 void Player::SeekRelative(double seconds) {
     if (!state_.fileLoaded) return;
+    holdResume_ = false;
     CancelCrossfade();
     std::string delta = std::to_string(seconds);
     Cmd({"seek", delta.c_str(), "relative+exact"});
@@ -735,6 +750,7 @@ void Player::SeekRelative(double seconds) {
 
 void Player::SeekChapter(int delta) {
     if (!state_.fileLoaded || state_.chapters.empty()) return;
+    holdResume_ = false;
     CancelCrossfade();
     std::string d = std::to_string(delta);
     Cmd({"add", "chapter", d.c_str()});
@@ -774,10 +790,11 @@ void Player::CountTrackChoice(const char* prop) {
     if (p == "aid") ++trackChoices_[0];
     if (p == "sid") ++trackChoices_[1];
     if (p == "secondary-sid") ++trackChoices_[2];
+    if (onTrackChoice && (p == "aid" || p == "sid" || p == "secondary-sid")) onTrackChoice(prop);
 }
 
-void Player::SetTrack(const char* prop, int64_t id) {
-    CountTrackChoice(prop);
+void Player::SetTrack(const char* prop, int64_t id, bool quiet) {
+    if (!quiet) CountTrackChoice(prop);
     SetString(prop, id > 0 ? std::to_string(id) : "no");
 }
 
@@ -786,14 +803,14 @@ void Player::CycleTrack(const char* prop) {
     Cmd({"cycle", prop});
 }
 
-void Player::AddSubtitle(const std::wstring& path) {
-    CountTrackChoice("sid");
+void Player::AddSubtitle(const std::wstring& path, bool quiet) {
+    if (!quiet) CountTrackChoice("sid");
     const std::string p = WideToUtf8(path);
     Cmd({"sub-add", p.c_str(), "select"});
 }
 
-void Player::AddAudio(const std::wstring& path) {
-    CountTrackChoice("aid");
+void Player::AddAudio(const std::wstring& path, bool quiet) {
+    if (!quiet) CountTrackChoice("aid");
     const std::string p = WideToUtf8(path);
     Cmd({"audio-add", p.c_str(), "select"});
 }
@@ -822,7 +839,7 @@ bool Player::NearEnd() const {
 }
 
 void Player::SaveWatchLater() {
-    if (!state_.fileLoaded) return;
+    if (!state_.fileLoaded || holdResume_) return;
     if (NearEnd() || IsMusic(state_.path))
         Cmd({"delete-watch-later-config"});
     else if (rememberPosition)
@@ -850,7 +867,7 @@ void Player::Shutdown() {
         Trace("close: player shutdown");
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
         const bool forget = NearEnd() || IsMusic(state_.path);
-        if (state_.fileLoaded && (forget || rememberPosition)) {
+        if (state_.fileLoaded && !holdResume_ && (forget || rememberPosition)) {
             const char* argv[] = {forget ? "delete-watch-later-config" : "write-watch-later-config", nullptr};
             api_.mpv_command(mpv, argv);
         }

@@ -95,6 +95,8 @@ public:
     bool Next(bool userAction = true);  // false at the end of the queue
     void Previous();
     void StopPlayback();
+    // The Stop command: back to 0:00, paused; History and the resume point keep where it stopped.
+    void StopAtStart();
     // Hands the item that plays after the current one to mpv (gapless, prefetch), or none when
     // the queue stops there. Called whenever the queue or its options change.
     void SyncNextInPlayer(bool force = false);

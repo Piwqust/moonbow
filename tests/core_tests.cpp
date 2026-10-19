@@ -478,6 +478,9 @@ void TestSchema() {
         if (!a.defaultKey.empty()) CHECK_MSG(defaults.insert(a.defaultKey).second, "%s key reused", a.id.c_str());
         CHECK(FindKeyAction(a.id) == &a);
     }
+    // The old table repeats Lumen's own keys (README.md): S stops, V cycles subtitles.
+    CHECK(FindKeyAction("stop") && FindKeyAction("stop")->defaultKey == L"S");
+    CHECK(FindKeyAction("cycleSubtitles") && FindKeyAction("cycleSubtitles")->defaultKey == L"V");
 
     // A section heading is never repeated as the label of its first visible row (R3-09).
     for (const Category& c : cats)
@@ -557,6 +560,10 @@ void TestConfigValues() {
     auto kb = json::Parse(R"({"fullscreen":{"key":"Ctrl+F","junk":1},"nope":{"key":"X"},"mute":5})");
     CHECK(c.Set("controls.keyBindings", *kb));
     CHECK(json::Serialize(c.Get("controls.keyBindings")) == R"({"fullscreen":{"key":"Ctrl+F"}})");
+    // Files written before the action ids still load: ShortcutStore maps the old ids.
+    kb = json::Parse(R"({"stop":{"key":"Ctrl+S"},"cycleSubtitles":{"key":"S"}})");
+    CHECK(c.Set("controls.keyBindings", *kb));
+    CHECK(json::Serialize(c.Get("controls.keyBindings")) == R"({"stop":{"key":"Ctrl+S"},"cycleSubtitles":{"key":"S"}})");
 
     // enabledWhen.
     CHECK(!c.IsEnabled("general.logFile"));
@@ -890,7 +897,14 @@ void TestConfigMpv() {
     CHECK(FindOption(opts, "demuxer-max-bytes") == "150MiB");
     CHECK(FindOption(opts, "screenshot-format") == "png");
     CHECK(!FindOption(opts, "screenshot-dir").empty());
-    CHECK(!FindOption(opts, "slang").empty());  // system language
+    // Sound and subtitles prefer the language Lumen speaks, not Windows'; a language picked stays.
+    CHECK(FindOption(opts, "slang") == "ru,rus" && FindOption(opts, "alang") == "ru,rus");
+    c.SetString("general.language", "en");
+    CHECK(FindOption(MpvOptions(c), "slang") == "en,eng" && FindOption(MpvOptions(c), "alang") == "en,eng");
+    c.SetString("subtitles.language", "de");
+    CHECK(FindOption(MpvOptions(c), "slang") == "de,ger,deu");
+    c.SetString("general.language", "ru");
+    c.SetString("subtitles.language", "app");
     FindOption(opts, "af", &found);
     CHECK(!found);  // no audio filters by default
     FindOption(opts, "vf", &found);
@@ -1246,6 +1260,27 @@ void TestFileSettings() {
     {
         library::FileSettings fs;
         CHECK(fs.Load() && fs.size() == 0);
+    }
+
+    // A series' track languages outlive the session (the next episode opened from Explorer).
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && !fs.FindShow(L"show"));
+        const library::ShowLanguages ru{L"rus", L"Русский 660 Hz", L"rus", L"", false};
+        CHECK(fs.PutShow(L"show", ru) && !fs.PutShow(L"SHOW", ru) && !fs.PutShow(L"", ru));
+        CHECK(fs.PutShow(L"D:\\Сериал", {L"", L"", L"", L"", true}));  // subtitles off, sound as is
+        CHECK(fs.Flush() && fs.size() == 0);
+    }
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load());
+        const library::ShowLanguages* s = fs.FindShow(L"Show");
+        CHECK(s && s->audioLang == L"rus" && s->audioTitle == L"Русский 660 Hz" && s->subLang == L"rus" && !s->subsOff);
+        const library::ShowLanguages* o = fs.FindShow(L"d:\\сериал");
+        CHECK(o && o->subsOff && o->audioLang.empty());
+        CHECK(fs.PutShow(L"D:\\Сериал", {}) && !fs.FindShow(L"D:\\Сериал"));
+        fs.Clear();  // History > Clear forgets the shows too
+        CHECK(!fs.FindShow(L"show") && fs.Flush());
     }
 
     // Values that would break mpv's "a=1,b=2" loadfile options are dropped; bad numbers too.
@@ -1692,6 +1727,10 @@ void TestPlayerEpisodes() {
     CHECK(ep::DisplayName(L"D:\\TV\\Show - 1x02 - Pilot.mkv") == L"Show · Pilot");
     CHECK(ep::DisplayName(L"D:\\TV\\S01E02.mkv").empty());
     CHECK(ep::DisplayName(L"D:\\TV\\Movie.mkv") == L"Movie");
+    // The window title of an episode.
+    CHECK(ep::Title(L"D:\\TV\\Show S01\\Show S01E02.mkv") == L"Show — S01E02");
+    CHECK(ep::Title(L"D:\\TV\\S01E02.mkv") == L"S01E02");
+    CHECK(ep::Title(L"D:\\TV\\Movie.mkv").empty());
 
     CHECK(ep::KindOf(L"Opening") == ep::ChapterKind::Intro);
     CHECK(ep::KindOf(L"OP1") == ep::ChapterKind::Intro);

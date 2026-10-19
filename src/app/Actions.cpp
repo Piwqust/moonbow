@@ -8,7 +8,9 @@
 #include "app/library/LibraryCommon.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/Episodes.h"
 #include "app/player/LiveState.h"
+#include "app/player/PlayerOverlays.h"
 #include "app/player/PlayerView.h"
 #include "app/player/SubWords.h"
 
@@ -209,6 +211,20 @@ std::wstring SelectedTrackText(const wchar_t* type) {
         return t.title + L" (" + lang + L")";
     }
     return Tr(L"off");
+}
+
+// "Audio 2/2: Russian", "Subtitles: off": which of the file's tracks plays now.
+std::wstring TrackToastText(const wchar_t* type) {
+    long long count = 0, at = 0;
+    for (const Track& t : PS().tracks)
+        if (t.type == type) {
+            ++count;
+            if (t.selected && !at) at = count;
+        }
+    const bool audio = std::wcscmp(type, L"audio") == 0;
+    if (!at) return Fmt(Tr(audio ? L"Audio: {0}" : L"Subtitles: {0}"), {SelectedTrackText(type)});
+    return Fmt(Tr(audio ? L"Audio {0}/{1}: {2}" : L"Subtitles {0}/{1}: {2}"),
+               {std::to_wstring(at), std::to_wstring(count), SelectedTrackText(type)});
 }
 
 std::wstring Clock(double t) {
@@ -415,7 +431,10 @@ bool Enabled(Action a) {
             return item && !lib::IsUrl(item->path);
         }
         case Action::Previous: return TheApp().queue().PrevIndex() >= 0 || s.fileLoaded;
-        case Action::Next: return TheApp().queue().NextIndex(true) >= 0;
+        case Action::Next: {
+            NextEpisodeCard* card = NextEpisodeCard::Instance();
+            return TheApp().queue().NextIndex(true) >= 0 || (card && card->HasNext());
+        }
         case Action::NextChapter:
         case Action::PreviousChapter: return !s.chapters.empty();
         case Action::JumpTo0: case Action::JumpTo10: case Action::JumpTo20: case Action::JumpTo30:
@@ -446,13 +465,17 @@ void Run(Action a) {
                 app.StopPlayback();
                 break;
             }
-            p.SetPause(true);
-            p.SeekAbsolute(0, true);
+            app.StopAtStart();
             Toast(Tr(L"Stopped"), "stop");
             break;
         case Action::Previous: app.Previous(); break;
         case Action::Next:
-            if (!app.Next(true)) Toast(Tr(L"End of the list"), "next");
+            if (app.Next(true)) break;
+            // A lone episode (the folder is not the queue): the episode the card found.
+            if (NextEpisodeCard* card = NextEpisodeCard::Instance(); card && card->HasNext())
+                card->PlayNext();
+            else
+                Toast(Tr(L"End of the list"), "next");
             break;
         case Action::SeekForward: SeekBy(Skip("controls.skipShort", 10)); break;
         case Action::SeekBackward: SeekBy(-Skip("controls.skipShort", 10)); break;
@@ -536,12 +559,11 @@ void Run(Action a) {
                     ids.push_back(t.id);
                 }
             if (ids.size() <= 1) {
-                Toast(ids.empty() ? Tr(L"No audio tracks") : Fmt(Tr(L"Audio: {0}"), {SelectedTrackText(L"audio")}),
-                      "audio");
+                Toast(ids.empty() ? std::wstring(Tr(L"No audio tracks")) : TrackToastText(L"audio"), "audio");
                 break;
             }
+            // OnTrackChoice names the new track once mpv has switched.
             p.SetProperty("aid", std::to_string(ids[static_cast<size_t>(current + 1) % ids.size()]));
-            ExpectOsd(PendingOsd::Audio);
             break;
         }
         case Action::AudioDelayUp:
@@ -551,10 +573,7 @@ void Run(Action a) {
             Toast(Fmt(Tr(L"Audio delay {0} ms"), static_cast<long long>(std::lround(d * 1000))), "audio");
             break;
         }
-        case Action::CycleSubtitles:
-            p.CycleTrack("sid");
-            ExpectOsd(PendingOsd::Subtitles);
-            break;
+        case Action::CycleSubtitles: p.CycleTrack("sid"); break;  // named by OnTrackChoice
         case Action::ToggleSubtitles: {
             // Paused with the word overlay up, mpv's own copy is hidden but the user sees subtitles.
             if (SubtitleWords* words = Words(); words && words->HidesMpvSubs()) {
@@ -806,14 +825,57 @@ const char* VolumeIcon(double volume, bool mute) {
     return "volume_value-high";
 }
 
+namespace {
+
+// Messages a file shows as it opens: the next-episode card's (ShowOsd) and "Resuming from 0:40".
+// Each one joins the other while that is still on screen, so neither hides the other.
+struct OpenNote {
+    std::wstring text;
+    double at = -1e9;
+    uint64_t serial = 0;
+};
+OpenNote g_cardNote, g_resumeNote;
+uint64_t g_resumeChecked = 0;
+
+void ShowOpenNote(OpenNote& note, const std::wstring& text, const char* icon) {
+    note = {text, ui::AnimFloat::Now(), PS().loadSerial};
+    std::wstring out;
+    for (const OpenNote* n : {&g_cardNote, &g_resumeNote})
+        if (!n->text.empty() && n->serial == note.serial && note.at - n->at < kToastMs)
+            out += (out.empty() ? L"" : L" · ") + n->text;
+    Toast(out, icon);
+}
+
+// Once per file: mpv's watch-later put it back where it was left (its file-local "start").
+void ResumeToast() {
+    const PlayerState& s = PS();
+    if (!s.fileLoaded || s.loadSerial == g_resumeChecked) return;
+    g_resumeChecked = s.loadSerial;
+    const double start = std::atof(TheApp().player().GetPropertyString("start").c_str());
+    if (start >= 1) ShowOpenNote(g_resumeNote, Fmt(Tr(L"Resuming from {0}"), {Clock(start)}), "play");
+}
+
+}  // namespace
+
+void OnTrackChoice(const char* prop) {
+    const std::string_view p = prop;
+    if (p == "aid") ExpectOsd(PendingOsd::Audio);
+    if (p == "sid") ExpectOsd(PendingOsd::Subtitles);
+}
+
+void ShowOsd(const std::wstring& text, const char* icon) {
+    ShowOpenNote(g_cardNote, text, icon);
+}
+
 void OnPlayerChangeForOsd(unsigned changes) {
     if ((changes & kChangeFile) && PS().loadSerial != g_toastSerial) {
         // Whatever was pending or on screen was about the previous file.
         g_pendingOsd = PendingOsd::None;
         if (ui::AnimFloat::Now() - g_toastAt < kToastMs) {
-            // Same text as the title bar: the tag title, or the file name without its extension.
+            // Same text as the title bar: the episode, the tag title, or the file name without its extension.
             const std::wstring file = FileNameOf(PS().path);
-            std::wstring title = PS().title.empty() ? file : PS().title;
+            std::wstring title = episodes::Title(PS().path);
+            if (title.empty()) title = PS().title.empty() ? file : PS().title;
             if (_wcsicmp(title.c_str(), file.c_str()) == 0) {
                 const size_t dot = title.find_last_of(L'.');
                 if (dot != std::wstring::npos && dot > 0) title.resize(dot);
@@ -821,8 +883,10 @@ void OnPlayerChangeForOsd(unsigned changes) {
             if (!title.empty()) Toast(title, "play");
             g_toastSerial = PS().loadSerial;
         }
+        ResumeToast();
         return;
     }
+    if (changes & kChangeFile) ResumeToast();
     if (g_pendingOsd == PendingOsd::None) return;
     if (ui::AnimFloat::Now() > g_pendingUntil) {
         g_pendingOsd = PendingOsd::None;
@@ -830,9 +894,9 @@ void OnPlayerChangeForOsd(unsigned changes) {
     }
     const PlayerState& s = PS();
     if (g_pendingOsd == PendingOsd::Audio && (changes & kChangeTracks)) {
-        Toast(Fmt(Tr(L"Audio: {0}"), {SelectedTrackText(L"audio")}), "audio");
+        Toast(TrackToastText(L"audio"), "audio");
     } else if (g_pendingOsd == PendingOsd::Subtitles && (changes & kChangeTracks)) {
-        Toast(Fmt(Tr(L"Subtitles: {0}"), {SelectedTrackText(L"sub")}), "subtitles");
+        Toast(TrackToastText(L"sub"), "subtitles");
     } else if (g_pendingOsd == PendingOsd::Chapter && (changes & kChangeChapters) && s.chapter >= 0 &&
                s.chapter < static_cast<long long>(s.chapters.size())) {
         const std::wstring& title = s.chapters[static_cast<size_t>(s.chapter)].title;

@@ -75,8 +75,11 @@ const char* LangMpv(std::string_view id) {
     return nullptr;
 }
 
-// "system" -> the Windows UI language; "original" -> nothing (mpv picks the default track).
-std::optional<std::string> LanguageList(const std::string& id) {
+// "app" -> Lumen's interface language (what the user reads, whatever Windows is in); "system" ->
+// the Windows UI language; "original" -> nothing (mpv picks the default track).
+std::optional<std::string> LanguageList(const Config& c, const char* key) {
+    std::string id = c.GetString(key);
+    if (id == "app") id = c.GetString("general.language") == "en" ? "en" : "ru";
     if (id == "original" || id.empty()) return std::nullopt;
     if (id != "system") {
         const char* mpv = LangMpv(id);
@@ -93,11 +96,11 @@ std::optional<std::string> LanguageList(const std::string& id) {
 }
 
 std::optional<std::string> BuildAlang(const Config& c) {
-    return LanguageList(c.GetString("audio.language"));
+    return LanguageList(c, "audio.language");
 }
 
 std::optional<std::string> BuildSlang(const Config& c) {
-    return LanguageList(c.GetString("subtitles.language"));
+    return LanguageList(c, "subtitles.language");
 }
 
 std::optional<std::string> BuildVid(const Config& c) {
@@ -711,6 +714,7 @@ public:
 
 std::vector<Choice> LanguageChoices(bool withOriginal) {
     std::vector<Choice> out;
+    out.push_back({"app", L"Interface language", L"Язык интерфейса"});
     out.push_back({"system", L"System language", L"Язык системы"});
     if (withOriginal) out.push_back({"original", L"Original language", L"Язык оригинала"});
     for (const LangInfo& l : kLanguages) out.push_back({l.id, l.en, l.ru});
@@ -1777,7 +1781,7 @@ void BuildMedia(Builder& b) {
 
     b.Sec("languages", L"Languages", L"Языки");
     b.Pick("audio.language", L"Preferred audio language", L"Предпочтительный язык звука", LanguageChoices(true),
-           "system")
+           "app")
         .Desc(L"Pick the audio track in this language when a file has several.",
               L"Если в файле несколько дорожек, выбирать дорожку на этом языке.")
         .MpvBuild("alang", BuildAlang);
@@ -1798,7 +1802,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Show subtitles when a file has them. You can still turn them on from the player.",
               L"Показывать субтитры, если они есть. Их всегда можно включить в плеере.")
         .MpvBuild("sid", BuildSid, "auto");
-    b.Pick("subtitles.language", L"Preferred language", L"Предпочтительный язык", LanguageChoices(false), "system")
+    b.Pick("subtitles.language", L"Preferred language", L"Предпочтительный язык", LanguageChoices(false), "app")
         .Desc(L"Pick the subtitle track in this language when there are several.",
               L"Если субтитров несколько, выбирать дорожку на этом языке.")
         .MpvBuild("slang", BuildSlang);
@@ -2438,23 +2442,24 @@ const std::vector<KeyActionGroup>& KeyActionGroups() {
 }
 
 const std::vector<KeyAction>& KeyActions() {
-    // Defaults keep the bindings Lumen already ships with (README.md) and take the rest from
-    // the Keyboard_Shortcuts frame. "Stop" is unassigned because S cycles subtitles in Lumen.
+    // Ids of the old shortcut table, kept only so that older settings.json files are read
+    // (ShortcutStore maps them onto app/Actions.cpp). The live keys are in Actions.cpp; the ones
+    // below repeat them (S stops, V cycles subtitles) or are empty where Lumen binds nothing.
     static const std::vector<KeyAction> actions = {
         {"fullscreen", "basic", L"Toggle fullscreen", L"Полный экран", L"F"},
         {"exitFullscreen", "basic", L"Exit fullscreen / close dialog", L"Выйти из полного экрана / закрыть окно", L"Esc"},
-        {"showTime", "basic", L"Show playback position and time", L"Показать позицию и время", L"T"},
-        {"showControls", "basic", L"Show interface controls in fullscreen", L"Показать панель в полноэкранном режиме", L"I"},
+        {"showTime", "basic", L"Show playback position and time", L"Показать позицию и время", L""},
+        {"showControls", "basic", L"Show interface controls in fullscreen", L"Показать панель в полноэкранном режиме", L""},
         {"openFile", "basic", L"Open file", L"Открыть файл", L"Ctrl+O"},
         {"closeFile", "basic", L"Close file", L"Закрыть файл", L"Ctrl+W"},
         {"settings", "basic", L"Settings", L"Настройки", L"Ctrl+P"},
-        {"screenshot", "basic", L"Take a screenshot", L"Сделать скриншот", L"Ctrl+S"},
+        {"screenshot", "basic", L"Take a screenshot", L"Сделать скриншот", L"Ctrl+Shift+S"},
 
         {"playPause", "playback", L"Play / pause", L"Пауза / продолжить", L"Space"},
-        {"stop", "playback", L"Stop playback", L"Остановить", L""},
+        {"stop", "playback", L"Stop playback", L"Остановить", L"S"},
         {"next", "playback", L"Next track", L"Следующий файл", L"PageDown"},
         {"previous", "playback", L"Previous track", L"Предыдущий файл", L"PageUp"},
-        {"nextProgram", "playback", L"Next program / Service ID", L"Следующая программа / Service ID", L"X"},
+        {"nextProgram", "playback", L"Next program / Service ID", L"Следующая программа / Service ID", L""},
         {"seekForward", "playback", L"Short skip forward", L"Короткий шаг вперёд", L"Right"},
         {"seekBackward", "playback", L"Short skip backward", L"Короткий шаг назад", L"Left"},
         {"seekForwardVeryShort", "playback", L"Very short skip forward", L"Очень короткий шаг вперёд", L"Shift+Right"},
@@ -2474,9 +2479,9 @@ const std::vector<KeyAction>& KeyActions() {
         {"mute", "audio", L"Mute", L"Без звука", L"M"},
         {"cycleAudio", "audio", L"Next audio track", L"Следующая аудиодорожка", L"A"},
 
-        {"cycleSubtitles", "subtitles", L"Next subtitle track", L"Следующие субтитры", L"S"},
-        {"subtitleDelayUp", "subtitles", L"Subtitle delay +100 ms", L"Задержка субтитров +100 мс", L"Ctrl+Shift+Up"},
-        {"subtitleDelayDown", "subtitles", L"Subtitle delay −100 ms", L"Задержка субтитров −100 мс", L"Ctrl+Shift+Down"},
+        {"cycleSubtitles", "subtitles", L"Next subtitle track", L"Следующие субтитры", L"V"},
+        {"subtitleDelayUp", "subtitles", L"Subtitle delay +50 ms", L"Задержка субтитров +50 мс", L"Shift+H"},
+        {"subtitleDelayDown", "subtitles", L"Subtitle delay −50 ms", L"Задержка субтитров −50 мс", L"Shift+G"},
     };
     return actions;
 }
