@@ -54,6 +54,9 @@ std::wstring TrackName(const Track& t, int ordinal) {
         return t.lang.empty() ? FileNameOf(t.file) : FileNameOf(t.file) + L" (" + LanguageName(t.lang) + L")";
     if (t.title.empty() && t.lang.empty()) return Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal));
     if (t.title.empty()) return LanguageName(t.lang);
+    // A title that only names the language ("English", "eng") says it in the interface language,
+    // as a bare language code does; a real title ("Director's commentary") stays.
+    if (const std::wstring named = LanguageName(t.title); named != t.title) return named;
     if (t.lang.empty()) return t.title;
     const std::wstring lang = LanguageName(t.lang);
     // "English 440 Hz" or "Русский (дубляж)" already says it.

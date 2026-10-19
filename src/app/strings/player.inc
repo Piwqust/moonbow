@@ -325,6 +325,7 @@
 {L"Audio: {0}", L"Аудио: {0}"},
 {L"Audio {0}/{1}: {2}", L"Аудио {0}/{1}: {2}"},
 // track languages (Actions.cpp LanguageName)
+{L"English", L"Английский"},
 {L"Russian", L"Русский"},
 {L"Ukrainian", L"Украинский"},
 {L"Belarusian", L"Белорусский"},

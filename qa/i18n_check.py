@@ -8,7 +8,9 @@ order = [l.split('"')[1] for l in (root / "app/I18n.cpp").read_text(encoding="ut
 pat = re.compile(r'\{L"((?:[^"\\]|\\.)*)",\s*L"((?:[^"\\]|\\.)*)"\}')
 d = collections.defaultdict(list)
 for f in order:
-    for m in pat.finditer((root / f).read_text(encoding="utf-8")):
+    # Header comments show the format with an example pair ({L"English", L"Русский"}): not entries.
+    text = "\n".join(l for l in (root / f).read_text(encoding="utf-8").splitlines() if not l.lstrip().startswith("//"))
+    for m in pat.finditer(text):
         d[m.group(1)].append((f.split("/")[-1], m.group(2)))
 n = 0
 for k, v in d.items():

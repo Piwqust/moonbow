@@ -278,6 +278,8 @@ std::wstring LanguageName(const std::wstring& code) {
     for (const auto& l : kLanguages) {
         const std::wstring codes = std::wstring(L" ") + l.codes + L" ";
         if (codes.find(L" " + key + L" ") != std::wstring::npos) return Tr(l.name);
+        // A track titled with the English name ("English") reads in the interface language too.
+        if (_wcsicmp(key.c_str(), l.name) == 0) return Tr(l.name);
     }
     return code;
 }
