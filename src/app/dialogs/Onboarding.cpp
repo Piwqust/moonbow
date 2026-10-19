@@ -189,9 +189,6 @@ public:
     explicit OnboardingWindow(std::function<void()> done) : done_(std::move(done)) {}
 
     bool Open() {
-        // First run: speak the language of Windows (Russian or English) from the first screen on.
-        if (done_ && Cfg().IsDefault("general.language"))
-            Cfg().SetString("general.language", PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? "ru" : "en");
         MainWindow* main = TheApp().main();
         HostOptions o;
         o.title = Tr(L"Lumen Setup");

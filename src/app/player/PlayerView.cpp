@@ -422,7 +422,7 @@ public:
         body_->wrap = true;
         body_->width = Length::Grow();
         // mpv's own words help a bug report, not the person in front of the card: only on request.
-        more_ = Add<LinkButton>(Tr(L"More details"), TextStyle::Small);
+        more_ = Add<LinkButton>(L"", TextStyle::Small);
         more_->onClick = [this] {
             more_->visible = false;
             detail_->visible = true;
@@ -435,9 +435,9 @@ public:
         row->dir = Dir::Row;
         row->gap = 8;
         row->pad.t = 12;
-        next_ = row->Add<Button>(Tr(L"Next file"), ButtonKind::Primary, "next");
+        next_ = row->Add<Button>(L"", ButtonKind::Primary, "next");
         next_->onClick = [] { Run(Action::Next); };
-        close_ = row->Add<Button>(Tr(L"Close"), ButtonKind::Secondary);
+        close_ = row->Add<Button>(L"", ButtonKind::Secondary);
         close_->onClick = [] { Run(Action::CloseMedia); };
     }
     void Refresh() {
@@ -450,6 +450,9 @@ public:
                            ? Tr(L"The stream is unavailable. Check the link and your connection.")
                            : Tr(L"The file is damaged or its format isn't supported."));
         detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
+        more_->text = Tr(L"More details");  // here, not when built: after a language switch too
+        next_->SetText(Tr(L"Next file"));
+        close_->SetText(Tr(L"Close"));
         detail_->visible = false;
         more_->visible = !err.empty();
         const int nextIndex = app.queue().NextIndex(true);
@@ -543,6 +546,14 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         if (skipChapter_->visible || nextEpisode_->visible) InvalidateLayout();
     });
     configToken_ = TheApp().config().Subscribe("general.developerMode", [this](const std::string&) { UpdateStats(); });
+    // The bar, the cards and the music view follow a language switch themselves (or translate when
+    // painted); the error card and the pinned queue take their strings when built.
+    langConn_ = Connect(TheApp().languageChanged, [this] {
+        error_->Refresh();
+        dock_->ClearChildren();
+        dock_->AddChild(panel::BuildQueueTab(false, true));
+        InvalidateLayout();
+    });
 }
 
 PlayerView::~PlayerView() {

@@ -136,9 +136,9 @@ public:
     LyricsSourceButton() {
         interactive = true;
         focusable = true;
-        tooltip = Tr(L"Lyrics from LRCLIB. Save them as an .lrc file next to the song");
     }
     void Paint(Painter& p) override {
+        tooltip = Tr(L"Lyrics from LRCLIB. Save them as an .lrc file next to the song");  // after a language switch too
         const Color white = Color::Hex(0xFFFFFF);
         const bool hot = IsHot() || IsPressed();
         if (hot) p.Fill(rect, white.WithAlpha(IsPressed() ? 0.14f : 0.08f), 4);

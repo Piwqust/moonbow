@@ -80,7 +80,7 @@ private:
     std::wstring carryPath_, audioLang_, audioTitle_, subLang_, subTitle_;
     bool hadSubs_ = false, subsOff_ = false;
     uint32_t choiceBase_[2] = {};  // Player::TrackChoices (audio, subtitles) when carryPath_ loaded
-    ScopedConnection playerConn_, queueConn_;
+    ScopedConnection playerConn_, queueConn_, langConn_;
 };
 
 // "Skip intro" / "Skip credits" while inside a chapter named Opening, Intro, OP, Credits, ED,
@@ -95,7 +95,7 @@ private:
     NextEpisodeCard* card_;
     int kind_ = 0;  // episodes::ChapterKind
     bool wanted_ = false;
-    ScopedConnection playerConn_;
+    ScopedConnection playerConn_, langConn_;
 };
 
 }  // namespace app

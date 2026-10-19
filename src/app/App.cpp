@@ -247,6 +247,7 @@ void App::OnConfigChanged(const std::string& key) {
     if (key == "general.language") {
         SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
         system_.LanguageChanged();
+        ReopenPlayerPanels();  // before the rebuilt library pane closes every popup
         languageChanged.Emit();
         // The preferred audio and subtitle languages default to the interface's ("app").
         for (const char* k : {"audio.language", "subtitles.language"})
@@ -394,11 +395,15 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         if (!a.empty() && a[0] != L'-') pendingOpen_.push_back(a);
 
     config_.Load();
+    LoadUiState();
+    // First run: the language of Windows (Russian or English) before any window is built, so the
+    // onboarding never switches it under a built UI (it can still be switched there).
+    if (UiValue("onboarded") != "1" && config_.IsDefault("general.language"))
+        config_.SetString("general.language", PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? "ru" : "en");
     LoadKeyBindings();
     SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
     ApplyTheme();
     Skins::Get().Start(config_);
-    LoadUiState();
     SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
     // The library opens on the section it was left in (only the section: a folder may be gone).
     {

@@ -934,6 +934,8 @@ ControlBar::ControlBar() {
     gap = 6;
     interactive = true;  // swallow clicks between items (don't pause the video)
     layoutConn_ = Connect(ControlLayoutChanged(), [this] { Rebuild(); });
+    // Some items take their tooltip when built.
+    langConn_ = Connect(TheApp().languageChanged, [this] { Rebuild(); });
     configToken_ = TheApp().config().Subscribe("interface.barStyle", [this](const std::string&) {
         Rebuild();
         if (Parent()) Parent()->InvalidateLayout();  // the bar height and the video area change
