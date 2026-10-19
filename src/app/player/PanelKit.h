@@ -236,6 +236,7 @@ std::wstring FormatNumber(double v, int maxDecimals = 2);
 // the sidecar file's name, or "Track 2" (`ordinal` among the tracks of its type).
 std::wstring TrackName(const Track& t, int ordinal);
 // Its format: "SubRip", "AAC · Stereo", "E-AC-3 · 5.1"; empty when mpv doesn't say.
-std::wstring TrackDetail(const Track& t);
+// Without the codec only an audio track's channels are left ("Stereo", "5.1").
+std::wstring TrackDetail(const Track& t, bool codec = true);
 
 }  // namespace app::panel

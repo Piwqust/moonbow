@@ -1,5 +1,6 @@
-// Playback Settings popover: Playback / Video / Audio / Subtitles tabs with live controls,
-// the preset field ("Default Preset") and "Open Advanced Settings".
+// Playback Settings popover: Playback / Video / Audio / Subtitles tabs with live controls (the
+// last three start with the track lists of TracksPanel.cpp), the preset field ("Default Preset")
+// and "Open Advanced Settings".
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/App.h"
@@ -225,12 +226,6 @@ std::vector<ui::Choice> TrackChoices(const wchar_t* type) {
     return out;
 }
 
-std::string SelectedTrack(const wchar_t* type) {
-    for (const Track& t : PS().tracks)
-        if (t.type == type && t.selected) return std::to_string(t.id);
-    return "0";
-}
-
 // Dropdown over the tracks of one type. The list follows the file: tracks arrive after the
 // panel opens, external subtitles get added.
 Dropdown* AddTracks(SyncPage* page, Widget* section, const std::wstring& label, const wchar_t* type,
@@ -253,12 +248,6 @@ Dropdown* AddTracks(SyncPage* page, Widget* section, const std::wstring& label, 
     sync();
     page->OnSync(sync);
     return raw;
-}
-
-Dropdown* AddTrackChoice(SyncPage* page, Widget* section, const std::wstring& label, const wchar_t* type,
-                         const char* prop) {
-    return AddTracks(page, section, label, type, [type] { return SelectedTrack(type); },
-                     [prop](const std::string& v) { TheApp().player().SetTrack(prop, std::atoll(v.c_str())); });
 }
 
 // Swatch + "#RRGGBB" field bound to a color setting.
@@ -546,6 +535,8 @@ std::unique_ptr<Widget> PlaybackTab() {
 std::unique_ptr<Widget> VideoTab() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
+    AddTrackLists(page, L"video");
+    AddSectionLine(page);
     AddSectionTitle(page, Tr(L"Defaults"));
     Widget* s = AddSection(page);
     auto* top = s->Add<Widget>();
@@ -763,9 +754,10 @@ std::unique_ptr<Widget> VideoTab() {
 std::unique_ptr<Widget> AudioTab() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
+    AddTrackLists(page, L"audio");
+    AddSectionLine(page);
     AddSectionTitle(page, Tr(L"Defaults"));
     Widget* s = AddSection(page);
-    AddTrackChoice(page, s, Tr(L"Audio Track"), L"audio", "aid");
     AddConfigChoice(page, s, Tr(L"Audio Language"), "audio.language");
     AddChoice(page, s, Tr(L"Stereo Mode"),
               {{Tr(L"Stereo"), "stereo", ""},
@@ -862,9 +854,10 @@ std::unique_ptr<Widget> AudioTab() {
 std::unique_ptr<Widget> SubtitlesTab() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
+    AddTrackLists(page, L"sub");
+    AddSectionLine(page);
     AddSectionTitle(page, Tr(L"Defaults"));
     Widget* s = AddSection(page);
-    AddTrackChoice(page, s, Tr(L"Subtitle Track"), L"sub", "sid");
     AddTracks(
         page, s, Tr(L"Secondary Subtitles"), L"sub", [] { return std::to_string(Live().V().secondarySid); },
         [](const std::string& v) {
@@ -1020,9 +1013,9 @@ public:
         width = Length::Grow();
         Add<PresetField>();
         adv_ = Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
-        adv_->onClick = [owner] {
+        adv_->onClick = [] {
             static const char* kCats[] = {"playback", "video", "audio", "subtitles"};
-            const std::string cat = kCats[std::clamp(owner->CurrentTab(), 0, 3)];
+            const std::string cat = kCats[std::clamp(SettingsTab(), 0, 3)];
             Later([cat] {
                 ClosePlayerPanels();
                 TheApp().OpenSettings(cat);
