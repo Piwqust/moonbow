@@ -516,7 +516,7 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
         // The basic keys once, at the first file ever played in the player (the onboarding has no page for
         // them). A song started from the library stays there: the toast would cover the page header.
-        if ((m & kChangeFile) && PS().fileLoaded && TheApp().PlayerShown() &&
+        if ((m & kChangeFile) && PS().fileLoaded && (TheApp().PlayerShown() || TheApp().PlayerPending()) &&
             TheApp().UiValue("hint.shortcuts") != "1") {
             TheApp().SetUiValue("hint.shortcuts", "1");
             // After the file's own messages (the languages picked, "Resuming from"): one toast
@@ -584,7 +584,8 @@ bool PlayerView::PipControlsShown() const {
 
 Rect PlayerView::VideoRect() const {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
-    if (!visible || music_->visible) return {};
+    // While App::PlayerPending the player is laid out unseen: mpv's window goes there already.
+    if ((!visible && !TheApp().PlayerPending()) || music_->visible) return {};
     return video_->Inner(immersive);
 }
 

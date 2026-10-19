@@ -38,10 +38,13 @@ public:
     }
     void OnLayout() override {
         const bool playerShown = TheApp().PlayerShown();
+        // Waiting for the opened file's first frame: the library stays, the player is laid out
+        // unseen (mpv's window and the cover get their size), no mini player in between.
+        const bool pending = TheApp().PlayerPending();
         library_->visible = !playerShown;
         player_->visible = playerShown;
         const PlayerState& s = TheApp().player().State();
-        mini_->visible = !playerShown && s.fileLoaded;
+        mini_->visible = !playerShown && !pending && s.fileLoaded;
         // The mini player goes first: the library's scroll views keep their last rows reachable above it.
         Rect card;
         if (mini_->visible) {
@@ -49,10 +52,8 @@ public:
             card = {rect.Right() - m.w - 24, rect.Bottom() - m.h - 24, m.w, m.h};
         }
         if (Host* h = GetHost()) h->floatingCard = card;
-        if (playerShown)
-            player_->Arrange(rect);
-        else
-            library_->Arrange(rect);
+        if (playerShown || pending) player_->Arrange(rect);
+        if (!playerShown) library_->Arrange(rect);
         if (mini_->visible) mini_->Arrange(card);
     }
 
@@ -366,7 +367,16 @@ void MainWindow::PokeChrome() {
 // Thumbnails that were queued for tiles no longer painted (scrolled away, page left) are
 // dropped, so the visible ones don't wait behind them.
 void MainWindow::OnFramePainted() {
+    TheApp().CheckPlayerHold();  // before EndFrame: a song's cover is asked for while the player waits
     TheApp().images().EndFrame();
+}
+
+bool MainWindow::ReadyToReveal() {
+    return TheApp().FirstScreenReady();
+}
+
+UINT MainWindow::RevealCapMs() {
+    return TheApp().OpensFileAtStart() ? 700 : 400;
 }
 
 // While the control bar floats over the picture, subtitles move up above it (as in uosc and
@@ -398,7 +408,7 @@ void MainWindow::OnLayoutDone() {
     UpdateSubtitleLift();
     // Where should the video be this frame?
     Rect target{};
-    if (TheApp().PlayerShown() && player_)
+    if ((TheApp().PlayerShown() || TheApp().PlayerPending()) && player_)
         target = player_->VideoRect();
     else if (mini_ && mini_->visible)
         target = mini_->VideoRect();
@@ -419,12 +429,14 @@ void MainWindow::OnLayoutDone() {
     }
 }
 
-// Opaque everywhere except the hole where mpv's video window shows through.
+// Opaque everywhere except the hole where mpv's video window shows through; no hole while the
+// player waits for the first frame (the window is placed already, under the library).
 void MainWindow::PaintBackground(Painter& p) {
     const Size client = ClientSize();
     const Color bg = P().bgBase;
     const float s = Scale();
-    if (appliedVideo_.right <= appliedVideo_.left || appliedVideo_.bottom <= appliedVideo_.top) {
+    if (appliedVideo_.right <= appliedVideo_.left || appliedVideo_.bottom <= appliedVideo_.top ||
+        TheApp().PlayerPending()) {
         p.Fill({0, 0, client.w, client.h}, bg);
         return;
     }

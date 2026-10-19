@@ -383,6 +383,7 @@ void App::StopAtStart() {
 
 void App::OnLibraryScanned() {
     libraryChanged.Emit();
+    libraryShown_ = true;
 }
 
 void App::OnThumbnails() {
@@ -452,6 +453,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     library_.SetNotifyWindow(main_->Hwnd(), kLibraryMessage);
     thumbnails_.SetNotifyWindow(main_->Hwnd(), kThumbnailsMessage);
     if (config_.GetBool("library.scanOnStartup") || !library_.Current()) library_.Rescan();
+    started_ = true;
     ControlLayoutChanged().Connect([this] { SetUiValue("controls.layout", CurrentControlLayout().Serialize()); });
     main_->StartTimer(3000, [this] { FlushStores(); }, true);
     InitDialogs();
@@ -570,14 +572,12 @@ void App::OnPlayerEvents() {
             queue_.SetInfo(queue_.Current(), learnTitle ? title : std::wstring(), s.duration);
         }
     if ((changes & kChangeFile) && s.fileLoaded) fitPending_ = true;
-    if ((changes & (kChangeVideoSize | kChangeFile)) && fitPending_ && s.videoW > 0 && s.videoH > 0) {
-        fitPending_ = false;
-        FitWindowToVideo();
-        if (config_.GetBool("video.startFullscreen") && s.hasVideo && main_ && !main_->IsFullscreen() &&
-            !main_->PictureInPicture() && playerShown_)
-            main_->SetFullscreen(true, config_.GetString("interface.fullscreenScreen") == "primary");
-    }
+    if (changes & (kChangeVideoSize | kChangeFile)) FitIfPending();
     if (changes & kChangeVolume) config_.SetDouble("audio.lastVolume", std::round(s.volume));
+    if (playerPending_ && main_) {
+        main_->RequestLayout();  // the unseen player places the video window for the new file
+        CheckPlayerHold();
+    }
     playerChanged.Emit(changes);
     OnPlayerChangeForOsd(changes);
     system_.Update(changes);
@@ -640,6 +640,52 @@ void App::FitWindowToVideo() {
     if (IsRectEmpty(&preFitRect_)) preFitRect_ = cur;
     SetWindowPos(main_->Hwnd(), nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
     fittedOnce_ = true;
+}
+
+void App::FitIfPending() {
+    const PlayerState& s = player_.State();
+    // Held back while the player waits for its first frame: ShowPlayer fits in the same step.
+    if (!fitPending_ || playerPending_ || s.videoW <= 0 || s.videoH <= 0) return;
+    fitPending_ = false;
+    FitWindowToVideo();
+    if (config_.GetBool("video.startFullscreen") && s.hasVideo && main_ && !main_->IsFullscreen() &&
+        !main_->PictureInPicture() && playerShown_)
+        main_->SetFullscreen(true, config_.GetString("interface.fullscreenScreen") == "primary");
+}
+
+namespace {
+// The longest the screen waits for a file's first frame before it shows the player anyway.
+constexpr UINT kPlayerHoldMs = 700;
+}  // namespace
+
+void App::HoldPlayer() {
+    holdSerial_ = player_.State().loadSerial;  // Open was just sent: this is the previous file's
+    if (playerPending_ || !main_) return;
+    playerPending_ = true;
+    holdTimer_ = main_->StartTimer(kPlayerHoldMs, [this] {
+        holdTimer_ = 0;
+        ShowPlayer(true);
+    });
+    main_->RequestLayout();
+}
+
+void App::CheckPlayerHold() {
+    if (!playerPending_ || !main_) return;
+    const PlayerState& s = player_.State();
+    const QueueItem* item = queue_.CurrentItem();
+    const bool failed = item && !failedPath_.empty() && failedPath_ == item->path;  // its error card shows
+    const bool playing = s.fileLoaded && s.loadSerial > holdSerial_ && s.shownSerial == s.loadSerial;
+    if (failed || (playing && (s.hasVideo || MusicCoverReady())))
+        main_->Post([this] {
+            if (playerPending_) ShowPlayer(true);
+        });
+}
+
+bool App::FirstScreenReady() const {
+    if (!started_ || OpensFileAtStart() || images_.Busy()) return false;
+    // The library is scanned at every start: Home waits for its first results instead of
+    // showing "Scanning your library" (or nothing) and then the cards.
+    return libraryShown_ || library_.Roots().empty();
 }
 
 bool App::HasMedia() const {
@@ -820,7 +866,7 @@ void App::PlayIndex(int index, bool showPlayer) {
     SyncNextInPlayer(true);
     // "Start playing as soon as a file opens"; the next item of a running queue always plays.
     player_.SetPause(!config_.GetBool("playback.autoPlay") && !player_.State().fileLoaded);
-    if (showPlayer || playerShown_) ShowPlayer(true);
+    if (showPlayer && !playerShown_) HoldPlayer();
 }
 
 void App::SyncNextInPlayer(bool force) {
@@ -952,7 +998,20 @@ void App::GoForward() {
 }
 
 void App::ShowPlayer(bool show) {
-    if (show == playerShown_) return;
+    const bool held = playerPending_;
+    if (held) {
+        playerPending_ = false;
+        if (holdTimer_ && main_) main_->CancelTimer(holdTimer_);
+        holdTimer_ = 0;
+    }
+    if (show == playerShown_) {
+        if (held) {
+            if (main_) main_->RequestLayout();  // the video window the hold placed goes
+            screenChanged.Emit();               // pages and the title kept still for the hold catch up
+            ReleaseHeldOsd(show);
+        }
+        return;
+    }
     playerShown_ = show;
     if (!show && main_ && main_->IsFullscreen()) main_->SetFullscreen(false);
     // Space and the arrows belong to the player once it is shown.
@@ -966,6 +1025,8 @@ void App::ShowPlayer(bool show) {
     }
     if (main_) main_->UpdateScreen();
     screenChanged.Emit();
+    if (held && show) FitIfPending();
+    if (held) ReleaseHeldOsd(show);
 }
 
 void App::OpenSettings(const std::string& category) {

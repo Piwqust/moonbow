@@ -140,8 +140,18 @@ const PlayerState& PS() {
 double g_toastAt = -1e9;
 uint64_t g_toastSerial = 0;
 
+// A file's messages while its player waits for the first frame (App::PlayerPending): the library
+// is still on screen, and the switch to the player would close them at once. They show with it.
+std::wstring g_heldText;
+const char* g_heldIcon = "";
+
 void Toast(const std::wstring& text, const char* icon = "") {
     if (!Win() || !TheApp().config().GetBool("interface.osdMessages")) return;
+    if (TheApp().PlayerPending()) {
+        g_heldText = text;
+        g_heldIcon = icon;
+        return;
+    }
     ShowToast(Win(), text, icon, kToastMs);
     g_toastAt = ui::AnimFloat::Now();
     g_toastSerial = PS().loadSerial;
@@ -875,6 +885,12 @@ void OnTrackChoice(const char* prop) {
 
 void ShowOsd(const std::wstring& text, const char* icon) {
     ShowOpenNote(g_cardNote, text, icon);
+}
+
+void ReleaseHeldOsd(bool show) {
+    std::wstring text = std::move(g_heldText);
+    g_heldText.clear();
+    if (show && !text.empty()) Toast(text, g_heldIcon);
 }
 
 void OnPlayerChangeForOsd(unsigned changes) {

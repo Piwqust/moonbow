@@ -46,6 +46,7 @@ struct Chapter {
 
 struct PlayerState {
     uint64_t loadSerial = 0;  // +1 on every MPV_EVENT_FILE_LOADED
+    uint64_t shownSerial = 0; // loadSerial once that file plays (its first frame is up): MPV_EVENT_PLAYBACK_RESTART
     bool ready = false;
     bool idle = true;
     bool fileLoaded = false;

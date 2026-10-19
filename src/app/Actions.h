@@ -66,6 +66,9 @@ void SeekBy(double seconds);
 std::wstring LanguageName(const std::wstring& code);
 // Shows the on-screen messages that wait for mpv (new track, new chapter).
 void OnPlayerChangeForOsd(unsigned changes);
+// The player waited for a file's first frame (App::PlayerPending): shows the message it held
+// back meanwhile (`show`), or drops it when the player did not come.
+void ReleaseHeldOsd(bool show);
 // A track was chosen anywhere (Player::onTrackChoice): "Audio 2/2: Russian" once mpv switched.
 void OnTrackChoice(const char* prop);
 // A message from elsewhere in the player (the next-episode card). It joins the "Resuming from"

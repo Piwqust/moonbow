@@ -122,6 +122,16 @@ public:
     // Library vs. player screen. Showing the library while media plays keeps the mini player.
     void ShowPlayer(bool show);
     bool PlayerShown() const { return playerShown_; }
+    // A file was opened to be shown in the player: the current screen stays until mpv shows its
+    // first frame (and a song's cover is decoded), at most kPlayerHoldMs, then the player comes
+    // in one step instead of an empty black player first. The player is laid out meanwhile.
+    bool PlayerPending() const { return playerPending_; }
+    // The pending player has what its first frame needs: shows it (also called every frame).
+    void CheckPlayerHold();
+    // MainWindow::ReadyToReveal: the first screen is complete (stores loaded, its images
+    // decoded, a file given at launch showing).
+    bool FirstScreenReady() const;
+    bool OpensFileAtStart() const { return !pendingOpen_.empty() || pendingIndex_ >= 0 || playerPending_; }
     // The file that failed to open (shown as a card in the player); empty when none.
     const std::wstring& FailedPath() const { return failedPath_; }
     const std::wstring& FailedError() const { return failedError_; }
@@ -171,6 +181,8 @@ private:
     void OnPlaybackEnded();
     void OnAdvanced();
     void FitWindowToVideo();
+    void FitIfPending();  // once per file, when the video size is known and the player shows
+    void HoldPlayer();
     void ApplyWindowOptions();
     void LoadUiState();
     void SaveUiState();
@@ -198,6 +210,11 @@ private:
     std::vector<NavEntry> nav_{NavEntry{}};
     int historyPos_ = 0;
     bool playerShown_ = false;
+    bool playerPending_ = false;
+    uint64_t holdSerial_ = 0;      // PlayerState::loadSerial when the hold began: a newer file ends it
+    UINT_PTR holdTimer_ = 0;
+    bool started_ = false;         // Run has loaded the stores
+    bool libraryShown_ = false;    // the pages got the first scan results
     std::wstring failedPath_, failedError_;
     double lastRestart_ = 0;      // Previous restarted the file at this time (ms)
     uint64_t recordedSerial_ = 0;  // PlayerState::loadSerial already counted in history

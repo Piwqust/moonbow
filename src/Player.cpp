@@ -378,6 +378,13 @@ unsigned Player::ProcessEvents() {
                 state_.failedPath.clear();
                 changes |= kChangeFile | kChangeState;
                 break;
+            case MPV_EVENT_PLAYBACK_RESTART:
+                if (state_.fileLoaded && state_.shownSerial != state_.loadSerial) {
+                    Trace("playback started");
+                    state_.shownSerial = state_.loadSerial;
+                    changes |= kChangeState;
+                }
+                break;
             case MPV_EVENT_LOG_MESSAGE: {
                 // On a device without passthrough mpv falls back to decoding the track, but then never
                 // restarts playback: the picture stays on its first frame until a seek. Seek in place.
