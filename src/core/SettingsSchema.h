@@ -135,12 +135,10 @@ struct Category {
     std::string id;     // "general"
     std::string group;  // "app", "media", "system"
     std::string icon;   // design/icons name ("preferences"); add "_active" for the selected state
-    std::wstring label, labelRu;  // sidebar entry
-    std::wstring title, titleRu;  // window header ("Global Settings")
+    std::wstring label, labelRu;  // sidebar entry and page title: one name, so the page is where the click led
     std::vector<Section> sections;
 
     const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
-    const std::wstring& Title(Lang lang) const { return lang == Lang::Ru ? titleRu : title; }
 };
 
 struct Group {

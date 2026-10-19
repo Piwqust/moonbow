@@ -359,7 +359,7 @@ void TestSchema() {
     size_t total = 0, mapped = 0;
     std::printf("  settings per category:");
     for (const Category& c : cats) {
-        CHECK(!c.label.empty() && !c.labelRu.empty() && !c.title.empty() && !c.titleRu.empty() && !c.icon.empty());
+        CHECK(!c.label.empty() && !c.labelRu.empty() && !c.icon.empty());
         bool groupOk = false;
         for (const Group& g : Groups()) groupOk = groupOk || g.id == c.group;
         CHECK_MSG(groupOk, "%s", c.id.c_str());
@@ -372,7 +372,11 @@ void TestSchema() {
                 if (!it.hidden) ++count;
                 const char* k = it.key.c_str();
                 CHECK_MSG(keys.insert(it.key).second, "duplicate key %s", k);
-                CHECK_MSG(it.key.compare(0, c.id.size() + 1, c.id + ".") == 0, "%s outside %s", k, c.id.c_str());
+                // Window behavior moved from Library to Interface keeps its keys (saved values, main.cpp).
+                const bool moved = it.key == "library.singleInstance" || it.key == "library.singleInstanceFileManager" ||
+                                   it.key == "library.enqueue";
+                CHECK_MSG(moved ? c.id == "interface" : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
+                          "%s outside %s", k, c.id.c_str());
                 CHECK_MSG(it.category == c.id && it.section == s.id, "%s", k);
                 CHECK_MSG(FindItem(it.key) == &it, "%s", k);
                 CHECK_MSG(!it.label.empty() && !it.labelRu.empty(), "%s label", k);
