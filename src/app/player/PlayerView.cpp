@@ -246,6 +246,21 @@ bool TipIs(const std::wstring& text, const std::wstring& a, const std::wstring& 
            text.compare(a.size() + 1, b.size(), b) == 0;
 }
 
+// The basic keys, once: after the file's own messages (the languages picked, "Resuming from")
+// are gone and a pause has passed, so one toast never replaces another.
+void ShowShortcutHint(MainWindow* w, UINT delay, bool afterToast) {
+    w->StartTimer(delay, [w, afterToast] {
+        if (!TheApp().PlayerShown()) return;
+        if (ToastShown(w)) return ShowShortcutHint(w, 250, true);
+        if (afterToast) return ShowShortcutHint(w, 600, false);
+        ShowToast(w,
+                  Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
+                      {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
+                       ShortcutText(Action::KeyboardShortcuts)}),
+                  "hotkeys", 8000);
+    });
+}
+
 }  // namespace
 
 void ShowPlayerContextMenu(Host* host, Point at) {
@@ -519,16 +534,7 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         if ((m & kChangeFile) && PS().fileLoaded && (TheApp().PlayerShown() || TheApp().PlayerPending()) &&
             TheApp().UiValue("hint.shortcuts") != "1") {
             TheApp().SetUiValue("hint.shortcuts", "1");
-            // After the file's own messages (the languages picked, "Resuming from"): one toast
-            // replaces another, and this one shows only once.
-            window_->StartTimer(1800, [w = window_] {
-                if (!TheApp().PlayerShown()) return;
-                ShowToast(w,
-                          Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
-                              {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
-                               ShortcutText(Action::KeyboardShortcuts)}),
-                          "hotkeys", 8000);
-            });
+            ShowShortcutHint(window_, 1800, false);
         }
         if ((m & kChangeFile) || ((m & kChangeState) && PS().paused != menuPaused_)) CloseStaleMenu();
         menuPaused_ = PS().paused;

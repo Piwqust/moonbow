@@ -1796,6 +1796,10 @@ void DismissToast(Host* host) {
     if (it != Toasts().end()) host->ClosePopup(it->second.widget);
 }
 
+bool ToastShown(Host* host) {
+    return Toasts().count(host) > 0;
+}
+
 }  // namespace ui
 
 namespace ui {
