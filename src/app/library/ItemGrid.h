@@ -93,6 +93,8 @@ public:
     // Media plays on a double click, Enter or a click on its card's ▶; folders, albums, artists,
     // genres, playlists, categories and actions open on a single click.
     std::function<void(int)> onActivate;
+    // Album cards show a ▶ on hover too, and a click on it plays the album here instead of opening it.
+    std::function<void(int)> onPlay;
     std::function<void(int, ui::Point)> onMenu;      // right click / menu key / "…" button
     std::function<void(int)> onDelete;               // Delete key
     std::function<void(int from, int to)> onMove;    // drag reorder: item ends up at `to`
