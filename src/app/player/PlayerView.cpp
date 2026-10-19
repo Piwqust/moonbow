@@ -510,6 +510,15 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
+        // The basic keys once, at the first file ever played (the onboarding has no page for them).
+        if ((m & kChangeFile) && PS().fileLoaded && TheApp().UiValue("hint.shortcuts") != "1") {
+            TheApp().SetUiValue("hint.shortcuts", "1");
+            ShowToast(window_,
+                      Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
+                          {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
+                           ShortcutText(Action::KeyboardShortcuts)}),
+                      "hotkeys", 8000);
+        }
         if ((m & kChangeFile) || ((m & kChangeState) && PS().paused != menuPaused_)) CloseStaleMenu();
         menuPaused_ = PS().paused;
         // The fullscreen top panel names the chapter and the title.
