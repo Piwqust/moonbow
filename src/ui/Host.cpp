@@ -868,8 +868,8 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             }
             if (!top.options.dismissOnOutside) break;
+            if (!(e.button == MouseButton::Left && ClicksThrough(top, x, y))) dismissed = true;
             ClosePopupAt(popups_.size() - 1);
-            dismissed = true;
         }
         if (dismissed && !inside) {
             if (e.button == MouseButton::Left) swallowedFor = hwnd_;
@@ -928,6 +928,13 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
             if (w->interactive && w->OnMouseUp(e)) break;
     }
     RequestRender();
+}
+
+bool Host::ClicksThrough(const Popup& popup, float x, float y) const {
+    if (!popup.options.clickThrough) return false;
+    Widget* w = HitTestAll(x, y);  // the popup is not under the point
+    while (w && !w->interactive) w = w->Parent();
+    return w && w->focusable && w->IsEnabled() && w != popup.previousFocus;
 }
 
 // --- keyboard -------------------------------------------------------------------------

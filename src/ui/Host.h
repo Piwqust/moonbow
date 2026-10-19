@@ -42,6 +42,10 @@ struct PopupOptions {
     bool focusContent = true;        // move keyboard focus into the popup
     bool passthrough = false;        // ignores the mouse entirely (tooltips, toasts)
     bool animate = true;             // short fade/slide in
+    // A click outside that lands on another enabled control (a bar button, the sidebar, a caption
+    // button) closes the popup and also presses it. A click on a plain surface (the video) or on
+    // the control that opened the popup only closes it, as with a menu. For panels, not menus.
+    bool clickThrough = false;
     std::function<void()> onDismiss; // called when closed for any reason
 };
 
@@ -215,6 +219,7 @@ private:
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();
     void HideTooltip();
+    bool ClicksThrough(const Popup& popup, float x, float y) const;
     Mods CurrentMods() const;
     void ClosePopupAt(size_t index);
     void Forget(Widget* w);
