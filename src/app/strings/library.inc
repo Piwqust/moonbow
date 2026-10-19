@@ -238,6 +238,19 @@
 {L"Play {0}", L"Смотреть {0}"},
 {L"Other videos", L"Другие видео"},
 
+// Videos tabs and shows
+{L"Movies", L"Фильмы"},
+{L"Shows", L"Сериалы"},
+{L"Folders", L"Папки"},
+{L"Next: {0}", L"Дальше: {0}"},
+{L"All watched", L"Всё просмотрено"},
+{L"No movies", L"Фильмов нет"},
+{L"Videos that aren't episodes of a show appear here.", L"Здесь будут видео, которые не относятся к сериалам."},
+{L"No shows", L"Сериалов нет"},
+{L"Episodes named like “Show S01E02” or kept in “Season 1” folders appear here.",
+ L"Здесь будут серии с названиями вида «Сериал S01E02» или из папок «Сезон 1»."},
+{L"This show isn't in the library", L"Этого сериала нет в медиатеке"},
+
 // Files the scanner can't play; files found since the library was last opened
 {L"Damaged file", L"Битый файл"},
 {L"New", L"Новое"},

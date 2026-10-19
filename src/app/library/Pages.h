@@ -203,6 +203,20 @@ private:
 
 std::unique_ptr<LibraryView> MakeHomePage(bool compact);
 std::unique_ptr<LibraryView> MakeFolderPage(const Route& route, bool compact);
+// Videos: "movies", "shows", "show:<key>", "folders" or a folder; "" opens the last of the tabs.
+std::unique_ptr<LibraryView> MakeVideosPage(const Route& route, bool compact);
+// The "Movies / Shows / Folders" tabs above a Videos page (`current` = 0..2); remembers the tab.
+void AddVideoTabs(ui::Widget* toolbar, int current);
+// The snapshot's shows and the videos that aren't episodes, grouped once per snapshot.
+struct ShowIndex {
+    std::shared_ptr<const library::Snapshot> snap;
+    std::vector<library::Show> shows;
+    std::vector<const library::MediaItem*> movies;
+};
+const ShowIndex& ShowsOf(const std::shared_ptr<const library::Snapshot>& snap);
+// Card of a show (Videos › Shows, Home): "Next: S01E03" and the episode count; route to its page.
+Entry ShowEntry(const library::Show& show, const std::function<bool(const std::wstring&)>& watched);
+Route ShowRoute(const library::Show& show);
 std::unique_ptr<LibraryView> MakeMusicPage(const Route& route, bool compact);
 std::unique_ptr<LibraryView> MakeNetworkPage(const Route& route, bool compact);
 std::unique_ptr<LibraryView> MakePlaylistsPage(const Route& route, bool compact);

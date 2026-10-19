@@ -53,6 +53,15 @@ bool IsReleaseTag(std::wstring_view word);
 // Card title of an episode file: "S01E02 · Pilot", "S01E02 · Show" when the name has no episode
 // title, or empty when the name is not an episode.
 std::wstring EpisodeLabel(std::wstring_view name);
+// Season of a folder name: "Season 2", "S02", "Сезон 2", "2 сезон", "Show.Season.2", "Show S01 1080p"
+// -> 2 / 1, with the text before the marker in *show ("Show", may be empty). -1 when the name is
+// not a season.
+int ParseSeasonFolder(std::wstring_view name, std::wstring* show);
+// An episode by its path: ParseEpisode of the file name, else a numbered file in a season folder
+// ("Show\Season 2\03 Title.mkv", "E03", "Episode 3", "Серия 3"). When the name has no show, the
+// show is the folder's: the text before a season folder's marker, the folder above a season
+// folder, or the file's folder.
+bool ParseEpisodePath(std::wstring_view path, EpisodeInfo* out);
 
 // How well a subtitle file name fits a video (letters and digits only, case-insensitive): 100 same
 // name, 90 the subtitle adds a suffix ("Show_E01_English"), 70 the video adds one, 60 same

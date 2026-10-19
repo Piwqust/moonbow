@@ -457,6 +457,43 @@ std::vector<const MediaItem*> Snapshot::Videos() const {
     return out;
 }
 
+std::vector<Show> GroupShows(const std::vector<const MediaItem*>& videos, std::vector<const MediaItem*>* movies) {
+    std::vector<Show> shows;
+    std::unordered_map<std::wstring, size_t> index;  // key -> shows
+    for (const MediaItem* m : videos) {
+        EpisodeInfo ep;
+        if (!ParseEpisodePath(m->path, &ep)) {
+            if (movies) movies->push_back(m);
+            continue;
+        }
+        if (ep.show.empty()) ep.show = m->folder;  // a file in a drive's root
+        std::wstring key = SearchFold(ep.show);
+        auto [it, added] = index.try_emplace(key, shows.size());
+        if (added) {
+            std::wstring folder = ParentFolder(m->path);
+            if (ParseSeasonFolder(FileNameOf(folder), nullptr) >= 0) folder = ParentFolder(folder);
+            shows.push_back({ep.show, std::move(key), std::move(folder), {}});
+        }
+        shows[it->second].episodes.push_back({m, std::move(ep)});
+    }
+    for (Show& s : shows)
+        std::stable_sort(s.episodes.begin(), s.episodes.end(), [](const Episode& a, const Episode& b) {
+            if (a.info.season != b.info.season) return a.info.season < b.info.season;
+            if (a.info.episode != b.info.episode) return a.info.episode < b.info.episode;
+            return NaturalLess(a.item->path, b.item->path);
+        });
+    std::stable_sort(shows.begin(), shows.end(), [](const Show& a, const Show& b) { return NaturalLess(a.name, b.name); });
+    return shows;
+}
+
+int NextUp(const std::vector<bool>& watched) {
+    const auto last = std::find(watched.rbegin(), watched.rend(), true);
+    const size_t after = static_cast<size_t>(watched.rend() - last);  // index after the last watched (0 = none)
+    if (after < watched.size()) return static_cast<int>(after);
+    const auto first = std::find(watched.begin(), watched.end(), false);
+    return first == watched.end() ? -1 : static_cast<int>(first - watched.begin());
+}
+
 std::vector<const MediaItem*> Snapshot::Music() const {
     std::vector<const MediaItem*> out;
     for (const MediaItem& it : items)

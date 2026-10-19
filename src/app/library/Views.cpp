@@ -789,14 +789,17 @@ public:
         const std::wstring name = FileNameOf(route_.path);
         queueName_ = route_.path.empty() ? std::wstring(Tr(SectionName(route_.section))) : name;
         if (kind_ == library::MediaKind::Video) {
+            // The folder browser is the Videos page's third tab.
+            tabs_ = route_.path.empty();
+            if (tabs_) AddVideoTabs(toolbar_, 2);
             // A folder of episodes gets "Continue S01E02" and "Play All", like an album page.
             next_ = toolbar_->Add<Button>(L"", ButtonKind::Primary, "play");
             next_->onClick = [this] {
                 if (nextRef_ >= 0) PlayQueue(queue_, nextRef_, queueName_);
             };
             if (!compact) {
-                auto* all = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Secondary, "playback");
-                all->onClick = [this] {
+                all_ = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Secondary, "playback");
+                all_->onClick = [this] {
                     if (!episodeQueue_.empty()) PlayQueue(episodeQueue_, 0, queueName_);
                 };
             }
@@ -805,8 +808,11 @@ public:
     }
 
     std::vector<Crumb> Breadcrumbs() const override {
-        if (route_.path.empty() || !snap_) return Page::Breadcrumbs();
-        return FolderCrumbs(*snap_, route_.section, route_.path, SoleRoot());
+        auto c = route_.path.empty() || !snap_ ? Page::Breadcrumbs()
+                                               : FolderCrumbs(*snap_, route_.section, route_.path, SoleRoot());
+        // Up from a folder leads to the folder browser, not to the last Videos tab.
+        if (kind_ == library::MediaKind::Video) c.front().route.path = L"folders";
+        return c;
     }
 
     std::vector<MenuItem> SortMenu() override {
@@ -987,7 +993,9 @@ protected:
     void UpdateToolbar() {
         if (!next_) return;
         const bool show = nextRef_ >= 0;
-        toolbar_->visible = show;
+        toolbar_->visible = show || tabs_;
+        next_->visible = show;
+        if (all_) all_->visible = show;
         if (show) next_->SetText(nextLabel_);
     }
 
@@ -1045,7 +1053,9 @@ private:
     std::wstring Folder() const { return route_.path.empty() ? SoleRoot() : route_.path; }
 
     library::MediaKind kind_;
+    bool tabs_ = false;               // the Videos tabs lead the toolbar
     Button* next_ = nullptr;          // "Continue S01E02" in a folder of episodes
+    Button* all_ = nullptr;           // its "Play All"
     int nextRef_ = -1;                // its queue index
     std::wstring nextLabel_;
     std::vector<QueueItem> episodeQueue_;  // the episodes in order, for "Play All"
@@ -1277,7 +1287,7 @@ std::unique_ptr<LibraryView> MakeRecentPage(const Route& route, bool compact) {
 std::unique_ptr<LibraryView> CreateLibraryView(const Route& route, bool compact) {
     switch (route.section) {
         case Section::Home: return lib::MakeHomePage(compact);
-        case Section::Videos: return lib::MakeFolderPage(route, compact);
+        case Section::Videos: return lib::MakeVideosPage(route, compact);
         case Section::Music: return lib::MakeMusicPage(route, compact);
         case Section::Network: return lib::MakeNetworkPage(route, compact);
         case Section::Playlists: return lib::MakePlaylistsPage(route, compact);

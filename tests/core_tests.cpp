@@ -1592,6 +1592,69 @@ void TestEpisodesAndOrder() {
     CHECK(got == L"a1,a2,a-none,a-d2-1,b1,u1,");
 }
 
+// Videos › Shows: season folders, numbered files in them, grouping and "Next: S01E03".
+void TestShows() {
+    std::wstring show;
+    CHECK(library::ParseSeasonFolder(L"Season 2", &show) == 2 && show.empty());
+    CHECK(library::ParseSeasonFolder(L"Series S01", &show) == 1 && show == L"Series");
+    CHECK(library::ParseSeasonFolder(L"The.Show.Season.03.1080p", &show) == 3 && show == L"The Show");
+    CHECK(library::ParseSeasonFolder(L"Сезон 4", &show) == 4);
+    CHECK(library::ParseSeasonFolder(L"Шоу - 2 сезон", &show) == 2 && show == L"Шоу");
+    CHECK(library::ParseSeasonFolder(L"Simpsons Season 5 (2019)", &show) == 5 && show == L"Simpsons");
+    CHECK(library::ParseSeasonFolder(L"Seasons", nullptr) < 0);
+    CHECK(library::ParseSeasonFolder(L"Best S1 Clips", nullptr) < 0);
+    CHECK(library::ParseSeasonFolder(L"Videos", nullptr) < 0);
+
+    library::EpisodeInfo ep;
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\Season 2\\03 - Pilot.mkv", &ep) && ep.show == L"Show" &&
+          ep.season == 2 && ep.episode == 3 && ep.title == L"Pilot");
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\Episode 7.mkv", &ep) && ep.episode == 7);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Шоу\\Сезон 1\\Серия 4.mkv", &ep) && ep.show == L"Шоу" && ep.episode == 4);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show S02\\E05.mkv", &ep) && ep.show == L"Show" && ep.season == 2 &&
+          ep.episode == 5);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\S01E02.mkv", &ep) && ep.show == L"Show" && ep.episode == 2);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\S01E02.mkv", &ep) && ep.show == L"Show");
+    CHECK(library::ParseEpisodePath(L"D:\\Video\\Series S01E03.mp4", &ep) && ep.show == L"Series");
+    CHECK(!library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\Making of.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\1080p.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Video\\2001 A Space Odyssey.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Video\\Movie (1080p).mkv", nullptr));
+
+    // Two season folders and loose "1x02" names are one show; episodes in order, movies apart.
+    const wchar_t* paths[] = {
+        L"D:\\TV\\Show\\Season 2\\01 Return.mkv", L"D:\\TV\\Show\\Season 1\\Show S01E03.mkv",
+        L"D:\\TV\\Show\\Season 1\\Show S01E02.mkv", L"D:\\Video\\Movie.mkv", L"D:\\TV\\show 1x01.mkv",
+        L"D:\\TV\\Other.Show.S01E01.mkv", L"D:\\Video\\Clip.mp4",
+    };
+    std::vector<library::MediaItem> items(std::size(paths));
+    std::vector<const library::MediaItem*> videos;
+    for (size_t i = 0; i < items.size(); ++i) {
+        items[i].path = paths[i];
+        items[i].folder = library::ParentFolder(paths[i]);
+        videos.push_back(&items[i]);
+    }
+    std::vector<const library::MediaItem*> movies;
+    const auto shows = library::GroupShows(videos, &movies);
+    CHECK(shows.size() == 2 && movies.size() == 2 && movies[0] == &items[3] && movies[1] == &items[6]);
+    if (shows.size() == 2) {
+        CHECK(shows[0].name == L"Other Show" && shows[0].episodes.size() == 1);
+        const library::Show& s = shows[1];
+        std::wstring order;
+        for (const library::Episode& e : s.episodes)
+            order += std::to_wstring(e.info.season) + L"x" + std::to_wstring(e.info.episode) + L",";
+        CHECK(order == L"1x1,1x2,1x3,2x1,");
+        CHECK(s.folder == L"D:\\TV\\Show");
+        CHECK(s.key == library::SearchFold(s.name));
+    }
+
+    CHECK(library::NextUp({}) == -1);
+    CHECK(library::NextUp({false, false}) == 0);
+    CHECK(library::NextUp({true, false, false}) == 1);
+    CHECK(library::NextUp({true, false, true, false}) == 3);  // after the last watched, not the skipped one
+    CHECK(library::NextUp({false, true}) == 0);                // the end is watched: the first gap
+    CHECK(library::NextUp({true, true}) == -1);
+}
+
 std::shared_ptr<const library::Snapshot> ScanAndWait(library::MediaLibrary& lib, DWORD timeoutMs = 20000) {
     constexpr UINT kMsg = WM_APP + 41;
     lib.SetNotifyWindow(MessageWindow(), kMsg);
@@ -3671,6 +3734,7 @@ const TestCase kTests[] = {
     {"bookmarks_favorites", TestBookmarksFavorites},
     {"media_types", TestMediaTypes},
     {"episodes_order", TestEpisodesAndOrder},
+    {"shows", TestShows},
     {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},
