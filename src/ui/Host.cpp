@@ -921,6 +921,13 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
         Widget* target = hit;
         while (target && !target->interactive) target = target->Parent();
         if (target && !target->IsEnabled()) target = nullptr;
+        // The second click of a double click whose first click went to another widget is used up:
+        // it was aimed at what that click replaced (a card's ▶ that started the video now under it).
+        if (e.button == MouseButton::Left) {
+            const bool stray = dbl && target != lastLeftDown_;
+            lastLeftDown_ = target;
+            if (stray) return;
+        }
 
         Widget* focusTarget = hit;
         while (focusTarget && !focusTarget->focusable) focusTarget = focusTarget->Parent();

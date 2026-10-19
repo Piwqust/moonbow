@@ -762,7 +762,7 @@ void Page::SortMedia(std::vector<const library::MediaItem*>& items, const std::s
 std::vector<Crumb> FolderCrumbs(const library::Snapshot& snap, Section section, const std::wstring& folder,
                                 const std::wstring& sectionRoot) {
     std::vector<Crumb> out;
-    out.push_back({Tr(SectionName(section)), Route{section, {}}});
+    out.push_back({Tr(SectionName(section)), Route{section, section == Section::Music ? LastMusicTab() : std::wstring()}});
     int idx = snap.FindFolder(folder);
     std::vector<Crumb> chain;
     for (int guard = 0; idx >= 0 && guard < 256; ++guard) {
@@ -1068,7 +1068,7 @@ public:
     RecentPage(Route r, bool compact) : Page(r, compact, "recent") {
         modes_ = false;
         list_ = true;
-        queueName_ = Tr(L"Recent");
+        queueName_ = Tr(L"History");
         if (!compact) {
             // The views as visible tabs, not hidden in "⋯" (the side panel keeps them in its menu).
             int current = 0;

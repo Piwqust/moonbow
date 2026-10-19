@@ -27,8 +27,6 @@ std::wstring Grouped(long long n);
 std::wstring CountSongs(long long n);
 std::wstring CountPlays(long long n);
 std::wstring CountAlbums(long long n);
-std::wstring CountArtists(long long n);   // "3 исполнителя"
-std::wstring CountGenres(long long n);    // "2 жанра"
 std::wstring CountStations(long long n);  // "5 станций"
 std::wstring CountEpisodes(long long n);  // "1 выпуск"
 // Tag labels for untagged songs: "Unknown artist" / "Unknown album".
@@ -117,7 +115,9 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
                     const std::wstring& placeholder = {});
 void ShowConfirm(const std::wstring& title, const std::wstring& text, const std::wstring& okText,
                  std::function<void()> done);
-void Toast(const std::wstring& text, const char* icon = "info");
+// With an action ("Undo") the toast stays 5 s and takes the click on its button.
+void Toast(const std::wstring& text, const char* icon = "info", const std::wstring& actionLabel = {},
+           std::function<void()> action = {});
 
 // --- small UI-state stores (ui.json) ------------------------------------------------------
 struct SavedStream {
@@ -135,5 +135,8 @@ std::wstring PlaylistImage(const library::Playlist& p);
 // "view.<key>" = grid|list, "sort.<key>" = <name>[:desc]
 bool ListModeFor(const std::string& key, bool fallbackList);
 void SetListModeFor(const std::string& key, bool list);
+// The Music tab opened last ("albums", "artists", "songs", "genres"): the route path that "Music"
+// leads to, so Back never lands on a page that shows whichever tab was used since.
+std::wstring LastMusicTab();
 
 }  // namespace app::lib

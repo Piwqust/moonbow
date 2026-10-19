@@ -203,7 +203,11 @@ public:
         Rebuild();
     }
 
-    std::vector<Crumb> Breadcrumbs() const override { return {{Tr(L"Home"), Route{Section::Home, {}}}}; }
+    // While searching, the header names what the page shows now: the results, not Home (UX-9).
+    std::vector<Crumb> Breadcrumbs() const override {
+        if (!filter_.empty()) return {{Fmt(Tr(L"Results: “{0}”"), {ShortQuery(filter_)}), Route{Section::Home, {}}}};
+        return {{Tr(L"Home"), Route{Section::Home, {}}}};
+    }
     long long ItemCount() const override { return count_; }
     void SetFilter(const std::wstring& text) override {
         searchDebounce_.Run(this, text, [this, text] {
@@ -246,6 +250,21 @@ public:
                 break;
             }
         InvalidateLayout();
+    }
+    // With nothing selected, Enter (and Space while nothing is loaded) resumes the first Continue
+    // Watching card, as Enter on that card does (UX-31).
+    bool OnKeyDown(const KeyEvent& e) override {
+        const bool space = e.key == VK_SPACE && !TheApp().player().State().fileLoaded;
+        if ((e.key != VK_RETURN && !space) || e.repeat || e.mods.ctrl || e.mods.alt || e.mods.shift || !filter_.empty() ||
+            !continue_->visible)
+            return false;
+        for (HomeSection* s : All())
+            if (s->visible && s->Grid()->Selected() >= 0) return false;
+        ItemGrid* g = continue_->Grid();
+        if (g->JustOpened() || g->Entries().empty()) return true;
+        g->Select(0, true);
+        if (g->onActivate) g->onActivate(0);
+        return true;
     }
     Widget* HitTest(float x, float y) override {
         auto* first = static_cast<ItemGrid*>(InitialFocus());

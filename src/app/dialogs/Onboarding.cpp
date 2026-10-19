@@ -538,7 +538,7 @@ private:
         };
         const Opt opts[] = {
             {"privacy.saveHistory", L"Remember what you play",
-             L"Keep a list of played files for Recent, Continue watching and Listen again."},
+             L"Keep a list of played files for History, Continue watching and Listen again."},
             {"privacy.rememberPosition", L"Continue where you left off",
              L"Save where you stopped and continue from there next time."},
             {"library.thumbnails", L"Show thumbnails", L"Use Windows thumbnails for videos and embedded covers for music."},

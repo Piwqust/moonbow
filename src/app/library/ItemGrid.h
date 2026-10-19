@@ -90,7 +90,8 @@ public:
     // under the cursor on the new page.
     bool JustOpened() const;
 
-    // Media plays on double click / Enter; categories and actions open on a single click.
+    // Media plays on a double click, Enter or a click on its card's ▶; folders, albums, artists,
+    // genres, playlists, categories and actions open on a single click.
     std::function<void(int)> onActivate;
     std::function<void(int, ui::Point)> onMenu;      // right click / menu key / "…" button
     std::function<void(int)> onDelete;               // Delete key
@@ -129,6 +130,7 @@ private:
     void PaintHeader(ui::Painter& p, int i, const ui::Rect& r);
     void PaintThumb(ui::Painter& p, const Entry& e, const ui::Rect& t, float radius, int iconSize, float opacity);
     ui::Rect MoreButtonRect(const ui::Rect& slot) const;
+    bool OnPlayButton(int index, float x, float y) const;  // over the ▶ of a media card
     ui::ScrollView* Scroller() const;
     int Navigate(int from, int dx, int dy) const;
     int DropIndexAt(float y) const;
@@ -160,6 +162,8 @@ private:
     float tipW_ = -1;
     int press_ = -1;
     ui::Point pressAt_;
+    bool pressPlay_ = false, pressMods_ = false;  // the press hit a card's ▶; Ctrl or Shift was held
+    bool hoverPlay_ = false;
     bool dragging_ = false;
     int dropAt_ = -1;
     uint64_t created_ = 0;
