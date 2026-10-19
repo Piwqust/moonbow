@@ -26,6 +26,9 @@ public:
     static bool TickAll(double nowMs);
     static bool AnyActive();
     static double Now();
+    // Windows "Animation effects" is off (Host reads it): every To() jumps to its target.
+    static void SetReducedMotion(bool on);
+    static bool ReducedMotion();
 
 private:
     void Step(double nowMs);

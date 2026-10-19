@@ -1473,14 +1473,14 @@ private:
         submenuTimer_ = 0;
         if (i >= 0 && !At(i).submenu.empty() && At(i).enabled) {
             timerHost_ = host;
-            submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i] {
+            submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i, fromKeyboard] {
                 submenuTimer_ = 0;
-                if (highlight_ == i) OpenSubmenu(i, false);
+                if (highlight_ == i) OpenSubmenu(i, false, !fromKeyboard);
             }) : 0;
         }
     }
 
-    void OpenSubmenu(int i, bool focus) {
+    void OpenSubmenu(int i, bool focus, bool animate = true) {
         Host* host = GetHost();
         if (!host || child_) return;
         auto sub = std::make_unique<MenuPopup>(At(i).submenu, 180.0f, this);
@@ -1490,6 +1490,7 @@ private:
         o.place = Place::Right;
         o.offset = 2;
         o.focusContent = focus;
+        o.animate = animate;
         o.onDismiss = [this, raw] {
             if (child_ == raw) child_ = nullptr;
         };

@@ -25,8 +25,28 @@ constexpr wchar_t kHostClass[] = L"LumenHost";
 constexpr UINT WM_APP_POST = WM_APP + 41;
 constexpr float kResizeBorder = 6.0f;
 constexpr UINT kTooltipDelayMs = 550;
+// Moving on from a shown tooltip within this time shows the next one at once, without the fade.
+constexpr double kTooltipWarmMs = 400;
 
 bool g_automation = false;
+bool g_inKey = false;  // a key message is being handled: popups it opens don't animate
+bool g_highContrast = false;
+bool g_systemRead = false;
+
+// Windows "Animation effects" and high contrast. --automation runs can't switch them (system
+// settings): the variables LUMEN_TEST_NO_ANIMATION / LUMEN_TEST_HIGH_CONTRAST stand in there.
+void ReadSystemSettings() {
+    g_systemRead = true;
+    BOOL animations = TRUE;
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0)) animations = TRUE;
+    HIGHCONTRASTW hc{sizeof(hc)};
+    g_highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) && (hc.dwFlags & HCF_HIGHCONTRASTON);
+    if (g_automation) {
+        if (GetEnvironmentVariableW(L"LUMEN_TEST_NO_ANIMATION", nullptr, 0)) animations = FALSE;
+        if (GetEnvironmentVariableW(L"LUMEN_TEST_HIGH_CONTRAST", nullptr, 0)) g_highContrast = true;
+    }
+    AnimFloat::SetReducedMotion(!animations);
+}
 
 std::vector<Host*>& Registry() {
     static std::vector<Host*> hosts;
@@ -121,6 +141,13 @@ void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
 
 void Host::SetAutomation(bool on) {
     g_automation = on;
+}
+
+std::function<void()> Host::onHighContrastChanged;
+
+bool Host::HighContrast() {
+    if (!g_systemRead) ReadSystemSettings();
+    return g_highContrast;
 }
 
 void Host::SetScaleOverride(float factor) {
@@ -288,6 +315,7 @@ void Host::Forget(Widget* w) {
 
 bool Host::Create(const HostOptions& options) {
     options_ = options;
+    if (!g_systemRead) ReadSystemSettings();
     HINSTANCE inst = GetModuleHandleW(nullptr);
     static bool registered = [inst] {
         WNDCLASSEXW wc{sizeof(wc)};
@@ -478,8 +506,10 @@ Widget* Host::ShowPopup(std::unique_ptr<Widget> content, const PopupOptions& opt
     popup.content->SetHost(this);
     popup.options = options;
     popup.previousFocus = focus_;
-    popup.appear = std::make_unique<AnimFloat>(options.animate ? 0.0f : 1.0f);
-    if (options.animate) popup.appear->To(1.0f, 140, Ease::Out);
+    // Opened with a key (Shift+F10, a shortcut, Enter on a menu button): there at once.
+    const bool animate = options.animate && !(g_inKey && !options.passthrough);
+    popup.appear = std::make_unique<AnimFloat>(animate ? 0.0f : 1.0f);
+    if (animate) popup.appear->To(1.0f, 140, Ease::Out);
     Widget* raw = popup.content.get();
     popups_.push_back(std::move(popup));
     PlacePopup(popups_.back());
@@ -868,8 +898,8 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             }
             if (!top.options.dismissOnOutside) break;
+            if (!(e.button == MouseButton::Left && ClicksThrough(top, x, y))) dismissed = true;
             ClosePopupAt(popups_.size() - 1);
-            dismissed = true;
         }
         if (dismissed && !inside) {
             if (e.button == MouseButton::Left) swallowedFor = hwnd_;
@@ -928,6 +958,13 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
             if (w->interactive && w->OnMouseUp(e)) break;
     }
     RequestRender();
+}
+
+bool Host::ClicksThrough(const Popup& popup, float x, float y) const {
+    if (!popup.options.clickThrough) return false;
+    Widget* w = HitTestAll(x, y);  // the popup is not under the point
+    while (w && !w->interactive) w = w->Parent();
+    return w && w->focusable && w->IsEnabled() && w != popup.previousFocus;
 }
 
 // --- keyboard -------------------------------------------------------------------------
@@ -1017,7 +1054,8 @@ void Host::UpdateTooltip() {
     tooltipFor_ = target;
     tooltipText_ = target->tooltip;
     tooltipRect_ = target->rect;
-    tooltipTimer_ = StartTimer(kTooltipDelayMs, [this] {
+    const bool warm = AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
+    tooltipTimer_ = StartTimer(warm ? USER_TIMER_MINIMUM : kTooltipDelayMs, [this, warm] {
         tooltipTimer_ = 0;
         if (!tooltipFor_ || hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
         PopupOptions o;
@@ -1034,6 +1072,7 @@ void Host::UpdateTooltip() {
         o.passthrough = true;
         o.focusContent = false;
         o.dismissOnOutside = false;
+        o.animate = !warm;
         auto bubble = std::make_unique<TooltipBubble>(tooltipText_);
         Size s = bubble->Measure(400, 200);
         if (r.w < 80 && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
@@ -1060,6 +1099,7 @@ void Host::HideTooltip() {
     if (tooltipWidget_) {
         Widget* w = tooltipWidget_;
         tooltipWidget_ = nullptr;
+        tooltipHiddenAt_ = AnimFloat::Now();
         ClosePopup(w);
     }
 }
@@ -1493,7 +1533,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
             if (msg == WM_SYSKEYDOWN && wp == VK_F4) break;
+            g_inKey = true;
             OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
+            g_inKey = false;
             if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
             return 0;
 
@@ -1563,6 +1605,14 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (!active_) HideTooltip();
             RequestRender();  // also restarts a focused text box's caret blink (TextBox::Paint)
             break;
+
+        case WM_SETTINGCHANGE: {
+            // Every top-level window gets it: the first one that sees the change tells the app.
+            const bool was = g_highContrast;
+            ReadSystemSettings();
+            if (g_highContrast != was && onHighContrastChanged) onHighContrastChanged();
+            break;
+        }
 
         case WM_ERASEBKGND:
             return 1;

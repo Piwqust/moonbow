@@ -201,6 +201,7 @@ void Open(Group g, int tab) {
     o.anchor = {o.anchor.Right() - 1, o.anchor.Bottom(), 1, 1};
     o.offset = 0;
     o.focusContent = true;
+    o.clickThrough = true;  // Pause or the sidebar act on the click that closes the panel
     o.onDismiss = [raw] {
         PanelState& s = S();
         if (s.pop != raw) return;
