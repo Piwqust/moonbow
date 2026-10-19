@@ -18,7 +18,8 @@
 #       [<state>...][ text="..."[ trunc][ clip][ overflow][ faded][ box=[x,y wxh]]]...[ tip="..."]
 #   Rects are window DIPs. <state> comes from Widget::DebugInfo: " scroll offset=Y/MAX"
 #   (ScrollView), " on"/" off" (Toggle), " checked", " selected=N", " value=V", " input",
-#   " empty" (TextBox showing its placeholder), " password", " readonly", " icon=<name>", " active".
+#   " empty" (TextBox showing its placeholder), " password", " readonly", " icon=<name>", " active",
+#   " dragging" (ItemGrid: a row is being reordered).
 #   text: every string the widget painted in this frame, in paint order; a widget that paints
 #   many items (grids, menus, lists) has several. Strings are escaped: \" \\ \n \r \t.
 #     trunc    natural one-line width exceeds the box it was drawn in (ellipsized or cut);
