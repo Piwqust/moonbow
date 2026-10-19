@@ -781,10 +781,10 @@ void App::Open(const std::vector<std::wstring>& paths) {
     PlayQueueItems(std::move(items), 0);
 }
 
-void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name) {
+void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name, bool showPlayer) {
     if (items.empty()) return;
     queue_.Set(std::move(items), index, std::move(name));
-    PlayIndex(queue_.Current());
+    PlayIndex(queue_.Current(), showPlayer);
 }
 
 void App::PlayIndex(int index, bool showPlayer) {

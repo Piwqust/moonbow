@@ -276,7 +276,9 @@ QueueItem MakeQueueItem(const std::wstring& path, const std::wstring& title, dou
 void PlayQueue(std::vector<QueueItem> items, int index, const std::wstring& name) {
     if (items.empty()) return;
     index = std::clamp(index, 0, static_cast<int>(items.size()) - 1);
-    TheApp().PlayQueueItems(std::move(items), index, name);
+    // Music plays on in the mini player and the page stays, as in Spotify; a video opens the player.
+    const bool song = library::KindOf(items[static_cast<size_t>(index)].path) == library::MediaKind::Audio;
+    TheApp().PlayQueueItems(std::move(items), index, name, !song);
 }
 
 void PlayNext(std::vector<QueueItem> items) {
