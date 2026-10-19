@@ -131,14 +131,6 @@ std::wstring CountAlbums(long long n) {
     return CountWith(n, L"album", L"albums", L"альбом", L"альбома", L"альбомов");
 }
 
-std::wstring CountArtists(long long n) {
-    return CountWith(n, L"artist", L"artists", L"исполнитель", L"исполнителя", L"исполнителей");
-}
-
-std::wstring CountGenres(long long n) {
-    return CountWith(n, L"genre", L"genres", L"жанр", L"жанра", L"жанров");
-}
-
 std::wstring CountStations(long long n) {
     return CountWith(n, L"station", L"stations", L"станция", L"станции", L"станций");
 }

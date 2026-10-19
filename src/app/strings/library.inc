@@ -118,7 +118,6 @@
 {L"Unknown artist", L"Неизвестный исполнитель"},
 {L"Unknown genre", L"Без жанра"},
 {L"Various artists", L"Разные исполнители"},
-{L"Reading tags…", L"Читаем теги…"},
 {L"Disc {0}", L"Диск {0}"},
 {L"Details", L"Сведения"},
 {L"Last played", L"Последний раз"},

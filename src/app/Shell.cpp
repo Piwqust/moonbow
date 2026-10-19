@@ -31,7 +31,7 @@ public:
         // video; the library's own sidebar also switches the window to the library.
         onClick = [this] {
             if (!owner_->InPlayer()) TheApp().ShowPlayer(false);
-            TheApp().Navigate(Route{section_, {}});
+            TheApp().Navigate(Route{section_, section_ == Section::Music ? lib::LastMusicTab() : std::wstring()});
         };
     }
     bool Selected() const {
