@@ -829,6 +829,8 @@ void BuildApp(Builder& b) {
               L"изменении файла.")
         .When("interface.customSkin", "true")
         .Group("skin");
+    // Set when a skin is picked in Settings: Windows high contrast then leaves even "Lumen" alone.
+    b.Toggle("interface.skinPicked", L"Skin picked by the user", L"Скин выбран вручную", false).Hidden();
 
     b.Sec("window", L"Window", L"Окно");
     b.Toggle("interface.embedVideo", L"Play video inside main window", L"Показывать видео в главном окне", true)

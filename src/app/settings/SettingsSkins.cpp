@@ -140,6 +140,7 @@ public:
         }
         const auto& builtins = Skins::Get().Builtins();
         if (index < 0 || index >= static_cast<int>(builtins.size())) return;
+        c.SetBool("interface.skinPicked", true);
         c.SetString("interface.skin", builtins[static_cast<size_t>(index)].id);
         c.SetBool("interface.customSkin", false);
     }
