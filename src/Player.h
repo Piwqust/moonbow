@@ -136,6 +136,8 @@ public:
     // aid/sid/secondary-sid), counted per kind: 0 audio, 1 subtitles, 2 secondary subtitles.
     // `quiet` picks are Lumen's own (restoring or carrying a choice): not counted.
     uint32_t TrackChoices(int kind) const { return kind >= 0 && kind < 3 ? trackChoices_[kind] : 0; }
+    // Runs with each counted choice ("aid", "sid", "secondary-sid"): the message naming the track.
+    std::function<void(const char* prop)> onTrackChoice;
 
     // Plays `path` from its watch-later resume point, if any.
     void Open(const std::wstring& path);

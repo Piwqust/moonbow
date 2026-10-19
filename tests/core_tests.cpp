@@ -1660,6 +1660,10 @@ void TestPlayerEpisodes() {
     CHECK(ep::DisplayName(L"D:\\TV\\Show - 1x02 - Pilot.mkv") == L"Show · Pilot");
     CHECK(ep::DisplayName(L"D:\\TV\\S01E02.mkv").empty());
     CHECK(ep::DisplayName(L"D:\\TV\\Movie.mkv") == L"Movie");
+    // The window title of an episode.
+    CHECK(ep::Title(L"D:\\TV\\Show S01\\Show S01E02.mkv") == L"Show — S01E02");
+    CHECK(ep::Title(L"D:\\TV\\S01E02.mkv") == L"S01E02");
+    CHECK(ep::Title(L"D:\\TV\\Movie.mkv").empty());
 
     CHECK(ep::KindOf(L"Opening") == ep::ChapterKind::Intro);
     CHECK(ep::KindOf(L"OP1") == ep::ChapterKind::Intro);

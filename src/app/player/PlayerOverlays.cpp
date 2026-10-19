@@ -435,7 +435,7 @@ void NextEpisodeCard::SetWanted(bool wanted) {
 void NextEpisodeCard::OnPlayer(unsigned m) {
     const PlayerState& s = PS();
     if (s.fileLoaded && s.loadSerial != serial_) OnNewFile();
-    if (m & kChangeTracks) CarryLanguages();
+    if (m & (kChangeTracks | kChangeFile)) CarryLanguages();
     if (m & (kChangeTime | kChangeChapters | kChangeState | kChangeFile | kChangeError)) Update();
     if (m & kChangeEnd) OnEnded();
 }
@@ -554,8 +554,9 @@ std::wstring ShowKey(const std::wstring& path) {
 
 void NextEpisodeCard::CarryLanguages() {
     const PlayerState& s = PS();
-    if (!s.fileLoaded || s.tracks.empty() || s.path.empty()) return;
     Player& p = TheApp().player();
+    // Not while the next file is still loading: its track list and per-file settings aren't there yet.
+    if (!p.FileSettled() || (p.confirmTracks && !p.TracksConfirmed()) || s.tracks.empty() || s.path.empty()) return;
     const std::wstring show = ShowKey(s.path);
     if (s.path != carryPath_) {
         const bool next = !carryPath_.empty() && episodes::IsNext(carryPath_, s.path);
@@ -583,21 +584,32 @@ void NextEpisodeCard::CarryLanguages() {
                 }
                 return best;
             };
-            if (!audioLang_.empty())
-                if (const Track* t = pick(L"audio", audioLang_, audioTitle_); t && !t->selected) p.SetTrack("aid", t->id, true);
+            const Track* audio = audioLang_.empty() ? nullptr : pick(L"audio", audioLang_, audioTitle_);
+            if (audio && !audio->selected) p.SetTrack("aid", audio->id, true);
             bool anySub = false, subSelected = false;
             for (const Track& t : s.tracks)
                 if (t.type == L"sub") {
                     anySub = true;
                     subSelected |= t.selected;
                 }
-            if (hadSubs_ && anySub) {
-                if (subsOff_) {
-                    if (subSelected) p.SetTrack("sid", 0, true);
-                } else if (!subLang_.empty()) {
-                    if (const Track* t = pick(L"sub", subLang_, subTitle_); t && !t->selected) p.SetTrack("sid", t->id, true);
-                }
+            const Track* sub = nullptr;
+            const bool subOff = hadSubs_ && anySub && subsOff_;
+            if (subOff && subSelected) p.SetTrack("sid", 0, true);
+            if (hadSubs_ && anySub && !subsOff_ && !subLang_.empty()) {
+                sub = pick(L"sub", subLang_, subTitle_);
+                if (sub && !sub->selected) p.SetTrack("sid", sub->id, true);
             }
+            // "S01E02 · Audio and subtitles: Russian": what the episode got from the one before.
+            const std::wstring sound = audio ? LanguageName(audio->lang) : L"";
+            const std::wstring text = subOff ? std::wstring(Tr(L"off")) : sub ? LanguageName(sub->lang) : L"";
+            std::wstring what;
+            if (!sound.empty() && sound == text) {
+                what = Fmt(Tr(L"Audio and subtitles: {0}"), {sound});
+            } else {
+                if (!sound.empty()) what = Fmt(Tr(L"Audio: {0}"), {sound});
+                if (!text.empty()) what += (what.empty() ? L"" : L" · ") + Fmt(Tr(L"Subtitles: {0}"), {text});
+            }
+            if (!what.empty()) ShowOsd(episodes::Label(episodes::Parse(s.path)) + L" · " + what, "audio");
             return;  // the choice we just made comes back as the next track-list change
         }
     }

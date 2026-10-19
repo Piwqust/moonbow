@@ -790,6 +790,7 @@ void Player::CountTrackChoice(const char* prop) {
     if (p == "aid") ++trackChoices_[0];
     if (p == "sid") ++trackChoices_[1];
     if (p == "secondary-sid") ++trackChoices_[2];
+    if (onTrackChoice && (p == "aid" || p == "sid" || p == "secondary-sid")) onTrackChoice(prop);
 }
 
 void Player::SetTrack(const char* prop, int64_t id, bool quiet) {

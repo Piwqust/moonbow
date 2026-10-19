@@ -106,6 +106,15 @@ inline std::wstring DisplayName(const std::wstring& path) {
     return show + L" · " + title;
 }
 
+// "Show — S01E02": an episode as the window title and the messages name it (a container's title
+// tag rarely says which episode it is); empty when `path` is not an episode.
+inline std::wstring Title(const std::wstring& path) {
+    const Episode e = Parse(path);
+    if (!e.Valid()) return {};
+    const std::wstring name = DisplayName(path);
+    return name.empty() ? Label(e) : name + L" — " + Label(e);
+}
+
 enum class ChapterKind { Other, Intro, Credits };
 
 // Chapter titles such as "Opening", "Intro", "OP", "OP1", "Заставка" (intro) or "Credits",

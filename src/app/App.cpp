@@ -433,6 +433,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     // MpvOptions already expands general.extraOptions (quotes, --no-x) and puts it last.
     player_.SetStartOptions(MpvOptions(config_));
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
+    player_.onTrackChoice = OnTrackChoice;
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
     // Stores and the library scan load after the window is up.

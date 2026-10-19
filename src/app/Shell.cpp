@@ -7,6 +7,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
+#include "app/player/Episodes.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/PlayerView.h"
 #include "gfx/Icons.h"
@@ -218,6 +219,7 @@ void TitleBar::Refresh() {
         if (dot != std::wstring::npos && dot > 0) title.resize(dot);
     }
     if (media && !tags.artist.empty() && !s.hasVideo) title += L" · " + tags.artist;
+    if (std::wstring episode = media ? episodes::Title(item->path) : std::wstring(); !episode.empty()) title = episode;
     if (!app.config().GetBool("interface.titleFileName")) title.clear();
     title_->SetText(title.empty() ? L"Lumen" : title);
     std::wstring caption = title.empty() ? L"Lumen" : title + L" — Lumen";
