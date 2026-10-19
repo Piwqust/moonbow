@@ -51,7 +51,7 @@
 {L"Drag files into the box or click here to select files.", L"Перетащите файлы сюда или нажмите, чтобы выбрать."},
 {L"{0} selected · click to add more", L"Выбрано: {0} · нажмите, чтобы добавить ещё"},
 {L"Also add the current queue ({0})", L"Добавить текущую очередь ({0})"},
-{L"Playlist created", L"Плейлист создан"},
+{L"Playlist “{0}” created", L"Плейлист «{0}» создан"},
 // --- media information
 {L"Media Information", L"Сведения о файле"},
 {L"Nothing is playing. Open a file to see its properties.", L"Сейчас ничего не воспроизводится. Откройте файл, чтобы увидеть его свойства."},
