@@ -229,6 +229,7 @@ private:
     Widget* hot_ = nullptr;
     Widget* pressed_ = nullptr;
     Widget* capture_ = nullptr;
+    Widget* lastLeftDown_ = nullptr;  // target of the last left press, only compared (may be gone)
     Widget* focus_ = nullptr;
     bool focusVisible_ = false;
     Point mouse_{-1, -1};
