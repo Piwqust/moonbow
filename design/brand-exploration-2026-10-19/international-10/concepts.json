@@ -1,0 +1,213 @@
+{
+  "created": "2026-10-19",
+  "brief": "10 genuinely different international player brands, shown in real interface context",
+  "attributes": [
+    "memorable spoken name",
+    "clear titlebar and app-icon presence",
+    "distinct symbolic idea",
+    "video and music equally supported",
+    "scalable beyond current Windows app"
+  ],
+  "concepts": [
+    {
+      "id": "plover",
+      "name": "Plover",
+      "ru": "Плавер",
+      "territory": "Персонаж",
+      "framework": "character-mascot",
+      "abstraction": "conceptual",
+      "typicality": 0.08,
+      "idea": "Небольшая птица с узнаваемым силуэтом: дружелюбный софт, который остаётся привычным спутником.",
+      "palette": [
+        "#F8E77E",
+        "#1E3432",
+        "#FFFEF2"
+      ],
+      "wordmark": "custom friendly lowercase rounded sans, tight even spacing, soft open p and e",
+      "mark": "a tiny plover shorebird in profile reduced to THREE bold flat shapes: oval body, long single leg, short pointed beak; a cut in the body becomes the letter p; absolutely NOT owl, fox, play triangle or generic social-media bird",
+      "ui": "sunny pale-yellow chrome, deep pine typography and neutral white content, compact left navigation with rounded active rows; warm rounded 12px thumbnails; a compact right Now playing panel showing track cover and controls, two wide Continue watching cards and a short row of albums; one small bird silhouette in the title bar and empty-state only, no mascot invasion",
+      "composition": "left vertical sun-yellow identity strip takes 24 percent, main app straight-on to its right takes 72 percent; small icon specimens and wordmark in strip, unusually warm approachable utilitarian software",
+      "risk": "Есть одноимённая программа стенографии Plover; требует проверки сходства."
+    },
+    {
+      "id": "twill",
+      "name": "Twill",
+      "ru": "Твилл",
+      "territory": "Материал",
+      "framework": "macro-texture",
+      "abstraction": "abstract",
+      "typicality": 0.06,
+      "idea": "Переплетение двух полос: видео и музыка собираются в одну систему.",
+      "palette": [
+        "#F5F6F1",
+        "#243FCC",
+        "#20211F"
+      ],
+      "wordmark": "a compact custom lowercase grotesk with interlocked double-l terminal; editorial Swiss typography, square dots",
+      "mark": "two interlaced solid flat bands, one horizontal and one diagonal, making an original compact woven T glyph, only three pieces, readable in one colour; no checkerboard optical illusion",
+      "ui": "chalk white and ultramarine flat precise desktop UI; top horizontal text tabs Home Videos Music Network Playlists Recent instead of tall sidebar; a strict two-column home showing Continue watching left and Listen again right; modest 3px corner cards, visible horizontal alignment rules, crisp typographic hierarchy and short album track list below; small woven diagonal motif only in selected tab and no-cover thumbnail; ultra restrained blue controls",
+      "composition": "large lowercase wordmark at top left, thin horizontal woven motif along top edge; app occupies central 84 percent width and most height, narrow specimen footer; cool modernist graphic design",
+      "risk": "Twill уже используется CMS и другими компаниями; точный медиаплеер в проверенных результатах не найден."
+    },
+    {
+      "id": "quince",
+      "name": "Quince",
+      "ru": "Квинс",
+      "territory": "Предмет и вкус",
+      "framework": "metaphor-object",
+      "abstraction": "conceptual",
+      "typicality": 0.04,
+      "idea": "Одно конкретное необычное слово и запоминающийся Q, как у самостоятельного потребительского бренда.",
+      "palette": [
+        "#F3AD39",
+        "#3B2334",
+        "#FBF3DF"
+      ],
+      "wordmark": "wide soft lowercase geometric sans with an unmistakable open-tail q and circular i dot; bold but no bubble lettering",
+      "mark": "a flat graphic cross-section of a quince fruit: one rounded asymmetrical ring with ONE small offset seed; the open lower-right notch creates a Q tail, deliberately solid and simple, not a play button or orange slice clipart",
+      "ui": "warm ivory main content with aubergine compact sidebar and a very restrained quince-yellow active strip; a single landscape Continue watching tile on left with title aligned beside, small upcoming episode row below, square album strip on right; 16px soft rounded cards, comfortable distinct grouped controls; playback bar ivory with aubergine play and a yellow progress dot",
+      "composition": "aubergine cover field above the app with one oversized small-fruit Q symbol beside exact name; use warm daylight colour with flat vector design, app fills lower 70 percent, tiny icon at lower right, cheerful but adult",
+      "risk": "Есть одноимённый проект музыкального анализа и другие бренды; произношение на слух менее очевидно."
+    },
+    {
+      "id": "cairn",
+      "name": "Cairn",
+      "ru": "Кэрн",
+      "territory": "Ориентир и порядок",
+      "framework": "pattern-rhythm",
+      "abstraction": "abstract",
+      "typicality": 0.06,
+      "idea": "Несколько простых элементов складываются в устойчивый ориентир: порядок в собственной медиатеке.",
+      "palette": [
+        "#DCDCD5",
+        "#333A3A",
+        "#B95C3F"
+      ],
+      "wordmark": "restrained uppercase custom humanist sans with broad C and quiet wide spacing, serious utilitarian identity",
+      "mark": "THREE differently sized flat horizontal stone-like lozenges stacked with deliberate slight lateral offset, one open notch aligns into a subtle C negative space; no zen spa illustration or pyramid of many stones",
+      "ui": "matte warm-grey native utility app, left navigation slim with text, main area an orderly combination of wide video row and detailed music rows with album, artist and duration; a right selected-item details pane and understated terracotta Play; 2px radii, substantial whitespace between groups rather than giant cards, clear file-library precision, no dashboard numbers",
+      "composition": "asymmetric large type CAIRN at upper right and stone mark upper left; app in lower 76 percent against a graphite outer field, three flat material swatches alongside; architectural and sturdy without concrete photo effects",
+      "risk": "Cairn используется играми и другими программами; сложнее записать на слух."
+    },
+    {
+      "id": "venn",
+      "name": "Venn",
+      "ru": "Венн",
+      "territory": "Геометрия и объединение",
+      "framework": "geometric-composition",
+      "abstraction": "abstract",
+      "typicality": 0.18,
+      "idea": "Два мира — изображение и звук — с общим пространством управления.",
+      "palette": [
+        "#F4F7FC",
+        "#254BC4",
+        "#152753"
+      ],
+      "wordmark": "custom lowcase geometric sans, sharply cut v and matched nn arches, no science-fiction cuts",
+      "mark": "two offset flat circular discs with a crisp square aperture cut from their intersection, the negative space reads as a tiny screen; compact asymmetrical icon, no multicolour overlapping SaaS blobs and no Mastercard imitation",
+      "ui": "pale porcelain desktop with a 52px icon rail on left and a strong centred dual-column home: Videos with two wide thumbnails on left, Music with two album cards and compact list on right; shared slim top search and category switcher, deep-navy text, cobalt active icon; 8px controlled radii, restrained light-blue surfaces and native short control bar",
+      "composition": "oversized clean wordmark aligned left above app, geometric circular symbol to right, ultra-white technical product sheet; app fills 78 percent of canvas, lower micro specimens on blue strip",
+      "risk": "Venn уже используется несколькими программными компаниями; требуется отдельная проверка имени."
+    },
+    {
+      "id": "attic",
+      "name": "Attic",
+      "ru": "Аттик",
+      "territory": "Место и коллекция",
+      "framework": "architectural-space",
+      "abstraction": "conceptual",
+      "typicality": 0.1,
+      "idea": "Своя комната с фильмами, музыкой и находками — медиа как личная коллекция.",
+      "palette": [
+        "#D2E0E9",
+        "#213B4B",
+        "#C14E3D"
+      ],
+      "wordmark": "compact slab-serif lowercase wordmark, modest crafted a and double t like two beams, contemporary archive rather than fake vintage",
+      "mark": "a simple open gable-roof outline above two filled small horizontal drawers, negative space forms a compact lowercase a; flat icon with generous gaps, NOT a generic house real-estate logo",
+      "ui": "powder-blue and dark-ink desktop library inspired by an organized archive; broad left collection navigation with folder breadcrumbs; main content organized in low horizontal shelf groups Continue watching and Albums rather than streaming recommendation cards; two detailed media rows then a four-album shelf; right narrow recently opened list; brick-red selection and small square play, quiet off-white display surfaces, subtle 4px corner details",
+      "composition": "gallery-like archival specimen: giant lowercase attic in ink on pale blue at top, app below spanning almost full width; sparse drawer-symbol border on left only; grown-up editorial, no papers or stationery mockups",
+      "risk": "Attic — распространённое слово, есть одноимённые программы и медиапроекты; не считать уникальным."
+    },
+    {
+      "id": "fika",
+      "name": "Fika",
+      "ru": "Фика",
+      "territory": "Ритуал и пауза",
+      "framework": "flat-lay",
+      "abstraction": "literal",
+      "typicality": 0.07,
+      "idea": "Приложение для привычного момента отдыха; простое короткое слово без привязки к формату файла.",
+      "palette": [
+        "#F4EEE7",
+        "#7A2E43",
+        "#DDA4A3"
+      ],
+      "wordmark": "large friendly lowercase soft-serif wordmark with compact f-i ligature and a distinctive rounded k; no script calligraphy",
+      "mark": "one solid rounded cup-like silhouette whose open handle is a circular paused moment; two clean vertical negative-space slits inside hint at pause WITHOUT making a generic coffee-shop pictogram, simple F silhouette overall",
+      "ui": "warm off-white desktop home, oxblood accents and neutral charcoal text; horizontal top-level text navigation; a generous Continue watching feature on left with movie title and resume time, on right a tidy vertical playlist/album queue; music covers in a lower row; subtly separated regions rather than many nested cards; 10px radii, spacious but efficient, compact rounded bottom controls with maroon play; no wellness claims or cups inside every menu",
+      "composition": "warm rose identity header with large fika and single solid cup-pause symbol; straight-on app fills most image with a small dark-theme mini-player specimen below as an auxiliary identity application; no literal coffee photography",
+      "risk": "Fika занято приложениями в других категориях; название культурно связано со шведским перерывом на кофе."
+    },
+    {
+      "id": "oddly",
+      "name": "Oddly",
+      "ru": "Одли",
+      "territory": "Характер и типографика",
+      "framework": "typographic-image",
+      "abstraction": "conceptual",
+      "typicality": 0.08,
+      "idea": "Одна намеренная странность в строгой системе: приложение с характером, а не безликая оболочка.",
+      "palette": [
+        "#E2F34A",
+        "#171B18",
+        "#F4F5ED"
+      ],
+      "wordmark": "bold lowercase grotesk; the first o is a nearly circular shape tilted exactly 12 degrees with a tiny square cut, remaining letters straight and precise; distinctive but readable",
+      "mark": "the custom tilted o with one tiny square notch and one offset circular pupil; a single friendly odd eye silhouette, monochrome, no monster face, no generic sparkle",
+      "ui": "ink-black left icon rail, electric-citron compact header strip and chalk content, crisp editorial asymmetry; wide Continue watching cards across upper content, precise album/track list below with one large cover on right, extremely clear original software navigation, bold section typography and very restrained 6px radii; black Play button on citron small control; no neon glow, gradients, brutalist unreadability or hacker-terminal labels",
+      "composition": "an enormous cropped but still fully readable exact word oddly occupies the top 18 percent; off-centre o icon near app title; app fills the remaining canvas; mischievous international cultural-software identity",
+      "risk": "Обычное английское наречие; поиск будет шумным, есть другие проекты с этим словом."
+    },
+    {
+      "id": "sundog",
+      "name": "Sundog",
+      "ru": "Сандог",
+      "territory": "Оптика и свет",
+      "framework": "silhouette-light",
+      "abstraction": "abstract",
+      "typicality": 0.06,
+      "idea": "Редкое световое явление плюс легко воображаемое имя: свой знак можно запомнить отдельно от плеера.",
+      "palette": [
+        "#1C3D96",
+        "#FFCB45",
+        "#EDF2F7"
+      ],
+      "wordmark": "open lowercase rounded grotesk with a very recognisable broad s and short g, no comic font",
+      "mark": "one large flat sun disc with TWO much smaller square side reflections at the same horizontal level, inside an open square frame; a very compact optical emblem, not a sunburst, not firefox, not dog clipart and no glow",
+      "ui": "cobalt-blue top chrome and navigation, neutral graphite VIDEO surface only, light icy main library; top text navigation and a large landscape Continue watching card with restrained queue on its right, film thumbnails in a lower horizontal row and a compact music listening strip; sunflower small play dot and active tab underline, wide quiet spacing and 8px radii, no blue tint over media content",
+      "composition": "strong cobalt identity field with sunflower emblem and wordmark; screen slightly lower left but straight-on, small icon and monochrome symbol to right; clean modern colour-block advertising system, not a generic cosmic gradient",
+      "risk": "Sundog используется компаниями и музыкальным ПО; короткий поиск не заменяет проверку прав."
+    },
+    {
+      "id": "whirr",
+      "name": "Whirr",
+      "ru": "Вирр",
+      "territory": "Механика и движение",
+      "framework": "cutaway",
+      "abstraction": "literal",
+      "typicality": 0.05,
+      "idea": "Короткое звукоподражание вращению: механический характер без ретро-скина всего приложения.",
+      "palette": [
+        "#D4D9D4",
+        "#173F32",
+        "#E8E88E"
+      ],
+      "wordmark": "distinct custom lowercase mechanical sans with repeating rr shoulders, compact and slightly condensed; use monospace only for small timecodes",
+      "mark": "two open offset circular reel arcs joined by a single horizontal bridge forming a small angular w; only TWO arcs and one bridge, no filmstrip holes or complex cassette illustration; one-colour readability",
+      "ui": "matte pale-silver desktop with signal-green controls, a narrow left library rail plus generous central media list, one large playing album cover in the right inspector with FOUR readable lyric lines, wide film strip at bottom so video is equally visible; flat 2px corner controls, small circular playback buttons with precise separators, useful metadata and no fake engineering gauges or charts; deep forest-green active row, pale citron tiny progress handle",
+      "composition": "industrial flat product specimen, top-left exact word whirr in forest green, large open-reel mark to its right; dominant app window below, narrow pale-silver icon size strip at footer; analogue inspiration translated to modern software, no skeuomorphic brushed-metal textures",
+      "risk": "Неочевидная запись на слух и совпадение с названием музыкальной группы; проверка имени предварительная."
+    }
+  ]
+}
