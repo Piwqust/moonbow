@@ -12,7 +12,7 @@
 # Format (v2). First line of every window:
 #   === window title="..." client=WxH scale=S theme=dark|light fullscreen=0|1 maximized=0|1 hwnd=N main=0|1 dpi=D revealed=0|1
 #   (client in DIPs; scale = DIP-to-pixel factor incl. --scale; dpi = the monitor's real DPI;
-#   revealed = a user would see the window now: its first complete frame is up, Host::Reveal)
+#   revealed = a user would see the window now: its first GPU frame is up, Host::Reveal; its content fades in after it)
 # Then one line per widget, two spaces of indent per depth, popups after "--- popup":
 #   <indent><Type>[ #id] [x,y wxh][ hidden][ disabled][ interactive][ focus][ hot][ pressed]
 #       [<state>...][ text="..."[ trunc][ clip][ overflow][ faded][ box=[x,y wxh]]]...[ tip="..."]

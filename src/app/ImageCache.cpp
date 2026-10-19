@@ -127,8 +127,8 @@ void ImageCache::EndFrame() {
 
 void ImageCache::OnCompleted() {
     bool any = false;
-    // Before the window is revealed an answer is simply there in its first frame.
-    const bool onScreen = TheApp().main() && TheApp().main()->Revealed();
+    // Before the window's content shows an answer is simply there when it fades in.
+    const bool onScreen = TheApp().main() && TheApp().main()->ContentShown();
     for (auto it = fades_.begin(); it != fades_.end();)
         it = it->second->Active() ? std::next(it) : fades_.erase(it);
     for (const library::ThumbnailResult& r : thumbs_.TakeCompleted()) {

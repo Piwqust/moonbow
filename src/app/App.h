@@ -126,9 +126,12 @@ public:
     // first frame (and a song's cover is decoded), at most kPlayerHoldMs, then the player comes
     // in one step instead of an empty black player first. The player is laid out meanwhile.
     bool PlayerPending() const { return playerPending_; }
+    // The file the pending player opens, once the wait is long enough to be noticed (150 ms): the
+    // clicked card or row shows it pressed until the player comes. Empty otherwise.
+    std::wstring SlowOpeningPath() const;
     // The pending player has what its first frame needs: shows it (also called every frame).
     void CheckPlayerHold();
-    // MainWindow::ReadyToReveal: the first screen is complete (stores loaded, its images
+    // MainWindow::ContentReady: the first screen is complete (stores loaded, its images
     // decoded, a file given at launch showing).
     bool FirstScreenReady() const;
     bool OpensFileAtStart() const { return !pendingOpen_.empty() || pendingIndex_ >= 0 || playerPending_; }
@@ -213,6 +216,7 @@ private:
     bool playerPending_ = false;
     uint64_t holdSerial_ = 0;      // PlayerState::loadSerial when the hold began: a newer file ends it
     UINT_PTR holdTimer_ = 0;
+    double holdStart_ = 0;         // AnimFloat::Now() when the hold began
     bool started_ = false;         // Run has loaded the stores
     bool libraryShown_ = false;    // the pages got the first scan results
     std::wstring failedPath_, failedError_;

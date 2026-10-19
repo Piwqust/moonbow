@@ -371,11 +371,11 @@ void MainWindow::OnFramePainted() {
     TheApp().images().EndFrame();
 }
 
-bool MainWindow::ReadyToReveal() {
+bool MainWindow::ContentReady() {
     return TheApp().FirstScreenReady();
 }
 
-UINT MainWindow::RevealCapMs() {
+UINT MainWindow::ContentCapMs() {
     return TheApp().OpensFileAtStart() ? 700 : 400;
 }
 
@@ -446,6 +446,8 @@ void MainWindow::PaintBackground(Painter& p) {
     p.Fill({0, b, client.w, client.h - b}, bg);
     p.Fill({0, t, l, b - t}, bg);
     p.Fill({r, t, client.w - r, b - t}, bg);
+    // The picture fades in with the rest of the window's first content.
+    if (const float k = ContentAppear(); k < 1) p.Fill({l, t, r - l, b - t}, bg.Fade(1 - k));
 }
 
 void MainWindow::PaintSkeleton(HDC dc) {

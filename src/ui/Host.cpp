@@ -369,8 +369,8 @@ bool Host::Create(const HostOptions& options) {
     hwnd_ = CreateWindowExW(exStyle, kHostClass, options.title.c_str(), style, x, y, w, h, options.owner, nullptr,
                             inst, this);
     if (!hwnd_) return false;
-    // Cloaked until Reveal: DWM would show the window blank (or the GDI skeleton) until the
-    // first frame, then the UI popping in. --automation windows stay cloaked for good.
+    // Cloaked until its first GPU frame (Reveal), a frame or two after the show: DWM would show
+    // it blank or with the GDI skeleton first. --automation windows stay cloaked for good.
     const BOOL cloak = TRUE;
     DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     // A window opens at its monitor's DPI without a WM_DPICHANGED (Settings over a main window on
@@ -436,8 +436,6 @@ void Host::Show(int cmd) {
 void Host::Reveal() {
     if (revealed_ || !hwnd_) return;
     revealed_ = true;
-    if (revealTimer_) CancelTimer(revealTimer_);
-    revealTimer_ = 0;
     if (!g_automation) {
         // Uncloaked only once DWM has the presented frame, so it is the first thing composed.
         if (gpuPainted_) DwmFlush();
@@ -445,7 +443,19 @@ void Host::Reveal() {
         DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     }
     SetPropW(hwnd_, kRevealedProp, reinterpret_cast<HANDLE>(1));
-    if (options_.mainWindow) Trace(revealDue_ ? "revealed (cap reached)" : "revealed");
+    if (options_.mainWindow) Trace(gpuPainted_ ? "revealed" : "revealed (no frame yet)");
+}
+
+void Host::ShowContent() {
+    if (contentShown_) return;
+    contentShown_ = true;
+    if (contentTimer_) CancelTimer(contentTimer_);
+    contentTimer_ = 0;
+    // One calm appearance from the background instead of the UI popping in (instant with
+    // reduced motion: To jumps).
+    contentAppear_.To(1.0f, 140, Ease::Out);
+    RequestRender();
+    if (options_.mainWindow) Trace(contentDue_ ? "content shown (cap reached)" : "content shown");
 }
 
 void Host::Close() {
@@ -784,6 +794,13 @@ void Host::Render() {
         Painter p(ctx);
         if (texts) p.RecordText(texts);
         PaintBackground(p);
+        // Drawn unseen until ContentShown: its layout runs and its images are asked for. A layer,
+        // not the painter's opacity: the whole frame fades as one, overlapping parts don't show through.
+        const float appear = contentAppear_.Get();
+        if (appear < 1)
+            ctx->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                  D2D1::IdentityMatrix(), appear),
+                           nullptr);
         if (root_) root_->PaintTree(p);
         const Size client = ClientSize();
         for (Popup& popup : popups_) {
@@ -797,6 +814,7 @@ void Host::Render() {
             p.PopOpacity();
         }
         PaintDropOverlay(p);
+        if (appear < 1) ctx->PopLayer();
     }
     OnFramePainted();
     if (texts) a11y::TextsPainted(*texts);
@@ -805,7 +823,8 @@ void Host::Render() {
         if (!gpuPainted_) Trace("first frame");
         gpuPainted_ = true;
         // Posted startup work (the fit into the work area) runs first: no resize after the reveal.
-        if (!revealed_ && (revealDue_ || (revealTimer_ && posted_.empty() && ReadyToReveal()))) Reveal();
+        if (!revealed_ && posted_.empty() && IsWindowVisible(hwnd_)) Reveal();
+        if (revealed_ && !contentShown_ && (contentDue_ || ContentReady())) ShowContent();
     } else {
         RequestLayout();
     }
@@ -1246,8 +1265,9 @@ void AppendText(std::string& out, const TextRecord& t, const Rect& owner) {
 }  // namespace
 
 bool Host::Idle() const {
+    // A shown window whose content has not come yet is still a plain background.
     return hwnd_ && !layoutDirty_ && !renderPending_ && posted_.empty() && workIds_.empty() &&
-           !AnimFloat::AnyActive();
+           !AnimFloat::AnyActive() && (contentShown_ || !IsWindowVisible(hwnd_));
 }
 
 void Host::DumpTree(const std::wstring& path) {
@@ -1365,12 +1385,12 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
     switch (msg) {
         case WM_SHOWWINDOW:
-            if (wp && !revealed_ && !revealTimer_ && !revealDue_) {
-                revealTimer_ = StartTimer(RevealCapMs(), [this] {
-                    revealTimer_ = 0;
-                    revealDue_ = true;
-                    // Not drawn yet (no device): the next frame reveals it.
-                    if (gpuPainted_ || IsIconic(hwnd_)) Reveal();
+            if (wp && !contentShown_ && !contentTimer_ && !contentDue_) {
+                contentTimer_ = StartTimer(ContentCapMs(), [this] {
+                    contentTimer_ = 0;
+                    contentDue_ = true;
+                    Reveal();  // no frame yet (a slow device): the GDI skeleton shows meanwhile
+                    if (gpuPainted_ || IsIconic(hwnd_)) ShowContent();
                 });
             }
             // First show, after a restored placement too (App::RestoreWindowPlacement shows the
@@ -1750,7 +1770,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             std::vector<std::function<void()>> tasks;
             tasks.swap(posted_);
             for (auto& t : tasks) t();
-            if (!revealed_ && revealTimer_) RequestRender();  // the frame that can reveal it now
+            if (!revealed_ && gpuPainted_) RequestRender();  // the frame that can reveal it now
             return 0;
         }
 
