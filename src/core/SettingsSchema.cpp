@@ -75,8 +75,11 @@ const char* LangMpv(std::string_view id) {
     return nullptr;
 }
 
-// "system" -> the Windows UI language; "original" -> nothing (mpv picks the default track).
-std::optional<std::string> LanguageList(const std::string& id) {
+// "app" -> Lumen's interface language (what the user reads, whatever Windows is in); "system" ->
+// the Windows UI language; "original" -> nothing (mpv picks the default track).
+std::optional<std::string> LanguageList(const Config& c, const char* key) {
+    std::string id = c.GetString(key);
+    if (id == "app") id = c.GetString("general.language") == "en" ? "en" : "ru";
     if (id == "original" || id.empty()) return std::nullopt;
     if (id != "system") {
         const char* mpv = LangMpv(id);
@@ -93,11 +96,11 @@ std::optional<std::string> LanguageList(const std::string& id) {
 }
 
 std::optional<std::string> BuildAlang(const Config& c) {
-    return LanguageList(c.GetString("audio.language"));
+    return LanguageList(c, "audio.language");
 }
 
 std::optional<std::string> BuildSlang(const Config& c) {
-    return LanguageList(c.GetString("subtitles.language"));
+    return LanguageList(c, "subtitles.language");
 }
 
 std::optional<std::string> BuildVid(const Config& c) {
@@ -713,6 +716,7 @@ public:
 
 std::vector<Choice> LanguageChoices(bool withOriginal) {
     std::vector<Choice> out;
+    out.push_back({"app", L"Interface language", L"Язык интерфейса"});
     out.push_back({"system", L"System language", L"Язык системы"});
     if (withOriginal) out.push_back({"original", L"Original language", L"Язык оригинала"});
     for (const LangInfo& l : kLanguages) out.push_back({l.id, l.en, l.ru});
@@ -1767,7 +1771,7 @@ void BuildMedia(Builder& b) {
 
     b.Sec("languages", L"Languages", L"Языки");
     b.Pick("audio.language", L"Preferred audio language", L"Предпочтительный язык звука", LanguageChoices(true),
-           "system")
+           "app")
         .Desc(L"Pick the audio track in this language when a file has several.",
               L"Если в файле несколько дорожек, выбирать дорожку на этом языке.")
         .MpvBuild("alang", BuildAlang);
@@ -1788,7 +1792,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Show subtitles when a file has them. You can still turn them on from the player.",
               L"Показывать субтитры, если они есть. Их всегда можно включить в плеере.")
         .MpvBuild("sid", BuildSid, "auto");
-    b.Pick("subtitles.language", L"Preferred language", L"Предпочтительный язык", LanguageChoices(false), "system")
+    b.Pick("subtitles.language", L"Preferred language", L"Предпочтительный язык", LanguageChoices(false), "app")
         .Desc(L"Pick the subtitle track in this language when there are several.",
               L"Если субтитров несколько, выбирать дорожку на этом языке.")
         .MpvBuild("slang", BuildSlang);

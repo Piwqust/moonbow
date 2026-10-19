@@ -893,7 +893,14 @@ void TestConfigMpv() {
     CHECK(FindOption(opts, "demuxer-max-bytes") == "150MiB");
     CHECK(FindOption(opts, "screenshot-format") == "png");
     CHECK(!FindOption(opts, "screenshot-dir").empty());
-    CHECK(!FindOption(opts, "slang").empty());  // system language
+    // Sound and subtitles prefer the language Lumen speaks, not Windows'; a language picked stays.
+    CHECK(FindOption(opts, "slang") == "ru,rus" && FindOption(opts, "alang") == "ru,rus");
+    c.SetString("general.language", "en");
+    CHECK(FindOption(MpvOptions(c), "slang") == "en,eng" && FindOption(MpvOptions(c), "alang") == "en,eng");
+    c.SetString("subtitles.language", "de");
+    CHECK(FindOption(MpvOptions(c), "slang") == "de,ger,deu");
+    c.SetString("general.language", "ru");
+    c.SetString("subtitles.language", "app");
     FindOption(opts, "af", &found);
     CHECK(!found);  // no audio filters by default
     FindOption(opts, "vf", &found);

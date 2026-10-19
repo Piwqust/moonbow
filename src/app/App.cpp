@@ -248,6 +248,9 @@ void App::OnConfigChanged(const std::string& key) {
         SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
         system_.LanguageChanged();
         languageChanged.Emit();
+        // The preferred audio and subtitle languages default to the interface's ("app").
+        for (const char* k : {"audio.language", "subtitles.language"})
+            for (const auto& [name, value] : MpvOptionFor(config_, k)) player_.ApplySetting(name, value);
         return;
     }
     if (key == "playback.repeat") {
