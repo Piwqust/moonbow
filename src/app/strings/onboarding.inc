@@ -31,8 +31,8 @@
 // preferences
 {L"A few preferences.", L"Несколько настроек."},
 {L"Remember what you play", L"Запоминать, что вы смотрите и слушаете"},
-{L"Keep a list of played files for Recent, Continue watching and Listen again.",
- L"Вести список открытых файлов для разделов «Недавние», «Продолжить просмотр» и «Послушать снова»."},
+{L"Keep a list of played files for History, Continue watching and Listen again.",
+ L"Вести список открытых файлов для разделов «История», «Продолжить просмотр» и «Слушать снова»."},
 {L"Continue where you left off", L"Продолжать с места остановки"},
 {L"Save where you stopped and continue from there next time.",
  L"Сохранять, где вы остановились, и продолжать с этого места в следующий раз."},

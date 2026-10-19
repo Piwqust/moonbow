@@ -912,8 +912,8 @@ void BuildApp(Builder& b) {
 
     b.Sec("history", L"History", L"История");
     b.Toggle("privacy.saveHistory", L"Save recently played items", L"Сохранять недавние файлы", true)
-        .Desc(L"Keep a list of played files for Recent, Continue watching and Listen again.",
-              L"Вести список открытых файлов для разделов «Недавние», «Продолжить просмотр» и «Послушать снова».");
+        .Desc(L"Keep a list of played files for History, Continue watching and Listen again.",
+              L"Вести список открытых файлов для разделов «История», «Продолжить просмотр» и «Слушать снова».");
     b.Toggle("privacy.rememberPosition", L"Remember the playback position", L"Запоминать место остановки", true)
         .Desc(L"Save where you stopped and continue from there next time.",
               L"Сохранять, где вы остановились, и продолжать с этого места в следующий раз.");  // Player::rememberPosition

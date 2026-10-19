@@ -1059,7 +1059,7 @@ public:
     RecentPage(Route r, bool compact) : Page(r, compact, "recent") {
         modes_ = false;
         list_ = true;
-        queueName_ = Tr(L"Recent");
+        queueName_ = Tr(L"History");
         if (!compact) {
             // The views as visible tabs, not hidden in "⋯" (the side panel keeps them in its menu).
             int current = 0;

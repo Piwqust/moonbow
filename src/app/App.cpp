@@ -48,7 +48,7 @@ const wchar_t* SectionName(Section s) {
         case Section::Music: return L"Music";
         case Section::Network: return L"Network";
         case Section::Playlists: return L"Playlists";
-        case Section::Recent: return L"Recent";
+        case Section::Recent: return L"History";
     }
     return L"";
 }
