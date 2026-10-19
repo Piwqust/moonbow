@@ -636,7 +636,15 @@ void Player::Open(const std::wstring& path) {
 }
 
 std::string Player::LoadfileOptions(const std::wstring& path) const {
-    return fileOptions && !path.empty() ? fileOptions(path) : std::string();
+    std::string opts = fileOptions && !path.empty() ? fileOptions(path) : std::string();
+    // Songs always start from the top, also when an older Lumen saved a position for them.
+    if (IsMusic(path)) opts += opts.empty() ? "resume-playback=no" : ",resume-playback=no";
+    return opts;
+}
+
+// Positions are remembered for videos only: a three-minute song is heard again from its start.
+bool Player::IsMusic(const std::wstring& path) {
+    return library::KindOf(path) == library::MediaKind::Audio;
 }
 
 void Player::Stop() {
@@ -815,7 +823,7 @@ bool Player::NearEnd() const {
 
 void Player::SaveWatchLater() {
     if (!state_.fileLoaded) return;
-    if (NearEnd())
+    if (NearEnd() || IsMusic(state_.path))
         Cmd({"delete-watch-later-config"});
     else if (rememberPosition)
         Cmd({"write-watch-later-config"});
@@ -841,8 +849,9 @@ void Player::Shutdown() {
     if (mpv) {
         Trace("close: player shutdown");
         // Runs off the UI thread (see App shutdown), so a blocking call is fine here.
-        if (state_.fileLoaded && (NearEnd() || rememberPosition)) {
-            const char* argv[] = {NearEnd() ? "delete-watch-later-config" : "write-watch-later-config", nullptr};
+        const bool forget = NearEnd() || IsMusic(state_.path);
+        if (state_.fileLoaded && (forget || rememberPosition)) {
+            const char* argv[] = {forget ? "delete-watch-later-config" : "write-watch-later-config", nullptr};
             api_.mpv_command(mpv, argv);
         }
         Trace("close: watch-later written");

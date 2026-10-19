@@ -242,6 +242,7 @@ private:
     uint64_t nextObserver_ = 1000;
     // Per-file settings (see fileOptions).
     std::string LoadfileOptions(const std::wstring& path) const;
+    static bool IsMusic(const std::wstring& path);
     void CountTrackChoice(const char* prop);
     decltype(&::mpv_get_property_async) getAsync_ = nullptr;  // not in MpvApi: only confirmTracks needs it
     std::wstring loadedPath_;
