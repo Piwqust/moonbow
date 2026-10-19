@@ -113,21 +113,15 @@ bool MainWindow::Create() {
     if (!video_) return false;
 
     BuildUi();
-    // Over video toasts sit at the top; in the library below its header, so they never cover
-    // back/forward, the search or the "⋯" button.
+    // Over video toasts sit at the top. In the library they sit at the bottom, like a snackbar:
+    // at the top they covered the page's header rows (tabs, "Shuffle", an album's title).
     // In fullscreen they go below the top info panel while it shows (PlayerView::PaintTopInfo).
-    toastTop = [this](float) {
+    toastTop = [this](float h) {
         if (!TheApp().PlayerShown()) {
-            // Below the scan banner too while a scan shows one (it is the strip under the header).
-            float top = 122.0f;
-            std::function<void(Widget*)> find = [&](Widget* w) {
-                if (!w->visible) return;
-                if (w->id == "scan-banner") top = std::max(top, w->rect.Bottom() + 12);
-                else
-                    for (auto& c : w->Children()) find(c.get());
-            };
-            if (library_) find(library_);
-            return top;
+            float bottom = ClientSize().h - 24;
+            // Above the mini player when a centred toast (at most 600 DIP wide) could reach it.
+            if (mini_ && mini_->visible && mini_->rect.x < (ClientSize().w + 600) / 2) bottom = mini_->rect.y - 12;
+            return bottom - h;
         }
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
