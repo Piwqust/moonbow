@@ -119,10 +119,13 @@ public:
     // Writes the dump file(s) named above; returns the per-window path.
     std::wstring WriteTreeDump();
     bool IsMainWindow() const { return options_.mainWindow; }
-    // The window has shown its first complete frame (Reveal). Until then it is cloaked: never a
-    // blank, half-drawn or skeleton frame on screen. --automation windows stay cloaked; tests
-    // read the LumenRevealed window property (or revealed=1 in the tree dump) instead.
+    // The window is on screen (Reveal): cloaked only until its first GPU frame (the background),
+    // so never a blank or skeleton frame. --automation windows stay cloaked; tests read the
+    // LumenRevealed window property (or revealed=1 in the tree dump) instead.
     bool Revealed() const { return revealed_; }
+    // The widget tree is drawn, at ContentAppear() opacity (0 to 1 over 140 ms, once; ContentReady).
+    bool ContentShown() const { return contentShown_; }
+    float ContentAppear() const { return contentAppear_.Get(); }
     // Nothing waits to be laid out, drawn or run, and no animation is running.
     bool Idle() const;
     // Re-applies DWM attributes (dark title/border) and repaints after a theme change.
@@ -200,12 +203,14 @@ protected:
     virtual void OnResize() {}
     // GDI fill used before the GPU device exists and behind DComp content.
     virtual void PaintSkeleton(HDC dc);
-    // Asked after each frame until the window is revealed: does this frame show the first screen
-    // complete (its images, the file it opens)? The window appears with the first frame that
-    // does, or RevealCapMs after it was shown at the latest, so a slow disk never hides it.
-    virtual bool ReadyToReveal() { return true; }
-    virtual UINT RevealCapMs() { return 400; }
+    // Asked after each frame until the content shows: does this frame show the first screen
+    // complete (its images, the file it opens)? The window itself is on screen at once with its
+    // background; the content fades in from it with the first frame that is ready, or
+    // ContentCapMs after the show at the latest, so a slow disk never hides it.
+    virtual bool ContentReady() { return true; }
+    virtual UINT ContentCapMs() { return 400; }
     void Reveal();
+    void ShowContent();
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -235,6 +240,8 @@ private:
     LRESULT NcHitTest(LPARAM lp);
     void UpdateHot(float x, float y);
     void OnMouseButton(UINT msg, WPARAM wp, LPARAM lp);
+    void CancelPress();
+    void AfterPress(float x, float y);
     void OnKey(UINT vk, bool down, bool repeat);
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
@@ -255,6 +262,7 @@ private:
     Widget* hot_ = nullptr;
     Widget* pressed_ = nullptr;
     Widget* capture_ = nullptr;
+    Widget* released_ = nullptr;  // the widget whose press is ending, while AfterPress runs
     Widget* lastLeftDown_ = nullptr;  // target of the last left press, only compared (may be gone)
     Widget* focus_ = nullptr;
     bool focusVisible_ = false;
@@ -272,8 +280,10 @@ private:
     bool renderPending_ = false;
     bool gpuPainted_ = false;  // a GPU frame is on screen: WM_PAINT skips the GDI skeleton
     bool revealed_ = false;
-    bool revealDue_ = false;       // RevealCapMs has passed: the next frame reveals, ready or not
-    UINT_PTR revealTimer_ = 0;     // set on the first show
+    bool contentShown_ = false;
+    bool contentDue_ = false;      // ContentCapMs has passed: the next frame shows it, ready or not
+    UINT_PTR contentTimer_ = 0;    // set on the first show
+    AnimFloat contentAppear_{0.0f};
     bool layoutDirty_ = true;
     bool fullscreen_ = false;
     WINDOWPLACEMENT placement_{sizeof(WINDOWPLACEMENT)};

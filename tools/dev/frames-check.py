@@ -6,6 +6,9 @@ Only frames a user could see count: from the first "revealed" frame on (builds w
 reveal mark show their window at once, so from the first frame). Pixels that still change at the
 end of the series (a playing video, its clock) are intended motion and left out. What is left
 should not change after the window appears, except:
+  - the window's content fading in once from its plain background: the first change, from a
+    frame that shows nothing but the background, a single rise of opacity (every frame on the
+    way from that frame to the final one, never back or sideways) over at most FADE_MS;
   - after an "OPEN": the switch to the opened file, in one step (one event of at most 2 frames);
   - one toast (a small change centred horizontally) per window or open.
 Everything else is reported (a pop = one-frame change, a fade = several) and fails the verdict,
@@ -24,6 +27,8 @@ W = 192  # analysis width in pixels
 STEP_DIFF = 0.6  # mean abs difference (0-255) over the compared pixels that counts as a change
 PIXEL_DIFF = 24  # a pixel changed when it moved by more than this
 PIXEL_SHARE = 0.002  # ... and when at least this share of the compared pixels changed
+FADE_MS = 220  # the content fade-in (140 ms) from its first to its last changed frame, plus capture jitter
+FADE_RESIDUAL = 3.0  # mean distance (0-255) of a fade frame from the straight blend: more = something else changed
 
 
 def load(path, size):
@@ -74,11 +79,9 @@ def main():
         x, y, w, h = f["video"]
         k = size[0] / f["w"]
         return (max(0, int(x * k)), max(0, int(y * k)), min(size[0], int((x + w) * k + 1)), min(size[1], int((y + h) * k + 1)))
-    for f, im in zip(seen, imgs):
-        b = video_box(f)
-        if b and b[2] - b[0] > 8 and b[3] - b[1] > 8 and float(im[b[1]:b[3], b[0]:b[2]].std()) < 4:
-            failures.append(f"{f['t']} ms: the video area is shown empty (no frame yet)")
-            print(f"  FAIL {failures[-1]}")
+    def plain(im):  # nothing but the window background (before its content shows)
+        return float((np.abs(im - np.median(im)) > PIXEL_DIFF).mean()) < 0.01
+
     # Intended ongoing motion: pixels that change over the last 2 s of the series (a clock too).
     end_t = seen[-1]["t"]
     tail = [im for f, im in zip(seen, imgs) if f["t"] >= end_t - 2000]
@@ -128,10 +131,37 @@ def main():
         centred = abs((x0 + x1) / 2 - size[0] / 2) < size[0] * 0.08
         return area < 0.08 and centred
 
+    def fade_in(e):
+        """None when the event is the content's one fade-in from the plain background, else why not."""
+        k0, k1 = e["k0"], e["k0"] + e["steps"]
+        # A fade that began with the reveal may be under way in the first captured frame.
+        if k0 > 0 and not plain(imgs[k0]):
+            return "it does not start from the plain background"
+        took = seen[k1]["t"] - seen[k0 + 1]["t"]
+        if took > FADE_MS:
+            return f"it takes {took} ms"
+        mask = keep.copy()
+        for f in seen[k0:k1 + 1]:
+            if (b := video_box(f)):
+                mask[b[1]:b[3], b[0]:b[2]] = False
+        s, d = imgs[k0][mask], imgs[k1][mask] - imgs[k0][mask]
+        den = float((d * d).sum()) or 1.0
+        prev = 0.0
+        for k in range(k0 + 1, k1 + 1):
+            x = imgs[k][mask] - s
+            alpha = float((x * d).sum()) / den
+            if alpha < prev - 0.05:
+                return f"its opacity goes back at {seen[k]['t']} ms"
+            if float(np.abs(x - alpha * d).mean()) > FADE_RESIDUAL:
+                return f"{seen[k]['t']} ms is not a blend of the background and the final frame"
+            prev = alpha
+        return None
+
     # Windows to check: after the reveal, and after every open.
     starts = [("reveal", reveal_t)] + [("open", t) for t in opens if t >= reveal_t]
     for e in events:
         e["kind"] = "pop" if e["steps"] == 1 else f"fade/{e['steps']} steps"
+    faded = set()  # frames of the content fade-in: on their way in, the video may still be faint
     for idx, (what, t0) in enumerate(starts):
         t_end = min([t0 + a.window] + [s[1] for s in starts[idx + 1:]])
         # By the frame that shows the change: the one before it may predate an open.
@@ -143,6 +173,13 @@ def main():
             if what == "open" and j == 0 and e["steps"] <= 2:
                 print(f"  ok   {label} (the switch to the opened file)")
                 continue
+            if what == "reveal" and j == 0:
+                why = fade_in(e)
+                if why is None:
+                    faded.update(range(e["k0"], e["k0"] + e["steps"] + 1))
+                    print(f"  ok   {label} (the content fading in)")
+                    continue
+                label += f" (not the content fade-in: {why})"
             if toast_like(e) and toasts == 0:
                 toasts += 1
                 print(f"  ok   {label} (toast)")
@@ -151,6 +188,13 @@ def main():
             failures.append(label)
         if what == "open" and not mine:
             print(f"  note open at {t0} ms: nothing changed within {a.window} ms")
+    for k, (f, im) in enumerate(zip(seen, imgs)):
+        b = video_box(f)
+        if k in faded or plain(im):  # the plain player background before the content comes
+            continue
+        if b and b[2] - b[0] > 8 and b[3] - b[1] > 8 and float(im[b[1]:b[3], b[0]:b[2]].std()) < 4:
+            failures.append(f"{f['t']} ms: the video area is shown empty (no frame yet)")
+            print(f"  FAIL {failures[-1]}")
 
     if a.sheet:
         # The first 1.2 s after the reveal and after each open: where flashes happen.

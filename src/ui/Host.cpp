@@ -309,6 +309,7 @@ void Host::Forget(Widget* w) {
     if (hot_ == w) hot_ = nullptr;
     if (pressed_ == w) pressed_ = nullptr;
     if (capture_ == w) capture_ = nullptr;
+    if (released_ == w) released_ = nullptr;
     if (focus_ == w) focus_ = nullptr;
     if (tooltipFor_ == w) tooltipFor_ = nullptr;
     if (tooltipWidget_ == w) tooltipWidget_ = nullptr;
@@ -369,8 +370,8 @@ bool Host::Create(const HostOptions& options) {
     hwnd_ = CreateWindowExW(exStyle, kHostClass, options.title.c_str(), style, x, y, w, h, options.owner, nullptr,
                             inst, this);
     if (!hwnd_) return false;
-    // Cloaked until Reveal: DWM would show the window blank (or the GDI skeleton) until the
-    // first frame, then the UI popping in. --automation windows stay cloaked for good.
+    // Cloaked until its first GPU frame (Reveal), a frame or two after the show: DWM would show
+    // it blank or with the GDI skeleton first. --automation windows stay cloaked for good.
     const BOOL cloak = TRUE;
     DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     // A window opens at its monitor's DPI without a WM_DPICHANGED (Settings over a main window on
@@ -436,8 +437,6 @@ void Host::Show(int cmd) {
 void Host::Reveal() {
     if (revealed_ || !hwnd_) return;
     revealed_ = true;
-    if (revealTimer_) CancelTimer(revealTimer_);
-    revealTimer_ = 0;
     if (!g_automation) {
         // Uncloaked only once DWM has the presented frame, so it is the first thing composed.
         if (gpuPainted_) DwmFlush();
@@ -445,7 +444,19 @@ void Host::Reveal() {
         DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     }
     SetPropW(hwnd_, kRevealedProp, reinterpret_cast<HANDLE>(1));
-    if (options_.mainWindow) Trace(revealDue_ ? "revealed (cap reached)" : "revealed");
+    if (options_.mainWindow) Trace(gpuPainted_ ? "revealed" : "revealed (no frame yet)");
+}
+
+void Host::ShowContent() {
+    if (contentShown_) return;
+    contentShown_ = true;
+    if (contentTimer_) CancelTimer(contentTimer_);
+    contentTimer_ = 0;
+    // One calm appearance from the background instead of the UI popping in (instant with
+    // reduced motion: To jumps).
+    contentAppear_.To(1.0f, 140, Ease::Out);
+    RequestRender();
+    if (options_.mainWindow) Trace(contentDue_ ? "content shown (cap reached)" : "content shown");
 }
 
 void Host::Close() {
@@ -784,6 +795,13 @@ void Host::Render() {
         Painter p(ctx);
         if (texts) p.RecordText(texts);
         PaintBackground(p);
+        // Drawn unseen until ContentShown: its layout runs and its images are asked for. A layer,
+        // not the painter's opacity: the whole frame fades as one, overlapping parts don't show through.
+        const float appear = contentAppear_.Get();
+        if (appear < 1)
+            ctx->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                  D2D1::IdentityMatrix(), appear),
+                           nullptr);
         if (root_) root_->PaintTree(p);
         const Size client = ClientSize();
         for (Popup& popup : popups_) {
@@ -797,6 +815,7 @@ void Host::Render() {
             p.PopOpacity();
         }
         PaintDropOverlay(p);
+        if (appear < 1) ctx->PopLayer();
     }
     OnFramePainted();
     if (texts) a11y::TextsPainted(*texts);
@@ -805,7 +824,8 @@ void Host::Render() {
         if (!gpuPainted_) Trace("first frame");
         gpuPainted_ = true;
         // Posted startup work (the fit into the work area) runs first: no resize after the reveal.
-        if (!revealed_ && (revealDue_ || (revealTimer_ && posted_.empty() && ReadyToReveal()))) Reveal();
+        if (!revealed_ && posted_.empty() && IsWindowVisible(hwnd_)) Reveal();
+        if (revealed_ && !contentShown_ && (contentDue_ || ContentReady())) ShowContent();
     } else {
         RequestLayout();
     }
@@ -846,7 +866,12 @@ void Host::UpdateHot(float x, float y) {
     if (hot == hot_) return;
     Widget* old = hot_;
     hot_ = hot;
+    Widget* up = old ? old->Parent() : nullptr;
     if (old) old->OnMouseLeave();
+    // A container keeps its hover while the pointer is on one of its children (the mini player's
+    // overlay): it hears the leave once the pointer is off it altogether, not only off the child.
+    for (Widget* a = up; a; a = a->Parent())
+        if (a->interactive && !a->IsAncestorOf(hot_)) a->OnMouseLeave();
     if (hot_) hot_->OnMouseEnter();
     UpdateTooltip();
     RequestRender();
@@ -909,6 +934,9 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     if (down) {
+        // Before the first screen fades in the window shows only its background: a press there
+        // must not reach the buttons laid out under it (at most 400-700 ms after start).
+        if (!contentShown_) return;
         HideTooltip();
         // Clicking outside popups closes them (topmost first). Like a Windows menu, the click
         // that closes one is used up: it doesn't also pause the video or press the button under
@@ -984,18 +1012,52 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
         Widget* wasPressed = pressed_;
         capture_ = nullptr;
         if (GetCapture() == hwnd_) ::ReleaseCapture();
+        released_ = t;
         if (t) {
             t->OnMouseUp(e);
             if (t == wasPressed && InteractiveAt(x, y) == t) t->OnClick();
         }
         pressed_ = nullptr;
-        UpdateHot(x, y);
+        AfterPress(x, y);
     } else {
         Widget* t = InteractiveAt(x, y);
         for (Widget* w = t; w; w = w->Parent())
             if (w->interactive && w->OnMouseUp(e)) break;
     }
     RequestRender();
+}
+
+// A press that ends without a release: another window took the capture (Alt+Tab, a dialog), the
+// window was deactivated, or Esc. The widget undoes its drag (MouseEvent::cancelled).
+void Host::CancelPress() {
+    Widget* t = capture_;
+    capture_ = nullptr;
+    if (GetCapture() == hwnd_) ::ReleaseCapture();
+    released_ = t;
+    if (t) t->OnMouseUp({mouse_.x, mouse_.y, MouseButton::Left, CurrentMods(), true});
+    pressed_ = nullptr;
+    AfterPress(mouse_.x, mouse_.y);
+    RequestRender();
+}
+
+// After a press, hover follows the pointer again. The pressed widget got the drag's moves even
+// off itself, so one the pointer is no longer on hears the leave it missed: otherwise its hover
+// (the seek bar's preview, a row's highlight, the speaker) stays where the drag left it.
+void Host::AfterPress(float x, float y) {
+    const Size c = ClientSize();
+    if (x < 0 || y < 0 || x >= c.w || y >= c.h) mouseInside_ = false;  // released outside the window
+    Widget* before = hot_;
+    UpdateHot(x, y);
+    if (released_ && released_ != hot_ && released_ != before) released_->OnMouseLeave();
+    released_ = nullptr;
+    // What the pointer is on now had no move yet: its item under the pointer lights up at once.
+    if (hot_ && hot_ != before) hot_->OnMouseMove({x, y, MouseButton::Left, CurrentMods()});
+    // The capture held back the leave tracking: re-armed, Windows posts WM_MOUSELEAVE at once when
+    // the pointer is off the window (released over another one, or the capture went elsewhere).
+    if (mouseInside_ && !g_automation) {
+        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
+        trackingLeave_ = TrackMouseEvent(&tme) != FALSE;
+    }
 }
 
 bool Host::HasInteractivePopup() const {
@@ -1051,6 +1113,10 @@ void Host::OnKey(UINT vk, bool down, bool repeat) {
     if (!down) return;
     KeyEvent e{vk, CurrentMods(), repeat};
     HideTooltip();
+    if (vk == VK_ESCAPE && capture_) {  // Esc drops a drag, as in Windows: a second one does the rest
+        CancelPress();
+        return;
+    }
 
     for (Widget* w = focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
@@ -1246,8 +1312,9 @@ void AppendText(std::string& out, const TextRecord& t, const Rect& owner) {
 }  // namespace
 
 bool Host::Idle() const {
+    // A shown window whose content has not come yet is still a plain background.
     return hwnd_ && !layoutDirty_ && !renderPending_ && posted_.empty() && workIds_.empty() &&
-           !AnimFloat::AnyActive();
+           !AnimFloat::AnyActive() && (contentShown_ || !IsWindowVisible(hwnd_));
 }
 
 void Host::DumpTree(const std::wstring& path) {
@@ -1365,12 +1432,12 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
     switch (msg) {
         case WM_SHOWWINDOW:
-            if (wp && !revealed_ && !revealTimer_ && !revealDue_) {
-                revealTimer_ = StartTimer(RevealCapMs(), [this] {
-                    revealTimer_ = 0;
-                    revealDue_ = true;
-                    // Not drawn yet (no device): the next frame reveals it.
-                    if (gpuPainted_ || IsIconic(hwnd_)) Reveal();
+            if (wp && !contentShown_ && !contentTimer_ && !contentDue_) {
+                contentTimer_ = StartTimer(ContentCapMs(), [this] {
+                    contentTimer_ = 0;
+                    contentDue_ = true;
+                    Reveal();  // no frame yet (a slow device): the GDI skeleton shows meanwhile
+                    if (gpuPainted_ || IsIconic(hwnd_)) ShowContent();
                 });
             }
             // First show, after a restored placement too (App::RestoreWindowPlacement shows the
@@ -1543,14 +1610,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return msg >= WM_XBUTTONDOWN ? TRUE : 0;
 
         case WM_CAPTURECHANGED:
-            if (reinterpret_cast<HWND>(lp) != hwnd_ && capture_) {
-                Widget* t = capture_;
-                capture_ = nullptr;
-                MouseEvent e{mouse_.x, mouse_.y, MouseButton::Left, CurrentMods(), true};
-                t->OnMouseUp(e);
-                pressed_ = nullptr;
-                RequestRender();
-            }
+            if (reinterpret_cast<HWND>(lp) != hwnd_ && capture_) CancelPress();
             return 0;
 
         case WM_MOUSEWHEEL:
@@ -1655,6 +1715,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATE:
             active_ = LOWORD(wp) != WA_INACTIVE;
             if (!active_) HideTooltip();
+            if (!active_ && capture_) CancelPress();
             RequestRender();  // also restarts a focused text box's caret blink (TextBox::Paint)
             break;
 
@@ -1750,7 +1811,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             std::vector<std::function<void()>> tasks;
             tasks.swap(posted_);
             for (auto& t : tasks) t();
-            if (!revealed_ && revealTimer_) RequestRender();  // the frame that can reveal it now
+            if (!revealed_ && gpuPainted_) RequestRender();  // the frame that can reveal it now
             return 0;
         }
 

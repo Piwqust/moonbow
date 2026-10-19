@@ -12,13 +12,14 @@
 # Format (v2). First line of every window:
 #   === window title="..." client=WxH scale=S theme=dark|light fullscreen=0|1 maximized=0|1 hwnd=N main=0|1 dpi=D revealed=0|1
 #   (client in DIPs; scale = DIP-to-pixel factor incl. --scale; dpi = the monitor's real DPI;
-#   revealed = a user would see the window now: its first complete frame is up, Host::Reveal)
+#   revealed = a user would see the window now: its first GPU frame is up, Host::Reveal; its content fades in after it)
 # Then one line per widget, two spaces of indent per depth, popups after "--- popup":
 #   <indent><Type>[ #id] [x,y wxh][ hidden][ disabled][ interactive][ focus][ hot][ pressed]
 #       [<state>...][ text="..."[ trunc][ clip][ overflow][ faded][ box=[x,y wxh]]]...[ tip="..."]
 #   Rects are window DIPs. <state> comes from Widget::DebugInfo: " scroll offset=Y/MAX"
 #   (ScrollView), " on"/" off" (Toggle), " checked", " selected=N", " value=V", " input",
-#   " empty" (TextBox showing its placeholder), " password", " readonly", " icon=<name>", " active".
+#   " empty" (TextBox showing its placeholder), " password", " readonly", " icon=<name>", " active",
+#   " dragging" (ItemGrid: a row is being reordered).
 #   text: every string the widget painted in this frame, in paint order; a widget that paints
 #   many items (grids, menus, lists) has several. Strings are escaped: \" \\ \n \r \t.
 #     trunc    natural one-line width exceeds the box it was drawn in (ellipsized or cut);

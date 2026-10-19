@@ -351,8 +351,9 @@ void MainWindow::PokeChrome() {
     chromeTimer_ = StartTimer(ChromeHideDelay(), [this] {
         chromeTimer_ = 0;
         if (!BarOverlays()) return;
-        // Keep the controls while the pointer is on them or a menu or panel is open (toasts don't count).
-        Widget* hot = Hot();
+        // Keep the controls while the pointer is on them or drags one (the seek bar held still above
+        // the bar), or a menu or panel is open (toasts don't count).
+        Widget* hot = Pressed() ? Pressed() : Hot();
         const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
         if (HasInteractivePopup() || overBar || TheApp().player().State().paused) {
             PokeChrome();
@@ -371,11 +372,11 @@ void MainWindow::OnFramePainted() {
     TheApp().images().EndFrame();
 }
 
-bool MainWindow::ReadyToReveal() {
+bool MainWindow::ContentReady() {
     return TheApp().FirstScreenReady();
 }
 
-UINT MainWindow::RevealCapMs() {
+UINT MainWindow::ContentCapMs() {
     return TheApp().OpensFileAtStart() ? 700 : 400;
 }
 
@@ -446,6 +447,8 @@ void MainWindow::PaintBackground(Painter& p) {
     p.Fill({0, b, client.w, client.h - b}, bg);
     p.Fill({0, t, l, b - t}, bg);
     p.Fill({r, t, client.w - r, b - t}, bg);
+    // The picture fades in with the rest of the window's first content.
+    if (const float k = ContentAppear(); k < 1) p.Fill({l, t, r - l, b - t}, bg.Fade(1 - k));
 }
 
 void MainWindow::PaintSkeleton(HDC dc) {

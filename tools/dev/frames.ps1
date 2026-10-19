@@ -6,9 +6,10 @@
 #   -Open    sends "open <file>" (automation command, no quotes) after -OpenAfterMs
 # frames.txt: "<ms> f<NNN> <w>x<h> at <x>,<y> [revealed] [video=x,y,w,h]" per frame, "<ms> OPEN" for -Open
 # (video = the shown mpv video window, in window pixels).
-# "revealed" = the window has shown its first complete frame, i.e. a user would see it now
-# (the LumenRevealed window property; --automation windows themselves stay cloaked). Builds
-# without that property show their window at once: every frame counts as seen.
+# "revealed" = the window is on screen, i.e. a user would see it now: from its first GPU frame (the
+# plain background; its content fades in after it) on (the LumenRevealed window property;
+# --automation windows themselves stay cloaked). Builds without that property show their window at
+# once: every frame counts as seen.
 [CmdletBinding(PositionalBinding = $false)]
 param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string]$Out, [Parameter(Mandatory)][string]$DataDir,
       [string]$Library = "", [int]$Ms = 3000, [string]$Settings = "", [string]$Open = "", [int]$OpenAfterMs = 2000,
