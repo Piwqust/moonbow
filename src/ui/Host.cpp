@@ -934,6 +934,9 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     if (down) {
+        // Before the first screen fades in the window shows only its background: a press there
+        // must not reach the buttons laid out under it (at most 400-700 ms after start).
+        if (!contentShown_) return;
         HideTooltip();
         // Clicking outside popups closes them (topmost first). Like a Windows menu, the click
         // that closes one is used up: it doesn't also pause the video or press the button under
