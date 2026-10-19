@@ -105,6 +105,8 @@ unsigned g_automationMods = 0;
 float g_scaleOverride = 1.0f;
 
 constexpr wchar_t kFittedProp[] = L"LumenFitted";
+// Set when the window is revealed: tools/dev/frames.ps1 reads it from outside.
+constexpr wchar_t kRevealedProp[] = L"LumenRevealed";
 
 // Keeps a window's normal rect inside its monitor's work area (minus `margin` px), centred when
 // it had to shrink or stood off the screen; never below the minimum size. A first run at 200 %
@@ -367,10 +369,10 @@ bool Host::Create(const HostOptions& options) {
     hwnd_ = CreateWindowExW(exStyle, kHostClass, options.title.c_str(), style, x, y, w, h, options.owner, nullptr,
                             inst, this);
     if (!hwnd_) return false;
-    if (g_automation) {
-        const BOOL cloak = TRUE;
-        DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
-    }
+    // Cloaked until Reveal: DWM would show the window blank (or the GDI skeleton) until the
+    // first frame, then the UI popping in. --automation windows stay cloaked for good.
+    const BOOL cloak = TRUE;
+    DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
     // A window opens at its monitor's DPI without a WM_DPICHANGED (Settings over a main window on
     // a monitor scaled unlike the primary one): its size is worked out again at that DPI. With
     // --scale it may be bigger than the monitor; CreateWindowEx clamped it to the default max
@@ -429,6 +431,21 @@ void Host::Show(int cmd) {
         ShowWindow(hwnd_, cmd);
     }
     UpdateWindow(hwnd_);
+}
+
+void Host::Reveal() {
+    if (revealed_ || !hwnd_) return;
+    revealed_ = true;
+    if (revealTimer_) CancelTimer(revealTimer_);
+    revealTimer_ = 0;
+    if (!g_automation) {
+        // Uncloaked only once DWM has the presented frame, so it is the first thing composed.
+        if (gpuPainted_) DwmFlush();
+        const BOOL cloak = FALSE;
+        DwmSetWindowAttribute(hwnd_, DWMWA_CLOAK, &cloak, sizeof(cloak));
+    }
+    SetPropW(hwnd_, kRevealedProp, reinterpret_cast<HANDLE>(1));
+    if (options_.mainWindow) Trace(revealDue_ ? "revealed (cap reached)" : "revealed");
 }
 
 void Host::Close() {
@@ -787,6 +804,8 @@ void Host::Render() {
     if (surface_.End()) {
         if (!gpuPainted_) Trace("first frame");
         gpuPainted_ = true;
+        // Posted startup work (the fit into the work area) runs first: no resize after the reveal.
+        if (!revealed_ && (revealDue_ || (revealTimer_ && posted_.empty() && ReadyToReveal()))) Reveal();
     } else {
         RequestLayout();
     }
@@ -1257,10 +1276,10 @@ void Host::DumpTree(const std::wstring& path) {
     AppendQuoted(line, title);
     const Size client = hwnd_ ? ClientSize() : Size{};
     char buf[256];
-    snprintf(buf, sizeof buf, " client=%.0fx%.0f scale=%g theme=%s fullscreen=%d maximized=%d hwnd=%llu main=%d dpi=%u\n",
+    snprintf(buf, sizeof buf, " client=%.0fx%.0f scale=%g theme=%s fullscreen=%d maximized=%d hwnd=%llu main=%d dpi=%u revealed=%d\n",
              client.w, client.h, Scale(), Theme::Get().Mode() == ThemeMode::Dark ? "dark" : "light", fullscreen_ ? 1 : 0,
              hwnd_ && IsWindowMaximized() ? 1 : 0, static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwnd_)),
-             options_.mainWindow ? 1 : 0, dpi_);
+             options_.mainWindow ? 1 : 0, dpi_, revealed_ ? 1 : 0);
     line += buf;
     fwrite(line.data(), 1, line.size(), f);
 
@@ -1346,6 +1365,14 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
     switch (msg) {
         case WM_SHOWWINDOW:
+            if (wp && !revealed_ && !revealTimer_ && !revealDue_) {
+                revealTimer_ = StartTimer(RevealCapMs(), [this] {
+                    revealTimer_ = 0;
+                    revealDue_ = true;
+                    // Not drawn yet (no device): the next frame reveals it.
+                    if (gpuPainted_ || IsIconic(hwnd_)) Reveal();
+                });
+            }
             // First show, after a restored placement too (App::RestoreWindowPlacement shows the
             // window with a saved rect): fit it once the show has applied that rect.
             if (wp && !fullscreen_ && !GetPropW(hwnd_, kFittedProp)) {
@@ -1684,8 +1711,10 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             gfx::Gpu& gpu = gfx::Gpu::Get();
             const bool hadDevice = gpu.Ready();
             if (!gpu.FinishDevice()) {
-                if (gpu.DeviceFailed())
+                if (gpu.DeviceFailed()) {
+                    for (Host* h : Registry()) h->Reveal();  // nothing will ever be drawn: show what there is
                     MessageBoxW(hwnd_, L"Direct3D 11 / DirectComposition is not available.", L"Lumen", MB_ICONERROR);
+                }
                 return 0;
             }
             for (Host* h : Registry()) {
@@ -1721,6 +1750,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             std::vector<std::function<void()>> tasks;
             tasks.swap(posted_);
             for (auto& t : tasks) t();
+            if (!revealed_ && revealTimer_) RequestRender();  // the frame that can reveal it now
             return 0;
         }
 
@@ -1741,6 +1771,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_NCDESTROY:
             RemovePropW(self, kFittedProp);
+            RemovePropW(self, kRevealedProp);
             surface_.Detach();
             hwnd_ = nullptr;
             break;

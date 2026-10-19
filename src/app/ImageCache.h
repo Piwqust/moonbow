@@ -1,9 +1,11 @@
 #pragma once
 #include "app/Signal.h"
 #include "gfx/Gpu.h"
+#include "ui/Anim.h"
 
 #include <cstdint>
 #include <list>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -24,6 +26,13 @@ public:
     // `sizePx` is the longest side wanted in physical pixels (rounded up to a bucket).
     ID2D1Bitmap* Get(const std::wstring& path, int sizePx);
     bool Missing(const std::wstring& path, int sizePx) const;  // the file has no thumbnail
+    // Asked for and on its way: draw the plain card surface, not the "no picture" icon.
+    bool Loading(const std::wstring& path, int sizePx) const;
+    // 0..1: what replaces the plain surface once a request is answered after the window is on
+    // screen, the picture or the "no picture" icon, fades in; 1 when it was there at once.
+    float Appear(const std::wstring& path, int sizePx) const;
+    // The last painted frame asked for images that are not decoded yet.
+    bool Busy() const { return !pending_.empty(); }
     // Drops queued requests that no Get() asked for since the previous call (once per painted frame).
     void EndFrame();
     // Called by the app when the thumbnail service posts completions.
@@ -52,6 +61,7 @@ private:
     std::unordered_map<std::wstring, uint64_t> pending_;  // key -> cookie
     std::unordered_map<uint64_t, std::wstring> cookies_;
     std::unordered_set<std::wstring> missing_;
+    std::unordered_map<std::wstring, std::unique_ptr<ui::AnimFloat>> fades_;  // answered on screen (Appear)
     std::unordered_set<uint64_t> wanted_;  // cookies of pending requests asked for since the last EndFrame
     size_t bytes_ = 0;                     // GPU bitmap pixels
     uint64_t nextCookie_ = 1;

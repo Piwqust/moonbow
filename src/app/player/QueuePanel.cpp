@@ -416,13 +416,16 @@ public:
         const Palette& c = P();
         const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
         const Rect art{r.x + 5, r.y + 5, r.h - 10, r.h - 10};
-        ID2D1Bitmap* bmp = GetHost() ? TheApp().images().Get(item.path, static_cast<int>(art.w * GetHost()->Scale())) : nullptr;
+        const int px = GetHost() ? static_cast<int>(art.w * GetHost()->Scale()) : 0;
+        ImageCache& images = TheApp().images();
+        ID2D1Bitmap* bmp = GetHost() ? images.Get(item.path, px) : nullptr;
+        const float appear = images.Appear(item.path, px);
+        if (!bmp || appear < 1) p.Fill(art, c.bgSelected, 4);
         if (bmp) {
-            p.Image(bmp, art, 4, true);
-        } else {
-            p.Fill(art, c.bgSelected, 4);
+            p.Image(bmp, art, 4, true, appear);
+        } else if (!images.Loading(item.path, px)) {  // no icon while the cover is on its way
             p.Icon(library::KindOf(item.path) == library::MediaKind::Audio ? "music" : "video", art.Center(20, 20),
-                   c.textTertiary);
+                   c.textTertiary.Fade(appear));
         }
         const bool handleHot = hot && hoverHandle_;
         if (handleHot || floating) {

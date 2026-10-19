@@ -197,7 +197,8 @@ public:
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             // Behind the player screen: rebuild when Home shows again (see Page).
             if (!(m & kChangeFile)) return;
-            if (!compact_ && TheApp().PlayerShown()) stale_ = true;
+            // The player about to show (App::PlayerPending) counts: the page must not change just before.
+            if (!compact_ && (TheApp().PlayerShown() || TheApp().PlayerPending())) stale_ = true;
             else Rebuild();
         });
         screenConn_ = Connect(TheApp().screenChanged, [this] {

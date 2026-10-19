@@ -414,5 +414,7 @@ void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 1
                std::function<void()> action = {});
 // Closes the toast on screen, if any (e.g. when the file it was about is replaced).
 void DismissToast(Host* host);
+// A toast is on screen (one that is not urgent waits for it instead of replacing it).
+bool ToastShown(Host* host);
 
 }  // namespace ui

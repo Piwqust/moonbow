@@ -389,7 +389,8 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
         // screen nobody sees the page: rebuild it when the library shows again, not on every
         // track of an album (a 20 000-song list costs a few hundred ms).
         if (!(m & kChangeFile)) return;
-        if (!compact_ && TheApp().PlayerShown()) stale_ = true;
+        // The player about to show (App::PlayerPending) counts: the page must not change just before.
+        if (!compact_ && (TheApp().PlayerShown() || TheApp().PlayerPending())) stale_ = true;
         else Refresh();
     });
     screenConn_ = Connect(TheApp().screenChanged, [this] {

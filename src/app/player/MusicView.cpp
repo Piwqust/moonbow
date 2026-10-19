@@ -266,14 +266,13 @@ public:
         out += text;
     }
 
-    void Paint(Painter& p) override {
-        TakeLoadedLyrics();
-        const Palette& c = P();
-        p.Fill(rect, c.videoBg);
-        const PlayerState& s = TheApp().player().State();
-        const QueueItem* item = TheApp().queue().CurrentItem();
-        const std::wstring path = item ? item->path : s.path;
-
+    // Where the cover and its text go: the view's rect less an open popover, the left half with
+    // wide lyrics.
+    struct Geometry {
+        Rect area, left, cover;
+        bool shown = false, wide = false, oneLine = false;
+    };
+    Geometry Place() const {
         // An open popover (queue, tracks, settings) takes the right side: center the cover and
         // the text in what is left, when that is still wide enough.
         Rect area = rect;
@@ -281,36 +280,76 @@ public:
                            PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
         // 320 leaves a usable cover next to the compact library too (844 - 420 DIP at 1280 wide).
         if (panel && rect.w - (panel::kPanelW + panel::kGap) >= 320) area.w -= panel::kPanelW + panel::kGap;
+        Geometry g;
         // With lyrics in a wide view the cover and its text take the left half.
-        const bool shown = lyricsOn_ && !lyrics_.Empty();
-        const bool wide = shown && area.w >= kWideLyrics;
-        const bool oneLine = shown && !wide && lyrics_.synced;
-        const float extra = (oneLine ? 32.0f : 0.0f) + kPillsH;
-        Rect left = area;
-        if (wide) left.w = std::floor(area.w * 0.5f);
+        g.shown = lyricsOn_ && !lyrics_.Empty();
+        g.wide = g.shown && area.w >= kWideLyrics;
+        g.oneLine = g.shown && !g.wide && lyrics_.synced;
+        const float extra = (g.oneLine ? 32.0f : 0.0f) + kPillsH;
+        g.area = area;
+        g.left = area;
+        if (g.wide) g.left.w = std::floor(area.w * 0.5f);
         // Layout: cover centered, text 88 DIP under it (1920×1080: 738 cover, 73 top margin).
         const float side =
-            std::floor(std::max(96.0f, std::min({left.w - 96, rect.h - 180 - extra, wide ? 620.0f : 738.0f})));
+            std::floor(std::max(96.0f, std::min({g.left.w - 96, rect.h - 180 - extra, g.wide ? 620.0f : 738.0f})));
         const float block = side + 88 + 30 + extra;
         const float top = rect.y + std::max(24.0f, (rect.h - block) / 2);
-        const Rect cover{std::round(left.Cx() - side / 2), std::round(top), side, side};
+        g.cover = {std::round(g.left.Cx() - side / 2), std::round(top), side, side};
+        return g;
+    }
+
+    static std::wstring CoverPath() {
+        const QueueItem* item = TheApp().queue().CurrentItem();
+        return item ? item->path : TheApp().player().State().path;
+    }
+
+    // The cover this view would paint now is decoded, or the file has none. Asks for it like a
+    // paint does, so the player opened by App::CheckPlayerHold shows it in its first frame.
+    bool CoverReady() {
+        const std::wstring path = CoverPath();
+        if (path.empty() || !GetHost()) return true;
+        const int px = static_cast<int>(Place().cover.w * GetHost()->Scale());
+        ImageCache& images = TheApp().images();
+        return images.Get(path, px) || !images.Loading(path, px);
+    }
+
+    void Paint(Painter& p) override {
+        TakeLoadedLyrics();
+        const Palette& c = P();
+        p.Fill(rect, c.videoBg);
+        const PlayerState& s = TheApp().player().State();
+        const QueueItem* item = TheApp().queue().CurrentItem();
+        const std::wstring path = CoverPath();
+        const Geometry g = Place();
+        const Rect& area = g.area;
+        const Rect& left = g.left;
+        const Rect& cover = g.cover;
+        const bool shown = g.shown, wide = g.wide, oneLine = g.oneLine;
 
         ID2D1Bitmap* bmp = nullptr;
+        float appear = 1;
+        bool loading = false;
         if (!path.empty() && GetHost()) {
-            const int px = static_cast<int>(side * GetHost()->Scale());
-            bmp = TheApp().images().Get(path, px);
+            const int px = static_cast<int>(cover.w * GetHost()->Scale());
+            ImageCache& images = TheApp().images();
+            bmp = images.Get(path, px);
+            appear = images.Appear(path, px);
+            // On its way: neither the stand-in art nor its glow, so the cover never replaces them.
+            loading = !bmp && images.Loading(path, px);
         }
 
         p.PushClip(rect);
+        p.PushOpacity(appear);
         if (bmp) PaintBackdrop(p, bmp, cover);
-        else PaintGlow(p, cover);
+        else if (!loading) PaintGlow(p, cover);
+        p.PopOpacity();
         p.PopClip();
 
         lastPaint_ = AnimFloat::Now();
         const float viz = UpdateVisualizer(s);
-        if (viz < 1) {
-            p.PushOpacity(1 - viz);
-            p.Shadow(cover, 16, 40, 12, 0.55f * (1 - viz));
+        if (viz < 1 && !loading) {
+            p.PushOpacity((1 - viz) * appear);
+            p.Shadow(cover, 16, 40, 12, 0.55f * (1 - viz) * appear);
             if (bmp) p.Image(bmp, cover, 16, true);
             else PaintGeneratedArt(p, cover, Hash(path));
             p.PopOpacity();
@@ -1084,7 +1123,14 @@ private:
             ctx->GetTransform(&old);
             ctx->SetTransform(D2D1::Matrix3x2F::Translation(-b.left, -b.top) * D2D1::Matrix3x2F::Scale(k, k) *
                               D2D1::Matrix3x2F::Translation(cover.Cx() - w / 2, cover.Cy() - h / 2) * old);
+            // DrawImage ignores the painter's opacity (the cover fading in): a layer carries it.
+            const float fade = p.Opacity();
+            if (fade < 1)
+                ctx->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                      D2D1::IdentityMatrix(), fade),
+                               nullptr);
             ctx->DrawImage(out.Get(), D2D1_INTERPOLATION_MODE_LINEAR);
+            if (fade < 1) ctx->PopLayer();
             ctx->SetTransform(old);
         }
         const Palette& c = P();
@@ -1134,6 +1180,7 @@ private:
         glow_->SetCenter({cover.Cx(), cover.Cy()});
         glow_->SetRadiusX(r);
         glow_->SetRadiusY(r);
+        glow_->SetOpacity(p.Opacity());
         ctx->FillRectangle(rect.D2D(), glow_.Get());
     }
 
@@ -1231,6 +1278,10 @@ private:
 
 void ShowMusicLyrics() {
     if (g_musicView) g_musicView->ShowLyrics();
+}
+
+bool MusicCoverReady() {
+    return !g_musicView || g_musicView->CoverReady();
 }
 
 std::vector<MenuItem> LyricsStyleItems() {

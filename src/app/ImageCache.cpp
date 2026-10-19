@@ -1,6 +1,7 @@
 #include "app/ImageCache.h"
 
 #include "app/App.h"
+#include "app/MainWindow.h"
 #include "library/Thumbnails.h"
 
 namespace app {
@@ -33,6 +34,15 @@ std::wstring ImageCache::Key(const std::wstring& path, int bucket) {
 
 bool ImageCache::Missing(const std::wstring& path, int sizePx) const {
     return missing_.count(Key(path, Bucket(sizePx))) > 0;
+}
+
+bool ImageCache::Loading(const std::wstring& path, int sizePx) const {
+    return pending_.count(Key(path, Bucket(sizePx))) > 0;
+}
+
+float ImageCache::Appear(const std::wstring& path, int sizePx) const {
+    auto it = fades_.find(Key(path, Bucket(sizePx)));
+    return it != fades_.end() ? it->second->Get() : 1.0f;
 }
 
 void ImageCache::NoteMissing(const std::wstring& key) {
@@ -117,6 +127,10 @@ void ImageCache::EndFrame() {
 
 void ImageCache::OnCompleted() {
     bool any = false;
+    // Before the window is revealed an answer is simply there in its first frame.
+    const bool onScreen = TheApp().main() && TheApp().main()->Revealed();
+    for (auto it = fades_.begin(); it != fades_.end();)
+        it = it->second->Active() ? std::next(it) : fades_.erase(it);
     for (const library::ThumbnailResult& r : thumbs_.TakeCompleted()) {
         auto c = cookies_.find(r.cookie);
         if (c == cookies_.end()) continue;
@@ -124,6 +138,11 @@ void ImageCache::OnCompleted() {
         cookies_.erase(c);
         pending_.erase(key);
         if (!r.bitmap) NoteMissing(key);
+        if (onScreen) {
+            auto& fade = fades_[key];
+            fade = std::make_unique<ui::AnimFloat>(0.0f);
+            fade->To(1.0f, 140, ui::Ease::Out);
+        }
         any = true;
     }
     if (any) ready.Emit();
@@ -134,6 +153,7 @@ void ImageCache::Clear() {
     lru_.clear();
     bytes_ = 0;
     missing_.clear();
+    fades_.clear();
 }
 
 }  // namespace app

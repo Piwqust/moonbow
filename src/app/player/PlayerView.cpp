@@ -246,6 +246,21 @@ bool TipIs(const std::wstring& text, const std::wstring& a, const std::wstring& 
            text.compare(a.size() + 1, b.size(), b) == 0;
 }
 
+// The basic keys, once: after the file's own messages (the languages picked, "Resuming from")
+// are gone and a pause has passed, so one toast never replaces another.
+void ShowShortcutHint(MainWindow* w, UINT delay, bool afterToast) {
+    w->StartTimer(delay, [w, afterToast] {
+        if (!TheApp().PlayerShown()) return;
+        if (ToastShown(w)) return ShowShortcutHint(w, 250, true);
+        if (afterToast) return ShowShortcutHint(w, 600, false);
+        ShowToast(w,
+                  Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
+                      {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
+                       ShortcutText(Action::KeyboardShortcuts)}),
+                  "hotkeys", 8000);
+    });
+}
+
 }  // namespace
 
 void ShowPlayerContextMenu(Host* host, Point at) {
@@ -516,19 +531,10 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
         // The basic keys once, at the first file ever played in the player (the onboarding has no page for
         // them). A song started from the library stays there: the toast would cover the page header.
-        if ((m & kChangeFile) && PS().fileLoaded && TheApp().PlayerShown() &&
+        if ((m & kChangeFile) && PS().fileLoaded && (TheApp().PlayerShown() || TheApp().PlayerPending()) &&
             TheApp().UiValue("hint.shortcuts") != "1") {
             TheApp().SetUiValue("hint.shortcuts", "1");
-            // After the file's own messages (the languages picked, "Resuming from"): one toast
-            // replaces another, and this one shows only once.
-            window_->StartTimer(1800, [w = window_] {
-                if (!TheApp().PlayerShown()) return;
-                ShowToast(w,
-                          Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
-                              {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
-                               ShortcutText(Action::KeyboardShortcuts)}),
-                          "hotkeys", 8000);
-            });
+            ShowShortcutHint(window_, 1800, false);
         }
         if ((m & kChangeFile) || ((m & kChangeState) && PS().paused != menuPaused_)) CloseStaleMenu();
         menuPaused_ = PS().paused;
@@ -584,7 +590,8 @@ bool PlayerView::PipControlsShown() const {
 
 Rect PlayerView::VideoRect() const {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
-    if (!visible || music_->visible) return {};
+    // While App::PlayerPending the player is laid out unseen: mpv's window goes there already.
+    if ((!visible && !TheApp().PlayerPending()) || music_->visible) return {};
     return video_->Inner(immersive);
 }
 
@@ -1019,17 +1026,18 @@ void MiniPlayer::Paint(Painter& p) {
         const QueueItem* cur = TheApp().queue().CurrentItem();
         const std::wstring path = cur ? cur->path : s.path;
         ID2D1Bitmap* bmp = nullptr;
-        if (!path.empty() && GetHost())
-            bmp = TheApp().images().Get(path, static_cast<int>(std::ceil(v.w * GetHost()->Scale())));
+        const int px = GetHost() ? static_cast<int>(std::ceil(v.w * GetHost()->Scale())) : 0;
+        if (!path.empty() && GetHost()) bmp = TheApp().images().Get(path, px);
         p.Fill(v, P().bgCard, 4);
+        const float appear = TheApp().images().Appear(path, px);
         if (bmp) {
             // Square cover centered over a dimmed, cropped copy of itself.
-            p.Image(bmp, v, 4, true, 0.35f);
-            p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true);
-        } else {
+            p.Image(bmp, v, 4, true, 0.35f * appear);
+            p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true, appear);
+        } else if (!TheApp().images().Loading(path, px)) {
             // The hover controls take the center: fade the note out under them.
             const float icon = compact_ ? 24.0f : 40.0f;
-            p.Icon("music", v.Center(icon, icon), P().textTertiary.Fade(1 - k));
+            p.Icon("music", v.Center(icon, icon), P().textTertiary.Fade((1 - k) * appear));
         }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
