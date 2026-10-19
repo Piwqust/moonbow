@@ -279,6 +279,17 @@ void ClosePlayerPanels() {
     s.group = Group::None;
 }
 
+void ReopenPlayerPanels() {
+    MainWindow* w = TheApp().main();
+    const PanelState& s = S();
+    if (!w || !s.pop || !w->IsPopupOpen(s.pop)) return;
+    // Posted: whatever else the change closes or rebuilds goes first.
+    w->Post([g = s.group, tab = s.tab] {
+        ClosePlayerPanels();
+        Open(g, tab);
+    });
+}
+
 void TogglePlayerPanel(PanelKind kind, const Rect&) {
     MainWindow* w = TheApp().main();
     if (!w) return;

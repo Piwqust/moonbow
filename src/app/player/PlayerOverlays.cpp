@@ -405,6 +405,12 @@ NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
         if (serial_) Resolve();
         Update();
     });
+    langConn_ = Connect(TheApp().languageChanged, [this, play, cancel] {
+        play->SetText(Tr(L"Play now"));
+        cancel->SetText(Tr(L"Cancel"));
+        shownSecs_ = -1;  // the title too
+        Update();
+    });
 }
 
 NextEpisodeCard::~NextEpisodeCard() {
@@ -658,6 +664,10 @@ SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", Button
     };
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeTime | kChangeChapters | kChangeFile | kChangeState)) Update();
+    });
+    langConn_ = Connect(TheApp().languageChanged, [this] {
+        kind_ = -1;  // sets the text again
+        Update();
     });
 }
 

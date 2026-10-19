@@ -71,7 +71,7 @@ private:
     float thinW_ = 0;
     int thinPx_ = -1;
     uint64_t configToken_ = 0;
-    ScopedConnection playerConn_, screenConn_, liveConn_;
+    ScopedConnection playerConn_, screenConn_, liveConn_, langConn_;
 };
 
 // Built by the player module (MusicView.cpp): cover art, blurred backdrop, titles.
