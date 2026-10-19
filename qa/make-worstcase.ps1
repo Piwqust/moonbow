@@ -180,6 +180,22 @@ if (-not (Done $lrc)) {
   [IO.File]::WriteAllText($lrc, ($lines -join "`r`n") + "`r`n", (New-Object Text.UTF8Encoding $false)); $script:made++
 }
 
+# Cover and lyrics together, as real songs have them (qa/ESCAPES.md E5): the same synced lyrics over
+# a saturated, a white, a black, a red and a busy cover. On black alone colour bugs don't show.
+$d = SubDir "Music\Covers with lyrics"
+foreach ($c in @(@("Blue", "0x1E78E0"), @("White", "0xF4F4F0"), @("Black", "0x050505"), @("Red", "0xD8263A"), @("Busy", ""))) {
+  $img = $coverNormal
+  if ($c[1]) {
+    $img = Join-Path $tmp ("cover-" + $c[0].ToLower() + ".png")
+    $color = $c[1]
+    Make $img { param($o) FF @("-f", "lavfi", "-i", "color=c=${color}:s=600x600", "-frames:v", "1", $o) }
+  }
+  $song = Join-Path $d "$($c[0]) cover.mp3"
+  Song $song @{ title = "$($c[0]) cover"; artist = "Lyrics Tester"; album = "Covers with lyrics" } $img $tone60
+  $songLrc = [IO.Path]::ChangeExtension($song, ".lrc")
+  if (-not (Done $songLrc)) { Copy-Item -LiteralPath $lrc -Destination $songLrc; $script:made++ }
+}
+
 # --- videos ---------------------------------------------------------------------------------------
 $d = SubDir "Videos\Aspect"
 Video (Join-Path $d "Cinema 21x9 (840x360).mp4") 840 360

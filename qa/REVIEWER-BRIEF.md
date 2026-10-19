@@ -70,6 +70,27 @@ Window resizing: use `SetWindowPos` via a small Add-Type helper on **your** wind
 5. No system setting changes, no registry writes, no installs, no network uploads.
 6. Keep volume at 0 / muted.
 
+## Beyond defects: product, design and motion
+
+Most of what the owner still finds is not broken by the checklist above: it is unconsidered.
+Read [qa/ESCAPES.md](ESCAPES.md) first: it lists what slipped past earlier rounds and why. Then,
+besides hunting defects, answer its questions:
+
+- **Product (Q1-Q3).** For each behavior and default: is it right for a song, a film, a series
+  episode and a stream? Does it continue what the user just saw (Explorer, the library, a drop)?
+  Would a Spotify, Apple Music, YouTube, VLC or IINA user be surprised?
+- **Design (Q4-Q5).** Capture at scale 1, not 0.5, on realistic media: the worst-case set's
+  `Music\Covers with lyrics` (white, black, saturated and busy covers with synced lyrics), both
+  themes, long text. Ask what a designer at Spotify or Apple would change first, and what looks
+  cheap, flat or dull. Run `python tools/dev/check-colors.py` and read
+  [qa/visual-rules.md](visual-rules.md).
+- **Motion.** Anything that moves (lyrics, fills, bars, transitions) gets a series of frames, not
+  one: it must move one way, at an even pace, without a jump.
+- **Combinations.** Try every input (left, right, double click, wheel, keys, drop) on every state
+  of a screen (with and without lyrics, cover, queue, panel), not only on the first one you meet.
+
+Report these as `Ugly` or `Product` findings next to the defects.
+
 ## What to report
 
 Write your report to the file given in your task (Markdown). Structure:

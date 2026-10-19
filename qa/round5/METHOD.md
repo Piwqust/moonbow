@@ -14,6 +14,8 @@ The method has four layers. Each one catches what the others miss.
 Code-level rules for visual bugs that only real media shows (opaque colors over pictures and the
 like) are in [../visual-rules.md](../visual-rules.md), with `tools/dev/check-colors.py`. Worst-case
 data includes a saturated cover, not only black or generated art.
+What slipped past the rounds, and the product, design and motion passes that answer it, are in
+[../ESCAPES.md](../ESCAPES.md).
 
 ## 1. Deterministic audits
 
