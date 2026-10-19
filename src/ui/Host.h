@@ -73,6 +73,8 @@ public:
     void ClosePopup(Widget* content);
     void CloseAllPopups();
     bool HasPopup() const { return !popups_.empty(); }
+    // A menu, panel or dialog: not a toast or tooltip, which take no focus and stay on outside clicks.
+    bool HasInteractivePopup() const;
     size_t PopupCount() const { return popups_.size(); }
     Widget* PopupAt(size_t i) const { return i < popups_.size() ? popups_[i].content.get() : nullptr; }
     bool IsPopupOpen(const Widget* content) const;

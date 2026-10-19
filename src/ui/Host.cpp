@@ -976,6 +976,12 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
     RequestRender();
 }
 
+bool Host::HasInteractivePopup() const {
+    for (const Popup& p : popups_)
+        if (p.options.focusContent || p.options.dismissOnOutside) return true;
+    return false;
+}
+
 bool Host::ClicksThrough(const Popup& popup, float x, float y) const {
     if (!popup.options.clickThrough) return false;
     Widget* w = HitTestAll(x, y);  // the popup is not under the point
