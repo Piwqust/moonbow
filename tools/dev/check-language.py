@@ -16,7 +16,8 @@ root = pathlib.Path(__file__).resolve().parents[2] / "src" / "app" / "strings"
 pair = re.compile(r'\{L"((?:[^"\\]|\\.)*)",\s*L"((?:[^"\\]|\\.)*)"\}')
 en_to_ru = {}
 for f in sorted(root.glob("*.inc")):
-    for m in pair.finditer(f.read_text(encoding="utf-8")):
+    text = "\n".join(l for l in f.read_text(encoding="utf-8").splitlines() if not l.lstrip().startswith("//"))  # header examples
+    for m in pair.finditer(text):
         en, ru = (s.replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\") for s in m.groups())
         if en != ru and len(en) > 1 and re.search(r"[A-Za-z]", en):  # not units such as "B"
             en_to_ru[en] = ru

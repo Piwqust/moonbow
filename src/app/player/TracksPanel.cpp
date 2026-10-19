@@ -74,7 +74,6 @@ const PlayerState& PS() {
 struct ChoiceRow {
     std::wstring label;
     std::wstring detail;  // right-aligned, tertiary
-    std::wstring tip;     // the row's tooltip (the track's format)
     bool checked = false;
     std::function<void()> select;
     std::function<void()> remove;  // shown in edit mode
@@ -144,10 +143,6 @@ public:
     bool OnMouseMove(const MouseEvent& e) override {
         const int i = RowAt(e.y);
         const bool x = i >= 0 && editing && e.x >= RowRect(i).Right() - 32;
-        if (i != hover_) {
-            const auto rows = rows_();
-            tooltip = i >= 0 && i < static_cast<int>(rows.size()) ? rows[static_cast<size_t>(i)].tip : L"";
-        }
         if (i != hover_ || x != hoverX_) {
             hover_ = i;
             hoverX_ = x;
@@ -234,9 +229,9 @@ std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
         r.label = external && t.title.empty() && !t.TitleFromFileName() && t.lang.empty()
                       ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
                       : TrackName(t, ordinal);
-        // The codec ("SubRip", "E-AC-3") is jargon: the row says stereo or 5.1, the tooltip the format.
+        // The codec ("SubRip", "E-AC-3") is jargon: the row says stereo or 5.1 and nothing more (a
+        // tooltip under the pointer covered the next row; Media Information names the format).
         r.detail = TrackDetail(t, false);
-        r.tip = TrackDetail(t);
         r.checked = t.selected;
         const int64_t id = t.id;
         r.select = [prop, id] { TheApp().player().SetTrack(prop, id); };
@@ -289,7 +284,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
     AddSectionLine(page);
     Widget* title = AddListTitle(page, Tr(L"External Tracks"));
     auto* list = page->Add<ChoiceList>([type] { return TrackRows(type, true); }, Tr(L"None added"));
-    auto* edit = AddTitleButton(title, "edit", L"Edit external tracks", nullptr);
+    auto* edit = AddTitleButton(title, "edit", L"Remove external tracks", nullptr);
     edit->onClick = [list, edit] {
         list->editing = !list->editing;
         edit->active = list->editing;
@@ -306,7 +301,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
                     ShowOnlineSubtitlesDialog();
                 });
         });
-    AddTitleButton(title, "add", subs ? L"Add subtitle file" : L"Add audio file", [subs] {
+    AddTitleButton(title, "add", subs ? L"Add subtitle file…" : L"Add audio file…", [subs] {
         if (!PS().fileLoaded) return;
         for (const std::wstring& f : PickFiles(subs ? 2 : 1)) {
             if (subs) TheApp().player().AddSubtitle(f);

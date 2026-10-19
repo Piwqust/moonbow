@@ -39,9 +39,10 @@ struct TrackInfo {
     std::wstring path, artist, title, album;
     double duration = 0;
 };
-// Looks the song up when the feature is on and the track has an artist and a title; `done` runs
-// on the UI thread (found = false when there is nothing). Returns 0 when nothing was asked.
-uint64_t FetchLyrics(const TrackInfo& track, std::function<void(const LyricsAnswer&)> done);
+// Looks the song up when the feature is on (or once = the user agreed to this one search) and the
+// track has an artist and a title; `done` runs on the UI thread (found = false when there is
+// nothing). Returns 0 when nothing was asked.
+uint64_t FetchLyrics(const TrackInfo& track, std::function<void(const LyricsAnswer&)> done, bool once = false);
 // Writes "<song>.lrc" next to the file (never replaces one) and says how it went in a toast.
 void SaveLyrics(const TrackInfo& track, const LyricsAnswer& lyrics, ui::Host* toastHost);
 

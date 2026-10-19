@@ -5,6 +5,7 @@
 #include "Util.h"
 #include "app/I18n.h"
 #include "app/library/Pages.h"
+#include "app/player/Episodes.h"
 #include "library/MediaTypes.h"
 
 #include <shellapi.h>
@@ -185,6 +186,9 @@ public:
         results_[2]->SetGridStyle(GridStyle::VideoCards, 0);
         // Songs are found by the dozen: list rows with artist and album read better than big covers.
         results_[3]->SetGridStyle(GridStyle::Rows, 0, kColSubtitle | kColExtra | kColDuration);
+        // Folders have no artwork: a short list of three, not tiles of one folder icon each, which ran
+        // off the bottom of a 1280×780 window under Continue Watching.
+        folders_->SetGridStyle(GridStyle::CompactRows, 3, 0);
 
         empty_ = Add<EmptyState>();
         empty_->visible = false;
@@ -381,10 +385,22 @@ private:
             if (h.duration > 0 && h.Progress() >= 0.95) watched.insert(library::PathKey(h.path));
         auto isWatched = [&](const std::wstring& path) { return watched.count(library::PathKey(path)) > 0; };
         std::set<int> shows;  // already represented
+        std::set<std::wstring> looseShows;  // episodes outside the library: show name + folder
         for (const library::HistoryEntry& h : hist.ContinueWatching(20)) {
+            // One card per show: the newest episode in progress (the list is newest first). Episodes
+            // outside the library count by their name and folder.
+            const int show = findShow(h.path);
+            const episodes::Episode ep = episodes::Parse(h.path);
+            const bool seen = show >= 0 ? !shows.insert(show).second
+                                        : ep.Valid() && !IsUrl(h.path) &&
+                                              !looseShows.insert(ep.show + L"\n" + library::PathKey(library::ParentFolder(h.path))).second;
+            if (seen) continue;
             const library::MediaItem* m = snap->FindItem(h.path);
             Entry e = MediaCard(h.path, m, &h);
             e.audio = false;
+            // An episode as the window and the mini player name it ("Show — S01E02"), not by the
+            // container's title tag.
+            if (ep.Valid() && !IsUrl(h.path)) e.title = episodes::Title(h.path);
             e.subtitle.clear();
             e.icon = IsUrl(h.path) ? "streaming" : "video";
             e.progress = h.Progress();
@@ -393,7 +409,6 @@ private:
                 e.subtitle = Fmt(Tr(L"{0} left"), {FormatDuration(h.duration - h.position)});
             // The frame where playback stopped, as Continue Watching rows in other players show.
             if (!e.image.empty() && h.position > 0) e.image = library::FramePath(h.path, h.position);
-            if (const int show = findShow(h.path); show >= 0) shows.insert(show);
             cards.push_back({h.lastPlayed, std::move(e), MakeQueueItem(h.path, h.title, h.duration)});
         }
         size_t scanned = 0;

@@ -506,9 +506,13 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
     if (hot) {
         p.Fill(t, pressed ? c.press : c.hover, kCardRadius);
-        if (e.kind == EntryKind::Media && !now) {
-            p.FillCircle({t.Cx(), t.Cy()}, kPlayD / 2 + (hoverPlay_ ? 2.0f : 0.0f), c.accent.Fade(hoverPlay_ ? 1.0f : 0.94f));
-            p.Icon("play", t.Center(24, 24), c.onAccent);
+        if ((e.kind == EntryKind::Media || (e.kind == EntryKind::Album && onPlay)) && !now) {
+            // On artwork, like the "now playing" chip: the same in both themes (the light theme's
+            // black accent vanished on a dark cover), with a shadow that keeps it on a white one.
+            const float rad = kPlayD / 2 + (hoverPlay_ ? 2.0f : 0.0f);
+            p.Shadow(t.Center(rad * 2, rad * 2), rad, 10, 2, 0.35f);
+            p.FillCircle({t.Cx(), t.Cy()}, rad, Color::Hex(0xFFFFFF, hoverPlay_ ? 1.0f : 0.94f));
+            p.Icon("play", t.Center(24, 24), Color::Hex(0x000000));
         }
     }
     if (sel) {
@@ -528,7 +532,9 @@ Rect ItemGrid::MoreButtonRect(const Rect& slot) const {
 }
 
 bool ItemGrid::OnPlayButton(int i, float x, float y) const {
-    if (!IsCardStyle(style_) || !Selectable(i) || entries_[static_cast<size_t>(i)].kind != EntryKind::Media) return false;
+    if (!IsCardStyle(style_) || !Selectable(i)) return false;
+    const EntryKind kind = entries_[static_cast<size_t>(i)].kind;
+    if (kind != EntryKind::Media && !(kind == EntryKind::Album && onPlay)) return false;
     // The playing card shows its state there, not a ▶.
     if (SamePath(entries_[static_cast<size_t>(i)].path, NowPlayingPath())) return false;
     const Rect r = ItemRect(i);
@@ -555,7 +561,10 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const bool compactRow = style_ == GridStyle::CompactRows;
     const RowCells cells = MediaCells(r);
     const Rect t = compactRow ? Rect{r.x, r.Cy() - kThumb / 2, kThumb, kThumb} : cells.thumb;
-    if (!compactRow && (columns & kColTrack) && e.track > 0)
+    // The playing track shows the compact list's ▶ in place of its number.
+    if (!compactRow && (columns & kColTrack) && now && t.w <= 0)
+        p.Icon("play", {cells.track.Right() - 18, r.Cy() - 9, 18, 18}, c.accent);
+    else if (!compactRow && (columns & kColTrack) && e.track > 0)
         p.Text(std::to_wstring(e.track), cells.track, TextStyle::Mono, now ? c.accent : c.textTertiary, HAlign::Trailing);
     const bool iconRow = e.kind != EntryKind::Media && e.kind != EntryKind::Album && e.image.empty();
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
@@ -979,7 +988,8 @@ void ItemGrid::OnClick() {
     const bool play = pressPlay_;
     pressPlay_ = false;
     if (pressMods_) return;  // Ctrl/Shift+click only selects: it must not open or play
-    if ((OpensOnClick(entries_[static_cast<size_t>(i)].kind) || play) && onActivate) onActivate(i);  // may destroy this grid
+    if (play && onPlay && entries_[static_cast<size_t>(i)].kind != EntryKind::Media) onPlay(i);  // may destroy this grid
+    else if ((OpensOnClick(entries_[static_cast<size_t>(i)].kind) || play) && onActivate) onActivate(i);  // may destroy this grid
 }
 
 bool ItemGrid::OnDoubleClick(const MouseEvent& e) {

@@ -8,6 +8,7 @@
 #include "app/Shell.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
+#include "app/player/Episodes.h"
 #include "app/player/LiveState.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
@@ -518,11 +519,16 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
         if ((m & kChangeFile) && PS().fileLoaded && TheApp().PlayerShown() &&
             TheApp().UiValue("hint.shortcuts") != "1") {
             TheApp().SetUiValue("hint.shortcuts", "1");
-            ShowToast(window_,
-                      Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
-                          {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
-                           ShortcutText(Action::KeyboardShortcuts)}),
-                      "hotkeys", 8000);
+            // After the file's own messages (the languages picked, "Resuming from"): one toast
+            // replaces another, and this one shows only once.
+            window_->StartTimer(1800, [w = window_] {
+                if (!TheApp().PlayerShown()) return;
+                ShowToast(w,
+                          Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
+                              {ShortcutText(Action::PlayPause), ShortcutText(Action::Fullscreen),
+                               ShortcutText(Action::KeyboardShortcuts)}),
+                          "hotkeys", 8000);
+            });
         }
         if ((m & kChangeFile) || ((m & kChangeState) && PS().paused != menuPaused_)) CloseStaleMenu();
         menuPaused_ = PS().paused;
@@ -714,6 +720,14 @@ void PlayerView::OnLayout() {
     UpdateStats();
 }
 
+Rect PlayerView::ToastBand() const {
+    Rect a = video_->rect;
+    const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
+                       PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
+    if (panel && a.w - (panel::kPanelW + panel::kGap) >= 320) a.w -= panel::kPanelW + panel::kGap;
+    return a;
+}
+
 void PlayerView::Paint(Painter& p) {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
     if (immersive) return;
@@ -863,7 +877,8 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     overlay_->dir = Dir::None;
     auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
-    auto* expand = overlay_->Add<MiniOverlayButton>("open", L"Open player", Action::None, 28, 18);
+    // An upward chevron, as Spotify's and YouTube's mini players expand: "open" read as a new window.
+    auto* expand = overlay_->Add<MiniOverlayButton>("chevron_up", L"Open player", Action::None, 28, 18);
     expand->id = "expand";
     expand->onClick = [] { TheApp().ShowPlayer(true); };
     auto* prev = overlay_->Add<MiniOverlayButton>("previous", L"Previous", Action::Previous, 36, 24);
@@ -884,6 +899,13 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     auto* queue = Add<QueueButton>();
     queue->id = "queue";
     queue->onClick = [this] { TogglePlayerPanel(PanelKind::Queue, rect); };
+    // A song's lyrics are one click away from the library too: the player opens on them.
+    auto* lyrics = Add<IconButton>("subtitle-2", Tr(L"Lyrics"), 28, 20);
+    lyrics->id = "lyrics";
+    lyrics->onClick = [] {
+        TheApp().ShowPlayer(true);
+        ShowMusicLyrics();
+    };
     auto* seek = Add<SeekBar>();
     seek->compact = true;
     seek->id = "seek";
@@ -933,7 +955,7 @@ void MiniPlayer::OnLayout() {
             }
         }
         for (auto& c : Children()) {
-            if (c->id == "queue") c->visible = false;
+            if (c->id == "queue" || c->id == "lyrics") c->visible = false;
             if (c->id == "seek") c->Arrange({v.Right() + 10, rect.Bottom() - 24, rect.Right() - 60 - v.Right() - 10, 24});
         }
         return;
@@ -955,6 +977,11 @@ void MiniPlayer::OnLayout() {
         if (c->id == "queue") {
             c->visible = true;
             c->Arrange({rect.Right() - 8 - 28, rect.Bottom() - 8 - 28, 28, 28});
+        }
+        if (c->id == "lyrics") {
+            c->visible = !PS().hasVideo;
+            static_cast<IconButton*>(c.get())->tooltip = Tr(L"Lyrics");
+            c->Arrange({rect.Right() - 8 - 28 - 4 - 28, rect.Bottom() - 8 - 28, 28, 28});
         }
     }
 }
@@ -1007,7 +1034,9 @@ void MiniPlayer::Paint(Painter& p) {
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
     const PlayingTags& tags = CurrentTags();
-    const std::wstring name = item ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : L"";
+    // An episode as the window names it ("Show — S01E02"): a container's title tag rarely says which.
+    const std::wstring episode = item && s.hasVideo ? episodes::Title(item->path) : L"";
+    const std::wstring name = !episode.empty() ? episode : item ? (tags.title.empty() ? FileNameOf(item->path) : tags.title) : L"";
     // A cut title stays readable in the card's tooltip.
     const float titleW = compact_ ? std::max(0.0f, rect.Right() - 60 - v.Right() - 12) : rect.w - 24;
     tooltip = gfx::Text::Get().Measure(name, TextStyle::Body).width > titleW ? name : std::wstring();
@@ -1033,7 +1062,7 @@ void MiniPlayer::Paint(Painter& p) {
     }
     if (!tags.artist.empty()) folder = tags.artist;
     p.Icon(tags.artist.empty() ? "folder" : "artist", {rect.x + 10, rect.Bottom() - 32, 20, 20}, P().textTertiary);
-    p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - 84, 24}, TextStyle::Small, P().textTertiary);
+    p.Text(folder, {rect.x + 36, rect.Bottom() - 34, rect.w - (s.hasVideo ? 84.0f : 116.0f), 24}, TextStyle::Small, P().textTertiary);
     // Hover scrim over the video (DComp draws it above mpv's window); the
     // overlay buttons are children, so they paint on top of it. They get solid backings of
     // their own: through the scrim alone, light cover art (its title text) reads through the icons.

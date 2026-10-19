@@ -150,8 +150,13 @@ public:
     std::function<void(std::vector<std::wstring>)> onDropFiles;
     // Top edge (DIPs) for a toast of height h; default 56 (below the title bar).
     std::function<float(float h)> toastTop;
+    // The part of the window (x and w) a toast centres in, beside open side panels; default the whole width.
+    std::function<Rect()> toastBand;
     // Text shown in the overlay while files are dragged over the window.
     std::wstring dropHint;
+    // A card floating over the content (the library's mini player), empty when none: scroll views
+    // it covers let their last rows scroll up above it.
+    Rect floatingCard;
 
     // Every live host, e.g. to repaint all windows after a theme change.
     static const std::vector<Host*>& All();

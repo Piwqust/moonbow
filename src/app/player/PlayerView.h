@@ -34,6 +34,8 @@ public:
 
     // Rect where the video is shown (window DIPs); empty when not visible.
     ui::Rect VideoRect() const;
+    // Where a toast centres: the video or music area left of an open popover.
+    ui::Rect ToastBand() const;
 
     void OnLayout() override;
     float SubtitleBand(float h) const;
@@ -88,6 +90,8 @@ void ShowPlayerContextMenu(ui::Host* host, ui::Point at);
 // The queue pinned beside the music view: "left", "right" or "" (ui.json player.queueDock).
 std::string QueueDockSide();
 void SetQueueDockSide(const std::string& side);
+// Shows the lyrics in the music view again if the Lyrics pill hid them (MusicView.cpp).
+void ShowMusicLyrics();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
 

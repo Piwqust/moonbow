@@ -629,7 +629,7 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
 }
 
 void ShowConfirm(const std::wstring& title, const std::wstring& text, const std::wstring& okText,
-                 std::function<void()> done) {
+                 std::function<void()> done, const std::wstring& otherText, std::function<void()> other) {
     MainWindow* w = TheApp().main();
     if (!w) return;
     auto frame = std::make_unique<dlg::Frame>(title, dlg::FitWidth(w, 440));
@@ -640,11 +640,15 @@ void ShowConfirm(const std::wstring& title, const std::wstring& text, const std:
     auto* cancel = f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral);
     cancel->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
-    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = [f, done] {
-        auto run = done;  // the dialog (and this lambda) is gone after Close()
-        f->Close();
-        if (run) run();
+    auto closeAndRun = [f](std::function<void()> fn) {
+        return [f, fn] {
+            auto run = fn;  // the dialog (and this lambda) is gone after Close()
+            f->Close();
+            if (run) run();
+        };
     };
+    if (other) f->Footer()->Add<dlg::DButton>(otherText, dlg::BtnStyle::Neutral)->onClick = closeAndRun(other);
+    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = closeAndRun(done);
     dlg::ShowFrame(w, std::move(frame), cancel);
     w->SetFocus(cancel, true);  // with its ring: Enter and Space cancel, Tab reaches the action
 }

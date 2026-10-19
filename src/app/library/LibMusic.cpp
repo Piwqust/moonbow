@@ -311,6 +311,9 @@ protected:
         auto songs = snap_->Music();
         grid_->roundImages = mode_ == MusicMode::Artists;
         grid_->thumbs = mode_ != MusicMode::Album;  // every row would repeat the album's cover
+        grid_->onPlay = [this](int i) {
+            if (const Entry* e = EntryAt(i); e && e->kind == EntryKind::Album) PlayInOrder(GroupQueue(i), e->title);
+        };
         if (tabs_) tabs_->Parent()->visible = !songs.empty();  // no music at all: the empty state alone
 
         switch (mode_) {
@@ -476,6 +479,13 @@ private:
         albums_->visible = false;
         albums_->onActivate = [this](int i) {
             if (i >= 0 && i < static_cast<int>(albumRoutes_.size())) TheApp().Navigate(albumRoutes_[static_cast<size_t>(i)]);
+        };
+        albums_->onPlay = [this](int i) {
+            if (i < 0 || i >= static_cast<int>(albumSongs_.size())) return;
+            std::vector<QueueItem> q;
+            for (const library::MediaItem* m : albumSongs_[static_cast<size_t>(i)])
+                q.push_back(MakeQueueItem(m->path, m->DisplayTitle(), m->duration));
+            PlayInOrder(std::move(q), albums_->Entries()[static_cast<size_t>(i)].title);
         };
         albums_->onMenu = [this](int i, Point at) {
             if (i < 0 || i >= static_cast<int>(albumRoutes_.size())) return;

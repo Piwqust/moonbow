@@ -986,6 +986,11 @@ void ScrollView::OnLayout() {
     Widget* c = Content();
     if (!c) return;
     contentH_ = c->Measure(rect.w, kInf).h;
+    if (const Host* host = GetHost()) {
+        const Rect& card = host->floatingCard;
+        if (card.w > 0 && card.x < rect.Right() && card.Right() > rect.x && card.y < rect.Bottom())
+            contentH_ += rect.Bottom() - card.y + 12;
+    }
     // Not scrollable (an overflow of up to kNoScroll): back to the top, not left 1-4 DIP down.
     const float maxOff = Scrollable() ? MaxOffset() : 0.0f;
     if (offset_.Target() > maxOff) offset_.Set(maxOff);
@@ -1762,11 +1767,13 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         };
     }
     auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon), std::move(actionLabel), std::move(action));
+    const Rect band = host->toastBand ? host->toastBand() : Rect{0, 0, host->ClientSize().w, 0};
+    bubble->maxW = std::max(240.0f, band.w - 32);  // the popup measures again with the window's width
     const Size s = bubble->Measure(600, 40);
     PopupOptions o;
     o.place = Place::At;
     const float y = host->toastTop ? host->toastTop(s.h) : 56.0f;
-    o.anchor = {(host->ClientSize().w - s.w) / 2, y, 0, 0};
+    o.anchor = {std::round(band.x + (band.w - s.w) / 2), y, 0, 0};
     o.passthrough = !clickable;
     o.focusContent = false;
     o.dismissOnOutside = false;

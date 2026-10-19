@@ -1083,7 +1083,17 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::ve
     f->OnClosed([w, previousDrop, result, done] {
         w->onDropFiles = *previousDrop;
         if (done) done(*result);
-        if (!result->empty()) ShowToast(w, Tr(L"Playlist created"), "playlist");
+        if (result->empty()) return;
+        const library::Playlist* p = TheApp().playlists().Find(*result);
+        const std::wstring route = Utf8ToWide(*result);
+        ShowToast(w, Fmt(Tr(L"Playlist “{0}” created"), {p ? p->name : std::wstring()}), "playlist", 5000, Tr(L"Open"),
+                  [w, route] {
+                      // Posted: leaving the player closes the popups, this toast among them, mid-click.
+                      w->Post([route] {
+                          TheApp().ShowPlayer(false);
+                          TheApp().Navigate(Route{Section::Playlists, route});
+                      });
+                  });
     });
     ShowFrame(w, std::move(frame), name);
 }

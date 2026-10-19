@@ -63,7 +63,7 @@ struct LyricsLoad {
     Lyrics lyrics;
 };
 
-constexpr float kWideLyrics = 860;  // narrower views show only the sung line under the title
+constexpr float kWideLyrics = 720;  // narrower views show only the sung line under the title
 // Lines light up this much early: an exact seek to a stamp may land a frame before it.
 constexpr double kLead = 0.1;
 constexpr float kEdgeFade = 72;  // lyrics fade out over this much at the column's top and bottom
@@ -156,8 +156,9 @@ public:
 };
 
 // "Lyrics" and "Queue" under the title: the music view's own way to them, larger than the bar's
-// icons. Translucent white over the blurred cover (qa/visual-rules.md, rule 1); brighter while
-// what it opens is shown.
+// icons. Translucent white over the blurred cover (qa/visual-rules.md, rule 1); solid white with
+// dark text while what it opens is shown, so on and off differ at a glance; faint when there is
+// nothing to show.
 class MusicPill : public Widget {
 public:
     MusicPill(const char* icon, const wchar_t* label) : icon_(icon), label_(label) {
@@ -165,11 +166,16 @@ public:
         focusable = true;
     }
     bool active = false;
+    bool dim = false;
     void Paint(Painter& p) override {
         const Color white = Color::Hex(0xFFFFFF);
         const bool hot = IsHot() || IsPressed();
-        p.Fill(rect, white.Fade(IsPressed() ? 0.26f : active ? 0.2f : hot ? 0.16f : 0.1f), rect.h / 2);
-        const Color c = white.Fade(active || hot ? 0.95f : 0.72f);
+        if (active) {
+            p.Fill(rect, white.Fade(IsPressed() ? 0.8f : hot ? 0.86f : 0.94f), rect.h / 2);
+        } else {
+            p.Fill(rect, white.Fade(IsPressed() ? 0.26f : hot ? 0.16f : dim ? 0.06f : 0.1f), rect.h / 2);
+        }
+        const Color c = active ? Color::Hex(0x000000, 0.88f) : white.Fade(hot ? 0.95f : dim ? 0.42f : 0.72f);
         p.Icon(icon_, {rect.x + 12, rect.Cy() - 9, 18, 18}, c, c);  // two-tone parts too: accentMid is opaque
         p.Text(Tr(label_), {rect.x + 36, rect.y, rect.w - 46, rect.h}, TextStyle::BodyMedium, c);
         PaintFocusRing(p, rect, rect.h / 2);
@@ -186,9 +192,13 @@ private:
     const wchar_t* label_;
 };
 
+class MusicView;
+MusicView* g_musicView = nullptr;  // the one music view (ShowMusicLyrics)
+
 class MusicView : public Widget {
 public:
     MusicView() {
+        g_musicView = this;
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeFile | kChangeMeta)) RefreshLyrics();
             if (m & kChangeTime) FollowTime();
@@ -226,6 +236,7 @@ public:
         queueBtn_->onClick = [this] { TogglePlayerPanel(PanelKind::Queue, queueBtn_->rect); };
     }
     ~MusicView() override {
+        if (g_musicView == this) g_musicView = nullptr;
         TheApp().config().Unsubscribe(vizToken_);
         TheApp().config().Unsubscribe(lyricsToken_);
         TheApp().player().SetSignalTap(false);
@@ -233,6 +244,10 @@ public:
         net::Cancel(onlineReq_);
     }
     void OnLayout() override {}  // titleTip_, source_ and the pills are placed by Paint
+    void ShowLyrics() {
+        lyricsOn_ = true;
+        Invalidate();
+    }
 
     void DebugInfo(std::string& out) const override {
         Widget::DebugInfo(out);
@@ -261,7 +276,8 @@ public:
         Rect area = rect;
         const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
                            PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
-        if (panel && rect.w - (panel::kPanelW + panel::kGap) >= 480) area.w -= panel::kPanelW + panel::kGap;
+        // 320 leaves a usable cover next to the compact library too (844 - 420 DIP at 1280 wide).
+        if (panel && rect.w - (panel::kPanelW + panel::kGap) >= 320) area.w -= panel::kPanelW + panel::kGap;
         // With lyrics in a wide view the cover and its text take the left half.
         const bool shown = lyricsOn_ && !lyrics_.Empty();
         const bool wide = shown && area.w >= kWideLyrics;
@@ -328,6 +344,7 @@ public:
         const float textEnd =
             cover.Bottom() + (oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f);
         lyricsBtn_->active = shown;
+        lyricsBtn_->dim = lyrics_.Empty() && !pending_ && !onlineReq_;
         queueBtn_->active = PlayerPanelOpen(PanelKind::Queue);
         const float lw = lyricsBtn_->Width(), qw = queueBtn_->Width();
         const float px = std::round(left.Cx() - (lw + 10 + qw) / 2), py = std::round(textEnd + 16);
@@ -610,7 +627,9 @@ private:
     // No .lrc and no tag (the local sources answered first): ask LRCLIB, when the user allowed it.
     void FetchOnline() {
         const PlayerState& s = TheApp().player().State();
-        if (!s.fileLoaded || !lyrics_.Empty() || pending_ || onlineSerial_ == serial_ || !net::online::LyricsOn()) return;
+        if (!s.fileLoaded || !lyrics_.Empty() || pending_ || onlineSerial_ == serial_ ||
+            (!net::online::LyricsOn() && !asked_))
+            return;
         const QueueItem* item = TheApp().queue().CurrentItem();
         net::online::TrackInfo t;
         t.path = item ? item->path : s.path;
@@ -638,7 +657,7 @@ private:
             SetLyrics(std::move(l));
             online_ = true;
             Invalidate();
-        });
+        }, asked_);
         // Asked; or nothing to ask with yet (tags may come with the next metadata change).
         if (onlineReq_) onlineSerial_ = serial_;
     }
@@ -660,6 +679,14 @@ private:
         none.icon = "info";
         none.enabled = false;
         items.push_back(std::move(none));
+        // Why, in one line: where Lumen looked.
+        MenuItem why;
+        why.label = !net::online::LyricsOn() ? Tr(L"No .lrc file, no lyrics in the tags, online search is off")
+                    : onlineSerial_ == serial_ && !onlineReq_ ? Tr(L"No .lrc file, no lyrics in the tags or on LRCLIB")
+                                                               : Tr(L"No .lrc file, no lyrics in the tags");
+        why.enabled = false;
+        items.push_back(std::move(why));
+        items.push_back(MenuItem::Separator());
         MenuItem find;
         find.label = onlineReq_ ? Tr(L"Searching LRCLIB…") : Tr(L"Find online (LRCLIB)");
         find.icon = "search";
@@ -674,8 +701,8 @@ private:
         ShowMenu(GetHost(), lyricsBtn_->rect, std::move(items), Place::Below, 240);
     }
 
-    // LRCLIB is off until the user allows it (privacy.fetchLyrics): the first search asks, and the
-    // yes turns the setting on for the songs after this one too.
+    // LRCLIB is off until the user allows it (privacy.fetchLyrics): the first search asks. "Find now"
+    // searches for this song only; "Always search" turns the setting on for the songs after it too.
     void FindOnline() {
         auto search = [this, alive = alive_] {
             if (!*alive) return;
@@ -691,9 +718,9 @@ private:
             return;
         }
         lib::ShowConfirm(Tr(L"Find lyrics online?"),
-                         Tr(L"The song's artist, title, album and length are sent to lrclib.net. Lumen will also "
-                            L"search for the next songs without lyrics; you can turn this off in Settings > Network."),
-                         Tr(L"Search online"), [search] {
+                         Tr(L"The song's artist, title, album and length are sent to lrclib.net. “Always search” "
+                            L"also looks up the next songs without lyrics; you can turn it off in Settings > Network."),
+                         Tr(L"Find now"), search, Tr(L"Always search"), [search] {
                              TheApp().config().SetBool("privacy.fetchLyrics", true);
                              search();
                          });
@@ -1192,6 +1219,10 @@ private:
 };
 
 }  // namespace
+
+void ShowMusicLyrics() {
+    if (g_musicView) g_musicView->ShowLyrics();
+}
 
 std::vector<MenuItem> LyricsStyleItems() {
     std::vector<MenuItem> items;

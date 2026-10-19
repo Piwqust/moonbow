@@ -531,6 +531,7 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
                     track.channels = static_cast<int>(NodeInt(MapGet(t, "demux-channel-count")));
                     track.selected = NodeFlag(MapGet(t, "selected"));
                     track.external = NodeFlag(MapGet(t, "external"));
+                    track.isDefault = NodeFlag(MapGet(t, "default"));
                     track.file = NodeString(MapGet(t, "external-filename"));
                     if (track.type == L"video" && !NodeFlag(MapGet(t, "albumart"))) state_.hasVideo = true;
                     state_.tracks.push_back(std::move(track));
