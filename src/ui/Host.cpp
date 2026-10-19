@@ -847,7 +847,12 @@ void Host::UpdateHot(float x, float y) {
     if (hot == hot_) return;
     Widget* old = hot_;
     hot_ = hot;
+    Widget* up = old ? old->Parent() : nullptr;
     if (old) old->OnMouseLeave();
+    // A container keeps its hover while the pointer is on one of its children (the mini player's
+    // overlay): it hears the leave once the pointer is off it altogether, not only off the child.
+    for (Widget* a = up; a; a = a->Parent())
+        if (a->interactive && !a->IsAncestorOf(hot_)) a->OnMouseLeave();
     if (hot_) hot_->OnMouseEnter();
     UpdateTooltip();
     RequestRender();
