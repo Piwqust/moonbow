@@ -932,7 +932,7 @@ std::unique_ptr<Widget> SubtitlesTab() {
 
 // --- footer ----------------------------------------------------------------------------------
 
-// "Default Preset ⌃": opens the preset menu above itself.
+// "Settings preset: standard ⌃": opens the preset menu above itself.
 class PresetField : public Widget {
 public:
     PresetField() {
@@ -954,7 +954,9 @@ public:
         if (IsHot() || open) p.Fill(rect.Inset(2), c.hover, 4);
         PaintFocusRing(p, rect, 6);
         const Color fg = IsHot() ? c.textPrimary : c.textSecondary;
-        p.Text(name_, {rect.x + 16, rect.y, rect.w - 60, rect.h}, TextStyle::Body, fg);
+        // "Settings preset: standard": the bare "Default Preset" with a chevron didn't say what it was.
+        p.Text(Fmt(Tr(L"Settings preset: {0}"), {name_}), {rect.x + 16, rect.y, rect.w - 60, rect.h}, TextStyle::Body, fg);
+        tooltip = Tr(L"Save these settings as a preset or switch to another one");
         p.Icon(open ? "chevron_down" : "chevron_up", {rect.Right() - 40, rect.Cy() - 12, 24, 24}, fg);
     }
     bool OnKeyDown(const KeyEvent& e) override {
@@ -970,7 +972,7 @@ private:
     void ReadName() {
         const auto presets = Live().Presets();
         const int a = Live().activePreset;
-        name_ = a >= 0 && a < static_cast<int>(presets.size()) ? presets[static_cast<size_t>(a)].name : Tr(L"Default Preset");
+        name_ = a >= 0 && a < static_cast<int>(presets.size()) ? presets[static_cast<size_t>(a)].name : Tr(L"standard");
     }
     void Open() {
         Host* h = GetHost();
