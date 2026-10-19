@@ -36,7 +36,7 @@
 #     --automation: native dialogs and Explorer are blocked.)
 #   nav <route> [path]    show the library at a route (leaves the player screen):
 #     nav home
-#     nav videos [<folder path>]
+#     nav videos [movies|shows|folders|show:<show name, lower case>|<folder path>]
 #     nav music [songs|albums|artists|genres|album:<name>|artist:<name>|genre:<name>]
 #     nav network [<sub-page>]
 #     nav playlists [<playlist id>]

@@ -174,7 +174,7 @@ public:
         continue_ = AddSection(L"Continue Watching", Route{Section::Recent, L"continue"}, GridStyle::VideoCards);
         listen_ = AddSection(L"Listen Again", Route{Section::Recent, L"audio"}, GridStyle::SquareCards);
         favorites_ = AddSection(L"Favorites", Route{Section::Recent, L"favorites"}, GridStyle::VideoCards);
-        folders_ = AddSection(L"Frequently Visited Folders", Route{Section::Videos, {}}, GridStyle::SquareCards);
+        folders_ = AddSection(L"Frequently Visited Folders", Route{Section::Videos, L"folders"}, GridStyle::SquareCards);
         playlists_ = AddSection(L"Frequently Visited Playlists", Route{Section::Playlists, {}}, GridStyle::SquareCards);
         artists_ = AddSection(L"Frequently Listened Artists", Route{Section::Music, L"artists"}, GridStyle::SquareCards);
         artists_->Grid()->roundImages = true;
@@ -516,12 +516,30 @@ private:
         artists_->Commit({});
 
         // Recently added videos (newest files first). Files whose length couldn't be read are
-        // usually broken or not media at all: they don't open the Home page.
+        // usually broken or not media at all: they don't open the Home page. A show with several
+        // episodes is one card (its page lists them in order) where its newest episode would be.
         auto vids = snap->Videos();
         library::SortItems(vids, library::SortKey::Date, true);
+        const ShowIndex& index = ShowsOf(snap);
+        std::unordered_map<const library::MediaItem*, size_t> showOf;
+        for (size_t s = 0; s < index.shows.size(); ++s)
+            if (index.shows[s].episodes.size() > 1)
+                for (const library::Episode& ep : index.shows[s].episodes) showOf.emplace(ep.item, s);
+        std::set<size_t> showsAdded;
+        std::set<std::wstring> watched;  // PathKey
+        for (const library::HistoryEntry& h : hist.Entries())
+            if (h.duration > 0 && h.Progress() >= 0.95) watched.insert(library::PathKey(h.path));
+        auto isWatched = [&](const std::wstring& path) { return watched.count(library::PathKey(path)) > 0; };
         for (size_t i = 0, n = 0; i < vids.size() && n < 20; ++i) {
             const library::MediaItem* m = vids[i];
             if (!(m->duration > 0)) continue;
+            if (auto s = showOf.find(m); s != showOf.end()) {
+                if (showsAdded.insert(s->second).second) {
+                    added_->AddEntry(ShowEntry(index.shows[s->second], isWatched), ShowRoute(index.shows[s->second]));
+                    ++n;
+                }
+                continue;
+            }
             const library::HistoryEntry* h = hist.Find(m->path);
             Entry e = MediaCard(m->path, m, nullptr);
             e.ref = added_->AddQueue(MakeQueueItem(m->path, {}, m->duration));
