@@ -75,7 +75,7 @@ std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool all
     int ordinal = 0;
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
-        const std::wstring detail = panel::TrackDetail(t);
+        const std::wstring detail = panel::TrackDetail(t, false);  // no codec jargon, as in the panel
         const std::wstring name = panel::TrackName(t, ++ordinal);
         MenuItem m{detail.empty() ? name : name + L" · " + detail};
         m.radio = true;
