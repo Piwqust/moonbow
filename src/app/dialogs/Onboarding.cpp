@@ -31,6 +31,8 @@ Config& Cfg() {
 }
 
 std::wstring DefaultVideosFolder() {
+    // A test instance must never offer the owner's real Videos: one Continue would scan it.
+    if (ui::Host::Automation()) return {};
     PWSTR p = nullptr;
     std::wstring out;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Videos, 0, nullptr, &p)) && p) out = p;
