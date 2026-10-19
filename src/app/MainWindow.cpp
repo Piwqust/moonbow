@@ -40,16 +40,20 @@ public:
         const bool playerShown = TheApp().PlayerShown();
         library_->visible = !playerShown;
         player_->visible = playerShown;
+        const PlayerState& s = TheApp().player().State();
+        mini_->visible = !playerShown && s.fileLoaded;
+        // The mini player goes first: the library's scroll views keep their last rows reachable above it.
+        Rect card;
+        if (mini_->visible) {
+            const Size m = mini_->Measure(rect.w, rect.h);
+            card = {rect.Right() - m.w - 24, rect.Bottom() - m.h - 24, m.w, m.h};
+        }
+        if (Host* h = GetHost()) h->floatingCard = card;
         if (playerShown)
             player_->Arrange(rect);
         else
             library_->Arrange(rect);
-        const PlayerState& s = TheApp().player().State();
-        mini_->visible = !playerShown && s.fileLoaded;
-        if (mini_->visible) {
-            const Size m = mini_->Measure(rect.w, rect.h);
-            mini_->Arrange({rect.Right() - m.w - 24, rect.Bottom() - m.h - 24, m.w, m.h});
-        }
+        if (mini_->visible) mini_->Arrange(card);
     }
 
 private:

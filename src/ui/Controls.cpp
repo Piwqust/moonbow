@@ -986,6 +986,11 @@ void ScrollView::OnLayout() {
     Widget* c = Content();
     if (!c) return;
     contentH_ = c->Measure(rect.w, kInf).h;
+    if (const Host* host = GetHost()) {
+        const Rect& card = host->floatingCard;
+        if (card.w > 0 && card.x < rect.Right() && card.Right() > rect.x && card.y < rect.Bottom())
+            contentH_ += rect.Bottom() - card.y + 12;
+    }
     // Not scrollable (an overflow of up to kNoScroll): back to the top, not left 1-4 DIP down.
     const float maxOff = Scrollable() ? MaxOffset() : 0.0f;
     if (offset_.Target() > maxOff) offset_.Set(maxOff);
