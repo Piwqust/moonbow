@@ -222,11 +222,14 @@ public:
             // The rows changed under a drag (a removal, a new queue): its indices mean nothing now.
             dragging_ = false;
             downIndex_ = -1;
+            FollowCurrent();
             selected_ = std::min(selected_, static_cast<int>(TheApp().queue().Items().size()) - 1);
             rows_.clear();
             InvalidateLayout();
         });
+        shownCurrent_ = TheApp().queue().Current();
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & kChangeFile) FollowCurrent();
             if (m & (kChangeFile | kChangeMeta)) rows_.clear();
             if (m & (kChangeFile | kChangeMeta | kChangeState)) Invalidate();
         });
@@ -239,6 +242,14 @@ public:
             pad = {12, 0, 12, 20};
             imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
         }
+    }
+
+    // A selection on the playing row moves with it (the next song, a row inserted or removed
+    // above): left behind, its edge marked a second row as if it were playing.
+    void FollowCurrent() {
+        const int cur = TheApp().queue().Current();
+        if (selected_ >= 0 && selected_ == shownCurrent_) selected_ = cur;
+        shownCurrent_ = cur;
     }
 
     float Pitch() const { return covers_ ? 60.0f : compact_ ? 31.0f : 44.0f; }
@@ -683,6 +694,7 @@ private:
     bool covers_ = false;
     ScopedConnection imagesConn_;
     int hover_ = -1, selected_ = -1, downIndex_ = -1;
+    int shownCurrent_ = -1;  // the playing row when the selection last looked (FollowCurrent)
     bool hoverHandle_ = false, hoverRemove_ = false;
     bool removeCold_ = false;  // the "×" stays off until the pointer leaves where it removed a row
     Point removedAt_{};
