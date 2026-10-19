@@ -235,6 +235,8 @@ private:
     LRESULT NcHitTest(LPARAM lp);
     void UpdateHot(float x, float y);
     void OnMouseButton(UINT msg, WPARAM wp, LPARAM lp);
+    void CancelPress();
+    void AfterPress(float x, float y);
     void OnKey(UINT vk, bool down, bool repeat);
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
@@ -255,6 +257,7 @@ private:
     Widget* hot_ = nullptr;
     Widget* pressed_ = nullptr;
     Widget* capture_ = nullptr;
+    Widget* released_ = nullptr;  // the widget whose press is ending, while AfterPress runs
     Widget* lastLeftDown_ = nullptr;  // target of the last left press, only compared (may be gone)
     Widget* focus_ = nullptr;
     bool focusVisible_ = false;

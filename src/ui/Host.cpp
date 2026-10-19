@@ -309,6 +309,7 @@ void Host::Forget(Widget* w) {
     if (hot_ == w) hot_ = nullptr;
     if (pressed_ == w) pressed_ = nullptr;
     if (capture_ == w) capture_ = nullptr;
+    if (released_ == w) released_ = nullptr;
     if (focus_ == w) focus_ = nullptr;
     if (tooltipFor_ == w) tooltipFor_ = nullptr;
     if (tooltipWidget_ == w) tooltipWidget_ = nullptr;
@@ -984,18 +985,52 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
         Widget* wasPressed = pressed_;
         capture_ = nullptr;
         if (GetCapture() == hwnd_) ::ReleaseCapture();
+        released_ = t;
         if (t) {
             t->OnMouseUp(e);
             if (t == wasPressed && InteractiveAt(x, y) == t) t->OnClick();
         }
         pressed_ = nullptr;
-        UpdateHot(x, y);
+        AfterPress(x, y);
     } else {
         Widget* t = InteractiveAt(x, y);
         for (Widget* w = t; w; w = w->Parent())
             if (w->interactive && w->OnMouseUp(e)) break;
     }
     RequestRender();
+}
+
+// A press that ends without a release: another window took the capture (Alt+Tab, a dialog), the
+// window was deactivated, or Esc. The widget undoes its drag (MouseEvent::cancelled).
+void Host::CancelPress() {
+    Widget* t = capture_;
+    capture_ = nullptr;
+    if (GetCapture() == hwnd_) ::ReleaseCapture();
+    released_ = t;
+    if (t) t->OnMouseUp({mouse_.x, mouse_.y, MouseButton::Left, CurrentMods(), true});
+    pressed_ = nullptr;
+    AfterPress(mouse_.x, mouse_.y);
+    RequestRender();
+}
+
+// After a press, hover follows the pointer again. The pressed widget got the drag's moves even
+// off itself, so one the pointer is no longer on hears the leave it missed: otherwise its hover
+// (the seek bar's preview, a row's highlight, the speaker) stays where the drag left it.
+void Host::AfterPress(float x, float y) {
+    const Size c = ClientSize();
+    if (x < 0 || y < 0 || x >= c.w || y >= c.h) mouseInside_ = false;  // released outside the window
+    Widget* before = hot_;
+    UpdateHot(x, y);
+    if (released_ && released_ != hot_ && released_ != before) released_->OnMouseLeave();
+    released_ = nullptr;
+    // What the pointer is on now had no move yet: its item under the pointer lights up at once.
+    if (hot_ && hot_ != before) hot_->OnMouseMove({x, y, MouseButton::Left, CurrentMods()});
+    // The capture held back the leave tracking: re-armed, Windows posts WM_MOUSELEAVE at once when
+    // the pointer is off the window (released over another one, or the capture went elsewhere).
+    if (mouseInside_ && !g_automation) {
+        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
+        trackingLeave_ = TrackMouseEvent(&tme) != FALSE;
+    }
 }
 
 bool Host::HasInteractivePopup() const {
@@ -1051,6 +1086,10 @@ void Host::OnKey(UINT vk, bool down, bool repeat) {
     if (!down) return;
     KeyEvent e{vk, CurrentMods(), repeat};
     HideTooltip();
+    if (vk == VK_ESCAPE && capture_) {  // Esc drops a drag, as in Windows: a second one does the rest
+        CancelPress();
+        return;
+    }
 
     for (Widget* w = focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
@@ -1543,14 +1582,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return msg >= WM_XBUTTONDOWN ? TRUE : 0;
 
         case WM_CAPTURECHANGED:
-            if (reinterpret_cast<HWND>(lp) != hwnd_ && capture_) {
-                Widget* t = capture_;
-                capture_ = nullptr;
-                MouseEvent e{mouse_.x, mouse_.y, MouseButton::Left, CurrentMods(), true};
-                t->OnMouseUp(e);
-                pressed_ = nullptr;
-                RequestRender();
-            }
+            if (reinterpret_cast<HWND>(lp) != hwnd_ && capture_) CancelPress();
             return 0;
 
         case WM_MOUSEWHEEL:
@@ -1655,6 +1687,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATE:
             active_ = LOWORD(wp) != WA_INACTIVE;
             if (!active_) HideTooltip();
+            if (!active_ && capture_) CancelPress();
             RequestRender();  // also restarts a focused text box's caret blink (TextBox::Paint)
             break;
 

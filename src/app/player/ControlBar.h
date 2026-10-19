@@ -74,7 +74,7 @@ private:
     double TimeAt(float x) const;
     ui::Rect Track() const;
     bool dragging_ = false;
-    double dragTime_ = 0;
+    double dragTime_ = 0, dragFrom_ = 0;
     float hoverX_ = -1;
     ScopedConnection conn_, liveConn_;
 };
