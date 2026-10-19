@@ -315,8 +315,10 @@ void NavSidebar::Refresh() {
 }
 
 void NavSidebar::Paint(Painter& p) {
-    // The panel sits 8 DIP inside the window edge, like the design.
-    p.Fill({rect.x + 8, rect.y + 8, rect.w - 8, rect.h - 16}, P().bgPanel, 6);
+    // The panel sits 8 DIP inside the window edge, like the design; in the player it runs flush
+    // into the side pane beside it, where that gutter read as gaps.
+    if (inPlayer_) p.Fill(rect, P().bgPanel);
+    else p.Fill({rect.x + 8, rect.y + 8, rect.w - 8, rect.h - 16}, P().bgPanel, 6);
 }
 
 // --- LibraryPane -----------------------------------------------------------------------
