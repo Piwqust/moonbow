@@ -633,10 +633,6 @@ private:
     void FollowTime() {
         TakeLoadedLyrics();
         const double pos = TheApp().player().State().position;
-        if (pos != stampPos_) {
-            stampPos_ = pos;
-            stampAt_ = AnimFloat::Now();
-        }
         if (!lyrics_.synced) return;
         const int line = lyrics_.LineAt(pos + kLead);
         if (line == current_) return;
@@ -649,11 +645,21 @@ private:
         Invalidate();
     }
 
-    // The playback position between mpv's time updates (a few a second), for a smooth fill.
-    double SmoothTime() const {
+    // The playback position for a smooth fill: mpv reports it in steps, so a clock of our own
+    // runs between the reports and is pulled toward them, never jumping back and forth.
+    double SmoothTime() {
         const PlayerState& s = TheApp().player().State();
-        if (!s.fileLoaded || s.paused || s.eof || s.idle) return s.position;
-        return s.position + std::clamp((AnimFloat::Now() - stampAt_) / 1000.0, 0.0, 0.3) * s.speed;
+        const double now = AnimFloat::Now();
+        const double dt = std::clamp((now - clockAt_) / 1000.0, 0.0, 0.1);
+        clockAt_ = now;
+        const bool playing = s.fileLoaded && !s.paused && !s.eof && !s.idle;
+        if (!playing || std::abs(s.position - clock_) > 0.5) {
+            clock_ = s.position;  // paused, or a seek
+        } else {
+            clock_ += dt * s.speed;
+            clock_ += (s.position - clock_) * 0.1;
+        }
+        return clock_;
     }
 
     void ClearHover() {
@@ -1013,7 +1019,7 @@ private:
     LyricsLook look_;
     gfx::ComPtr<IDWriteTextFormat> format_;  // the look's font; reset when it changes
     Config::Token lyricsToken_ = 0;
-    double stampPos_ = -1, stampAt_ = 0;  // the last position mpv reported and when (SmoothTime)
+    double clock_ = 0, clockAt_ = 0;  // SmoothTime's clock and when it last ran
     gfx::ComPtr<ID2D1LinearGradientBrush> fill_;  // FillBrush
     uint32_t fillGen_ = 0;
     Rect box_;
