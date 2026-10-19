@@ -214,6 +214,8 @@ struct ShowIndex {
     std::vector<const library::MediaItem*> movies;
 };
 const ShowIndex& ShowsOf(const std::shared_ptr<const library::Snapshot>& snap);
+// The index in show.episodes to watch next (library::NextUp), or -1 when all are watched.
+int NextUpOf(const library::Show& show, const std::function<bool(const std::wstring&)>& watched);
 // Card of a show (Videos › Shows, Home): "Next: S01E03" and the episode count; route to its page.
 Entry ShowEntry(const library::Show& show, const std::function<bool(const std::wstring&)>& watched);
 Route ShowRoute(const library::Show& show);

@@ -25,12 +25,6 @@ std::wstring Code(const library::EpisodeInfo& ep) {
     return code;
 }
 
-int NextUpOf(const library::Show& show, const std::function<bool(const std::wstring&)>& watched) {
-    std::vector<bool> w;
-    for (const library::Episode& e : show.episodes) w.push_back(watched(e.item->path));
-    return library::NextUp(w);
-}
-
 class VideosPage : public Page {
 public:
     VideosPage(Route r, std::wstring tab, bool compact)
@@ -219,6 +213,12 @@ void AddVideoTabs(Widget* toolbar, int current) {
     };
     toolbar->visible = true;
     TheApp().SetUiValue("tab.videos", WideToUtf8(kTabPaths[current]));
+}
+
+int NextUpOf(const library::Show& show, const std::function<bool(const std::wstring&)>& watched) {
+    std::vector<bool> w;
+    for (const library::Episode& e : show.episodes) w.push_back(watched(e.item->path));
+    return library::NextUp(w);
 }
 
 const ShowIndex& ShowsOf(const std::shared_ptr<const library::Snapshot>& snap) {

@@ -310,29 +310,6 @@ private:
         return e;
     }
 
-    // The episode after `ep` of the same show in the same folder (next number in the season, else
-    // the first of the next season), or null.
-    static const library::MediaItem* NextEpisode(const library::Snapshot& snap, const std::wstring& path,
-                                                 const library::EpisodeInfo& ep) {
-        const std::wstring show = library::SearchFold(ep.show);
-        const library::MediaItem* best = nullptr;
-        library::EpisodeInfo bestEp;
-        for (const library::MediaItem* m : snap.ItemsIn(library::ParentFolder(path), false)) {
-            library::EpisodeInfo e;
-            if (m->kind != library::MediaKind::Video || m->damaged || !library::ParseEpisode(m->name, &e) ||
-                library::SearchFold(e.show) != show)
-                continue;
-            const bool after = e.season > ep.season || (e.season == ep.season && e.episode > ep.episode);
-            const bool closer = !best || e.season < bestEp.season ||
-                                (e.season == bestEp.season && e.episode < bestEp.episode);
-            if (after && closer) {
-                best = m;
-                bestEp = e;
-            }
-        }
-        return best;
-    }
-
     void Rebuild() {
         stale_ = false;
         App& app = TheApp();
@@ -381,18 +358,29 @@ private:
         }
         for (HomeSection* s : results_) s->Commit({});
 
-        // Continue Watching: videos stopped halfway, and after a finished episode the next one
-        // of the same show in its folder ("Up next", as in Infuse and Plex), newest first.
+        // Continue Watching: videos stopped halfway, and after a finished episode the show's next
+        // one ("Up next", as in Infuse and Plex), newest first. Shows are grouped as the Shows tab
+        // groups them ("Season N" folders too), so the card here is the one its "Next:" names.
         struct Card {
             int64_t when;
             Entry entry;
             QueueItem item;
         };
         std::vector<Card> cards;
-        std::set<std::wstring> shows;  // folder|show already represented
-        auto showKey = [](const std::wstring& path, const library::EpisodeInfo& ep) {
-            return library::PathKey(library::ParentFolder(path)) + L"|" + library::SearchFold(ep.show);
+        const ShowIndex& index = ShowsOf(snap);
+        std::unordered_map<std::wstring, size_t> showOfPath;  // PathKey -> index.shows
+        for (size_t s = 0; s < index.shows.size(); ++s)
+            for (const library::Episode& ep : index.shows[s].episodes)
+                showOfPath.emplace(library::PathKey(ep.item->path), s);
+        auto findShow = [&](const std::wstring& path) {
+            const auto it = showOfPath.find(library::PathKey(path));
+            return it == showOfPath.end() ? -1 : static_cast<int>(it->second);
         };
+        std::set<std::wstring> watched;  // PathKey
+        for (const library::HistoryEntry& h : hist.Entries())
+            if (h.duration > 0 && h.Progress() >= 0.95) watched.insert(library::PathKey(h.path));
+        auto isWatched = [&](const std::wstring& path) { return watched.count(library::PathKey(path)) > 0; };
+        std::set<int> shows;  // already represented
         for (const library::HistoryEntry& h : hist.ContinueWatching(20)) {
             const library::MediaItem* m = snap->FindItem(h.path);
             Entry e = MediaCard(h.path, m, &h);
@@ -405,23 +393,27 @@ private:
                 e.subtitle = Fmt(Tr(L"{0} left"), {FormatDuration(h.duration - h.position)});
             // The frame where playback stopped, as Continue Watching rows in other players show.
             if (!e.image.empty() && h.position > 0) e.image = library::FramePath(h.path, h.position);
-            if (library::EpisodeInfo ep; !IsUrl(h.path) && library::ParseEpisode(library::StemOf(h.path), &ep))
-                shows.insert(showKey(h.path, ep));
+            if (const int show = findShow(h.path); show >= 0) shows.insert(show);
             cards.push_back({h.lastPlayed, std::move(e), MakeQueueItem(h.path, h.title, h.duration)});
         }
         size_t scanned = 0;
         for (const library::HistoryEntry& h : hist.Entries()) {
             if (++scanned > 80 || cards.size() >= 20) break;
-            library::EpisodeInfo ep;
-            if (h.kind != library::MediaKind::Video || h.duration <= 0 || h.Progress() < 0.95 || IsUrl(h.path) ||
-                !library::ParseEpisode(library::StemOf(h.path), &ep) || !shows.insert(showKey(h.path, ep)).second)
+            const int show = findShow(h.path);
+            if (h.kind != library::MediaKind::Video || h.duration <= 0 || h.Progress() < 0.95 || show < 0 ||
+                !shows.insert(show).second)
                 continue;
-            const library::MediaItem* next = NextEpisode(*snap, h.path, ep);
-            if (!next) continue;
+            const library::Show& s = index.shows[static_cast<size_t>(show)];
+            const int up = NextUpOf(s, isWatched);
+            if (up < 0) continue;
+            const library::MediaItem* next = s.episodes[static_cast<size_t>(up)].item;
+            if (next->damaged) continue;
             if (const library::HistoryEntry* seen = hist.Find(next->path); seen && seen->Progress() > 0.02) continue;
             Entry e = MediaCard(next->path, next, nullptr);
             e.audio = false;
-            e.subtitle = Tr(L"Next episode");
+            // As the show's card says it: "Night Garden", "Next: S02E01" (a file may be just "01").
+            e.title = s.name;
+            e.subtitle = ShowEntry(s, isWatched).subtitle;
             cards.push_back({h.lastPlayed, std::move(e), MakeQueueItem(next->path, next->DisplayTitle(), next->duration)});
         }
         std::stable_sort(cards.begin(), cards.end(), [](const Card& a, const Card& b) { return a.when > b.when; });
@@ -536,16 +528,11 @@ private:
         // episodes is one card (its page lists them in order) where its newest episode would be.
         auto vids = snap->Videos();
         library::SortItems(vids, library::SortKey::Date, true);
-        const ShowIndex& index = ShowsOf(snap);
         std::unordered_map<const library::MediaItem*, size_t> showOf;
         for (size_t s = 0; s < index.shows.size(); ++s)
             if (index.shows[s].episodes.size() > 1)
                 for (const library::Episode& ep : index.shows[s].episodes) showOf.emplace(ep.item, s);
         std::set<size_t> showsAdded;
-        std::set<std::wstring> watched;  // PathKey
-        for (const library::HistoryEntry& h : hist.Entries())
-            if (h.duration > 0 && h.Progress() >= 0.95) watched.insert(library::PathKey(h.path));
-        auto isWatched = [&](const std::wstring& path) { return watched.count(library::PathKey(path)) > 0; };
         for (size_t i = 0, n = 0; i < vids.size() && n < 20; ++i) {
             const library::MediaItem* m = vids[i];
             if (!(m->duration > 0)) continue;

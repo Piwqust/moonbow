@@ -201,7 +201,6 @@
 {L"Earlier", L"Ранее"},
 {L"Everything", L"Всё"},
 {L"{0} left", L"осталось {0}"},
-{L"Next episode", L"Следующая серия"},
 {L"Remove from History", L"Удалить из истории"},
 {L"Clear History…", L"Очистить историю…"},
 {L"Clear history", L"Очистить историю"},
