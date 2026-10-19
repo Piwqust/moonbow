@@ -84,23 +84,31 @@ public:
         const Palette& c = P();
         const float radius = round_ ? rect.w / 2 : 12.0f;
         ID2D1Bitmap* bmp = nullptr;
+        float appear = 1;
+        bool loading = false;
         if (!image_.empty()) {
             const float scale = GetHost() ? GetHost()->Scale() : 1.0f;
-            bmp = TheApp().images().Get(image_, static_cast<int>(std::ceil(size_ * scale)));
+            const int px = static_cast<int>(std::ceil(size_ * scale));
+            ImageCache& images = TheApp().images();
+            bmp = images.Get(image_, px);
+            appear = images.Appear(image_, px);
+            loading = !bmp && images.Loading(image_, px);
         }
         if (bmp) {
+            if (appear < 1) p.Fill(rect, c.bgCard, radius);  // fading in over the plain card
             if (round_) {
                 p.PushRoundClip(rect, radius);
-                p.Image(bmp, rect, 0, true);
+                p.Image(bmp, rect, 0, true, appear);
                 p.PopClip();
             } else {
-                p.Fill(rect, c.bgDeep, radius);
-                p.Image(bmp, rect, radius, true);
+                p.Fill(rect, c.bgDeep.Fade(appear), radius);
+                p.Image(bmp, rect, radius, true, appear);
             }
             return;
         }
         p.Fill(rect, c.bgCard, radius);
-        p.Icon(round_ ? "artist" : "album", rect.Center(64, 64), c.textTertiary, c.accentMid);
+        if (!loading)
+            p.Icon(round_ ? "artist" : "album", rect.Center(64, 64), c.textTertiary.Fade(appear), c.accentMid.Fade(appear));
     }
 
 private:

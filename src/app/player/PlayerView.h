@@ -92,6 +92,8 @@ std::string QueueDockSide();
 void SetQueueDockSide(const std::string& side);
 // Shows the lyrics in the music view again if the Lyrics pill hid them (MusicView.cpp).
 void ShowMusicLyrics();
+// The music view's cover is decoded (or the file has none); asks for it as a paint would.
+bool MusicCoverReady();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
 

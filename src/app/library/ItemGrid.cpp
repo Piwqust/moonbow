@@ -393,6 +393,8 @@ void ItemGrid::Select(int index, bool scrollIntoView) {
 void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radius, int iconSize, float opacity) {
     const Palette& c = P();
     ID2D1Bitmap* bmp = nullptr;
+    float appear = 1;
+    bool loading = false;
     if (!e.image.empty()) {
         Host* host = GetHost();
         const float scale = host ? host->Scale() : 1.0f;
@@ -402,31 +404,39 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
         // A damaged file is not the film its name says: no lookup, no artwork (V7-02).
         if (e.kind == EntryKind::Media && !e.audio && !e.damaged && e.image == e.path)
             if (std::wstring online = net::online::CardImage(e.path); !online.empty()) image = std::move(online);
-        bmp = TheApp().images().Get(image, static_cast<int>(std::ceil(std::max(t.w, t.h) * scale)));
+        const int px = static_cast<int>(std::ceil(std::max(t.w, t.h) * scale));
+        ImageCache& images = TheApp().images();
+        bmp = images.Get(image, px);
+        appear = images.Appear(image, px);
+        loading = !bmp && images.Loading(image, px);
     }
     const bool iconOnly = e.kind == EntryKind::Folder || e.kind == EntryKind::Playlist || e.kind == EntryKind::Category ||
                           e.kind == EntryKind::Artist || e.kind == EntryKind::Genre || e.kind == EntryKind::Stream;
+    const float r = roundImages && e.kind == EntryKind::Artist ? t.w / 2 : radius;
     if (bmp) {
+        // Fading in over the plain card it replaces.
+        if (appear < 1) p.Fill(t, c.bgCard, r);
         if (roundImages && e.kind == EntryKind::Artist) {
             p.PushRoundClip(t, t.w / 2);
-            p.Image(bmp, t, 0, true, opacity);
+            p.Image(bmp, t, 0, true, opacity * appear);
             p.PopClip();
         } else {
-            p.Fill(t, c.bgDeep, radius);
-            p.Image(bmp, t, radius, true, opacity);
+            p.Fill(t, c.bgDeep.Fade(appear), radius);
+            p.Image(bmp, t, radius, true, opacity * appear);
         }
         return;
     }
-    const float r = roundImages && e.kind == EntryKind::Artist ? t.w / 2 : radius;
     if (e.kind == EntryKind::Action) {
         p.Stroke(t, c.lineStrong, r);
     } else {
         p.Fill(t, c.bgCard, r);
     }
+    if (loading) return;  // the picture is on its way: no "no picture" icon in the meantime
     std::string icon = e.icon;
     if (icon.empty()) icon = e.audio ? "music" : "video";
     const Color ic = iconOnly || e.kind == EntryKind::Action ? c.textSecondary : c.textTertiary;
-    p.Icon(icon, t.Center(static_cast<float>(iconSize), static_cast<float>(iconSize)), ic.Fade(opacity), c.accentMid.Fade(opacity));
+    p.Icon(icon, t.Center(static_cast<float>(iconSize), static_cast<float>(iconSize)), ic.Fade(opacity * appear),
+           c.accentMid.Fade(opacity * appear));
 }
 
 void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {

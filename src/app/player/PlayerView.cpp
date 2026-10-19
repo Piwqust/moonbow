@@ -1019,17 +1019,18 @@ void MiniPlayer::Paint(Painter& p) {
         const QueueItem* cur = TheApp().queue().CurrentItem();
         const std::wstring path = cur ? cur->path : s.path;
         ID2D1Bitmap* bmp = nullptr;
-        if (!path.empty() && GetHost())
-            bmp = TheApp().images().Get(path, static_cast<int>(std::ceil(v.w * GetHost()->Scale())));
+        const int px = GetHost() ? static_cast<int>(std::ceil(v.w * GetHost()->Scale())) : 0;
+        if (!path.empty() && GetHost()) bmp = TheApp().images().Get(path, px);
         p.Fill(v, P().bgCard, 4);
+        const float appear = TheApp().images().Appear(path, px);
         if (bmp) {
             // Square cover centered over a dimmed, cropped copy of itself.
-            p.Image(bmp, v, 4, true, 0.35f);
-            p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true);
-        } else {
+            p.Image(bmp, v, 4, true, 0.35f * appear);
+            p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true, appear);
+        } else if (!TheApp().images().Loading(path, px)) {
             // The hover controls take the center: fade the note out under them.
             const float icon = compact_ ? 24.0f : 40.0f;
-            p.Icon("music", v.Center(icon, icon), P().textTertiary.Fade(1 - k));
+            p.Icon("music", v.Center(icon, icon), P().textTertiary.Fade((1 - k) * appear));
         }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
