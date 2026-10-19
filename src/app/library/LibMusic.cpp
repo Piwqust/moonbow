@@ -267,7 +267,6 @@ public:
             m.push_back(std::move(pl));
             m.push_back(MenuItem::Separator());
         }
-        m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
         return m;
     }

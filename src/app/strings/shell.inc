@@ -15,7 +15,7 @@
 {L"Keyboard shortcuts", L"Сочетания клавиш"},
 {L"Settings", L"Настройки"},
 {L"Quit", L"Выход"},
-{L"Menu", L"Меню"},
+{L"Lumen menu", L"Меню Lumen"},
 {L"Toggle sidebar", L"Боковая панель"},
 {L"Show in library", L"Показать в медиатеке"},
 {L"Show the full path", L"Показать весь путь"},

@@ -356,7 +356,7 @@ private:
         if (searching) {
             title_->SetText(Tr(L"Search results"));
         } else if (const Category* c = settings::FindCategory(category_)) {
-            title_->SetText(c->Title(Lang()));
+            title_->SetText(c->Label(Lang()));
         }
     }
 

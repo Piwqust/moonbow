@@ -615,15 +615,13 @@ public:
     bool advanced = false;  // rows added now sit under "Advanced Options"
     bool inferred = false;  // rows added now are not visible in the design
 
-    void Cat(std::string id, std::string group, std::string icon, W label, W labelRu, W title, W titleRu) {
+    void Cat(std::string id, std::string group, std::string icon, W label, W labelRu) {
         Category c;
         c.id = std::move(id);
         c.group = std::move(group);
         c.icon = std::move(icon);
         c.label = std::move(label);
         c.labelRu = std::move(labelRu);
-        c.title = std::move(title);
-        c.titleRu = std::move(titleRu);
         cats.push_back(std::move(c));
         advanced = false;
         inferred = false;
@@ -723,7 +721,7 @@ std::vector<Choice> LanguageChoices(bool withOriginal) {
 
 void BuildApp(Builder& b) {
     // ===== General =====
-    b.Cat("general", "app", "preferences", L"General", L"Общие", L"Global Settings", L"Общие настройки");
+    b.Cat("general", "app", "preferences", L"General", L"Общие");
 
     b.Sec("appearance", L"Appearance", L"Оформление");
     b.Pick("general.language", L"Interface language", L"Язык интерфейса",
@@ -804,7 +802,7 @@ void BuildApp(Builder& b) {
         .Hidden();  // not implemented yet
 
     // ===== Interface =====
-    b.Cat("interface", "app", "interface", L"Interface", L"Интерфейс", L"Interface Settings", L"Настройки интерфейса");
+    b.Cat("interface", "app", "interface", L"Interface", L"Интерфейс");
 
     b.Sec("skin", L"Skin", L"Скин");
     // One widget (app/settings/SettingsSkins.cpp): the built-in skins with swatches, then "Custom file".
@@ -855,6 +853,21 @@ void BuildApp(Builder& b) {
            "current")
         .Desc(L"Which monitor to use for fullscreen when you have several.",
               L"Какой монитор использовать для полного экрана, если их несколько.");
+    // Moved from Library; the keys stay so saved values (and main.cpp's raw lookup) still apply.
+    b.Toggle("library.singleInstance", L"Only allow one Lumen window", L"Только одно окно Lumen", true)
+        .Desc(L"Open new files in the window that is already running.",
+              L"Открывать новые файлы в уже запущенном окне.");
+    b.Toggle("library.singleInstanceFileManager", L"Apply to files opened from the file manager",
+             L"Для файлов из Проводника", true)
+        .Desc(L"Also reuse the window for files opened from Explorer.",
+              L"Использовать то же окно и для файлов, открытых из Проводника.")
+        .When("library.singleInstance", "true")
+        .Hidden();  // not implemented yet: Explorer launches look like any other
+    b.Toggle("library.enqueue", L"Add to the playlist instead of replacing it", L"Добавлять в плейлист, а не заменять",
+             false)
+        .Desc(L"Files opened in a running window are appended to the playlist.",
+              L"Файлы, открытые в запущенном окне, добавляются в конец плейлиста.")
+        .When("library.singleInstance", "true");
 
     b.Sec("controls", L"Playback Controls", L"Панель управления");
     b.Toggle("interface.compactMode", L"Start in compact mode", L"Запускать в компактном режиме", false)
@@ -907,8 +920,7 @@ void BuildApp(Builder& b) {
     b.Toggle("interface.taskbarProgress", L"Show progress on the taskbar button", L"Прогресс на кнопке в панели задач", true);
 
     // ===== Privacy =====
-    b.Cat("privacy", "app", "privacy", L"Privacy", L"Конфиденциальность", L"Privacy Settings",
-          L"Конфиденциальность");
+    b.Cat("privacy", "app", "privacy", L"Privacy", L"Конфиденциальность");
 
     b.Sec("history", L"History", L"История");
     b.Toggle("privacy.saveHistory", L"Save recently played items", L"Сохранять недавние файлы", true)
@@ -1014,8 +1026,7 @@ void BuildApp(Builder& b) {
         .Hidden();  // not implemented yet
 
     // ===== Controls =====
-    b.Cat("controls", "app", "hotkeys", L"Controls", L"Управление", L"Mouse, Keyboard & Remote Controls",
-          L"Мышь, клавиатура и пульт");
+    b.Cat("controls", "app", "hotkeys", L"Controls", L"Управление");
 
     b.Sec("shortcuts", L"Keyboard Shortcuts", L"Сочетания клавиш");
     b.Button("controls.editShortcuts", L"Shortcut list", L"Список сочетаний", "edit-shortcuts", L"Edit Keyboard Shortcuts",
@@ -1070,8 +1081,7 @@ void BuildApp(Builder& b) {
 
 void BuildMedia(Builder& b) {
     // ===== Playback =====
-    b.Cat("playback", "media", "playback", L"Playback", L"Воспроизведение", L"Playback Preferences",
-          L"Параметры воспроизведения");
+    b.Cat("playback", "media", "playback", L"Playback", L"Воспроизведение");
 
     b.Sec("startup", L"Startup", L"Запуск");
     b.Pick("playback.resume", L"Continue where you left off", L"Продолжать с места остановки",
@@ -1187,7 +1197,7 @@ void BuildMedia(Builder& b) {
               L"Показывать маленький кадр при наведении на полосу перемотки.");
 
     // ===== Video =====
-    b.Cat("video", "media", "video", L"Video", L"Видео", L"Video Defaults", L"Видео по умолчанию");
+    b.Cat("video", "media", "video", L"Video", L"Видео");
 
     b.Sec("output", L"Output", L"Вывод");
     b.Toggle("video.enabled", L"Enable video", L"Показывать видео", true)
@@ -1437,7 +1447,7 @@ void BuildMedia(Builder& b) {
         .Reset("mpv-shot%n");
 
     // ===== Audio =====
-    b.Cat("audio", "media", "audio", L"Audio", L"Аудио", L"Audio Defaults", L"Аудио по умолчанию");
+    b.Cat("audio", "media", "audio", L"Audio", L"Аудио");
 
     b.Sec("output", L"Output", L"Вывод");
     b.Toggle("audio.enabled", L"Enable audio", L"Включить звук", true)
@@ -1781,7 +1791,7 @@ void BuildMedia(Builder& b) {
         .MpvBool("audio-file-auto", "fuzzy", "no");
 
     // ===== Subtitles =====
-    b.Cat("subtitles", "media", "subtitles", L"Subtitles", L"Субтитры", L"Subtitle Defaults", L"Субтитры по умолчанию");
+    b.Cat("subtitles", "media", "subtitles", L"Subtitles", L"Субтитры");
 
     b.Sec("tracks", L"Tracks & Languages", L"Дорожки и языки");
     b.Toggle("subtitles.enabled", L"Enable subtitles", L"Показывать субтитры", true)
@@ -1941,24 +1951,9 @@ void BuildMedia(Builder& b) {
         .When("subtitles.wordPicker", "true");
 
     // ===== Library =====
-    b.Cat("library", "media", "folder", L"Library", L"Медиатека", L"Playlists, Folders & Files",
-          L"Плейлисты, папки и файлы");
+    b.Cat("library", "media", "folder", L"Library", L"Медиатека");
 
     b.Sec("opening", L"Opening Files", L"Открытие файлов");
-    b.Toggle("library.singleInstance", L"Only allow one Lumen window", L"Только одно окно Lumen", true)
-        .Desc(L"Open new files in the window that is already running.",
-              L"Открывать новые файлы в уже запущенном окне.");
-    b.Toggle("library.singleInstanceFileManager", L"Apply to files opened from the file manager",
-             L"Для файлов из Проводника", true)
-        .Desc(L"Also reuse the window for files opened from Explorer.",
-              L"Использовать то же окно и для файлов, открытых из Проводника.")
-        .When("library.singleInstance", "true")
-        .Hidden();  // not implemented yet: Explorer launches look like any other
-    b.Toggle("library.enqueue", L"Add to the playlist instead of replacing it", L"Добавлять в плейлист, а не заменять",
-             false)
-        .Desc(L"Files opened in a running window are appended to the playlist.",
-              L"Файлы, открытые в запущенном окне, добавляются в конец плейлиста.")
-        .When("library.singleInstance", "true");
     b.Pick("library.openFolder", L"When opening a folder", L"При открытии папки",
            {{"subfolders", L"Include subfolders", L"Вместе с вложенными папками"},
             {"folder", L"This folder only", L"Только эта папка"}},
@@ -1996,8 +1991,7 @@ void BuildMedia(Builder& b) {
 
 void BuildSystem(Builder& b) {
     // ===== Network =====
-    b.Cat("network", "system", "streaming", L"Network", L"Сеть", L"Network Connections & Security",
-          L"Сеть и безопасность");
+    b.Cat("network", "system", "streaming", L"Network", L"Сеть");
 
     b.Sec("buffering", L"Buffering", L"Буферизация");
     b.Pick("network.buffering", L"Preload", L"Предзагрузка",
@@ -2094,8 +2088,7 @@ void BuildSystem(Builder& b) {
         .Reset("libmpv");
 
     // ===== Performance =====
-    b.Cat("performance", "system", "speed", L"Performance", L"Производительность", L"Performance Settings",
-          L"Производительность");
+    b.Cat("performance", "system", "speed", L"Performance", L"Производительность");
 
     b.Sec("decoding", L"Decoding", L"Декодирование");
     b.Pick("performance.hwdec", L"Hardware-accelerated decoding", L"Аппаратное декодирование",
@@ -2204,8 +2197,7 @@ void BuildSystem(Builder& b) {
         .Startup();
 
     // ===== Recording =====
-    b.Cat("recording", "system", "record", L"Recording", L"Запись", L"Recording, Casting & Streaming Out",
-          L"Запись, трансляция и стриминг");
+    b.Cat("recording", "system", "record", L"Recording", L"Запись");
 
     b.Sec("recording", L"Recording", L"Запись");
     b.Path("recording.folder", L"Save recordings to", L"Папка для записей", PathKind::Folder)
@@ -2274,7 +2266,7 @@ void BuildSystem(Builder& b) {
         .Hidden();  // not implemented yet
 
     // ===== Extensions =====
-    b.Cat("extensions", "system", "plugins", L"Extensions", L"Расширения", L"Add-ons & Scripts", L"Дополнения и скрипты");
+    b.Cat("extensions", "system", "plugins", L"Extensions", L"Расширения");
 
     b.Sec("addons", L"Add-ons", L"Дополнения");
     b.Info("extensions.list", L"Add-ons", L"Дополнения", "addons-list")

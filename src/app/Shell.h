@@ -25,8 +25,7 @@ private:
     ui::Label* crumbLabel_ = nullptr;
     ui::Label* title_ = nullptr;
     ui::IconButton* maxBtn_ = nullptr;
-    ui::IconButton* fullBtn_ = nullptr;
-    ui::IconButton* moreBtn_ = nullptr;
+    ui::IconButton* moreBtn_ = nullptr;  // the app menu (logo + chevron)
     std::wstring windowTitle_;  // last text given to the window caption
     std::vector<std::pair<ui::Widget*, const wchar_t*>> tips_;  // tooltip widget, English text
     ScopedConnection playerConn_, routeConn_, screenConn_, langConn_;
