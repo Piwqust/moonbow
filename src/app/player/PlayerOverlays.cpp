@@ -485,7 +485,9 @@ void NextEpisodeCard::Update() {
     if (secs == shownSecs_) return;
     shownSecs_ = secs;
     const episodes::Episode e = episodes::Parse(nextPath_);
-    title_->SetText(Fmt(Tr(L"Next episode: {0} · in {1} s"), {episodes::Label(e), std::to_wstring(secs)}));
+    // Without "play the folder's other files" the card only offers the episode: no countdown.
+    title_->SetText(AutoNext() ? Fmt(Tr(L"Next episode: {0} · in {1} s"), {episodes::Label(e), std::to_wstring(secs)})
+                               : Fmt(Tr(L"Next episode: {0}"), {episodes::Label(e)}));
     const std::wstring name = episodes::DisplayName(nextPath_);
     name_->SetText(name);
     if (name_->visible != !name.empty()) {
@@ -507,10 +509,15 @@ void NextEpisodeCard::PlayNext() {
         app.Open({next});  // a single local file brings its folder along as the queue
 }
 
+bool NextEpisodeCard::AutoNext() const {
+    const Config& c = TheApp().config();
+    return c.GetBool("playback.folderAsPlaylist") && !c.GetBool("playback.stopAfterEach");
+}
+
 void NextEpisodeCard::OnEnded() {
     // The queue moves on by itself; a next episode found only in the folder is ours to start,
     // unless the app already did (End of queue > Play the next file in the folder).
-    if (fromQueue_ || nextPath_.empty() || dismissed_ || TheApp().config().GetBool("playback.stopAfterEach")) return;
+    if (fromQueue_ || nextPath_.empty() || dismissed_ || !AutoNext()) return;
     const std::wstring ended = curPath_;
     window_->Post([this, ended] {
         const QueueItem* item = TheApp().queue().CurrentItem();

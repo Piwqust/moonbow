@@ -8,7 +8,9 @@
 #include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
+#include "app/player/PlayerView.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
 
 #include <objbase.h>
 #include <propkey.h>
@@ -205,7 +207,8 @@ private:
 
 class QueueList : public Widget {
 public:
-    explicit QueueList(bool compact) : compact_(compact) {
+    // covers: the queue pinned beside the music view, two-line rows with the cover art.
+    QueueList(bool compact, bool covers) : compact_(compact), covers_(covers) {
         interactive = true;
         focusable = true;
         width = Length::Grow();
@@ -228,10 +231,14 @@ public:
             Invalidate();
         });
         onContextMenu = [this](const MouseEvent& e) { ShowMenuAt(e); };
+        if (covers_) {
+            pad = {12, 0, 12, 20};
+            imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
+        }
     }
 
-    float Pitch() const { return compact_ ? 31.0f : 44.0f; }
-    float RowH() const { return compact_ ? 26.0f : 32.0f; }
+    float Pitch() const { return covers_ ? 60.0f : compact_ ? 31.0f : 44.0f; }
+    float RowH() const { return covers_ ? 54.0f : compact_ ? 26.0f : 32.0f; }
     int Count() const { return static_cast<int>(TheApp().queue().Items().size()); }
     Rect RowRect(int i) const {
         return {rect.x + pad.l, rect.y + pad.t + Pitch() * static_cast<float>(i), rect.w - pad.H(), RowH()};
@@ -349,6 +356,10 @@ public:
         if (!floating && i == selected_)
             p.Fill({r.x + 1, r.y + 6, 3, r.h - 12}, IsFocused() ? c.accent : c.textTertiary, 1.5f);
         if (!floating && i == selected_ && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, 4);
+        if (covers_) {
+            PaintCoverRow(p, i, r, floating, hot, current);
+            return;
+        }
         const float box = RowH();
         const bool handleHot = hot && hoverHandle_;
         p.Icon("move", Rect{r.x, r.y, box, box}.Center(compact_ ? 18.0f : 24.0f, compact_ ? 18.0f : 24.0f),
@@ -383,6 +394,53 @@ public:
         }
         if (!dur.empty())
             p.Text(dur, {right - dw - 4, r.y, dw + 4, r.h}, ts, current ? c.textSecondary : c.textTertiary, HAlign::Trailing);
+    }
+
+    // A row of the pinned queue: the cover (the drag handle), the title over the artist, the length.
+    void PaintCoverRow(Painter& p, int i, const Rect& r, bool floating, bool hot, bool current) {
+        const Palette& c = P();
+        const QueueItem& item = TheApp().queue().Items()[static_cast<size_t>(i)];
+        const Rect art{r.x + 5, r.y + 5, r.h - 10, r.h - 10};
+        ID2D1Bitmap* bmp = GetHost() ? TheApp().images().Get(item.path, static_cast<int>(art.w * GetHost()->Scale())) : nullptr;
+        if (bmp) {
+            p.Image(bmp, art, 4, true);
+        } else {
+            p.Fill(art, c.bgSelected, 4);
+            p.Icon(library::KindOf(item.path) == library::MediaKind::Audio ? "music" : "video", art.Center(20, 20),
+                   c.textTertiary);
+        }
+        const bool handleHot = hot && hoverHandle_;
+        if (handleHot || floating) {
+            p.Fill(art, Color::Hex(0x000000).Fade(0.55f), 4);
+            p.Icon("move", art.Center(22, 22), Color::Hex(0xFFFFFF));
+        }
+        const double d = DurationOf(i);
+        const std::wstring dur = d > 0 ? ClockTime(d) : L"";
+        const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, TextStyle::Small).width + 4;
+        const bool showRemove = hot && !removeCold_;
+        const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - 8;
+        const float textX = art.Right() + 12;
+        const float avail = std::max(0.0f, right - textX - dw - 8);
+        const RowInfo& info = Info(i);
+        const std::wstring& artist = Playing(i) && !PS().hasVideo ? CurrentTags().artist : info.artist;
+        const std::wstring second = artist.empty() ? std::wstring(Tr(library::KindOf(item.path) == library::MediaKind::Audio
+                                                                        ? L"Song"
+                                                                        : L"Video"))
+                                                   : artist;
+        p.Text(info.title, {textX, r.y + 8, avail, 20}, TextStyle::Body, current ? c.accent : c.textPrimary, HAlign::Leading,
+               VAlign::Center, gfx::kTextEllipsis);
+        p.Text(second, {textX, r.y + 28, avail, 18}, TextStyle::Small, c.textTertiary, HAlign::Leading, VAlign::Center,
+               gfx::kTextEllipsis);
+        if (hot && !floating && !hoverHandle_ && !hoverRemove_)
+            RowTip(*this, TextCut(p, info.title, TextStyle::Body, avail) || TextCut(p, second, TextStyle::Small, avail),
+                   artist.empty() ? info.title : info.title + L"\n" + artist);
+        if (showRemove) {
+            const Rect x{r.Right() - 30, r.Cy() - 12, 24, 24};
+            if (hoverRemove_) p.Fill(x, c.hover, 4);
+            p.Icon("close", x.Center(18, 18), hoverRemove_ ? c.textPrimary : c.textTertiary);
+        }
+        if (!dur.empty())
+            p.Text(dur, {right - dw, r.y, dw, r.h}, TextStyle::Small, c.textTertiary, HAlign::Trailing);
     }
 
     void Paint(Painter& p) override {
@@ -571,7 +629,9 @@ public:
     int Selected() const { return selected_; }
 
 private:
-    bool OnRemoveButton(int i, float x) const { return !compact_ && !removeCold_ && x >= RowRect(i).Right() - 28; }
+    bool OnRemoveButton(int i, float x) const {
+        return !compact_ && !removeCold_ && x >= RowRect(i).Right() - (covers_ ? 32 : 28);
+    }
 
     void AutoScroll(float y) {
         ScrollView* sv = ScrollerOf(this);
@@ -597,6 +657,8 @@ private:
     }
 
     bool compact_;
+    bool covers_ = false;
+    ScopedConnection imagesConn_;
     int hover_ = -1, selected_ = -1, downIndex_ = -1;
     bool hoverHandle_ = false, hoverRemove_ = false;
     bool removeCold_ = false;  // the "×" stays off until the pointer leaves where it removed a row
@@ -725,7 +787,7 @@ private:
 // Column: header + scrolling list. Keeps the header text in sync.
 class QueueTab : public Widget {
 public:
-    explicit QueueTab(bool compact) {
+    QueueTab(bool compact, bool covers) {
         dir = Dir::Column;
         width = Length::Grow();
         height = Length::Grow();
@@ -757,10 +819,15 @@ public:
             else q.Clear();
         });
         HeaderButton(header_, "add", L"Add files", [] { AddFilesToQueue(); });
+        // Music: the queue can stay beside the cover (PlayerView's dock) instead of this popover.
+        if (covers)
+            HeaderButton(header_, "close", L"Unpin the queue", [] { SetQueueDockSide(""); });
+        else if (!compact && !PS().hasVideo)
+            HeaderButton(header_, "sidebar_right", L"Pin beside the music", [] { SetQueueDockSide("right"); });
         auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
-        list_ = sv->SetContent<QueueList>(compact);
+        list_ = sv->SetContent<QueueList>(compact, covers);
         conn_ = Connect(TheApp().queue().changed, [this] { header_->Refresh(); });
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeFile | kChangeMeta)) header_->Refresh();
@@ -1113,8 +1180,8 @@ private:
 
 }  // namespace
 
-std::unique_ptr<Widget> BuildQueueTab(bool compact) {
-    return std::make_unique<QueueTab>(compact);
+std::unique_ptr<Widget> BuildQueueTab(bool compact, bool covers) {
+    return std::make_unique<QueueTab>(compact, covers);
 }
 
 std::unique_ptr<IconButton> MakeRepeatButton() {

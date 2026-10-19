@@ -2,6 +2,9 @@
 #include "app/Signal.h"
 #include "ui/Controls.h"
 
+#include <string>
+#include <vector>
+
 namespace app {
 
 class MainWindow;
@@ -55,6 +58,7 @@ private:
     VideoArea* video_ = nullptr;
     SubtitleWords* words_ = nullptr;
     ui::Widget* music_ = nullptr;
+    ui::Widget* dock_ = nullptr;  // the queue pinned beside the music view (QueueDockSide)
     ui::Widget* pip_ = nullptr;
     NextEpisodeCard* nextEpisode_ = nullptr;
     SkipChapterButton* skipChapter_ = nullptr;
@@ -78,6 +82,14 @@ std::unique_ptr<ui::Widget> CreatePipOverlay(MainWindow* window);
 bool PipOverlayShown(const ui::Widget* overlay);
 // The compact right-click menu of Picture in Picture: play, audio, subtitles, speed, back.
 void ShowPipContextMenu(ui::Host* host, ui::Point at);
+// The player's right-click menu; for music it has the lyrics and pinned-queue items instead of
+// the video and subtitle ones.
+void ShowPlayerContextMenu(ui::Host* host, ui::Point at);
+// The queue pinned beside the music view: "left", "right" or "" (ui.json player.queueDock).
+std::string QueueDockSide();
+void SetQueueDockSide(const std::string& side);
+// audio.lyricsStyle as radio items (MusicView.cpp).
+std::vector<ui::MenuItem> LyricsStyleItems();
 
 // Library-mode mini player (bottom-right): small video, seek, title, controls on hover.
 class MiniPlayer : public ui::Widget {

@@ -57,7 +57,7 @@ struct LyricsLoad {
     Lyrics lyrics;
 };
 
-constexpr float kWideLyrics = 980;  // narrower views show only the sung line under the title
+constexpr float kWideLyrics = 860;  // narrower views show only the sung line under the title
 // Lines light up this much early: an exact seek to a stamp may land a frame before it.
 constexpr double kLead = 0.1;
 constexpr float kEdgeFade = 72;  // lyrics fade out over this much at the column's top and bottom
@@ -320,21 +320,7 @@ public:
         // Right click on the lyrics: their style (and the save command for lyrics from the
         // internet); elsewhere the player's menu.
         if (e.button == MouseButton::Right && box_.w > 0 && box_.Contains(e.x, e.y) && GetHost()) {
-            std::vector<MenuItem> items;
-            const std::string cur = TheApp().config().GetString("audio.lyricsStyle");
-            for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"lumen", L"Lumen"},
-                                               {"spotify", L"Like Spotify"},
-                                               {"apple", L"Like Apple Music"},
-                                               {"yandex", L"Like Yandex Music"},
-                                               {"karaoke", L"Karaoke"}}) {
-                MenuItem m;
-                m.label = Tr(label);
-                m.radio = true;
-                m.checked = cur == value;
-                const std::string v = value;
-                m.action = [v] { TheApp().config().SetString("audio.lyricsStyle", v); };
-                items.push_back(std::move(m));
-            }
+            std::vector<MenuItem> items = LyricsStyleItems();
             items.push_back(MenuItem::Separator());
             MenuItem more;
             more.label = Tr(L"Lyrics settings…");
@@ -349,6 +335,10 @@ public:
                 items.push_back(std::move(save));
             }
             ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
+            return true;
+        }
+        if (e.button == MouseButton::Right && GetHost()) {
+            ShowPlayerContextMenu(GetHost(), {e.x, e.y});
             return true;
         }
         if (e.button != MouseButton::Left) return false;
@@ -1051,6 +1041,25 @@ private:
 };
 
 }  // namespace
+
+std::vector<MenuItem> LyricsStyleItems() {
+    std::vector<MenuItem> items;
+    const std::string cur = TheApp().config().GetString("audio.lyricsStyle");
+    for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"lumen", L"Lumen"},
+                                       {"spotify", L"Like Spotify"},
+                                       {"apple", L"Like Apple Music"},
+                                       {"yandex", L"Like Yandex Music"},
+                                       {"karaoke", L"Karaoke"}}) {
+        MenuItem m;
+        m.label = Tr(label);
+        m.radio = true;
+        m.checked = cur == value;
+        const std::string v = value;
+        m.action = [v] { TheApp().config().SetString("audio.lyricsStyle", v); };
+        items.push_back(std::move(m));
+    }
+    return items;
+}
 
 std::unique_ptr<Widget> CreateMusicView() {
     return std::make_unique<MusicView>();

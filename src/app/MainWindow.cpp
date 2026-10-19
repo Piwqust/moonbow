@@ -8,8 +8,10 @@
 #include "app/App.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/library/LibraryCommon.h"
 #include "app/player/PlayerView.h"
 
+#include <shlwapi.h>
 #include <windowsx.h>
 
 #include <cmath>
@@ -163,12 +165,16 @@ bool MainWindow::Create() {
         return true;
     };
     // Dropped while the queue is open (the drop lands on or beside it): added to the queue, as in
-    // PotPlayer and VLC. Anywhere else the files play and replace the queue.
+    // PotPlayer and VLC. One folder opens as a library page to sort and pick from; anything else
+    // plays and replaces the queue.
     onDropFiles = [](std::vector<std::wstring> files) {
-        if (PlayerPanelOpen(PanelKind::Queue))
+        if (PlayerPanelOpen(PanelKind::Queue)) {
             TheApp().Enqueue(files);
-        else
+        } else if (files.size() == 1 && PathIsDirectoryW(files[0].c_str())) {
+            lib::ShowFolderInLibrary(files[0]);
+        } else {
             TheApp().Open(files);
+        }
     };
     dropHint = Tr(L"Drop to play");
     langConn_ = Connect(TheApp().languageChanged, [this] { dropHint = Tr(L"Drop to play"); });

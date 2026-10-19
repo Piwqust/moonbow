@@ -50,6 +50,7 @@
 #     tracks (= audio) subtitles settings queue chapters bookmarks speed; panel close
 #   open <path|url>       play a file, folder, playlist or URL (no dialog); fails if missing
 #   queue <path|url>      append to the queue without playing
+#   drop <path>           as if the file or folder was dropped on the main window
 #   set <key> <value>     change a setting live, as Settings does (Config::Set + listeners).
 #                         value is JSON when it parses (true, 0.5, "x"), else a plain string:
 #                         set general.theme light | set interface.autoHide always

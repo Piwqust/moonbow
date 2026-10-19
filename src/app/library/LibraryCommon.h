@@ -83,6 +83,9 @@ void AddToQueue(std::vector<QueueItem> items);
 // Folder picker; adds the folder as a library root, saves and rescans.
 void AddFolderToLibrary();
 void RemoveLibraryRoot(const std::wstring& folder);
+// A folder dropped on the window: added to the library when no root covers it yet, then opened
+// as a page (Music when it holds more songs than videos) to sort and pick from.
+void ShowFolderInLibrary(const std::wstring& folder);
 void RescanLibrary();
 // Forgets the history, saved positions, per-file settings and what the online services sent.
 void ClearHistory();

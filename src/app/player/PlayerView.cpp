@@ -122,12 +122,13 @@ MenuItem PlayItem() {
 void ShowVideoContextMenu(Host* host, Point at) {
     App& app = TheApp();
     const PlayerState& s = PS();
+    const bool music = s.fileLoaded && !s.hasVideo;
     std::vector<MenuItem> items;
     items.push_back(PlayItem());
     items.push_back(Item(L"Stop", Action::Stop, "stop_twotone"));
     items.push_back(Item(L"Previous Item", Action::Previous, "previous_twotone"));
     items.push_back(Item(L"Next Item", Action::Next, "next_twotone"));
-    items.push_back(Item(L"Record", Action::Record, "record"));
+    if (!music) items.push_back(Item(L"Record", Action::Record, "record"));
     items.push_back(Item(L"Hide UI", Action::HideUI, "ui"));
 
     MenuItem playback{Tr(L"Playback"), L"", "playback"};
@@ -169,7 +170,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
     video.submenu.push_back(Item(L"Fullscreen", Action::Fullscreen, "fullscreen"));
     video.submenu.push_back(Item(L"Picture in Picture", Action::PictureInPicture, "pip"));
     video.submenu.push_back(Item(L"Snapshot", Action::Snapshot, "snapshot"));
-    items.push_back(video);
+    if (!music) items.push_back(video);
 
     MenuItem audio{Tr(L"Audio"), L"", "audio"};
     audio.submenu = TrackItems(L"audio", "aid", true);
@@ -178,6 +179,24 @@ void ShowVideoContextMenu(Host* host, Point at) {
     mute.checked = s.mute;
     audio.submenu.push_back(mute);
     items.push_back(audio);
+    if (music) {
+        MenuItem lyrics{Tr(L"Lyrics style"), L"", "music"};
+        lyrics.submenu = LyricsStyleItems();
+        items.push_back(std::move(lyrics));
+        MenuItem dock{Tr(L"Queue beside the music"), L"", "queue"};
+        const std::string side = QueueDockSide();
+        for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"", L"Not pinned"},
+                                           {"left", L"On the left"},
+                                           {"right", L"On the right"}}) {
+            MenuItem m{Tr(label)};
+            m.radio = true;
+            m.checked = side == value;
+            const std::string v = value;
+            m.action = [v] { SetQueueDockSide(v); };
+            dock.submenu.push_back(std::move(m));
+        }
+        items.push_back(std::move(dock));
+    }
     items.push_back(MenuItem::Separator());
     items.push_back(Item(L"Media information", Action::ShowInfo, "info"));
     MenuItem stats = Item(L"Statistics", Action::ToggleStats, "wrench");
@@ -189,7 +208,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
     subs.submenu = TrackItems(L"sub", "sid", true);
     subs.submenu.push_back(MenuItem::Separator());
     subs.submenu.push_back(Item(L"Add subtitle file…", Action::OpenSubtitles, "add"));
-    items.push_back(subs);
+    if (!music) items.push_back(subs);
 
     MenuItem more{Tr(L"More Settings"), L"", "settings"};
     more.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
@@ -227,6 +246,26 @@ bool TipIs(const std::wstring& text, const std::wstring& a, const std::wstring& 
 }
 
 }  // namespace
+
+void ShowPlayerContextMenu(Host* host, Point at) {
+    ShowVideoContextMenu(host, at);
+}
+
+std::string QueueDockSide() {
+    return TheApp().UiValue("player.queueDock");
+}
+
+void SetQueueDockSide(const std::string& side) {
+    TheApp().SetUiValue("player.queueDock", side);
+    MainWindow* w = TheApp().main();
+    if (!w) return;
+    // Posted: the pin button that calls this lives in the popover it closes.
+    w->Post([side] {
+        if (!side.empty()) ClosePlayerPanels();  // the popover's queue moved into the dock
+        if (MainWindow* mw = TheApp().main())
+            if (PlayerView* pv = mw->playerView()) pv->InvalidateLayout();
+    });
+}
 
 void ShowPipContextMenu(Host* host, Point at) {
     // Short: the PiP window is as small as 256x144 DIP and an in-window menu can't leave it.
@@ -431,6 +470,12 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     words_->fallbackMenu = [this](const MouseEvent& e) { ShowVideoContextMenu(GetHost(), {e.x, e.y}); };
     music_ = AddChild(CreateMusicView());
     music_->visible = false;
+    auto* dock = Add<Panel>();
+    dock->fill = [] { return P().bgBase; };
+    dock->dir = Dir::Column;
+    dock->AddChild(panel::BuildQueueTab(false, true));
+    dock->visible = false;
+    dock_ = dock;
     error_ = Add<ErrorCard>();
     error_->visible = false;
 
@@ -570,7 +615,18 @@ void PlayerView::OnLayout() {
     const Rect area = immersive ? rect : Rect{x, rect.y, rect.Right() - x, rect.h - (overlay ? 0.0f : barH)};
     video_->Arrange(area);
     music_->visible = audioOnly;
-    if (audioOnly) music_->Arrange(immersive ? area : video_->Inner(false));
+    // The pinned queue takes a side of the music view while there is room for both (not over
+    // the floating fullscreen bar).
+    Rect musicArea = immersive ? area : video_->Inner(false);
+    const std::string dockSide = QueueDockSide();
+    const float dockW = 360;
+    dock_->visible = audioOnly && !pip && !immersive && !dockSide.empty() && musicArea.w - dockW >= 480;
+    if (dock_->visible) {
+        dock_->Arrange({dockSide == "left" ? musicArea.x : musicArea.Right() - dockW, musicArea.y, dockW, musicArea.h});
+        if (dockSide == "left") musicArea.x += dockW;
+        musicArea.w -= dockW;
+    }
+    if (audioOnly) music_->Arrange(musicArea);
 
     const float chrome = window_->ChromeOpacity();
     bar_->opacity = immersive || overlay ? chrome : 1.0f;

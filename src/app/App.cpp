@@ -1200,6 +1200,12 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
         return true;
     }
 
+    if (verb == "drop" && main_ && main_->onDropFiles) {  // as if dropped on the window
+        main_->onDropFiles({warg});
+        r = "drop " + arg;
+        return true;
+    }
+
     if (verb == "open" || verb == "queue") {
         if (warg.empty() || (!IsUrl(warg) && GetFileAttributesW(warg.c_str()) == INVALID_FILE_ATTRIBUTES)) {
             r = "not found: " + arg;

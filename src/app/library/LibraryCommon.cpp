@@ -415,6 +415,24 @@ void AddFolderToLibrary() {
     Toast(Fmt(Tr(L"Added “{0}” — scanning…"), {FileNameOf(folder).empty() ? folder : FileNameOf(folder)}), "folder");
 }
 
+void ShowFolderInLibrary(const std::wstring& folder) {
+    App& app = TheApp();
+    library::MediaLibrary& lib = app.library();
+    const std::wstring path = library::NormalizePath(folder);
+    if (lib.AddRoot(path)) {
+        lib.Save();
+        RescanLibrary();
+        Toast(Fmt(Tr(L"Added “{0}” — scanning…"), {FileNameOf(path).empty() ? path : FileNameOf(path)}), "folder");
+    }
+    // shortcut: counts only the folder's own files; an album-per-subfolder music folder opens in
+    // Videos. Count the subfolders too if that annoys.
+    int audio = 0, other = 0;
+    for (const std::wstring& f : ListSiblingMedia(path + L"\\x"))
+        ++(library::KindOf(f) == library::MediaKind::Audio ? audio : other);
+    app.Navigate(Route{audio > other ? Section::Music : Section::Videos, path});
+    app.ShowPlayer(false);
+}
+
 void RemoveLibraryRoot(const std::wstring& folder) {
     library::MediaLibrary& lib = TheApp().library();
     if (!lib.RemoveRoot(folder)) return;

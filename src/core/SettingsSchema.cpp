@@ -1149,9 +1149,11 @@ void BuildMedia(Builder& b) {
         .Desc(L"Play the playlist in random order.", L"Воспроизводить плейлист в случайном порядке.")
         .MpvBool("shuffle");
     b.Toggle("playback.folderAsPlaylist", L"Play the folder's other files next", L"Играть остальные файлы папки",
-             true)
-        .Desc(L"Opening one file queues the files next to it, like a series. Off: only that file plays.",
-              L"Открытый файл ставит в очередь соседние файлы, как серии. Если выключено, играет только он.");
+             false)
+        .Desc(L"Opening one file queues the files next to it, and a series goes on to the next episode by itself. "
+              L"Off: only that file plays; build a queue or a playlist to play more.",
+              L"Открытый файл ставит в очередь соседние файлы, а сериал сам переходит к следующей серии. Если "
+              L"выключено, играет только этот файл; чтобы играло больше, соберите очередь или плейлист.");
     b.Pick("playback.folderOrder", L"Order of the folder's files", L"Порядок файлов папки",
            {{"explorer", L"As in Explorer", L"Как в Проводнике"},
             {"name", L"By name", L"По названию"},

@@ -61,6 +61,7 @@ private:
     void Resolve();
     void Update();
     void OnEnded();
+    bool AutoNext() const;  // the episode starts by itself when this one ends
     void CarryLanguages();
     void SetWanted(bool wanted);
 
