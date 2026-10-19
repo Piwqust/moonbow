@@ -510,8 +510,10 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
-        // The basic keys once, at the first file ever played (the onboarding has no page for them).
-        if ((m & kChangeFile) && PS().fileLoaded && TheApp().UiValue("hint.shortcuts") != "1") {
+        // The basic keys once, at the first file ever played in the player (the onboarding has no page for
+        // them). A song started from the library stays there: the toast would cover the page header.
+        if ((m & kChangeFile) && PS().fileLoaded && TheApp().PlayerShown() &&
+            TheApp().UiValue("hint.shortcuts") != "1") {
             TheApp().SetUiValue("hint.shortcuts", "1");
             ShowToast(window_,
                       Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
