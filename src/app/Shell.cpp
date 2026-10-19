@@ -73,6 +73,8 @@ public:
                              [] { lib::AddFolderToLibrary(); }});
             items.push_back({Tr(L"Open file"), ShortcutText(Action::OpenFile), "file", false, true, false, false,
                              [] { Run(Action::OpenFile); }});
+            items.push_back({Tr(L"Open folder"), ShortcutText(Action::OpenFolder), "folder", false, true, false, false,
+                             [] { Run(Action::OpenFolder); }});
             items.push_back({Tr(L"Open network stream"), ShortcutText(Action::OpenNetwork), "streaming", false, true,
                              false, false, [] { Run(Action::OpenNetwork); }});
             ShowMenu(GetHost(), rect, std::move(items), Place::Below, 220);
@@ -111,6 +113,22 @@ private:
     bool danger_;
 };
 
+// The app menu: the logo with a chevron, so it reads as "Lumen's menu" and not as the page's "⋯".
+class AppMenuButton : public IconButton {
+public:
+    AppMenuButton() : IconButton("lumen", Tr(L"Lumen menu"), 40, 20) {
+        width = Length::Px(44);
+    }
+    void Paint(Painter& p) override {
+        const bool hot = IsHot();
+        if (IsPressed()) p.Fill(rect, P().press, 4);
+        else if (hot) p.Fill(rect, P().hover, 4);
+        PaintFocusRing(p, rect, 4);
+        p.Icon("lumen", {rect.x + 6, rect.Cy() - 10, 20, 20}, P().textPrimary);
+        p.Icon("chevron_down", {rect.x + 27, rect.Cy() - 6, 12, 12}, hot ? P().textPrimary : P().textSecondary);
+    }
+};
+
 std::wstring FolderNameOf(const std::wstring& path) {
     const size_t slash = path.find_last_of(L"\\/");
     if (slash == std::wstring::npos || path.find(L"://") != std::wstring::npos) return {};
@@ -130,11 +148,7 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     gap = 2;
     ncRole = NcRole::Caption;
 
-    auto* logo = Add<IconView>("lumen", 20, Tone::Primary);
-    logo->width = Length::Px(32);
-    logo->color = [] { return P().textPrimary; };
-
-    moreBtn_ = Add<IconButton>("more", Tr(L"Menu"), 32, 20);
+    moreBtn_ = Add<AppMenuButton>();
     moreBtn_->onClick = [this] { ShowAppMenu(); };
 
     sidebarBtn_ = Add<IconButton>("sidebar_left", Tr(L"Toggle sidebar"), 32, 20);
@@ -175,8 +189,8 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     maxBtn_ = Add<CaptionButton>("maximize", L"", false);
     maxBtn_->ncRole = NcRole::Maximize;
     maxBtn_->onClick = [window] { window->ToggleMaximize(); };
-    fullBtn_ = Add<CaptionButton>("fullscreen", Tr(L"Fullscreen"), false);
-    fullBtn_->onClick = [] { Run(Action::Fullscreen); };
+    // No fullscreen button here: next to Maximize its corners read as the same thing. It lives at
+    // the right end of the control bar, where YouTube and VLC users look for it.
     auto* close = Add<CaptionButton>("close", Tr(L"Close"), true);
     close->onClick = [window] { window->Close(); };
 
@@ -186,8 +200,8 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     routeConn_ = Connect(TheApp().routeChanged, [this] { Refresh(); });
     screenConn_ = Connect(TheApp().screenChanged, [this] { Refresh(); });
     // Tooltips are translated when set: again on a language switch (maximize's in Refresh).
-    tips_ = {{moreBtn_, L"Menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
-             {min, L"Minimize"}, {fullBtn_, L"Fullscreen"}, {close, L"Close"}};
+    tips_ = {{moreBtn_, L"Lumen menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
+             {min, L"Minimize"}, {close, L"Close"}};
     langConn_ = Connect(TheApp().languageChanged, [this] {
         for (const auto& [w, english] : tips_) w->tooltip = Tr(english);
         Refresh();
@@ -265,6 +279,9 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Open file", "file", Action::OpenFile));
     items.push_back(item(L"Open folder", "folder", Action::OpenFolder));
     items.push_back(item(L"Open network stream", "streaming", Action::OpenNetwork));
+    MenuItem addFolder{Tr(L"Add Folder to Library…"), L"", "new-folder"};
+    addFolder.action = [] { lib::AddFolderToLibrary(); };
+    items.push_back(std::move(addFolder));
     items.push_back(item(L"Add subtitles", "subtitles", Action::OpenSubtitles));
     items.push_back(item(L"Media information", "info", Action::ShowInfo));
     items.push_back(MenuItem::Separator());

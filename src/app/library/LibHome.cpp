@@ -215,11 +215,8 @@ public:
     }
     std::vector<MenuItem> MoreMenu() override {
         std::vector<MenuItem> m;
-        m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
+        // Adding and opening live in "+ Add" and the app menu; the page menu keeps what is about the page.
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
-        m.push_back(MenuItem::Separator());
-        m.push_back(Item(L"Open File…", "file", [] { TheApp().OpenFileDialog(); }));
-        m.push_back(Item(L"Open Network Stream…", "streaming", [] { TheApp().OpenUrl({}); }));
         return m;
     }
     Widget* InitialFocus() override {

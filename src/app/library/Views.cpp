@@ -833,7 +833,6 @@ public:
                              [path] { ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
             m.push_back(MenuItem::Separator());
         }
-        m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
         MenuItem hidden = Item(L"Show Hidden Files", "view", [] {
             Config& cfg = TheApp().config();
