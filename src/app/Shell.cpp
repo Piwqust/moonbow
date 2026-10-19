@@ -606,7 +606,11 @@ void LibraryPane::RefreshHeader() {
     back_->enabled = app.CanGoBack();
     forward_->enabled = app.CanGoForward();
     if (view_) {
-        static_cast<CrumbBar*>(crumbs_)->Set(view_->Breadcrumbs(), compact_);
+        std::vector<Crumb> crumbs = view_->Breadcrumbs();
+        // The box says where it searches (UX-9): Home searches the whole library, a page only itself.
+        searchHint_ = route_.section == Section::Home || crumbs.empty() ? std::wstring(Tr(L"Search library"))
+                                                                        : Fmt(Tr(L"Search in “{0}”"), {crumbs.back().label});
+        static_cast<CrumbBar*>(crumbs_)->Set(std::move(crumbs), compact_);
         const long long n = view_->ItemCount();
         // The side panel is too narrow for crumbs and a count side by side.
         countWanted_ = n >= 0 && !compact_;
@@ -642,6 +646,11 @@ void LibraryPane::OnLayout() {
     const bool tight = !compact_ && rect.w < 900;
     if (count_) count_->visible = countWanted_ && !tight;
     Widget::OnLayout();
+    // A box too narrow for the whole hint says just "Search", not a cut "Search in “…".
+    if (search_) {
+        const float room = search_->rect.w - 48;  // the icon and the padding
+        search_->placeholder = gfx::Text::Get().Measure(searchHint_, TextStyle::Body).width <= room ? searchHint_ : std::wstring(Tr(L"Search"));
+    }
 }
 
 bool LibraryPane::Backdrop(Color& out) const {

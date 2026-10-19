@@ -65,6 +65,7 @@ public:
 
 private:
     bool countWanted_ = false;  // the view has a count (hidden anyway in a tight header)
+    std::wstring searchHint_;   // "Search in “Mixed”": where the search box looks
     void Build();
     void BuildHeader();
     void RefreshHeader();

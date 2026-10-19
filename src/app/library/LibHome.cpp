@@ -203,7 +203,11 @@ public:
         Rebuild();
     }
 
-    std::vector<Crumb> Breadcrumbs() const override { return {{Tr(L"Home"), Route{Section::Home, {}}}}; }
+    // While searching, the header names what the page shows now: the results, not Home (UX-9).
+    std::vector<Crumb> Breadcrumbs() const override {
+        if (!filter_.empty()) return {{Fmt(Tr(L"Results: “{0}”"), {ShortQuery(filter_)}), Route{Section::Home, {}}}};
+        return {{Tr(L"Home"), Route{Section::Home, {}}}};
+    }
     long long ItemCount() const override { return count_; }
     void SetFilter(const std::wstring& text) override {
         searchDebounce_.Run(this, text, [this, text] {
