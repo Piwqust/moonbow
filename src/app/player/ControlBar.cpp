@@ -372,6 +372,18 @@ public:
         Invalidate();
         return true;
     }
+    void Describe(A11y& a) override {
+        a.role = Role::Slider;
+        a.name = Tr(L"Volume");
+        a.max = 100;
+        a.now = PS().volume;
+        a.step = 5;
+        a.setRange = [this](double v) {
+            if (PS().mute) TheApp().player().SetMute(false);
+            TheApp().player().SetVolume(std::round(v));
+            Invalidate();
+        };
+    }
     bool OnKeyDown(const KeyEvent& e) override {
         if (e.key == VK_LEFT || e.key == VK_DOWN) Run(Action::VolumeDown);
         else if (e.key == VK_RIGHT || e.key == VK_UP) Run(Action::VolumeUp);
@@ -737,6 +749,16 @@ bool SeekBar::OnWheel(const WheelEvent& e) {
     if (!TheApp().player().State().fileLoaded) return false;
     SeekBy(5.0 * e.delta);  // with the position message, like the arrow keys
     return true;
+}
+
+void SeekBar::Describe(A11y& a) {
+    const PlayerState& s = TheApp().player().State();
+    a.role = Role::Slider;
+    a.name = Tr(L"Seek bar");
+    a.max = s.fileLoaded ? s.duration : 0;
+    a.now = std::clamp(s.position, 0.0, a.max);
+    a.step = 5;  // seconds, like the wheel
+    if (s.fileLoaded) a.setRange = [](double v) { TheApp().player().SeekAbsolute(v, true); };
 }
 
 void SeekBar::OnMouseLeave() {

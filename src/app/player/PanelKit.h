@@ -46,6 +46,7 @@ public:
     bool OnMouseDown(const ui::MouseEvent& e) override;
     void OnMouseLeave() override;
     bool OnKeyDown(const ui::KeyEvent& e) override;
+    void Describe(ui::A11y& a) override;
 
 private:
     ui::Rect TabRect(int i) const;
@@ -159,6 +160,7 @@ public:
     bool OnMouseUp(const ui::MouseEvent& e) override;
     bool OnKeyDown(const ui::KeyEvent& e) override;
     bool OnWheel(const ui::WheelEvent& e) override;
+    void Describe(ui::A11y& a) override;
 
 private:
     ui::Rect TrackRect() const;
