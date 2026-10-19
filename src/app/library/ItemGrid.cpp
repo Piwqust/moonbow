@@ -191,6 +191,7 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
 
 void ItemGrid::DebugInfo(std::string& out) const {
     if (selected_ >= 0) out += " selected=" + std::to_string(selected_);
+    if (dragging_) out += " dragging";
 }
 
 void ItemGrid::Describe(ui::A11y& a) {
@@ -972,14 +973,15 @@ bool ItemGrid::OnMouseMove(const MouseEvent& e) {
     return true;
 }
 
-bool ItemGrid::OnMouseUp(const MouseEvent&) {
+bool ItemGrid::OnMouseUp(const MouseEvent& e) {
     if (dragging_) {
         const int from = press_;
         int to = dropAt_ > from ? dropAt_ - 1 : dropAt_;
         dragging_ = false;
         dropAt_ = -1;
         press_ = -1;
-        if (from >= 0 && to >= 0 && to != from && onMove) {
+        // A lost capture or Esc drops the reorder, as in the queue.
+        if (!e.cancelled && from >= 0 && to >= 0 && to != from && onMove) {
             const int last = static_cast<int>(entries_.size()) - 1;
             to = std::min(to, last);
             while (to < last && !Selectable(to)) ++to;  // above the column titles = before the first item
@@ -988,6 +990,9 @@ bool ItemGrid::OnMouseUp(const MouseEvent&) {
         Invalidate();
         return true;
     }
+    // No click follows a press dropped or released off the grid: left behind, the next plain move
+    // of the pointer would start a reorder without a button down.
+    if (e.cancelled || !rect.Contains(e.x, e.y)) press_ = -1;
     return true;
 }
 

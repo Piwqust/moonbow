@@ -774,6 +774,7 @@ bool SeekBar::OnMouseDown(const MouseEvent& e) {
     const PlayerState& s = TheApp().player().State();
     if (!s.fileLoaded || s.duration <= 0 || !s.seekable) return true;
     dragging_ = true;
+    dragFrom_ = s.position;
     dragTime_ = TimeAt(e.x);
     TheApp().player().SeekAbsolute(dragTime_, false);
     Invalidate();
@@ -790,8 +791,9 @@ bool SeekBar::OnMouseMove(const MouseEvent& e) {
     return true;
 }
 
-bool SeekBar::OnMouseUp(const MouseEvent&) {
-    if (dragging_) TheApp().player().SeekAbsolute(dragTime_, true);
+bool SeekBar::OnMouseUp(const MouseEvent& e) {
+    // A dropped drag (Esc, a lost capture) goes back to where it began, like the sliders.
+    if (dragging_) TheApp().player().SeekAbsolute(e.cancelled ? dragFrom_ : dragTime_, true);
     dragging_ = false;
     Invalidate();
     return true;

@@ -8,13 +8,15 @@
 #   tools\dev\input.ps1 -ProcessId 1234 -Wheel 300,200 -Delta -1
 #   tools\dev\input.ps1 -ProcessId 1234 -Key Space | -Key F | -Key Escape | -Type "hello"
 #   tools\dev\input.ps1 -ProcessId 1234 -Drag 100,100,400,100
+#   tools\dev\input.ps1 -ProcessId 1234 -Drag 100,100,400,100 -Hold   no release: the button stays down
+#     (then -CaptureLost, -Key Escape, -Leave, or -Up 400,100 to release it there)
 #   tools\dev\input.ps1 -ProcessId 1234 -Leave        WM_MOUSELEAVE: the pointer left the window
 #   tools\dev\input.ps1 -ProcessId 1234 -CaptureLost  WM_CAPTURECHANGED: another window took capture
 #   add -Ctrl / -Shift to any of these to hold the modifier (e.g. -Key P -Ctrl)
 param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Title = "",
       [string]$Click = "", [string]$Move = "", [string]$Wheel = "", [int]$Delta = 1, [string]$Drag = "",
       [switch]$Right, [switch]$Double, [string]$Key = "", [string]$Type = "", [switch]$Ctrl, [switch]$Shift,
-      [switch]$Leave, [switch]$CaptureLost)
+      [switch]$Leave, [switch]$CaptureLost, [switch]$Hold, [string]$Up = "")
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
@@ -70,8 +72,9 @@ if ($Drag) {
   $p = $Drag -split ','; $x1 = [int]$p[0]; $y1 = [int]$p[1]; $x2 = [int]$p[2]; $y2 = [int]$p[3]
   Post 0x200 0 (MakeLParam $x1 $y1); Post 0x201 1 (MakeLParam $x1 $y1)
   for ($i = 1; $i -le 10; $i++) { Start-Sleep -Milliseconds 15; Post 0x200 1 (MakeLParam ([int]($x1 + ($x2 - $x1) * $i / 10)) ([int]($y1 + ($y2 - $y1) * $i / 10))) }
-  Post 0x202 0 (MakeLParam $x2 $y2)
+  if (-not $Hold) { Post 0x202 0 (MakeLParam $x2 $y2) }
 }
+if ($Up) { $x, $y = XY $Up; Post 0x202 0 (MakeLParam $x $y) }
 if ($Wheel) {
   $x, $y = XY $Wheel
   $pt = New-Object LumenIn+POINT; $pt.X = $x; $pt.Y = $y
