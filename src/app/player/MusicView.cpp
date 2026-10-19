@@ -244,8 +244,11 @@ public:
         net::Cancel(onlineReq_);
     }
     void OnLayout() override {}  // titleTip_, source_ and the pills are placed by Paint
+    // From the mini player's Lyrics button: a song without lyrics opens the "no lyrics" card
+    // once the pill has a place (the next paint), so the click never looks like it did nothing.
     void ShowLyrics() {
         lyricsOn_ = true;
+        noLyricsCardPending_ = true;
         Invalidate();
     }
 
@@ -350,6 +353,11 @@ public:
         const float px = std::round(left.Cx() - (lw + 10 + qw) / 2), py = std::round(textEnd + 16);
         lyricsBtn_->rect = {px, py, lw, kPillsH - 16};
         queueBtn_->rect = {px + lw + 10, py, qw, kPillsH - 16};
+        if (noLyricsCardPending_ && !pending_ && !onlineReq_) {
+            noLyricsCardPending_ = false;
+            if (lyrics_.Empty())
+                if (ui::Host* h = GetHost()) h->Post([this, alive = alive_] { if (*alive) LyricsClicked(); });
+        }
 
         source_->visible = false;
         if (wide) {
@@ -1179,6 +1187,7 @@ private:
     net::online::TrackInfo onlineTrack_;
     uint64_t onlineReq_ = 0, onlineSerial_ = 0;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+    bool noLyricsCardPending_ = false;
     uint64_t serial_ = 0;
     std::shared_ptr<LyricsLoad> pending_;
     int current_ = -1, hovered_ = -1;

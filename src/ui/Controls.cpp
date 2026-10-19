@@ -1786,7 +1786,8 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         if (it != Toasts().end() && it->second.id == id) Toasts().erase(it);
     };
     Toasts()[host] = {host->ShowPopup(std::move(bubble), o), id};
-    CloseToastAfter(host, id, ms);
+    // A toast with a button (Undo, Open) stays long enough to read it and reach the button.
+    CloseToastAfter(host, id, clickable ? std::max<UINT>(ms, 8000) : ms);
 }
 
 void DismissToast(Host* host) {

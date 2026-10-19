@@ -907,7 +907,10 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             }
             if (!top.options.dismissOnOutside) break;
-            if (!(e.button == MouseButton::Left && ClicksThrough(top, x, y))) dismissed = true;
+            // A right click passes too: it opens the menu of what it lands on (a song while the queue is open).
+            const bool through =
+                (e.button == MouseButton::Left || e.button == MouseButton::Right) && ClicksThrough(top, x, y);
+            if (!through) dismissed = true;
             ClosePopupAt(popups_.size() - 1);
         }
         if (dismissed && !inside) {
