@@ -18,8 +18,8 @@
     "line": "#352C22",
     "line.strong": "#54473A",
     "text.primary": "#EDE3D1",
-    "text.secondary": "#B3A28A",
-    "text.tertiary": "#8F7F69",
+    "text.secondary": "#BDAD95",
+    "text.tertiary": "#A3927A",
     "text.disabled": "#76695A",
     "accent": "#D9A866"
   },
@@ -38,8 +38,8 @@
     "line": "#D9CBA8",
     "line.strong": "#BFAE87",
     "text.primary": "#33281C",
-    "text.secondary": "#5C4A35",
-    "text.tertiary": "#86705A",
+    "text.secondary": "#4E3D2A",
+    "text.tertiary": "#6B5743",
     "text.disabled": "#9A8670",
     "accent": "#7A4E22"
   }

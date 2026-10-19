@@ -77,10 +77,11 @@
 
 Для каждой темы, в которой работает скин:
 
-- `text.primary` и `text.secondary` на всех фонах (`bg.base`, `bg.deep`, `bg.raised`, `bg.panel`,
-  `bg.chrome`, `bg.card`, `bg.selected`, `bg.menu`) должны давать не меньше **4,5:1**;
-- `text.tertiary` на `bg.base` и `bg.panel`, `accent` на `bg.base`, `bg.deep` и `bg.chrome`, `on.accent`
-  на `accent` — не меньше **3:1**: это значки, подписи и элементы управления;
+- `text.primary`, `text.secondary` и `text.tertiary` на всех фонах (`bg.base`, `bg.deep`, `bg.raised`,
+  `bg.panel`, `bg.chrome`, `bg.card`, `bg.selected`, `bg.menu`) должны давать не меньше **4,5:1**:
+  третичным цветом написаны подписи, «осталось 6:00», клавиши в меню и подсказки в полях;
+- `accent` на `bg.base`, `bg.deep` и `bg.chrome`, `on.accent` на `accent` — не меньше **3:1**: это значки
+  и элементы управления;
 - `text.disabled` не проверяется: WCAG не требует контраста от недоступных элементов.
 
 Если пара не проходит, в настройках появляется предупреждение со списком пар в подсказке и кнопка
