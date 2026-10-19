@@ -1254,7 +1254,7 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
             r = "menus closed";
             return true;
         } else if (arg == "app") {
-            target = FindVisible(w->titleBar(), [](Widget* x) { return HasIcon(x, "more"); });
+            target = FindVisible(w->titleBar(), [](Widget* x) { return TypeContains(x, "AppMenuButton"); });
         } else if (arg == "more" || arg == "sort") {
             target = FindVisible(w->library(), [&](Widget* x) { return HasIcon(x, arg.c_str()); });
         } else if (arg == "add") {
