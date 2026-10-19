@@ -10,6 +10,7 @@
 #include "app/player/ControlBar.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/PlayerView.h"
+#include "app/player/SeekPreview.h"
 
 #include <shlwapi.h>
 #include <windowsx.h>
@@ -386,6 +387,9 @@ void MainWindow::UpdateSubtitleLift() {
         // PiP: above the overlay's seek bar (16 DIP from the bottom), so it doesn't strike the line through.
         margin = base + static_cast<int>(std::lround(26.0f / h * 720));
     }
+    // Above the seek bar's frame preview while it shows, not under it.
+    if (const Rect v = player_ && !pip_ ? player_->VideoRect() : Rect{}; SeekPreviewTop() > 0 && v.h > 0)
+        margin = std::max(margin, base + static_cast<int>(std::lround(std::max(0.0f, v.Bottom() - SeekPreviewTop() + 8) / v.h * 720)));
     if (margin == appliedSubMargin_) return;
     appliedSubMargin_ = margin;
     mpv.SetProperty("sub-margin-y", std::to_string(margin));

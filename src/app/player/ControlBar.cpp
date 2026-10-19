@@ -860,7 +860,11 @@ void SeekBar::Paint(Painter& p) {
 
 void SeekBar::PaintOver(Painter& p) {
     const PlayerState& s = TheApp().player().State();
-    if ((hoverX_ < 0 && !dragging_) || !s.fileLoaded || s.duration <= 0 || compact) return;
+    if (compact) return;
+    if ((hoverX_ < 0 && !dragging_) || !s.fileLoaded || s.duration <= 0) {
+        HideSeekPreview();
+        return;
+    }
     const double t = dragging_ ? dragTime_ : TimeAt(hoverX_);
     std::wstring label = FormatTime(t, s.duration >= 3600);
     for (auto it = s.chapters.rbegin(); it != s.chapters.rend(); ++it)

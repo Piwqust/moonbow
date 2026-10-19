@@ -508,7 +508,29 @@ float DeviceScale(ui::Painter& p) {
     return dx / 96.0f;
 }
 
+// Top of the preview as last painted (window DIPs), 0 while none shows.
+float g_previewTop = 0;
+
+void SetPreviewTop(float top) {
+    top = std::round(top);
+    if (top == g_previewTop) return;
+    g_previewTop = top;
+    // Called while painting: the next layout moves the subtitles (MainWindow::UpdateSubtitleLift).
+    if (MainWindow* w = TheApp().main())
+        w->Post([] {
+            if (MainWindow* mw = TheApp().main()) mw->RequestLayout();
+        });
+}
+
 }  // namespace
+
+float SeekPreviewTop() {
+    return g_previewTop;
+}
+
+void HideSeekPreview() {
+    SetPreviewTop(0);
+}
 
 float ClampedLeft(float x, float w, const ui::Rect& track, const ui::Rect& bounds) {
     // Over the bar while it is wider than the box; else within the window, 8 DIP from its edges.
@@ -524,8 +546,11 @@ float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double se
     App& app = TheApp();
     const PlayerState& s = app.player().State();
     const QueueItem* item = app.queue().CurrentItem();
-    if (!s.hasVideo || !item || item->path.find(L"://") != std::wstring::npos || s.duration <= 0) return 0;
-    if (!app.config().GetBool("playback.seekPreview")) return 0;
+    if (!s.hasVideo || !item || item->path.find(L"://") != std::wstring::npos || s.duration <= 0 ||
+        !app.config().GetBool("playback.seekPreview")) {
+        HideSeekPreview();
+        return 0;
+    }
 
     // Bucket times so nearby hovers share a frame (≈ 300 frames per file, at least 2 s apart).
     Request r;
@@ -561,6 +586,7 @@ float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double se
         p.Image(g_shown.bitmap.Get(), box, 6, true);
     }
     p.Stroke(box, ui::P().line, 6);
+    SetPreviewTop(box.y);
     return h + 6;
 }
 

@@ -667,9 +667,10 @@ void PlayerView::OnLayout() {
 
     // Bottom-right of the picture, above a floating bar and above the subtitle lines; top-right
     // when that would put them in the upper half of a small picture.
-    // A floating bar lifts the subtitles above it too (MainWindow::UpdateSubtitleLift).
+    // A floating bar lifts the subtitles above it too (MainWindow::UpdateSubtitleLift). Its room
+    // stays reserved while it is hidden: the chips dropped 72 DIP in one frame as it faded out.
     const Rect v = video_->Inner(immersive);
-    const float lift = (immersive || overlay) && bar_->visible ? barSpace : 0.0f;
+    const float lift = immersive || overlay ? barSpace : 0.0f;
     const float bottom = v.Bottom() - lift - std::max(20.0f, SubtitleBand(v.h) + 12);
     auto place = [&](Widget* w, Size sz) {
         const float top = bottom - sz.h < v.y + v.h * 0.5f ? v.y + (immersive ? 64.0f : 20.0f) : bottom - sz.h;
