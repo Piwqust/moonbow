@@ -95,12 +95,6 @@ const PlayerState& PS() {
     return TheApp().player().State();
 }
 
-// "Subtitles (V)": the key as bound now (Settings > Controls can change it).
-std::wstring WithKey(const std::wstring& tip, Action a) {
-    const std::wstring key = a == Action::None ? L"" : ShortcutText(a);
-    return key.empty() ? tip : tip + L" (" + key + L")";
-}
-
 // Icon button that runs an action and names its key in the tooltip.
 class ActionButton : public IconButton {
 public:

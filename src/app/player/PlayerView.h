@@ -106,9 +106,10 @@ public:
 private:
     ui::Rect VideoBox() const;  // video or cover art
     ui::Widget* overlay_ = nullptr;
+    ui::IconButton* next_ = nullptr;
     bool compact_ = false;  // one row (thumbnail, title, play) in a small window
     ui::AnimFloat hover_;
-    ScopedConnection playerConn_, imagesConn_;
+    ScopedConnection playerConn_, imagesConn_, queueConn_;
 };
 
 }  // namespace app

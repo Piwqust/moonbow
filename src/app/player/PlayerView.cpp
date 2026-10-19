@@ -819,12 +819,24 @@ constexpr float kMiniVideoH = 148;
 constexpr float kMiniCompactW = 1000, kMiniCompactH = 560;
 constexpr float kMiniCompactCardW = 320, kMiniCompactCardH = 72;
 
+// Runs `action` and names its key; Next dims like the control bar's while it has nothing to play.
 class MiniOverlayButton : public IconButton {
 public:
-    MiniOverlayButton(const char* icon, const wchar_t* tip, int box, int isz)
-        : IconButton(icon, Tr(tip), box, isz) {
+    MiniOverlayButton(const char* icon, const wchar_t* tip, Action action, int box, int isz)
+        : IconButton(icon, Tr(tip), box, isz), tip_(tip), action_(action) {
         round = true;
+        onClick = [action] { Run(action); };
+        tooltip = WithKey(Tr(tip), action);
     }
+    void Paint(Painter& p) override {
+        if (action_ == Action::Next) enabled = Enabled(Action::Next);
+        tooltip = WithKey(Tr(action_ == Action::PlayPause && !PS().paused ? L"Pause" : tip_), action_);
+        IconButton::Paint(p);
+    }
+
+private:
+    const wchar_t* tip_;
+    Action action_;
 };
 
 }  // namespace
@@ -838,26 +850,23 @@ MiniPlayer::MiniPlayer(MainWindow*) {
 
     overlay_ = Add<Widget>();
     overlay_->dir = Dir::None;
-    auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", 28, 18);
+    auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
-    close->onClick = [] { Run(Action::Stop); };
-    auto* expand = overlay_->Add<MiniOverlayButton>("open", L"Open player", 28, 18);
+    auto* expand = overlay_->Add<MiniOverlayButton>("open", L"Open player", Action::None, 28, 18);
     expand->id = "expand";
     expand->onClick = [] { TheApp().ShowPlayer(true); };
-    auto* prev = overlay_->Add<MiniOverlayButton>("previous", L"Previous", 36, 24);
+    auto* prev = overlay_->Add<MiniOverlayButton>("previous", L"Previous", Action::Previous, 36, 24);
     prev->id = "prev";
-    prev->onClick = [] { Run(Action::Previous); };
-    auto* play = overlay_->Add<MiniOverlayButton>("play", L"Play", 40, 28);
+    auto* play = overlay_->Add<MiniOverlayButton>("play", L"Play", Action::PlayPause, 40, 28);
     play->id = "play";
-    play->onClick = [] { Run(Action::PlayPause); };
-    auto* next = overlay_->Add<MiniOverlayButton>("next", L"Next", 36, 24);
-    next->id = "next";
-    next->onClick = [] { Run(Action::Next); };
+    next_ = overlay_->Add<MiniOverlayButton>("next", L"Next", Action::Next, 36, 24);
+    next_->id = "next";
     class QueueButton : public IconButton {
     public:
         QueueButton() : IconButton("list", Tr(L"Queue"), 28, 20) {}
         void Paint(Painter& p) override {
             active = PlayerPanelOpen(PanelKind::Queue);
+            tooltip = WithKey(Tr(L"Queue"), Action::TogglePlaylist);
             IconButton::Paint(p);
         }
     };
@@ -873,8 +882,11 @@ MiniPlayer::MiniPlayer(MainWindow*) {
             for (auto& c : overlay_->Children())
                 if (c->id == "play") static_cast<IconButton*>(c.get())->icon = PS().paused ? "play" : "pause";
             Invalidate();
+        } else if ((m & kChangeTime) && next_->visible && next_->enabled != Enabled(Action::Next)) {
+            next_->Invalidate();  // the folder search for the next episode ends after the file loads
         }
     });
+    queueConn_ = Connect(TheApp().queue().changed, [this] { next_->Invalidate(); });
     imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
 }
 

@@ -799,7 +799,8 @@ public:
     void Paint(Painter& p) override {
         const Repeat r = TheApp().queue().RepeatMode();
         active = r != Repeat::Off;
-        tooltip = r == Repeat::Off ? Tr(L"Repeat off") : r == Repeat::All ? Tr(L"Repeat all") : Tr(L"Repeat one");
+        tooltip = WithKey(r == Repeat::Off ? Tr(L"Repeat off") : r == Repeat::All ? Tr(L"Repeat all") : Tr(L"Repeat one"),
+                          Action::ToggleRepeat);
         IconButton::Paint(p);
         if (r == Repeat::One) {
             const Rect b{rect.Right() - 11, rect.y + 2, 10, 10};
@@ -822,6 +823,7 @@ public:
     }
     void Paint(Painter& p) override {
         active = TheApp().queue().Shuffle();
+        tooltip = WithKey(Tr(L"Shuffle"), Action::ToggleShuffle);
         IconButton::Paint(p);
     }
 

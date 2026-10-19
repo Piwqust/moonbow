@@ -47,6 +47,8 @@ const std::vector<ActionInfo>& AllActions();
 const ActionInfo& Info(Action a);
 // "Ctrl + O" style text for the first binding of `a` (empty if none).
 std::wstring ShortcutText(Action a);
+// "Subtitles (V)": the key as bound now (Settings > Controls can change it); `tip` alone when unbound.
+std::wstring WithKey(const std::wstring& tip, Action a);
 // Key names follow the UI language ("Пробел", "Громкость +"); `localized` false gives the
 // English ones ("Space"), e.g. so a search for either finds the key.
 std::wstring KeyText(UINT vk, const ui::Mods& mods, bool localized = true);

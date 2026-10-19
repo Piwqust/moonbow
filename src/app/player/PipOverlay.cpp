@@ -15,17 +15,23 @@ using namespace ui;
 
 namespace {
 
+// `dimWith`: dimmed while that action can't run (Next with nothing to play, as in the control bar).
 class PipButton : public IconButton {
 public:
-    PipButton(const char* icon, const wchar_t* tip, int box, int iconSize) : IconButton(icon, Tr(tip), box, iconSize) {
+    PipButton(const char* icon, const wchar_t* tip, int box, int iconSize, Action dimWith = Action::None)
+        : IconButton(icon, Tr(tip), box, iconSize), dimWith_(dimWith) {
         round = true;
         tone = Tone::Primary;
     }
     void Paint(Painter& p) override {
+        if (dimWith_ != Action::None) enabled = Enabled(dimWith_);
         // Dark disc so the icon stays readable over bright video.
         p.Fill(rect, Color::Hex(0x000000, 0.35f), rect.w / 2);
         IconButton::Paint(p);
     }
+
+private:
+    Action dimWith_;
 };
 
 class PipOverlay : public Widget {
@@ -46,7 +52,7 @@ public:
         prev_->onClick = [] { Run(Action::Previous); };
         play_ = Add<PipButton>("play", L"Play", 48, 28);
         play_->onClick = [] { Run(Action::PlayPause); };
-        next_ = Add<PipButton>("next", L"Next", 36, 22);
+        next_ = Add<PipButton>("next", L"Next", 36, 22, Action::Next);
         next_->onClick = [] { Run(Action::Next); };
         seek_ = Add<SeekBar>();
         seek_->compact = true;
@@ -59,8 +65,11 @@ public:
                 if (!visible) return;
                 if (TheApp().player().State().paused && shown_.Target() < 1) shown_.To(1.0f, 120.0f);
                 window_->RequestLayout();
+            } else if ((m & kChangeTime) && next_->visible && next_->enabled != Enabled(Action::Next)) {
+                next_->Invalidate();  // the folder search for the next episode ends after the file loads
             }
         });
+        queueConn_ = Connect(TheApp().queue().changed, [this] { next_->Invalidate(); });
     }
     ~PipOverlay() override {
         if (timer_) window_->CancelTimer(timer_);
@@ -131,7 +140,7 @@ private:
     SeekBar* seek_;
     AnimFloat shown_{1.0f};
     UINT_PTR timer_ = 0;
-    ScopedConnection conn_;
+    ScopedConnection conn_, queueConn_;
 };
 
 }  // namespace

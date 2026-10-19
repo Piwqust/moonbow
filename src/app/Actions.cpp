@@ -403,6 +403,11 @@ std::wstring ShortcutText(Action a) {
     return L"";
 }
 
+std::wstring WithKey(const std::wstring& tip, Action a) {
+    const std::wstring key = a == Action::None ? L"" : ShortcutText(a);
+    return key.empty() ? tip : tip + L" (" + key + L")";
+}
+
 Action ActionForKey(const KeyEvent& e) {
     for (const ActionInfo& info : Table())
         for (const auto& [vk, mods] : Bindings(info.action))
