@@ -6,6 +6,7 @@
 #include <cwchar>
 #include <cwctype>
 #include <initializer_list>
+#include <vector>
 
 namespace library {
 
@@ -266,6 +267,114 @@ std::wstring EpisodeLabel(std::wstring_view name) {
     const std::wstring& rest = ep.title.empty() ? ep.show : ep.title;
     if (!rest.empty()) out += L" · " + rest;
     return out;
+}
+
+namespace {
+
+// Words of a name between spaces, dots, underscores, dashes and brackets.
+std::vector<std::wstring_view> Words(std::wstring_view s) {
+    auto sep = [](wchar_t c) {
+        return c == L' ' || c == L'.' || c == L'_' || c == L'-' || c == L'(' || c == L')' || c == L'[' ||
+               c == L']' || c == L',' || c == L'—' || c == L'–';
+    };
+    std::vector<std::wstring_view> out;
+    for (size_t i = 0; i < s.size();) {
+        while (i < s.size() && sep(s[i])) ++i;
+        size_t e = i;
+        while (e < s.size() && !sep(s[e])) ++e;
+        if (e > i) out.push_back(s.substr(i, e - i));
+        i = e;
+    }
+    return out;
+}
+
+bool WordIs(std::wstring_view w, std::initializer_list<std::wstring_view> list) {
+    for (std::wstring_view x : list)
+        if (CompareStringOrdinal(w.data(), static_cast<int>(w.size()), x.data(), static_cast<int>(x.size()), TRUE) ==
+            CSTR_EQUAL)
+            return true;
+    return false;
+}
+
+// A word that is only a number of 1..maxDigits digits, else -1.
+int NumberWord(std::wstring_view w, size_t maxDigits) {
+    size_t i = 0;
+    int v = 0;
+    return ReadNumber(w, i, maxDigits, &v) && i == w.size() ? v : -1;
+}
+
+// Offset of the word `w` (a view into `s`) and of the end of it.
+size_t Begin(std::wstring_view s, std::wstring_view w) { return static_cast<size_t>(w.data() - s.data()); }
+size_t End(std::wstring_view s, std::wstring_view w) { return Begin(s, w) + w.size(); }
+
+}  // namespace
+
+int ParseSeasonFolder(std::wstring_view name, std::wstring* show) {
+    const auto words = Words(name);
+    for (size_t k = 0; k < words.size(); ++k) {
+        const std::wstring_view w = words[k];
+        size_t last = k;  // last word of the marker
+        int season = w.size() >= 2 && (w[0] == L'S' || w[0] == L's') ? NumberWord(w.substr(1), 2) : -1;
+        if (season < 0 && k + 1 < words.size() && WordIs(w, {L"season", L"сезон"})) {
+            season = NumberWord(words[k + 1], 2);
+            last = k + 1;
+        }
+        if (season < 0 && k + 1 < words.size() && WordIs(words[k + 1], {L"season", L"сезон"})) {
+            season = NumberWord(w, 2);
+            last = k + 1;
+        }
+        if (season < 0) continue;
+        // Only release tags and a year may follow: "Best S1 Clips" is not a season.
+        bool tail = true;
+        for (size_t j = last + 1; j < words.size() && tail; ++j)
+            tail = IsReleaseTag(words[j]) || (words[j].size() == 4 && NumberWord(words[j], 4) >= 1900);
+        if (!tail) continue;
+        if (show) *show = ShowName(name.substr(0, Begin(name, w)));
+        return season;
+    }
+    return -1;
+}
+
+bool ParseEpisodePath(std::wstring_view path, EpisodeInfo* out) {
+    const std::wstring stem = StemOf(path);
+    const std::wstring folder = ParentFolder(path);
+    std::wstring folderShow;
+    const int season = ParseSeasonFolder(FileNameOf(folder), &folderShow);
+    EpisodeInfo ep;
+    if (!ParseEpisode(stem, &ep)) {
+        if (season < 0) return false;
+        // A numbered file in a season folder: "03 Title", "E03", "Ep03", "Episode 3", "Серия 3", "3 серия".
+        const std::wstring_view s = stem;
+        const auto words = Words(s);
+        int number = -1;
+        size_t after = 0;
+        for (size_t k = 0; k < words.size() && number < 0; ++k) {
+            const std::wstring_view w = words[k];
+            const bool next = k + 1 < words.size();
+            if (k == 0 && (number = NumberWord(w, 3)) >= 0) {
+                after = End(s, w);
+            } else if (w.size() >= 2 && (w[0] == L'E' || w[0] == L'e') &&
+                       ((number = NumberWord(w.substr(1), 3)) >= 0 ||
+                        (w.size() >= 3 && (w[1] == L'P' || w[1] == L'p') && (number = NumberWord(w.substr(2), 3)) >= 0))) {
+                after = End(s, w);
+            } else if (next && WordIs(w, {L"episode", L"ep", L"серия", L"эпизод"}) &&
+                       (number = NumberWord(words[k + 1], 3)) >= 0) {
+                after = End(s, words[k + 1]);
+            } else if (next && WordIs(words[k + 1], {L"серия"}) && (number = NumberWord(w, 3)) >= 0) {
+                after = End(s, words[k + 1]);
+            }
+        }
+        if (number <= 0) return false;
+        ep.season = season;
+        ep.episode = number;
+        ep.title = EpisodeTitle(s.substr(after));
+    }
+    if (ep.show.empty())
+        ep.show = season < 0             ? ShowName(FileNameOf(folder))
+                  : !folderShow.empty() ? folderShow
+                                        : ShowName(FileNameOf(ParentFolder(folder)));
+    if (out) *out = std::move(ep);
+    return true;
 }
 
 int ParseDiscNumber(std::wstring_view s) {

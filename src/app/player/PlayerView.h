@@ -34,6 +34,8 @@ public:
 
     // Rect where the video is shown (window DIPs); empty when not visible.
     ui::Rect VideoRect() const;
+    // Where a toast centres: the video or music area left of an open popover.
+    ui::Rect ToastBand() const;
 
     void OnLayout() override;
     float SubtitleBand(float h) const;
@@ -71,7 +73,7 @@ private:
     float thinW_ = 0;
     int thinPx_ = -1;
     uint64_t configToken_ = 0;
-    ScopedConnection playerConn_, screenConn_, liveConn_;
+    ScopedConnection playerConn_, screenConn_, liveConn_, langConn_;
 };
 
 // Built by the player module (MusicView.cpp): cover art, blurred backdrop, titles.
@@ -88,6 +90,8 @@ void ShowPlayerContextMenu(ui::Host* host, ui::Point at);
 // The queue pinned beside the music view: "left", "right" or "" (ui.json player.queueDock).
 std::string QueueDockSide();
 void SetQueueDockSide(const std::string& side);
+// Shows the lyrics in the music view again if the Lyrics pill hid them (MusicView.cpp).
+void ShowMusicLyrics();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
 
@@ -106,9 +110,10 @@ public:
 private:
     ui::Rect VideoBox() const;  // video or cover art
     ui::Widget* overlay_ = nullptr;
+    ui::IconButton* next_ = nullptr;
     bool compact_ = false;  // one row (thumbnail, title, play) in a small window
     ui::AnimFloat hover_;
-    ScopedConnection playerConn_, imagesConn_;
+    ScopedConnection playerConn_, imagesConn_, queueConn_;
 };
 
 }  // namespace app

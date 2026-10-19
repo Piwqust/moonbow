@@ -42,8 +42,8 @@ Colors BrandColors(bool dark) {
         c[kLine] = Rgba::Hex(0x262626);
         c[kLineStrong] = Rgba::Hex(0x404040);
         c[kTextPrimary] = Rgba::Hex(0xEAEAEA);
-        c[kTextSecondary] = Rgba::Hex(0x8F8F8F);
-        c[kTextTertiary] = Rgba::Hex(0x6B6B6B);
+        c[kTextSecondary] = Rgba::Hex(0xA8A8A8);
+        c[kTextTertiary] = Rgba::Hex(0x8B8B8B);
         c[kTextDisabled] = Rgba::Hex(0x646464);  // ~3:1 on bgBase: readable, clearly off
         c[kScrim] = Rgba::Hex(0x000000, 0.60f);
         c[kShadow] = Rgba::Hex(0x000000, 0.46f);
@@ -62,8 +62,8 @@ Colors BrandColors(bool dark) {
         c[kLine] = Rgba::Hex(0xD6D6D6);
         c[kLineStrong] = Rgba::Hex(0xBDBDBD);
         c[kTextPrimary] = Rgba::Hex(0x141414);
-        c[kTextSecondary] = Rgba::Hex(0x5C5C5C);
-        c[kTextTertiary] = Rgba::Hex(0x8A8A8A);
+        c[kTextSecondary] = Rgba::Hex(0x424242);
+        c[kTextTertiary] = Rgba::Hex(0x616161);
         c[kTextDisabled] = Rgba::Hex(0x848484);  // ~3.3:1 on bgBase, ~3.7:1 on white
         c[kScrim] = Rgba::Hex(0x000000, 0.32f);
         c[kShadow] = Rgba::Hex(0x000000, 0.18f);
@@ -307,12 +307,12 @@ std::vector<ContrastIssue> CheckContrast(const Skin* skin, int accentTone) {
         std::vector<int> bgs;
         double need;
     };
-    // Where each foreground is drawn. text.disabled is exempt (WCAG excludes inactive controls);
-    // text.tertiary marks captions and inactive items and is held to the 3:1 of non-text.
+    // Where each foreground is drawn. text.disabled is exempt (WCAG excludes inactive controls).
+    // text.tertiary is small text too (captions, "6:00 left", menu shortcuts, placeholders).
     static const Pair kPairs[] = {
         {kTextPrimary, {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu}, 4.5},
         {kTextSecondary, {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu}, 4.5},
-        {kTextTertiary, {kBgBase, kBgPanel}, 3.0},
+        {kTextTertiary, {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu}, 4.5},
         {kAccent, {kBgBase, kBgDeep, kBgChrome}, 3.0},
         {kOnAccent, {kAccent}, 3.0},
     };

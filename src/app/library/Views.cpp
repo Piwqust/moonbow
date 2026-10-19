@@ -762,7 +762,7 @@ void Page::SortMedia(std::vector<const library::MediaItem*>& items, const std::s
 std::vector<Crumb> FolderCrumbs(const library::Snapshot& snap, Section section, const std::wstring& folder,
                                 const std::wstring& sectionRoot) {
     std::vector<Crumb> out;
-    out.push_back({Tr(SectionName(section)), Route{section, {}}});
+    out.push_back({Tr(SectionName(section)), Route{section, section == Section::Music ? LastMusicTab() : std::wstring()}});
     int idx = snap.FindFolder(folder);
     std::vector<Crumb> chain;
     for (int guard = 0; idx >= 0 && guard < 256; ++guard) {
@@ -789,14 +789,17 @@ public:
         const std::wstring name = FileNameOf(route_.path);
         queueName_ = route_.path.empty() ? std::wstring(Tr(SectionName(route_.section))) : name;
         if (kind_ == library::MediaKind::Video) {
+            // The folder browser is the Videos page's third tab.
+            tabs_ = route_.path.empty();
+            if (tabs_) AddVideoTabs(toolbar_, 2);
             // A folder of episodes gets "Continue S01E02" and "Play All", like an album page.
             next_ = toolbar_->Add<Button>(L"", ButtonKind::Primary, "play");
             next_->onClick = [this] {
                 if (nextRef_ >= 0) PlayQueue(queue_, nextRef_, queueName_);
             };
             if (!compact) {
-                auto* all = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Secondary, "playback");
-                all->onClick = [this] {
+                all_ = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Secondary, "playback");
+                all_->onClick = [this] {
                     if (!episodeQueue_.empty()) PlayQueue(episodeQueue_, 0, queueName_);
                 };
             }
@@ -805,8 +808,11 @@ public:
     }
 
     std::vector<Crumb> Breadcrumbs() const override {
-        if (route_.path.empty() || !snap_) return Page::Breadcrumbs();
-        return FolderCrumbs(*snap_, route_.section, route_.path, SoleRoot());
+        auto c = route_.path.empty() || !snap_ ? Page::Breadcrumbs()
+                                               : FolderCrumbs(*snap_, route_.section, route_.path, SoleRoot());
+        // Up from a folder leads to the folder browser, not to the last Videos tab.
+        if (kind_ == library::MediaKind::Video) c.front().route.path = L"folders";
+        return c;
     }
 
     std::vector<MenuItem> SortMenu() override {
@@ -833,7 +839,6 @@ public:
                              [path] { ui::Host::ShellOpen(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }));
             m.push_back(MenuItem::Separator());
         }
-        m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
         MenuItem hidden = Item(L"Show Hidden Files", "view", [] {
             Config& cfg = TheApp().config();
@@ -988,7 +993,9 @@ protected:
     void UpdateToolbar() {
         if (!next_) return;
         const bool show = nextRef_ >= 0;
-        toolbar_->visible = show;
+        toolbar_->visible = show || tabs_;
+        next_->visible = show;
+        if (all_) all_->visible = show;
         if (show) next_->SetText(nextLabel_);
     }
 
@@ -1046,7 +1053,9 @@ private:
     std::wstring Folder() const { return route_.path.empty() ? SoleRoot() : route_.path; }
 
     library::MediaKind kind_;
+    bool tabs_ = false;               // the Videos tabs lead the toolbar
     Button* next_ = nullptr;          // "Continue S01E02" in a folder of episodes
+    Button* all_ = nullptr;           // its "Play All"
     int nextRef_ = -1;                // its queue index
     std::wstring nextLabel_;
     std::vector<QueueItem> episodeQueue_;  // the episodes in order, for "Play All"
@@ -1059,7 +1068,7 @@ public:
     RecentPage(Route r, bool compact) : Page(r, compact, "recent") {
         modes_ = false;
         list_ = true;
-        queueName_ = Tr(L"Recent");
+        queueName_ = Tr(L"History");
         if (!compact) {
             // The views as visible tabs, not hidden in "⋯" (the side panel keeps them in its menu).
             int current = 0;
@@ -1278,7 +1287,7 @@ std::unique_ptr<LibraryView> MakeRecentPage(const Route& route, bool compact) {
 std::unique_ptr<LibraryView> CreateLibraryView(const Route& route, bool compact) {
     switch (route.section) {
         case Section::Home: return lib::MakeHomePage(compact);
-        case Section::Videos: return lib::MakeFolderPage(route, compact);
+        case Section::Videos: return lib::MakeVideosPage(route, compact);
         case Section::Music: return lib::MakeMusicPage(route, compact);
         case Section::Network: return lib::MakeNetworkPage(route, compact);
         case Section::Playlists: return lib::MakePlaylistsPage(route, compact);

@@ -31,6 +31,7 @@ struct Track {
     int channels = 0;   // audio: demux-channel-count, 0 when unknown
     bool selected = false;
     bool external = false;
+    bool isDefault = false;  // the file marks it as its default track
     std::wstring file;  // external-filename for external tracks
 
     std::wstring Label() const;  // Name() + " · codec" (menus, media info)
@@ -134,11 +135,19 @@ public:
     bool TracksConfirmed() const { return tracksSerial_ != 0 && tracksSerial_ == state_.loadSerial; }
     // Track choices made through Player (SetTrack, CycleTrack, AddAudio/AddSubtitle, SetProperty of
     // aid/sid/secondary-sid), counted per kind: 0 audio, 1 subtitles, 2 secondary subtitles.
+    // `quiet` picks are Lumen's own (restoring or carrying a choice): not counted.
     uint32_t TrackChoices(int kind) const { return kind >= 0 && kind < 3 ? trackChoices_[kind] : 0; }
+    // Runs with each counted choice ("aid", "sid", "secondary-sid"): the message naming the track.
+    std::function<void(const char* prop)> onTrackChoice;
 
     // Plays `path` from its watch-later resume point, if any.
     void Open(const std::wstring& path);
     void Stop();
+    // The Stop command: pauses at 0:00 but keeps the resume point where the user stopped (mpv's
+    // watch-later is written now and then left alone) until playback, a seek or another file.
+    void StopAtStart();
+    bool HoldsResumePoint() const { return holdResume_; }
+    double StopPosition() const { return holdResume_ ? stopPos_ : 0; }  // where Play will continue
     // The file to play when the current one ends, kept in mpv's playlist so mpv prefetches it
     // and plays it gaplessly (gapless-audio, prefetch-playlist). Empty = stop at the end.
     // Open() and Stop() forget it. When mpv starts it, ProcessEvents reports kChangeAdvance.
@@ -164,10 +173,10 @@ public:
     void SetMute(bool mute);
     void ToggleMute();
     void SetSpeed(double speed);
-    void SetTrack(const char* prop, int64_t id);  // prop "aid"/"sid"/"vid", id 0 = off
+    void SetTrack(const char* prop, int64_t id, bool quiet = false);  // prop "aid"/"sid"/"vid", id 0 = off
     void CycleTrack(const char* prop);
-    void AddSubtitle(const std::wstring& path);
-    void AddAudio(const std::wstring& path);
+    void AddSubtitle(const std::wstring& path, bool quiet = false);
+    void AddAudio(const std::wstring& path, bool quiet = false);
     // withSubtitles: burn the visible subtitles into the image.
     void Screenshot(const std::wstring& file = {}, bool withSubtitles = true);
     // Starts writing the stream to `file` (empty stops). mpv "stream-record".
@@ -262,4 +271,6 @@ private:
     uint64_t xfSerial_ = 0;   // the transition already tried (loadSerial, entry)
     int64_t xfEntry_ = 0;
     bool signalTap_ = false;
+    bool holdResume_ = false;  // StopAtStart
+    double stopPos_ = 0;       // the position Stop left
 };

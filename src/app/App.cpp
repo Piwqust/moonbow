@@ -48,7 +48,7 @@ const wchar_t* SectionName(Section s) {
         case Section::Music: return L"Music";
         case Section::Network: return L"Network";
         case Section::Playlists: return L"Playlists";
-        case Section::Recent: return L"Recent";
+        case Section::Recent: return L"History";
     }
     return L"";
 }
@@ -247,7 +247,11 @@ void App::OnConfigChanged(const std::string& key) {
     if (key == "general.language") {
         SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
         system_.LanguageChanged();
+        ReopenPlayerPanels();  // before the rebuilt library pane closes every popup
         languageChanged.Emit();
+        // The preferred audio and subtitle languages default to the interface's ("app").
+        for (const char* k : {"audio.language", "subtitles.language"})
+            for (const auto& [name, value] : MpvOptionFor(config_, k)) player_.ApplySetting(name, value);
         return;
     }
     if (key == "playback.repeat") {
@@ -367,9 +371,14 @@ void App::FlushStores() {
 void App::SaveHistoryPosition() {
     const PlayerState& s = player_.State();
     const QueueItem* item = queue_.CurrentItem();
-    if (!s.fileLoaded || !item || s.duration <= 0) return;
+    if (!s.fileLoaded || !item || s.duration <= 0 || player_.HoldsResumePoint()) return;
     if (!config_.GetBool("privacy.saveHistory") || !config_.GetBool("privacy.rememberPosition")) return;
     history_.UpdatePosition(item->path, s.position, s.duration);
+}
+
+void App::StopAtStart() {
+    SaveHistoryPosition();
+    player_.StopAtStart();
 }
 
 void App::OnLibraryScanned() {
@@ -386,11 +395,15 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         if (!a.empty() && a[0] != L'-') pendingOpen_.push_back(a);
 
     config_.Load();
+    LoadUiState();
+    // First run: the language of Windows (Russian or English) before any window is built, so the
+    // onboarding never switches it under a built UI (it can still be switched there).
+    if (UiValue("onboarded") != "1" && config_.IsDefault("general.language"))
+        config_.SetString("general.language", PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? "ru" : "en");
     LoadKeyBindings();
     SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
     ApplyTheme();
     Skins::Get().Start(config_);
-    LoadUiState();
     SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
     // The library opens on the section it was left in (only the section: a folder may be gone).
     {
@@ -425,6 +438,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     // MpvOptions already expands general.extraOptions (quotes, --no-x) and puts it last.
     player_.SetStartOptions(MpvOptions(config_));
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
+    player_.onTrackChoice = OnTrackChoice;
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
     // Stores and the library scan load after the window is up.
@@ -497,7 +511,7 @@ void App::OnPlayerReady(bool ok) {
     if (pendingIndex_ >= 0) {
         const int i = pendingIndex_;
         pendingIndex_ = -1;
-        PlayIndex(i);
+        PlayIndex(i, pendingShowPlayer_);
     } else if (!pendingOpen_.empty()) {
         auto files = std::move(pendingOpen_);
         pendingOpen_.clear();
@@ -781,10 +795,10 @@ void App::Open(const std::vector<std::wstring>& paths) {
     PlayQueueItems(std::move(items), 0);
 }
 
-void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name) {
+void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name, bool showPlayer) {
     if (items.empty()) return;
     queue_.Set(std::move(items), index, std::move(name));
-    PlayIndex(queue_.Current());
+    PlayIndex(queue_.Current(), showPlayer);
 }
 
 void App::PlayIndex(int index, bool showPlayer) {
@@ -798,6 +812,7 @@ void App::PlayIndex(int index, bool showPlayer) {
         // from the file's folder.
         pendingOpen_.clear();
         pendingIndex_ = queue_.Current();
+        pendingShowPlayer_ = showPlayer;
         return;
     }
     // A jump the user asked for: "replace" (it also drops the queued next file), then queue anew.
@@ -1244,7 +1259,7 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
             r = "menus closed";
             return true;
         } else if (arg == "app") {
-            target = FindVisible(w->titleBar(), [](Widget* x) { return HasIcon(x, "more"); });
+            target = FindVisible(w->titleBar(), [](Widget* x) { return TypeContains(x, "AppMenuButton"); });
         } else if (arg == "more" || arg == "sort") {
             target = FindVisible(w->library(), [&](Widget* x) { return HasIcon(x, arg.c_str()); });
         } else if (arg == "add") {

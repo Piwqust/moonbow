@@ -47,6 +47,8 @@ const std::vector<ActionInfo>& AllActions();
 const ActionInfo& Info(Action a);
 // "Ctrl + O" style text for the first binding of `a` (empty if none).
 std::wstring ShortcutText(Action a);
+// "Subtitles (V)": the key as bound now (Settings > Controls can change it); `tip` alone when unbound.
+std::wstring WithKey(const std::wstring& tip, Action a);
 // Key names follow the UI language ("Пробел", "Громкость +"); `localized` false gives the
 // English ones ("Space"), e.g. so a search for either finds the key.
 std::wstring KeyText(UINT vk, const ui::Mods& mods, bool localized = true);
@@ -64,6 +66,11 @@ void SeekBy(double seconds);
 std::wstring LanguageName(const std::wstring& code);
 // Shows the on-screen messages that wait for mpv (new track, new chapter).
 void OnPlayerChangeForOsd(unsigned changes);
+// A track was chosen anywhere (Player::onTrackChoice): "Audio 2/2: Russian" once mpv switched.
+void OnTrackChoice(const char* prop);
+// A message from elsewhere in the player (the next-episode card). It joins the "Resuming from"
+// message the same file showed a moment before, so neither hides the other.
+void ShowOsd(const std::wstring& text, const char* icon);
 // Mouse on the video, as set in Settings > Controls > Mouse. Each returns true when it
 // did something. `delta` is in wheel notches (positive = up/right).
 bool VideoSingleClick();

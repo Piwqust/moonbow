@@ -382,8 +382,33 @@ bool Segmented::OnKeyDown(const KeyEvent& e) {
     if (i != selected_) {
         selected_ = i;
         if (onChange) onChange(i);
+        a11y::FocusChanged(GetHost());
     }
     return true;
+}
+
+Rect Segmented::SegmentRect(int i) const {
+    const float n = static_cast<float>(choices_.size());
+    const float segW = (rect.w - 4 - 2 * (n - 1)) / n;
+    return {rect.x + 2 + static_cast<float>(i) * (segW + 2), rect.y + 2, segW, rect.h - 4};
+}
+
+void Segmented::Describe(A11y& a) {
+    a.role = Role::Tab;
+    a.items = static_cast<int>(choices_.size());
+    a.item = [this](int i, A11y::Item& it) {
+        it.role = Role::TabItem;
+        it.name = choices_[static_cast<size_t>(i)].label;
+        it.rect = SegmentRect(i);
+        it.selected = i == selected_;
+    };
+    a.selectItem = [this](int i) {
+        if (i == selected_) return;
+        selected_ = i;
+        if (onChange) onChange(i);
+        Invalidate();
+    };
+    a.focusedItem = selected_;
 }
 
 void Segmented::Paint(Painter& p) {
@@ -392,10 +417,8 @@ void Segmented::Paint(Painter& p) {
     p.Fill(rect, live ? c.bgDeep : DisabledFill(), 5);
     PaintFocusRing(p, rect, 5);
     if (choices_.empty()) return;
-    const float n = static_cast<float>(choices_.size());
-    const float segW = (rect.w - 4 - 2 * (n - 1)) / n;
     for (size_t i = 0; i < choices_.size(); ++i) {
-        const Rect seg{rect.x + 2 + static_cast<float>(i) * (segW + 2), rect.y + 2, segW, rect.h - 4};
+        const Rect seg = SegmentRect(static_cast<int>(i));
         const bool sel = static_cast<int>(i) == selected_;
         const bool hot = live && IsHot() && static_cast<int>(i) == hoverIndex_;
         const bool dark = Theme::Get().Mode() == ThemeMode::Dark;
@@ -963,6 +986,11 @@ void ScrollView::OnLayout() {
     Widget* c = Content();
     if (!c) return;
     contentH_ = c->Measure(rect.w, kInf).h;
+    if (const Host* host = GetHost()) {
+        const Rect& card = host->floatingCard;
+        if (card.w > 0 && card.x < rect.Right() && card.Right() > rect.x && card.y < rect.Bottom())
+            contentH_ += rect.Bottom() - card.y + 12;
+    }
     // Not scrollable (an overflow of up to kNoScroll): back to the top, not left 1-4 DIP down.
     const float maxOff = Scrollable() ? MaxOffset() : 0.0f;
     if (offset_.Target() > maxOff) offset_.Set(maxOff);
@@ -1355,6 +1383,27 @@ public:
         }
     }
 
+    void Describe(A11y& a) override {
+        a.role = Role::Menu;
+        a.items = static_cast<int>(visible_.size());
+        a.item = [this](int k, A11y::Item& it) {
+            const int i = visible_[static_cast<size_t>(k)];
+            const MenuItem& m = At(i);
+            if (m.separator) {
+                it.role = Role::Skip;
+                return;
+            }
+            it.role = Role::MenuItem;
+            it.name = m.label;
+            it.rect = ItemRect(i);
+            it.enabled = m.enabled;
+            if (hasChecks_ || m.checked) it.toggle = m.checked ? 1 : 0;
+        };
+        a.invokeItem = [this](int k) { Activate(visible_[static_cast<size_t>(k)]); };
+        const auto at = std::find(visible_.begin(), visible_.end(), highlight_);
+        if (highlight_ >= 0 && at != visible_.end()) a.focusedItem = static_cast<int>(at - visible_.begin());
+    }
+
     bool OnChar(wchar_t ch) override {
         if (ch < 0x20 || filter_.size() >= 40) return false;
         if (ch == L' ' && filter_.empty()) return false;
@@ -1465,6 +1514,7 @@ private:
         highlight_ = i;
         Invalidate();
         Host* host = GetHost();
+        if (IsFocused()) a11y::FocusChanged(host);
         if (child_ && host) {
             host->ClosePopup(child_);
             child_ = nullptr;
@@ -1473,14 +1523,14 @@ private:
         submenuTimer_ = 0;
         if (i >= 0 && !At(i).submenu.empty() && At(i).enabled) {
             timerHost_ = host;
-            submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i] {
+            submenuTimer_ = host ? host->StartTimer(fromKeyboard ? 0 : 180, [this, i, fromKeyboard] {
                 submenuTimer_ = 0;
-                if (highlight_ == i) OpenSubmenu(i, false);
+                if (highlight_ == i) OpenSubmenu(i, false, !fromKeyboard);
             }) : 0;
         }
     }
 
-    void OpenSubmenu(int i, bool focus) {
+    void OpenSubmenu(int i, bool focus, bool animate = true) {
         Host* host = GetHost();
         if (!host || child_) return;
         auto sub = std::make_unique<MenuPopup>(At(i).submenu, 180.0f, this);
@@ -1490,6 +1540,7 @@ private:
         o.place = Place::Right;
         o.offset = 2;
         o.focusContent = focus;
+        o.animate = animate;
         o.onDismiss = [this, raw] {
             if (child_ == raw) child_ = nullptr;
         };
@@ -1716,11 +1767,13 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         };
     }
     auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon), std::move(actionLabel), std::move(action));
+    const Rect band = host->toastBand ? host->toastBand() : Rect{0, 0, host->ClientSize().w, 0};
+    bubble->maxW = std::max(240.0f, band.w - 32);  // the popup measures again with the window's width
     const Size s = bubble->Measure(600, 40);
     PopupOptions o;
     o.place = Place::At;
     const float y = host->toastTop ? host->toastTop(s.h) : 56.0f;
-    o.anchor = {(host->ClientSize().w - s.w) / 2, y, 0, 0};
+    o.anchor = {std::round(band.x + (band.w - s.w) / 2), y, 0, 0};
     o.passthrough = !clickable;
     o.focusContent = false;
     o.dismissOnOutside = false;
@@ -1733,7 +1786,8 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         if (it != Toasts().end() && it->second.id == id) Toasts().erase(it);
     };
     Toasts()[host] = {host->ShowPopup(std::move(bubble), o), id};
-    CloseToastAfter(host, id, ms);
+    // A toast with a button (Undo, Open) stays long enough to read it and reach the button.
+    CloseToastAfter(host, id, clickable ? std::max<UINT>(ms, 8000) : ms);
 }
 
 void DismissToast(Host* host) {

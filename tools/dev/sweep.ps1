@@ -643,6 +643,7 @@ $sel = @($all | Where-Object { (-not $Filter -or $_["name"] -match $Filter) -and
 foreach ($s in $sel) {
   $s["libraryResolved"] = @(@($s["library"]) | Where-Object { $_ } | ForEach-Object { Expand-Vars $_ $vars })
   $s["filesResolved"] = @(@($s["files"]) | Where-Object { $_ } | ForEach-Object { Expand-Vars $_ $vars })
+  foreach ($st in @($s["steps"])) { if ($st -and (Get-Prop $st "cmd")) { $st.cmd = Expand-Vars $st.cmd $vars } }  # "nav videos $MEDIA\Mixed"
   if ($s["seed"]) {
     # Data files written into the data dir; $VARS inside become JSON-escaped paths.
     $seeds = [ordered]@{}

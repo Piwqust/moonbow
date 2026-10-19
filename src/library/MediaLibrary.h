@@ -117,6 +117,24 @@ private:
 // Duration sorts unknown durations last.
 void SortItems(std::vector<const MediaItem*>& items, SortKey key, bool descending = false);
 
+// A TV show: the episodes ParseEpisodePath finds, grouped by show name (case-insensitive), so
+// "Show\Season 1" and "Show\Season 2" are one show.
+struct Episode {
+    const MediaItem* item = nullptr;
+    EpisodeInfo info;
+};
+struct Show {
+    std::wstring name;
+    std::wstring key;     // SearchFold(name): identity, route argument
+    std::wstring folder;  // the first episode's folder, or the one above it when that is a season
+    std::vector<Episode> episodes;  // season, then episode order
+};
+// Shows among `videos` in name order; the videos that aren't episodes go to *movies (in input order).
+std::vector<Show> GroupShows(const std::vector<const MediaItem*>& videos, std::vector<const MediaItem*>* movies = nullptr);
+// The episode to watch next: the one after the last watched, else the first unwatched; -1 when
+// every episode is watched.
+int NextUp(const std::vector<bool>& watched);
+
 // A file as a folder listing gives it, for the queue built from a folder.
 struct FileEntry {
     std::wstring path;

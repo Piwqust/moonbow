@@ -58,6 +58,8 @@ const std::map<std::string_view, std::string_view>& LegacyIds() {
         {"seekBackwardVeryShort", "playback.seek_backward_short"},
         {"seekForwardMedium", "playback.seek_forward_long"},
         {"seekBackwardMedium", "playback.seek_backward_long"},
+        {"seekForwardLong", "playback.seek_forward_xl"},
+        {"seekBackwardLong", "playback.seek_backward_xl"},
         {"frameStep", "playback.frame_step"},
         {"frameBackStep", "playback.frame_back"},
         {"speedUp", "playback.speed_up"},

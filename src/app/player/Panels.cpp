@@ -18,13 +18,16 @@ using namespace app::panel;
 
 namespace {
 
-enum class Group : uint8_t { None, Lists, Tracks, Settings, Mini };
+// Settings holds the tracks too: one panel (Playback / Video / Audio / Subtitles) whose last three
+// tabs start with the track lists, so the audio and subtitles buttons open it there.
+enum class Group : uint8_t { None, Lists, Settings, Mini };
 
 struct PanelState {
     Popover* pop = nullptr;
     Group group = Group::None;
-    int tab = 0;
-    int settingsTab = 0;  // reopened on the last used settings tab
+    int tab = 0;           // Settings: 0 playback, 1 video, 2 audio, 3 subtitles, whichever tabs show
+    int settingsTab = 0;   // the gear reopens the last used tab
+    bool videoTab = true;  // the open Settings popover has a Video tab (audio files don't)
 };
 
 PanelState& S() {
@@ -38,7 +41,7 @@ Group GroupFor(PanelKind k) {
         case PanelKind::Chapters:
         case PanelKind::Bookmarks: return TheApp().PlayerShown() ? Group::Lists : Group::Mini;
         case PanelKind::Tracks:
-        case PanelKind::Subtitles: return Group::Tracks;
+        case PanelKind::Subtitles:
         case PanelKind::Settings:
         case PanelKind::Speed: return Group::Settings;
     }
@@ -50,8 +53,8 @@ int TabFor(PanelKind k) {
         case PanelKind::Queue: return 0;
         case PanelKind::Bookmarks: return 1;
         case PanelKind::Chapters: return 2;
-        case PanelKind::Tracks: return 1;
-        case PanelKind::Subtitles: return 2;
+        case PanelKind::Tracks: return 2;
+        case PanelKind::Subtitles: return 3;
         case PanelKind::Settings: return S().settingsTab;
         case PanelKind::Speed: return 0;
     }
@@ -65,8 +68,8 @@ bool Matches(PanelKind k, Group g, int tab) {
         case PanelKind::Queue: return true;
         case PanelKind::Bookmarks: return tab == 1;
         case PanelKind::Chapters: return tab == 2;
-        case PanelKind::Tracks: return tab != 2;
-        case PanelKind::Subtitles: return tab == 2;
+        case PanelKind::Tracks: return tab == 2;
+        case PanelKind::Subtitles: return tab == 3;
         case PanelKind::Settings: return true;
         case PanelKind::Speed: return tab == 0;
     }
@@ -104,6 +107,23 @@ bool HasChaptersTab() {
     return ps.hasVideo || !ps.chapters.empty();
 }
 
+// Audio files get no Video tab: nothing in it applies to them.
+bool HasVideoTab() {
+    const PlayerState& ps = TheApp().player().State();
+    return !ps.fileLoaded || ps.hasVideo;
+}
+
+// A Settings tab (0-3) as an index among the tabs shown, and back; without the Video tab, Video
+// falls back to Playback.
+int ShownTab(Group g, int tab, bool videoTab) {
+    if (g != Group::Settings || videoTab) return tab;
+    return tab >= 2 ? tab - 1 : 0;
+}
+int TabOf(Group g, int shown, bool videoTab) {
+    if (g != Group::Settings || videoTab) return shown;
+    return shown >= 1 ? shown + 1 : 0;
+}
+
 // Directly above the mini player, same width.
 Rect PlaceAboveMini(float prefH) {
     MainWindow* w = TheApp().main();
@@ -132,7 +152,7 @@ void FocusQueue(MainWindow* w, Popover* pop) {
     w->dropHint = list ? Tr(L"Drop to add to the queue") : Tr(L"Drop to play");
 }
 
-std::unique_ptr<Popover> MakePopover(Group g, int tab) {
+std::unique_ptr<Popover> MakePopover(Group g, int tab, bool videoTab) {
     auto pop = std::make_unique<Popover>();
     Popover* raw = pop.get();
     switch (g) {
@@ -155,29 +175,23 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
             pop->build = [](int) { return BuildQueueTab(true); };
             pop->place = [] { return PlaceAboveMini(CompactQueueHeight()); };
             break;
-        case Group::Tracks:
-            pop->SetTabs({{L"Video", "video", "video_twotone"},
-                          {L"Audio", "audio", "audio_twotone"},
-                          {L"Subtitles", "subtitles", "subtitles_twotone"}},
-                         tab);
-            pop->build = [](int t) { return BuildTracksTab(t); };
-            pop->place = [] { return PlaceAboveBar(524); };
-            pop->SetFooter(BuildTracksFooter(raw));
-            break;
         case Group::Settings:
-            pop->SetTabs({{L"Playback", "playback", "playback_twotone"},
-                          {L"Video", "video", "video_twotone"},
-                          {L"Audio", "audio", "audio_twotone"},
-                          {L"Subtitles", "subtitles", "subtitles_twotone"}},
-                         tab);
-            pop->build = [](int t) { return BuildSettingsTab(t); };
+        {
+            std::vector<Tab> tabs = {{L"Playback", "playback", "playback_twotone"}};
+            if (videoTab) tabs.push_back({L"Video", "video", "video_twotone"});
+            tabs.push_back({L"Audio", "audio-tracks", "audio-tracks_twotone"});
+            tabs.push_back({L"Subtitles", "subtitles", "subtitles_twotone"});
+            pop->SetTabs(std::move(tabs), ShownTab(g, tab, videoTab));
+        }
+            pop->build = [videoTab](int t) { return BuildSettingsTab(TabOf(Group::Settings, t, videoTab)); };
             pop->place = [] { return PlaceAboveBar(946); };
             pop->SetFooter(BuildSettingsFooter(raw));
             break;
         case Group::None: break;
     }
-    pop->onTab = [g, raw](int t) {
+    pop->onTab = [g, raw, videoTab](int shown) {
         PanelState& s = S();
+        const int t = TabOf(g, shown, videoTab);
         s.tab = t;
         if (g == Group::Settings) s.settingsTab = t;
         MainWindow* w = TheApp().main();
@@ -192,15 +206,18 @@ void Open(Group g, int tab) {
     MainWindow* w = TheApp().main();
     if (!w) return;
     Live().Start();
-    auto pop = MakePopover(g, tab);
+    const bool videoTab = g != Group::Settings || HasVideoTab();
+    if (!videoTab && tab == 1) tab = 0;
+    auto pop = MakePopover(g, tab, videoTab);
     Popover* raw = pop.get();
-    raw->ShowTab(tab);
+    raw->ShowTab(ShownTab(g, tab, videoTab));
     PopupOptions o;
     o.place = Place::AboveRight;
     o.anchor = raw->place ? raw->place() : Rect{};
     o.anchor = {o.anchor.Right() - 1, o.anchor.Bottom(), 1, 1};
     o.offset = 0;
     o.focusContent = true;
+    o.clickThrough = true;  // Pause or the sidebar act on the click that closes the panel
     o.onDismiss = [raw] {
         PanelState& s = S();
         if (s.pop != raw) return;
@@ -214,11 +231,38 @@ void Open(Group g, int tab) {
     PanelState& s = S();
     s.group = g;
     s.tab = tab;
+    s.videoTab = videoTab;
     s.pop = static_cast<Popover*>(w->ShowPopup(std::move(pop), o));
     FocusQueue(w, raw);
 }
 
+// The Video tab comes and goes with the file (a song after a film in the queue): the open
+// settings popover is reopened on the same tab. Connected once, for the life of the app.
+void WatchVideoTab() {
+    static const int id = TheApp().playerChanged.Connect([](unsigned m) {
+        const PanelState& s = S();
+        if (!(m & (kChangeFile | kChangeTracks)) || s.group != Group::Settings ||
+            !TheApp().player().State().fileLoaded || s.videoTab == HasVideoTab())
+            return;
+        if (MainWindow* w = TheApp().main())
+            w->Post([] {
+                const PanelState& st = S();
+                if (st.group != Group::Settings || st.videoTab == HasVideoTab()) return;
+                const int tab = st.tab;
+                ClosePlayerPanels();
+                Open(Group::Settings, tab);
+            });
+    });
+    (void)id;
+}
+
 }  // namespace
+
+namespace panel {
+int SettingsTab() {
+    return S().tab;
+}
+}  // namespace panel
 
 bool PlayerPanelOpen(PanelKind kind) {
     MainWindow* w = TheApp().main();
@@ -235,6 +279,17 @@ void ClosePlayerPanels() {
     s.group = Group::None;
 }
 
+void ReopenPlayerPanels() {
+    MainWindow* w = TheApp().main();
+    const PanelState& s = S();
+    if (!w || !s.pop || !w->IsPopupOpen(s.pop)) return;
+    // Posted: whatever else the change closes or rebuilds goes first.
+    w->Post([g = s.group, tab = s.tab] {
+        ClosePlayerPanels();
+        Open(g, tab);
+    });
+}
+
 void TogglePlayerPanel(PanelKind kind, const Rect&) {
     MainWindow* w = TheApp().main();
     if (!w) return;
@@ -247,11 +302,12 @@ void TogglePlayerPanel(PanelKind kind, const Rect&) {
     int tab = TabFor(kind);
     if (g == Group::Lists && tab == 2 && !HasChaptersTab()) tab = 0;
     if (s.pop && w->IsPopupOpen(s.pop) && s.group == g) {
-        s.pop->ShowTab(tab);
+        s.pop->ShowTab(ShownTab(g, tab, s.videoTab));
         return;
     }
     ClosePlayerPanels();
     Open(g, tab);
+    WatchVideoTab();
 }
 
 }  // namespace app

@@ -54,6 +54,9 @@ std::wstring TrackName(const Track& t, int ordinal) {
         return t.lang.empty() ? FileNameOf(t.file) : FileNameOf(t.file) + L" (" + LanguageName(t.lang) + L")";
     if (t.title.empty() && t.lang.empty()) return Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal));
     if (t.title.empty()) return LanguageName(t.lang);
+    // A title that only names the language ("English", "eng") says it in the interface language,
+    // as a bare language code does; a real title ("Director's commentary") stays.
+    if (const std::wstring named = LanguageName(t.title); named != t.title) return named;
     if (t.lang.empty()) return t.title;
     const std::wstring lang = LanguageName(t.lang);
     // "English 440 Hz" or "Русский (дубляж)" already says it.
@@ -61,7 +64,7 @@ std::wstring TrackName(const Track& t, int ordinal) {
     return t.title + L" (" + lang + L")";
 }
 
-std::wstring TrackDetail(const Track& t) {
+std::wstring TrackDetail(const Track& t, bool withCodec) {
     // mpv's (FFmpeg's) codec ids, by the names players and release notes use.
     static const std::pair<const wchar_t*, const wchar_t*> kCodecs[] = {
         {L"subrip", L"SubRip"}, {L"srt", L"SubRip"}, {L"ass", L"ASS"}, {L"ssa", L"SSA"}, {L"webvtt", L"WebVTT"},
@@ -82,6 +85,7 @@ std::wstring TrackDetail(const Track& t) {
         codec = t.codec;
         for (wchar_t& ch : codec) ch = static_cast<wchar_t>(std::towupper(ch));
     }
+    if (!withCodec) codec.clear();
     if (t.type != L"audio" || t.channels <= 0) return codec;
     const std::wstring layout = t.channels == 1   ? Tr(L"Mono")
                                 : t.channels == 2 ? Tr(L"Stereo")
@@ -223,7 +227,21 @@ bool TabBar::OnKeyDown(const KeyEvent& e) {
     else if (e.key == VK_HOME) Select(0);
     else if (e.key == VK_END) Select(static_cast<int>(tabs_.size()) - 1);
     else return false;
+    a11y::FocusChanged(GetHost());
     return true;
+}
+
+void TabBar::Describe(A11y& a) {
+    a.role = Role::Tab;
+    a.items = static_cast<int>(tabs_.size());
+    a.item = [this](int i, A11y::Item& it) {
+        it.role = Role::TabItem;
+        it.name = Tr(tabs_[static_cast<size_t>(i)].label.c_str());
+        it.rect = TabRect(i);
+        it.selected = i == selected_;
+    };
+    a.selectItem = [this](int i) { Select(i); };
+    a.focusedItem = selected_;
 }
 
 // --- Popover -------------------------------------------------------------------------------
@@ -550,6 +568,22 @@ bool Range::OnKeyDown(const KeyEvent& e) {
         Invalidate();
     }
     return true;
+}
+
+void Range::Describe(A11y& a) {
+    a.role = Role::Slider;
+    a.min = min;
+    a.max = max;
+    a.now = value_;
+    a.step = step;
+    a.setRange = [this](double v) {  // like the arrow keys
+        const float s = Snap(static_cast<float>(v));
+        if (s == value_) return;
+        value_ = s;
+        if (onChange) onChange(value_);
+        if (onCommit) onCommit(value_);
+        Invalidate();
+    };
 }
 
 bool Range::OnWheel(const WheelEvent& e) {

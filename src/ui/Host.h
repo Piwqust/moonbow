@@ -41,7 +41,11 @@ struct PopupOptions {
     bool dismissOnEscape = true;
     bool focusContent = true;        // move keyboard focus into the popup
     bool passthrough = false;        // ignores the mouse entirely (tooltips, toasts)
-    bool animate = true;             // short fade/slide in
+    bool animate = true;             // short fade/slide in (never when opened from the keyboard)
+    // A click outside that lands on another enabled control (a bar button, the sidebar, a caption
+    // button) closes the popup and also presses it. A click on a plain surface (the video) or on
+    // the control that opened the popup only closes it, as with a menu. For panels, not menus.
+    bool clickThrough = false;
     std::function<void()> onDismiss; // called when closed for any reason
 };
 
@@ -69,6 +73,8 @@ public:
     void ClosePopup(Widget* content);
     void CloseAllPopups();
     bool HasPopup() const { return !popups_.empty(); }
+    // A menu, panel or dialog: not a toast or tooltip, which take no focus and stay on outside clicks.
+    bool HasInteractivePopup() const;
     size_t PopupCount() const { return popups_.size(); }
     Widget* PopupAt(size_t i) const { return i < popups_.size() ? popups_[i].content.get() : nullptr; }
     bool IsPopupOpen(const Widget* content) const;
@@ -144,8 +150,13 @@ public:
     std::function<void(std::vector<std::wstring>)> onDropFiles;
     // Top edge (DIPs) for a toast of height h; default 56 (below the title bar).
     std::function<float(float h)> toastTop;
+    // The part of the window (x and w) a toast centres in, beside open side panels; default the whole width.
+    std::function<Rect()> toastBand;
     // Text shown in the overlay while files are dragged over the window.
     std::wstring dropHint;
+    // A card floating over the content (the library's mini player), empty when none: scroll views
+    // it covers let their last rows scroll up above it.
+    Rect floatingCard;
 
     // Every live host, e.g. to repaint all windows after a theme change.
     static const std::vector<Host*>& All();
@@ -160,6 +171,10 @@ public:
     // factor x its real scale (1.5 on a 100 % screen looks like 150 %). Set before any window.
     static void SetScaleOverride(float factor);
     static float ScaleOverride();
+    // Windows high contrast is on (SPI_GETHIGHCONTRAST). onHighContrastChanged runs when it
+    // changes (WM_SETTINGCHANGE), once for all windows.
+    static bool HighContrast();
+    static std::function<void()> onHighContrastChanged;
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
     // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
@@ -215,6 +230,7 @@ private:
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();
     void HideTooltip();
+    bool ClicksThrough(const Popup& popup, float x, float y) const;
     Mods CurrentMods() const;
     void ClosePopupAt(size_t index);
     void Forget(Widget* w);
@@ -229,6 +245,7 @@ private:
     Widget* hot_ = nullptr;
     Widget* pressed_ = nullptr;
     Widget* capture_ = nullptr;
+    Widget* lastLeftDown_ = nullptr;  // target of the last left press, only compared (may be gone)
     Widget* focus_ = nullptr;
     bool focusVisible_ = false;
     Point mouse_{-1, -1};
@@ -254,6 +271,7 @@ private:
     UINT_PTR tooltipTimer_ = 0;
     std::wstring tooltipText_;  // what the bubble (or its timer) shows: a change re-arms it
     Rect tooltipRect_;          // tooltipFor_'s rect then: the bubble goes when the widget moves
+    double tooltipHiddenAt_ = -1e9;  // AnimFloat::Now() when a shown bubble last went away
 
     std::map<UINT_PTR, std::pair<std::function<void()>, bool>> timers_;
     std::vector<UINT_PTR> workIds_;  // StartWorkTimer timers still pending

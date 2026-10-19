@@ -87,13 +87,16 @@ public:
     void Open(const std::vector<std::wstring>& paths);
     // Adds files, folders and playlists to the end of the queue (starts it when nothing plays).
     void Enqueue(const std::vector<std::wstring>& paths);
-    void PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name = {});
+    // `showPlayer` off: songs started from the library keep the page and play in the mini player.
+    void PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name = {}, bool showPlayer = true);
     // `showPlayer` = switch to the player screen (off for next/previous, so music
     // keeps playing in the mini player while the user browses the library).
     void PlayIndex(int index, bool showPlayer = true);
     bool Next(bool userAction = true);  // false at the end of the queue
     void Previous();
     void StopPlayback();
+    // The Stop command: back to 0:00, paused; History and the resume point keep where it stopped.
+    void StopAtStart();
     // Hands the item that plays after the current one to mpv (gapless, prefetch), or none when
     // the queue stops there. Called whenever the queue or its options change.
     void SyncNextInPlayer(bool force = false);
@@ -203,6 +206,7 @@ private:
     std::vector<std::wstring> forwarded_;  // files other launches handed over together (OnCopyData)
     double forwardedAt_ = 0;
     int pendingIndex_ = -1;  // PlayIndex before mpv was ready: the queue is built, play this item
+    bool pendingShowPlayer_ = true;  // that PlayIndex's showPlayer
     bool engineReady_ = false;
     bool fitPending_ = false;
     bool fittedOnce_ = false;

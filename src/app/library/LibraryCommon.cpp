@@ -131,14 +131,6 @@ std::wstring CountAlbums(long long n) {
     return CountWith(n, L"album", L"albums", L"альбом", L"альбома", L"альбомов");
 }
 
-std::wstring CountArtists(long long n) {
-    return CountWith(n, L"artist", L"artists", L"исполнитель", L"исполнителя", L"исполнителей");
-}
-
-std::wstring CountGenres(long long n) {
-    return CountWith(n, L"genre", L"genres", L"жанр", L"жанра", L"жанров");
-}
-
 std::wstring CountStations(long long n) {
     return CountWith(n, L"station", L"stations", L"станция", L"станции", L"станций");
 }
@@ -276,7 +268,9 @@ QueueItem MakeQueueItem(const std::wstring& path, const std::wstring& title, dou
 void PlayQueue(std::vector<QueueItem> items, int index, const std::wstring& name) {
     if (items.empty()) return;
     index = std::clamp(index, 0, static_cast<int>(items.size()) - 1);
-    TheApp().PlayQueueItems(std::move(items), index, name);
+    // Music plays on in the mini player and the page stays, as in Spotify; a video opens the player.
+    const bool song = library::KindOf(items[static_cast<size_t>(index)].path) == library::MediaKind::Audio;
+    TheApp().PlayQueueItems(std::move(items), index, name, !song);
 }
 
 void PlayNext(std::vector<QueueItem> items) {
@@ -287,9 +281,24 @@ void PlayNext(std::vector<QueueItem> items) {
         return;
     }
     const size_t n = items.size();
+    std::vector<std::wstring> paths;
+    for (const QueueItem& q : items) paths.push_back(q.path);
+    const std::wstring title = items[0].title.empty() ? library::StemOf(items[0].path) : items[0].title;
+    const bool song = library::KindOf(items[0].path) == library::MediaKind::Audio;
+    const int at = app.queue().Current() + 1;  // where InsertNext puts them
     app.queue().InsertNext(std::move(items));
-    Toast(n == 1 ? std::wstring(Tr(L"Will play next")) : Fmt(Tr(L"{0} items will play next"), static_cast<long long>(n)),
-          "next");
+    const std::wstring text = n > 1 ? Fmt(Tr(L"{0} items will play next"), static_cast<long long>(n))
+                                    : Fmt(Tr(song ? L"“{0}” plays next" : L"“{0}” is up next"), {title});
+    // Undo takes out what is still where it was put (the user may have moved things since).
+    ShowToast(app.main(), text, "next", 5000, Tr(L"Undo"), [paths, at] {
+        for (int k = static_cast<int>(paths.size()) - 1; k >= 0; --k) {
+            const auto& now = TheApp().queue().Items();
+            const int i = at + k;
+            if (i < static_cast<int>(now.size()) &&
+                SamePath(now[static_cast<size_t>(i)].path, paths[static_cast<size_t>(k)]))
+                TheApp().RemoveFromQueue(i);
+        }
+    });
 }
 
 void AddToQueue(std::vector<QueueItem> items) {
@@ -620,7 +629,7 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
 }
 
 void ShowConfirm(const std::wstring& title, const std::wstring& text, const std::wstring& okText,
-                 std::function<void()> done) {
+                 std::function<void()> done, const std::wstring& otherText, std::function<void()> other) {
     MainWindow* w = TheApp().main();
     if (!w) return;
     auto frame = std::make_unique<dlg::Frame>(title, dlg::FitWidth(w, 440));
@@ -631,17 +640,25 @@ void ShowConfirm(const std::wstring& title, const std::wstring& text, const std:
     auto* cancel = f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral);
     cancel->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
-    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = [f, done] {
-        auto run = done;  // the dialog (and this lambda) is gone after Close()
-        f->Close();
-        if (run) run();
+    auto closeAndRun = [f](std::function<void()> fn) {
+        return [f, fn] {
+            auto run = fn;  // the dialog (and this lambda) is gone after Close()
+            f->Close();
+            if (run) run();
+        };
     };
+    if (other) f->Footer()->Add<dlg::DButton>(otherText, dlg::BtnStyle::Neutral)->onClick = closeAndRun(other);
+    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = closeAndRun(done);
     dlg::ShowFrame(w, std::move(frame), cancel);
     w->SetFocus(cancel, true);  // with its ring: Enter and Space cancel, Tab reaches the action
 }
 
-void Toast(const std::wstring& text, const char* icon) {
-    if (TheApp().main()) ShowToast(TheApp().main(), text, icon ? icon : "");
+void Toast(const std::wstring& text, const char* icon, const std::wstring& actionLabel, std::function<void()> action) {
+    if (!TheApp().main()) return;
+    if (action)
+        ShowToast(TheApp().main(), text, icon ? icon : "", 5000, actionLabel, std::move(action));
+    else
+        ShowToast(TheApp().main(), text, icon ? icon : "");
 }
 
 // --- small stores ------------------------------------------------------------------------

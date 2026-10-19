@@ -366,7 +366,16 @@ struct NextEpisodeCard::FolderJob {
     std::wstring result;
 };
 
+namespace {
+NextEpisodeCard* g_card = nullptr;
+}
+
+NextEpisodeCard* NextEpisodeCard::Instance() {
+    return g_card;
+}
+
 NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
+    g_card = this;
     dir = Dir::Column;
     gap = 10;
     pad = Insets::All(16);
@@ -396,9 +405,25 @@ NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
         if (serial_) Resolve();
         Update();
     });
+    langConn_ = Connect(TheApp().languageChanged, [this, play, cancel] {
+        play->SetText(Tr(L"Play now"));
+        cancel->SetText(Tr(L"Cancel"));
+        shownSecs_ = -1;  // the title too
+        Update();
+    });
 }
 
-NextEpisodeCard::~NextEpisodeCard() = default;
+NextEpisodeCard::~NextEpisodeCard() {
+    if (g_card == this) g_card = nullptr;
+}
+
+bool NextEpisodeCard::HasNext() {
+    if (job_ && nextPath_.empty()) {
+        std::lock_guard<std::mutex> lock(job_->mutex);
+        if (job_->done) nextPath_ = job_->result;
+    }
+    return !nextPath_.empty();
+}
 
 void NextEpisodeCard::Paint(Painter& p) {
     p.Shadow(rect, 12, 15, 8);
@@ -416,7 +441,7 @@ void NextEpisodeCard::SetWanted(bool wanted) {
 void NextEpisodeCard::OnPlayer(unsigned m) {
     const PlayerState& s = PS();
     if (s.fileLoaded && s.loadSerial != serial_) OnNewFile();
-    if (m & kChangeTracks) CarryLanguages();
+    if (m & (kChangeTracks | kChangeFile)) CarryLanguages();
     if (m & (kChangeTime | kChangeChapters | kChangeState | kChangeFile | kChangeError)) Update();
     if (m & kChangeEnd) OnEnded();
 }
@@ -464,13 +489,9 @@ void NextEpisodeCard::Resolve() {
 
 void NextEpisodeCard::Update() {
     const PlayerState& s = PS();
-    if (job_ && nextPath_.empty()) {
-        std::lock_guard<std::mutex> lock(job_->mutex);
-        if (job_->done) nextPath_ = job_->result;
-    }
     bool want = false;
     double left = 0;
-    if (s.fileLoaded && !nextPath_.empty() && !dismissed_ && s.duration > 60 && !s.eof) {
+    if (s.fileLoaded && HasNext() && !dismissed_ && s.duration > 60 && !s.eof) {
         left = std::max(0.0, s.duration - s.position);
         bool credits = false;
         if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size())) {
@@ -497,7 +518,7 @@ void NextEpisodeCard::Update() {
 }
 
 void NextEpisodeCard::PlayNext() {
-    if (nextPath_.empty()) return;
+    if (!HasNext()) return;
     const std::wstring next = nextPath_;
     SetWanted(false);
     dismissed_ = true;
@@ -525,14 +546,57 @@ void NextEpisodeCard::OnEnded() {
     });
 }
 
+namespace {
+
+// What a series' languages are kept under: its name, or its folder when the file names don't say
+// it (as episodes::IsNext tells shows apart). Empty when the file is not an episode.
+std::wstring ShowKey(const std::wstring& path) {
+    const episodes::Episode e = episodes::Parse(path);
+    if (!e.Valid() || lib::IsUrl(path)) return {};
+    return e.show.empty() ? library::ParentFolder(path) : e.show;
+}
+
+}  // namespace
+
+// "S01E02 · Audio and subtitles: Russian" (without the episode for other files); 	ext is the
+// subtitles' language name or "off".
+void NextEpisodeCard::SayLanguages(const std::wstring& audioLang, const std::wstring& text) {
+    const std::wstring sound = audioLang.empty() ? L"" : LanguageName(audioLang);
+    std::wstring what;
+    if (!sound.empty() && sound == text) {
+        what = Fmt(Tr(L"Audio and subtitles: {0}"), {sound});
+    } else {
+        if (!sound.empty()) what = Fmt(Tr(L"Audio: {0}"), {sound});
+        if (!text.empty()) what += (what.empty() ? L"" : L" · ") + Fmt(Tr(L"Subtitles: {0}"), {text});
+    }
+    if (what.empty()) return;
+    const episodes::Episode e = episodes::Parse(PS().path);
+    ShowOsd(e.Valid() ? episodes::Label(e) + L" · " + what : what, "audio");
+}
+
 void NextEpisodeCard::CarryLanguages() {
     const PlayerState& s = PS();
-    if (!s.fileLoaded || s.tracks.empty() || s.path.empty()) return;
+    Player& p = TheApp().player();
+    // Not while the next file is still loading: its track list and per-file settings aren't there yet.
+    if (!p.FileSettled() || (p.confirmTracks && !p.TracksConfirmed()) || s.tracks.empty() || s.path.empty()) return;
+    const std::wstring show = ShowKey(s.path);
     if (s.path != carryPath_) {
         const bool next = !carryPath_.empty() && episodes::IsNext(carryPath_, s.path);
         carryPath_ = s.path;
-        if (next && !Live().FileSettingsStored().HasTracks()) {
-            Player& p = TheApp().player();
+        choiceBase_[0] = p.TrackChoices(0);
+        choiceBase_[1] = p.TrackChoices(1);
+        // Opened by itself (Explorer, the library, a later session): what was chosen in the series.
+        const library::ShowLanguages* stored = next || show.empty() ? nullptr : Live().ShowLanguagesFor(show, s.path);
+        if (stored) {
+            audioLang_ = stored->audioLang;
+            audioTitle_ = stored->audioTitle;
+            subLang_ = stored->subLang;
+            subTitle_ = stored->subTitle;
+            subsOff_ = stored->subsOff;
+            hadSubs_ = subsOff_ || !subLang_.empty();
+        }
+        // Lumen's own picks (quiet): what the file remembers for itself wins over the series.
+        if ((next || stored) && !Live().FileSettingsStored().HasTracks()) {
             auto pick = [&s](const wchar_t* type, const std::wstring& lang, const std::wstring& title) -> const Track* {
                 const Track* best = nullptr;
                 for (const Track& t : s.tracks) {
@@ -542,22 +606,46 @@ void NextEpisodeCard::CarryLanguages() {
                 }
                 return best;
             };
-            if (!audioLang_.empty())
-                if (const Track* t = pick(L"audio", audioLang_, audioTitle_); t && !t->selected) p.SetTrack("aid", t->id);
+            const Track* audio = audioLang_.empty() ? nullptr : pick(L"audio", audioLang_, audioTitle_);
+            if (audio && !audio->selected) p.SetTrack("aid", audio->id, true);
             bool anySub = false, subSelected = false;
             for (const Track& t : s.tracks)
                 if (t.type == L"sub") {
                     anySub = true;
                     subSelected |= t.selected;
                 }
-            if (hadSubs_ && anySub) {
-                if (subsOff_) {
-                    if (subSelected) p.SetTrack("sid", 0);
-                } else if (!subLang_.empty()) {
-                    if (const Track* t = pick(L"sub", subLang_, subTitle_); t && !t->selected) p.SetTrack("sid", t->id);
+            const Track* sub = nullptr;
+            const bool subOff = hadSubs_ && anySub && subsOff_;
+            if (subOff && subSelected) p.SetTrack("sid", 0, true);
+            if (hadSubs_ && anySub && !subsOff_ && !subLang_.empty()) {
+                sub = pick(L"sub", subLang_, subTitle_);
+                if (sub && !sub->selected) p.SetTrack("sid", sub->id, true);
+            }
+            // "S01E02 · Audio and subtitles: Russian": what the episode got from the one before.
+            SayLanguages(audio ? audio->lang : L"", subOff ? std::wstring(Tr(L"off")) : sub ? LanguageName(sub->lang) : L"");
+            return;  // the choice we just made comes back as the next track-list change
+        }
+        // mpv picked by the language preference (Settings > Audio / Subtitles) rather than the file's
+        // own default track: say so once, or the first A switched away from it without a word.
+        if (!Live().FileSettingsStored().HasTracks()) {
+            // The file's own pick: its first default track (Matroska marks every track default
+            // unless told otherwise), else the first audio track; subtitles only when flagged.
+            const Track *audio = nullptr, *sub = nullptr, *ownAudio = nullptr, *ownSub = nullptr, *firstAudio = nullptr;
+            for (const Track& t : s.tracks) {
+                if (t.type == L"audio") {
+                    if (!firstAudio) firstAudio = &t;
+                    if (t.isDefault && !ownAudio) ownAudio = &t;
+                    if (t.selected) audio = &t;
+                } else if (t.type == L"sub" && !t.external) {
+                    if (t.isDefault && !ownSub) ownSub = &t;
+                    if (t.selected && !sub) sub = &t;
                 }
             }
-            return;  // the choice we just made comes back as the next track-list change
+            if (!ownAudio) ownAudio = firstAudio;
+            const bool byAudioPref = audio && audio != ownAudio && !audio->lang.empty();
+            const bool bySubPref = sub && sub != ownSub && !sub->lang.empty();
+            if (byAudioPref || bySubPref)
+                SayLanguages(byAudioPref ? audio->lang : L"", bySubPref ? LanguageName(sub->lang) : L"");
         }
     }
     // Remember this file's choice.
@@ -581,6 +669,9 @@ void NextEpisodeCard::CarryLanguages() {
     subsOff_ = anySub && !sOn;
     subLang_ = sLang;
     subTitle_ = sTitle;
+    // A choice the user made in this episode (not mpv's default pick) is the series' from now on.
+    if (!show.empty() && (p.TrackChoices(0) != choiceBase_[0] || p.TrackChoices(1) != choiceBase_[1]))
+        Live().RememberShowLanguages(show, s.path, {audioLang_, audioTitle_, subLang_, subTitle_, subsOff_});
 }
 
 // --- SkipChapterButton ----------------------------------------------------------------------
@@ -602,6 +693,10 @@ SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", Button
     };
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeTime | kChangeChapters | kChangeFile | kChangeState)) Update();
+    });
+    langConn_ = Connect(TheApp().languageChanged, [this] {
+        kind_ = -1;  // sets the text again
+        Update();
     });
 }
 

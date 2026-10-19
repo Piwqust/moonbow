@@ -113,8 +113,11 @@ const std::vector<BuiltinSkin>& Skins::Builtins() {
 void Skins::Start(Config& config) {
     config_ = &config;
     config.Subscribe("interface.", [this](const std::string& key) {
-        if (key == "interface.skin" || key == "interface.customSkin" || key == "interface.skinFile") Apply(false);
+        if (key == "interface.skin" || key == "interface.customSkin" || key == "interface.skinFile" ||
+            key == "interface.skinPicked")
+            Apply(false);
     });
+    ui::Host::onHighContrastChanged = [this] { Apply(false); };
     Apply(false);
 }
 
@@ -126,7 +129,9 @@ void Skins::Apply(bool reload) {
     if (!config_) return;
     const std::wstring file = config_->GetWString("interface.skinFile");
     const bool custom = config_->GetBool("interface.customSkin") && !file.empty();
-    const std::string id = config_->GetString("interface.skin");
+    std::string id = config_->GetString("interface.skin");
+    // Windows high contrast replaces the default look; a skin the user picked stays, "Lumen" too.
+    if (id == "lumen" && ui::Host::HighContrast() && !config_->GetBool("interface.skinPicked")) id = "contrast";
     const std::string source = custom ? "file:" + json::ToUtf8(file) : "builtin:" + id;
     if (source == source_ && !reload) return;
     const bool first = source_.empty();

@@ -38,6 +38,15 @@ bool IsLabel(EntryKind k) {
     return k == EntryKind::Header || k == EntryKind::Columns;
 }
 
+// One click rule (UX-20): what holds other things opens on a single click, like a link; a file
+// plays from the ▶ on its card or on a double click.
+bool OpensOnClick(EntryKind k) {
+    return k == EntryKind::Action || k == EntryKind::Category || k == EntryKind::Folder || k == EntryKind::Playlist ||
+           k == EntryKind::Album || k == EntryKind::Artist || k == EntryKind::Genre;
+}
+
+constexpr float kPlayD = 48;  // the ▶ on a hovered media card
+
 // The track column fits "#" with the sort arrow beside it.
 constexpr float kColumnsH = 32, kTrackW = 32, kDurationW = 76;
 // Narrow lists keep the title readable: below these widths of the text columns the album
@@ -182,6 +191,25 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
 
 void ItemGrid::DebugInfo(std::string& out) const {
     if (selected_ >= 0) out += " selected=" + std::to_string(selected_);
+}
+
+void ItemGrid::Describe(ui::A11y& a) {
+    a.role = ui::Role::List;
+    a.items = static_cast<int>(entries_.size());
+    a.item = [this](int i, ui::A11y::Item& it) {
+        const Entry& e = entries_[static_cast<size_t>(i)];
+        it.role = IsLabel(e.kind) ? ui::Role::Text : ui::Role::ListItem;
+        it.name = e.subtitle.empty() ? e.title : e.title + L", " + e.subtitle;
+        it.rect = ItemRect(i);
+        it.selected = i == selected_;
+    };
+    a.selectItem = [this](int i) { Select(i); };
+    a.invokeItem = [this](int i) {  // as a double click (Enter) would
+        if (!Selectable(i)) return;
+        Select(i, false);
+        if (onActivate) onActivate(i);
+    };
+    a.focusedItem = selected_;
 }
 
 void ItemGrid::SetStyle(GridStyle s) {
@@ -356,6 +384,7 @@ void ItemGrid::Select(int index, bool scrollIntoView) {
             s->ScrollIntoView(r);
         }
     if (changed && onSelectionChanged) onSelectionChanged(index);
+    if (changed && IsFocused()) ui::a11y::FocusChanged(GetHost());
     Invalidate();
 }
 
@@ -417,10 +446,12 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
 
     PaintThumb(p, e, t, kCardRadius, 48, dim);
 
-    // Progress line along the bottom edge, clipped by the rounded corners.
+    // Progress line along the bottom edge, clipped by the rounded corners. On artwork, like the
+    // "now playing" chip: white on a dark track in both themes, so a light frame can't hide it.
     if (e.progress > 0) {
         p.PushRoundClip(t, kCardRadius);
-        p.Fill({t.x, t.Bottom() - 4, std::round(t.w * static_cast<float>(std::min(1.0, e.progress))), 4}, c.accent);
+        p.Fill({t.x, t.Bottom() - 4, t.w, 4}, Color::Hex(0x000000, 0.55f));
+        p.Fill({t.x, t.Bottom() - 4, std::round(t.w * static_cast<float>(std::min(1.0, e.progress))), 4}, Color::Hex(0xFFFFFF));
         p.PopClip();
     }
 
@@ -475,10 +506,13 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
     if (hot) {
         p.Fill(t, pressed ? c.press : c.hover, kCardRadius);
-        if (e.kind == EntryKind::Media && !now) {
-            const float d = 48;
-            p.FillCircle({t.Cx(), t.Cy()}, d / 2, c.accent.Fade(0.94f));
-            p.Icon("play", t.Center(24, 24), c.onAccent);
+        if ((e.kind == EntryKind::Media || (e.kind == EntryKind::Album && onPlay)) && !now) {
+            // On artwork, like the "now playing" chip: the same in both themes (the light theme's
+            // black accent vanished on a dark cover), with a shadow that keeps it on a white one.
+            const float rad = kPlayD / 2 + (hoverPlay_ ? 2.0f : 0.0f);
+            p.Shadow(t.Center(rad * 2, rad * 2), rad, 10, 2, 0.35f);
+            p.FillCircle({t.Cx(), t.Cy()}, rad, Color::Hex(0xFFFFFF, hoverPlay_ ? 1.0f : 0.94f));
+            p.Icon("play", t.Center(24, 24), Color::Hex(0x000000));
         }
     }
     if (sel) {
@@ -495,6 +529,17 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
 
 Rect ItemGrid::MoreButtonRect(const Rect& slot) const {
     return {slot.Right() - 28, slot.Cy() - 12, 24, 24};
+}
+
+bool ItemGrid::OnPlayButton(int i, float x, float y) const {
+    if (!IsCardStyle(style_) || !Selectable(i)) return false;
+    const EntryKind kind = entries_[static_cast<size_t>(i)].kind;
+    if (kind != EntryKind::Media && !(kind == EntryKind::Album && onPlay)) return false;
+    // The playing card shows its state there, not a ▶.
+    if (SamePath(entries_[static_cast<size_t>(i)].path, NowPlayingPath())) return false;
+    const Rect r = ItemRect(i);
+    const float dx = x - r.Cx(), dy = y - (r.y + geo_.thumbH / 2), reach = kPlayD / 2 + 4;
+    return dx * dx + dy * dy <= reach * reach;
 }
 
 void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
@@ -516,7 +561,10 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const bool compactRow = style_ == GridStyle::CompactRows;
     const RowCells cells = MediaCells(r);
     const Rect t = compactRow ? Rect{r.x, r.Cy() - kThumb / 2, kThumb, kThumb} : cells.thumb;
-    if (!compactRow && (columns & kColTrack) && e.track > 0)
+    // The playing track shows the compact list's ▶ in place of its number.
+    if (!compactRow && (columns & kColTrack) && now && t.w <= 0)
+        p.Icon("play", {cells.track.Right() - 18, r.Cy() - 9, 18, 18}, c.accent);
+    else if (!compactRow && (columns & kColTrack) && e.track > 0)
         p.Text(std::to_wstring(e.track), cells.track, TextStyle::Mono, now ? c.accent : c.textTertiary, HAlign::Trailing);
     const bool iconRow = e.kind != EntryKind::Media && e.kind != EntryKind::Album && e.image.empty();
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
@@ -844,13 +892,14 @@ void ItemGrid::UpdateHover(float x, float y) {
     const int h = Selectable(i) ? i : -1;
     bool more = false;
     if (h >= 0 && !IsCardStyle(style_)) more = MoreButtonRect(ItemRect(h)).Inset(-4).Contains(x, y);
-    if (h != hover_ || more != hoverMore_) {
+    const bool play = OnPlayButton(h, x, y);
+    if (h != hover_ || more != hoverMore_ || play != hoverPlay_) {
         if (h != hover_) ResetTip();  // worked out again when the new item is painted
         hover_ = h;
         hoverMore_ = more;
-        // Actions and categories open on a single click, like links.
-        const bool link = h >= 0 && (entries_[static_cast<size_t>(h)].kind == EntryKind::Action ||
-                                     entries_[static_cast<size_t>(h)].kind == EntryKind::Category);
+        hoverPlay_ = play;
+        // Whatever acts on a single click gets the hand, like a link.
+        const bool link = h >= 0 && (OpensOnClick(entries_[static_cast<size_t>(h)].kind) || play);
         cursor = link ? IDC_HAND : IDC_ARROW;
         Invalidate();
     }
@@ -873,6 +922,8 @@ bool ItemGrid::OnMouseDown(const MouseEvent& e) {
     Select(i, false);
     press_ = i;
     pressAt_ = {e.x, e.y};
+    pressPlay_ = OnPlayButton(i, e.x, e.y);
+    pressMods_ = e.mods.ctrl || e.mods.shift;
     const Entry& en = entries_[static_cast<size_t>(i)];
     if (!IsCardStyle(style_) && onMenu && en.kind != EntryKind::Action && en.kind != EntryKind::Category &&
         MoreButtonRect(ItemRect(i)).Inset(-4).Contains(e.x, e.y)) {
@@ -919,8 +970,10 @@ bool ItemGrid::OnMouseUp(const MouseEvent&) {
         dropAt_ = -1;
         press_ = -1;
         if (from >= 0 && to >= 0 && to != from && onMove) {
-            to = std::min(to, static_cast<int>(entries_.size()) - 1);
-            onMove(from, to);
+            const int last = static_cast<int>(entries_.size()) - 1;
+            to = std::min(to, last);
+            while (to < last && !Selectable(to)) ++to;  // above the column titles = before the first item
+            if (to != from) onMove(from, to);
         }
         Invalidate();
         return true;
@@ -932,8 +985,11 @@ void ItemGrid::OnClick() {
     const int i = press_;
     press_ = -1;
     if (JustOpened() || !Selectable(i)) return;
-    const EntryKind k = entries_[static_cast<size_t>(i)].kind;
-    if ((k == EntryKind::Action || k == EntryKind::Category) && onActivate) onActivate(i);
+    const bool play = pressPlay_;
+    pressPlay_ = false;
+    if (pressMods_) return;  // Ctrl/Shift+click only selects: it must not open or play
+    if (play && onPlay && entries_[static_cast<size_t>(i)].kind != EntryKind::Media) onPlay(i);  // may destroy this grid
+    else if ((OpensOnClick(entries_[static_cast<size_t>(i)].kind) || play) && onActivate) onActivate(i);  // may destroy this grid
 }
 
 bool ItemGrid::OnDoubleClick(const MouseEvent& e) {
@@ -941,8 +997,8 @@ bool ItemGrid::OnDoubleClick(const MouseEvent& e) {
     if (HeadAt(i, e.x) >= 0) return OnMouseDown(e);  // a quick second click on a column title reverses again
     if (JustOpened() || !Selectable(i)) return true;
     Select(i, false);
-    const EntryKind k = entries_[static_cast<size_t>(i)].kind;
-    if (k == EntryKind::Action || k == EntryKind::Category) return true;  // already ran on the first click
+    // Already ran on the first click (a container, or the ▶ of a card).
+    if (OpensOnClick(entries_[static_cast<size_t>(i)].kind) || OnPlayButton(i, e.x, e.y)) return true;
     if (onActivate) onActivate(i);
     return true;
 }
@@ -952,6 +1008,7 @@ void ItemGrid::OnMouseLeave() {
     ResetTip();
     hoverHead_ = -1;
     hoverMore_ = false;
+    hoverPlay_ = false;
     Invalidate();
 }
 
@@ -1060,7 +1117,8 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
         }
         case VK_RETURN:
             if (JustOpened() || e.repeat) return true;  // the Enter that opened this page, or a held key
-            if (selected_ >= 0 && onActivate) {
+            if (selected_ < 0) return false;  // the page may have a default (Home resumes Continue Watching)
+            if (onActivate) {
                 g_keyActivateTick = GetTickCount64();
                 onActivate(selected_);  // may destroy this grid (navigation)
             }

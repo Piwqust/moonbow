@@ -1,11 +1,10 @@
-// First-run window (design/ref/Onboarding_*.png, 1090x760 DIP):
-//   0 welcome + media folder   1 theme + accent (live preview)   2 language
-//   3 privacy, updates, metadata   4 basic keyboard shortcuts   5 summary
-// Every choice is written to Config right away (the app re-themes / re-translates
-// live), the media folder is added to the library when leaving the first step.
+// First-run window (design/ref/Onboarding_*.png, 1090x760 DIP), three steps:
+//   0 welcome: language + media folder   1 theme (live preview)   2 summary + privacy toggles
+// The accent stays in Settings (five greys say little on a first run); the basic keys come as a
+// hint at the first playback (PlayerView). Every choice is written to Config right away (the app
+// re-themes / re-translates live), the media folder is added to the library when leaving step 0.
 #include "app/Dialogs.h"
 
-#include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
@@ -25,14 +24,15 @@ using namespace dlg;
 namespace {
 
 constexpr float kW = 1090, kH = 760;
-constexpr int kSteps = 6;
-constexpr const char* kAccentKeys[kAccentCount] = {"white", "pearl", "silver", "steel", "graphite"};
+constexpr int kSteps = 3;
 
 Config& Cfg() {
     return TheApp().config();
 }
 
 std::wstring DefaultVideosFolder() {
+    // A test instance must never offer the owner's real Videos: one Continue would scan it.
+    if (ui::Host::Automation()) return {};
     PWSTR p = nullptr;
     std::wstring out;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Videos, 0, nullptr, &p)) && p) out = p;
@@ -45,14 +45,8 @@ bool IsDir(const std::wstring& p) {
     return !p.empty() && a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-int AccentIndex() {
-    const std::string a = Cfg().GetString("general.accent");
-    for (int i = 0; i < kAccentCount; ++i)
-        if (a == kAccentKeys[i]) return i;
-    return 0;
-}
-
-// Page whose children sit at fixed design coordinates (relative to the page).
+// Page whose children sit at fixed design coordinates (relative to the page); a height of 0
+// takes the child's measured height.
 class AbsPage : public Widget {
 public:
     AbsPage() {
@@ -71,7 +65,11 @@ public:
         return At<T>(Rect{std::round((kW - w) / 2), y, w, h}, std::forward<A>(args)...);
     }
     void OnLayout() override {
-        for (auto& [w, r] : spots_) w->Arrange(r.Offset(rect.x, rect.y));
+        for (auto& [w, r] : spots_) {
+            Rect a = r.Offset(rect.x, rect.y);
+            if (a.h <= 0) a.h = w->Measure(a.w, kH).h;
+            w->Arrange(a);
+        }
     }
 
 private:
@@ -80,61 +78,59 @@ private:
 
 // --- step 1 widgets ---------------------------------------------------------------------------
 
-// Miniature Lumen window: title strip and a control bar, all in live palette colors.
+// A sketch of a Lumen window in live palette colors: plain shapes instead of real icons and
+// text, so it reads as a picture of the theme and not as a player that could be clicked.
 class PreviewWindow : public Widget {
 public:
     void Paint(Painter& p) override {
         const Palette& c = P();
-        p.Fill(rect, c.bgDeep);
-        const Rect title{rect.x, rect.y, rect.w, 22};
-        p.Fill(title, c.bgPanel);
-        p.Icon("lumen", {title.x + 6, title.y + 4, 14, 14}, c.accent);
-        const char* buttons[] = {"minimize", "maximize", "fullscreen", "close"};
-        for (int i = 0; i < 4; ++i)
-            p.Icon(buttons[i], {title.Right() - 88 + i * 20.0f, title.y + 4, 14, 14}, c.textSecondary);
+        constexpr float r = 10;
+        p.PushRoundClip(rect, r);
+        p.Fill(rect, c.bgBase);
+        const Rect title{rect.x, rect.y, rect.w, 20};
+        p.Fill(title, c.bgChrome);
+        p.Icon("lumen", {title.x + 8, title.y + 4, 12, 12}, c.textPrimary);
+        for (int i = 0; i < 3; ++i) p.Fill({title.Right() - 22 - i * 18.0f, title.Cy() - 1, 8, 2}, c.textTertiary, 1);
 
         const Rect bar{rect.x, rect.Bottom() - 30, rect.w, 30};
-        p.Fill(bar, c.bgPanel);
-        p.Fill({bar.x, bar.y, bar.w, 1}, c.line);
-        float x = bar.x + 12;
-        const float cy = bar.Cy();
-        p.Icon("previous", {x, cy - 7, 14, 14}, c.textSecondary);
-        x += 20;
-        const Rect play{x, cy - 8, 30, 16};
-        p.Fill(play, c.accent, 3);
-        p.Icon("play", play.Center(11, 11), c.onAccent);
-        x += 36;
-        p.Icon("next", {x, cy - 7, 14, 14}, c.textSecondary);
-        x += 28;
-        p.Text(L"00:02:10", {x, bar.y, 60, bar.h}, TextStyle::MonoSmall, c.textSecondary, HAlign::Leading,
-               VAlign::Center, 0);
-        x += 62;
-        const float right = bar.Right() - 236;
-        const Rect track{x, cy - 7, right - x, 14};
-        p.Fill(track, c.bgDeep, 3);
-        p.Fill({track.x, track.y, track.w * 0.08f, track.h}, c.accentDim, 3);
-        p.Fill({track.x + track.w * 0.08f - 1.5f, track.y - 1, 3, track.h + 2}, c.accent, 1.5f);
-        p.Text(L"00:25:40", {right + 8, bar.y, 60, bar.h}, TextStyle::MonoSmall, c.textSecondary, HAlign::Leading,
-               VAlign::Center, 0);
-        float rx = right + 64;
-        p.Icon("volume_value-high", {rx, cy - 7, 14, 14}, c.textSecondary);
-        const Rect vol{rx + 18, cy - 4, 46, 8};
-        p.Fill(vol, c.bgDeep, 2);
-        p.Fill({vol.x, vol.y, vol.w * 0.4f, vol.h}, c.accentMid, 2);
-        rx += 82;
-        for (const char* icon : {"audio", "subtitles", "playback-settings", "list"}) {
-            p.Icon(icon, {rx, cy - 7, 14, 14}, c.textSecondary);
-            rx += 23;
+        const Rect side{rect.x + 6, title.Bottom() + 6, 104, bar.y - title.Bottom() - 12};
+        p.Fill(side, c.bgPanel, 6);
+        for (int i = 0; i < 5; ++i) {
+            const Rect row{side.x + 4, side.y + 6 + i * 22.0f, side.w - 8, 18};
+            if (i == 0) p.Fill(row, c.bgSelected, 4);
+            p.FillCircle({row.x + 10, row.Cy()}, 3.5f, i == 0 ? c.accent : c.textTertiary);
+            p.Fill({row.x + 20, row.Cy() - 2, 36.0f + (i * 13 % 3) * 9, 4}, i == 0 ? c.textPrimary : c.textTertiary, 2);
         }
+
+        const float x0 = side.Right() + 14, x1 = rect.Right() - 14;
+        p.Fill({x0, side.y + 6, 84, 6}, c.textSecondary, 3);
+        const float space = 10, cw = std::floor((x1 - x0 - 2 * space) / 3), ch = std::round(cw * 9 / 16);
+        for (int row = 0; row < 2; ++row)
+            for (int col = 0; col < 3; ++col) {
+                const Rect card{x0 + col * (cw + space), side.y + 24 + row * (ch + 26), cw, ch};
+                p.Fill(card, c.bgCard, 5);
+                p.Fill({card.x, card.Bottom() + 7, cw * (col == 1 ? 0.45f : 0.6f), 4}, c.textTertiary, 2);
+            }
+
+        p.Fill(bar, c.bgDeep);
+        p.Fill({bar.x, bar.y, bar.w, 1}, c.line);
+        const float cy = bar.Cy();
+        p.FillCircle({bar.x + 22, cy}, 9, c.accent);
+        p.Icon("play", {bar.x + 17, cy - 5, 10, 10}, c.onAccent);
+        const Rect track{bar.x + 42, cy - 1.5f, bar.w - 42 - 70, 3};
+        p.Fill(track, c.accentDim, 1.5f);
+        p.Fill({track.x, track.y, track.w * 0.3f, track.h}, c.accent, 1.5f);
+        p.Fill({track.Right() + 16, cy - 1.5f, 36, 3}, c.accentMid, 1.5f);
+        p.PopClip();
+        p.Stroke(rect, c.line, r);
     }
 };
 
-// Option card with an accent ring when selected (theme and language steps).
+// Theme option: a sample of the theme with an accent ring when selected.
 class ChoiceCard : public Widget {
 public:
-    enum class Kind { Light, Dark, System, Text };
-    ChoiceCard(Kind k, std::wstring big = {}, std::wstring sub = {})
-        : kind_(k), big_(std::move(big)), small_(std::move(sub)) {
+    enum class Kind { Light, Dark, System };
+    explicit ChoiceCard(Kind k) : kind_(k) {
         interactive = true;
         focusable = true;
     }
@@ -166,13 +162,6 @@ public:
                 p.PopClip();
                 break;
             }
-            case Kind::Text:
-                p.Fill(inner, c.bgCard, 12);
-                p.Text(big_, {inner.x, inner.y + inner.h / 2 - 26, inner.w, 30}, TextStyle::Section, SoftText(),
-                       HAlign::Center);
-                p.Text(small_, {inner.x, inner.y + inner.h / 2 + 6, inner.w, 20}, TextStyle::Body, c.textTertiary,
-                       HAlign::Center);
-                break;
         }
         p.Text(caption, {rect.x - 20, rect.Bottom() - 19, rect.w + 40, 19}, TextStyle::Large,
                selected || IsHot() ? c.textPrimary : c.textSecondary, HAlign::Center);
@@ -180,53 +169,6 @@ public:
 
 private:
     Kind kind_;
-    std::wstring big_, small_;
-};
-
-class AccentSwatch : public Widget {
-public:
-    explicit AccentSwatch(int index) : index_(index) {
-        interactive = true;
-        focusable = true;
-        tooltip = Tr(Theme::AccentName(index));
-    }
-    bool selected = false;
-    void Paint(Painter& p) override {
-        const Color sw = Theme::Get().AccentSwatch(index_);
-        const float k = selected ? 1.0f : IsHot() ? 0.8f : 0.5f;
-        p.PushOpacity(k);
-        if (selected) p.Stroke(rect, Color::Mix(sw, P().bgBase, 0.55f), rect.w / 2, 4);
-        p.FillCircle({rect.Cx(), rect.Cy()}, 20, sw);
-        p.PopOpacity();
-        PaintFocusRing(p, rect, rect.w / 2);
-    }
-
-private:
-    int index_;
-};
-
-// --- step 4 / 5 widgets ---------------------------------------------------------------------------
-
-// "Space" or "← / →" as key caps.
-class KeyCombo : public Widget {
-public:
-    explicit KeyCombo(std::vector<Action> actions) {
-        dir = Dir::Row;
-        align = Align::Start;
-        gap = 4;
-        bool first = true;
-        for (Action a : actions) {
-            const auto& keys = Bindings(a);
-            if (keys.empty()) continue;
-            if (!first) {
-                auto* slash = Add<Label>(L"/", TextStyle::Large, Tone::Secondary);
-                slash->height = Length::Px(42);
-                slash->pad = {8, 0, 8, 0};
-            }
-            first = false;
-            for (const auto& part : SplitKeys(KeyText(keys[0].first, keys[0].second))) Add<KeyCap>(part);
-        }
-    }
 };
 
 // Root of the window; the chrome is positioned by the window itself.
@@ -284,9 +226,10 @@ public:
     void Finish() {
         if (finished_) return;
         finished_ = true;
-        // Skip, Escape or closing on the first page add nothing: the default folder (the user's
-        // real Videos) is scanned only after Continue confirmed it.
-        if (folderConfirmed_) CommitFolder();
+        // Skip, Escape or closing on the first page leave the default folder (the user's real
+        // Videos) alone: it is scanned only after Continue confirmed it. A folder the user typed or
+        // picked is a choice already and is kept.
+        if (folderConfirmed_ || folderEdited_) CommitFolder();
         MainWindow* main = TheApp().main();
         // Re-enable the owner before this window goes away so activation returns to it.
         if (main) EnableWindow(main->Hwnd(), TRUE);
@@ -428,9 +371,6 @@ private:
         switch (step_) {
             case 0: BuildWelcome(page_); break;
             case 1: BuildAppearance(page_); break;
-            case 2: BuildLanguage(page_); break;
-            case 3: BuildPreferences(page_); break;
-            case 4: BuildShortcuts(page_); break;
             default: BuildSummary(page_); break;
         }
         back_->visible = step_ > 0;
@@ -468,44 +408,56 @@ private:
     // --- steps -----------------------------------------------------------------------------------
 
     void BuildWelcome(AbsPage* pg) {
-        pg->Centered<IconView>(116, 141, 141, "lumen", 141, Tone::Accent);
-        pg->Centered<Label>(286, 700, 39, Tr(L"Welcome to Lumen!"), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<IconView>(84, 104, 104, "lumen", 104, Tone::Accent);
+        pg->Centered<Label>(214, 700, 39, Tr(L"Welcome to Lumen!"), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
-        auto* d = pg->At<Label>(Rect{248, 362, 595, 90},
+        auto* d = pg->At<Label>(Rect{248, 276, 595, 72},
                                 Tr(L"Lumen is a fast, quiet player for your videos and music. It opens almost any file, "
                                    L"folder or network stream, remembers where you stopped and keeps your library in "
                                    L"order."),
                                 TextStyle::Large, Tone::Secondary);
         d->wrap = true;
         d->valign = VAlign::Top;
-        pg->At<Label>(Rect{248, 500, 595, 17}, Tr(L"Choose a Media Folder to get started with"), TextStyle::Body,
+
+        // The language comes first: whoever reads the other one should not click through the setup in it.
+        pg->At<Label>(Rect{248, 380, 300, 36}, Tr(L"Interface language"), TextStyle::Body, Tone::Secondary)->valign =
+            VAlign::Center;
+        const bool en = Cfg().GetString("general.language") == "en";
+        auto* lang = pg->At<Segmented>(Rect{843 - 212, 380, 212, 36},
+                                       std::vector<Choice>{{L"Русский", "ru", {}}, {L"English", "en", {}}}, en ? 1 : 0);
+        lang->onChange = [](int i) { Cfg().SetString("general.language", i == 1 ? "en" : "ru"); };  // relabels
+
+        pg->At<Label>(Rect{248, 452, 595, 17}, Tr(L"Choose a Media Folder to get started with"), TextStyle::Body,
                       Tone::Secondary);
-        folderBox_ = pg->At<TextBox>(Rect{248, 533, 471, 36}, Tr(L"Folder with your videos or music"), "folder");
+        folderBox_ = pg->At<TextBox>(Rect{248, 480, 471, 36}, Tr(L"Folder with your videos or music"), "folder");
         folderBox_->SetText(folder_);
         folderBox_->onSubmit = [this](const std::wstring&) { host_.Post([this] { Next(); }); };
-        auto* status = pg->At<Label>(Rect{248, 577, 595, 18}, L"", TextStyle::Small, Tone::Tertiary);
+        auto* status = pg->At<Label>(Rect{248, 524, 595, 18}, L"", TextStyle::Small, Tone::Tertiary);
         auto check = [status](const std::wstring& t) {
-            status->SetText(t.empty() ? Tr(L"You can add folders later from the sidebar.")
-                                      : IsDir(t) ? L""
-                                                 : Tr(L"This folder doesn't exist. It won't be added."));
+            status->SetText(t.empty()   ? Tr(L"You can add folders later from the sidebar.")
+                            : IsDir(t) ? Tr(L"Folder found. Lumen will look for videos and music in it.")
+                                        : Tr(L"This folder doesn't exist. It won't be added."));
         };
         check(folder_);
-        folderBox_->onChange = check;
-        auto* browse = pg->At<DButton>(Rect{729, 533, 114, 36}, Tr(L"Browse"), BtnStyle::Neutral, TextStyle::Large);
+        folderBox_->onChange = [this, check](const std::wstring& t) {
+            folderEdited_ = true;
+            check(t);
+        };
+        auto* browse = pg->At<DButton>(Rect{729, 480, 114, 36}, Tr(L"Browse"), BtnStyle::Neutral, TextStyle::Large);
         browse->minWidth = 114;
         browse->onClick = [this, check] {
             const std::wstring f = PickFolder(host_.Hwnd(), folderBox_->Text());
             if (f.empty()) return;
             folderBox_->SetText(f);
+            folderEdited_ = true;
             check(f);
         };
     }
 
     void BuildAppearance(AbsPage* pg) {
-        pg->At<PreviewWindow>(Rect{17, 19, 1056, 594});
-        pg->Centered<Label>(173, 800, 42, Tr(L"Select your preferred theme and color."), TextStyle::Title,
-                            Tone::Secondary)
-            ->halign = HAlign::Center;
+        pg->Centered<Label>(56, 800, 42, Tr(L"Choose a theme."), TextStyle::Title, Tone::Secondary)->halign =
+            HAlign::Center;
+        pg->Centered<PreviewWindow>(124, 480, 270);
         const std::string theme = Cfg().GetString("general.theme");
         struct Opt {
             ChoiceCard::Kind kind;
@@ -516,7 +468,7 @@ private:
                             {ChoiceCard::Kind::Dark, L"Dark", "dark"},
                             {ChoiceCard::Kind::System, L"System", "system"}};
         for (int i = 0; i < 3; ++i) {
-            auto* card = pg->At<ChoiceCard>(Rect{331 + i * 156.0f, 286, 116, 157}, opts[i].kind);
+            auto* card = pg->At<ChoiceCard>(Rect{331 + i * 156.0f, 434, 116, 157}, opts[i].kind);
             card->caption = Tr(opts[i].label);
             card->selected = theme == opts[i].value;
             const char* v = opts[i].value;
@@ -525,137 +477,25 @@ private:
                 GoLater(step_, false);
             };
         }
-        const int accent = AccentIndex();
-        for (int i = 0; i < kAccentCount; ++i) {
-            auto* sw = pg->At<AccentSwatch>(Rect{41 + i * 80.0f, 655, 64, 64}, i);
-            sw->selected = i == accent;
-            sw->onClick = [this, i] {
-                Cfg().SetString("general.accent", kAccentKeys[i]);
-                GoLater(step_, false);
-            };
-        }
-        // Up to the Skip link (x 703), not under it: the names are one short word.
-        pg->At<Label>(Rect{441, 678, 240, 20}, Tr(Theme::AccentName(accent)), TextStyle::Body, Tone::Tertiary);
-    }
-
-    void BuildLanguage(AbsPage* pg) {
-        pg->Centered<Label>(173, 800, 42, Tr(L"Choose the interface language."), TextStyle::Title, Tone::Secondary)
-            ->halign = HAlign::Center;
-        const bool en = Cfg().GetString("general.language") == "en";
-        struct Opt {
-            const wchar_t *big, *sub, *caption;
-            const char* value;
-        };
-        const Opt opts[] = {{L"Русский", L"Привет!", L"Русский", "ru"},
-                            {L"English", L"Hello!", L"English", "en"}};
-        for (int i = 0; i < 2; ++i) {
-            auto* card = pg->At<ChoiceCard>(Rect{301 + i * 260.0f, 286, 228, 157}, ChoiceCard::Kind::Text,
-                                            opts[i].big, opts[i].sub);
-            card->caption = opts[i].caption;
-            card->selected = (i == 1) == en;
-            const char* v = opts[i].value;
-            card->onClick = [v] { Cfg().SetString("general.language", v); };  // relabels via languageChanged
-        }
-        pg->Centered<Label>(480, 700, 20, Tr(L"You can change it later in Settings > General."), TextStyle::Body,
-                            Tone::Tertiary)
-            ->halign = HAlign::Center;
-    }
-
-    void BuildPreferences(AbsPage* pg) {
-        pg->Centered<Label>(60, 800, 42, Tr(L"A few preferences."), TextStyle::Title, Tone::Secondary)->halign =
-            HAlign::Center;
-        auto* list = pg->Centered<Widget>(140, 760, 480);
-        list->dir = Dir::Column;
-        struct Opt {
-            const char* key;
-            const wchar_t *title, *desc;
-        };
-        const Opt opts[] = {
-            {"privacy.saveHistory", L"Remember what you play",
-             L"Keep a list of played files for Recent, Continue watching and Listen again."},
-            {"privacy.rememberPosition", L"Continue where you left off",
-             L"Save where you stopped and continue from there next time."},
-            {"library.thumbnails", L"Show thumbnails", L"Use Windows thumbnails for videos and embedded covers for music."},
-        };
-        for (size_t i = 0; i < std::size(opts); ++i) {
-            if (i > 0) AddSeparator(list);
-            auto* row = list->Add<Widget>();
-            row->dir = Dir::Row;
-            row->align = Align::Center;
-            row->width = Length::Grow();
-            row->pad = {0, 16, 0, 16};
-            row->gap = 24;
-            auto* text = row->Add<Widget>();
-            text->dir = Dir::Column;
-            // A known width: measured as Grow, the description was one line and its second line
-            // ran into the separator below.
-            text->width = Length::Px(760 - 24 - 66);  // list - gap - toggle
-            text->gap = 4;
-            text->Add<Label>(Tr(opts[i].title), TextStyle::Large)->color = SoftText;
-            auto* d = text->Add<Label>(Tr(opts[i].desc), TextStyle::Body, Tone::Tertiary);
-            d->wrap = true;
-            d->width = Length::Grow();
-            const std::string key = opts[i].key;
-            auto* t = row->Add<Toggle>(Cfg().GetBool(key));
-            t->onChange = [key](bool on) { Cfg().SetBool(key, on); };
-        }
-    }
-
-    void BuildShortcuts(AbsPage* pg) {
-        pg->Centered<Label>(60, 800, 42, Tr(L"Learn the basic keyboard shortcuts."), TextStyle::Title, Tone::Secondary)
-            ->halign = HAlign::Center;
-        struct Item {
-            const wchar_t* label;
-            std::vector<Action> actions;
-        };
-        const std::vector<Item> left = {
-            {L"Play / Pause", {Action::PlayPause}},
-            {L"Seek Backward / Forward", {Action::SeekBackward, Action::SeekForward}},
-            {L"Previous / Next Item", {Action::Previous, Action::Next}},
-            {L"Previous / Next Frame", {Action::FrameBackStep, Action::FrameStep}},
-            {L"Cycle Subtitle Track", {Action::CycleSubtitles}},
-            {L"Cycle Audio Track", {Action::CycleAudio}},
-        };
-        const std::vector<Item> right = {
-            {L"Toggle Fullscreen", {Action::Fullscreen}},
-            {L"Increase / Decrease Volume", {Action::VolumeUp, Action::VolumeDown}},
-            {L"Show / Hide Queue", {Action::TogglePlaylist}},
-            {L"Show / Hide Sidebar", {Action::ToggleSidebar}},
-            {L"Take a Snapshot", {Action::Snapshot}},
-            {L"Record", {Action::Record}},
-        };
-        auto column = [pg](const std::vector<Item>& items, float x) {
-            for (size_t i = 0; i < items.size(); ++i) {
-                const float y = 154 + i * 82.0f;
-                auto* l = pg->At<Label>(Rect{x, y, 240, 42}, Tr(items[i].label), TextStyle::Large, Tone::Secondary);
-                l->valign = VAlign::Center;
-                pg->At<KeyCombo>(Rect{x + 248, y, 210, 46}, items[i].actions);  // Ctrl Shift S: 207
-            }
-        };
-        // Both columns keep the 62 DIP page margin (the right one ran 3 DIP past the window).
-        column(left, 62);
-        column(right, kW - 62 - 458);
-        pg->At<Label>(Rect{62, 671, 600, 32},
-                      Fmt(Tr(L"Find the full list in the menu or press {0}."), {ShortcutText(Action::KeyboardShortcuts)}),
-                      TextStyle::Large, Tone::Tertiary);
     }
 
     void BuildSummary(AbsPage* pg) {
-        pg->Centered<IconView>(64, 56, 56, "lumen", 56, Tone::Accent);
-        pg->Centered<Label>(140, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<Label>(80, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
-        pg->Centered<Label>(192, 700, 22, Tr(L"Here is how Lumen is set up. Everything can be changed later in Settings."),
+        pg->Centered<Label>(132, 700, 22, Tr(L"Here is how Lumen is set up. Everything can be changed later in Settings."),
                             TextStyle::Large, Tone::Tertiary)
             ->halign = HAlign::Center;
-        auto* card = pg->Centered<Panel>(250, 680, 5 * 48.0f + 16);
-        card->fill = [] { return P().bgPanel; };
-        card->radius = 12;
-        card->dir = Dir::Column;
-        card->pad = {20, 8, 12, 8};
+        auto card = [pg](float y, float h) {
+            auto* c = pg->Centered<Panel>(y, 680, h);
+            c->fill = [] { return P().bgPanel; };
+            c->radius = 12;
+            c->dir = Dir::Column;
+            c->pad = {20, 8, 12, 8};
+            return c;
+        };
 
         const std::string theme = Cfg().GetString("general.theme");
         const wchar_t* themeName = theme == "light" ? L"Light" : theme == "system" ? L"System" : L"Dark";
-        auto onOff = [](const char* key) { return std::wstring(Cfg().GetBool(key) ? Tr(L"On") : Tr(L"Off")); };
         struct Row {
             const wchar_t* key;
             std::wstring value;
@@ -664,17 +504,16 @@ private:
         const std::vector<Row> rows = {
             {L"Media folder", IsDir(folder_) ? folder_ : std::wstring(Tr(L"Not chosen")), 0},
             {L"Theme", Tr(themeName), 1},
-            {L"Accent", Tr(Theme::AccentName(AccentIndex())), 1},
-            {L"Language", Cfg().GetString("general.language") == "en" ? L"English" : L"Русский", 2},
-            {L"Playback history", onOff("privacy.saveHistory"), 3},
+            {L"Language", Cfg().GetString("general.language") == "en" ? L"English" : L"Русский", 0},
         };
-        // The key column fits the longest key ("История воспроизведения"), not a fixed 170.
+        auto* setup = card(178, rows.size() * 48.0f + 16);
+        // The key column fits the longest key, not a fixed width.
         float keyW = 0;
         for (const Row& row : rows)
             keyW = std::max(keyW, std::ceil(gfx::Text::Get().Measure(Tr(row.key), TextStyle::Body).width) + 1);
         for (size_t i = 0; i < rows.size(); ++i) {
-            if (i > 0) AddSeparator(card);
-            auto* r = card->Add<Widget>();
+            if (i > 0) AddSeparator(setup);
+            auto* r = setup->Add<Widget>();
             r->dir = Dir::Row;
             r->align = Align::Center;
             r->width = Length::Grow();
@@ -688,6 +527,42 @@ private:
             auto* change = r->Add<LinkButton>(Tr(L"Change"), TextStyle::Body);
             const int s = rows[i].step;
             change->onClick = [this, s] { GoLater(s, true); };
+        }
+
+        // What Lumen keeps about the user, right here instead of on a page of its own.
+        auto* prefs = card(178 + rows.size() * 48.0f + 16 + 16, 0);  // 0: as tall as its rows
+        struct Opt {
+            const char* key;
+            const wchar_t *title, *desc;
+        };
+        const Opt opts[] = {
+            {"privacy.saveHistory", L"Remember what you play",
+             L"Keep a list of played files for History, Continue watching and Listen again."},
+            {"privacy.rememberPosition", L"Continue where you left off",
+             L"Save where you stopped and continue from there next time."},
+            {"library.thumbnails", L"Show thumbnails", L"Use Windows thumbnails for videos and embedded covers for music."},
+        };
+        for (size_t i = 0; i < std::size(opts); ++i) {
+            if (i > 0) AddSeparator(prefs);
+            auto* row = prefs->Add<Widget>();
+            row->dir = Dir::Row;
+            row->align = Align::Center;
+            row->width = Length::Grow();
+            row->pad = {0, 12, 0, 12};
+            row->gap = 24;
+            auto* text = row->Add<Widget>();
+            text->dir = Dir::Column;
+            // A known width: measured as Grow, the description was one line and its second line
+            // ran into the separator below.
+            text->width = Length::Px(680 - 20 - 12 - 24 - 66);  // card - padding - gap - toggle
+            text->gap = 4;
+            text->Add<Label>(Tr(opts[i].title), TextStyle::Body)->color = SoftText;
+            auto* d = text->Add<Label>(Tr(opts[i].desc), TextStyle::Small, Tone::Tertiary);
+            d->wrap = true;
+            d->width = Length::Grow();
+            const std::string key = opts[i].key;
+            auto* t = row->Add<Toggle>(Cfg().GetBool(key));
+            t->onChange = [key](bool on) { Cfg().SetBool(key, on); };
         }
     }
 
@@ -704,6 +579,7 @@ private:
     int step_ = 0;
     bool finished_ = false;
     bool folderConfirmed_ = false;
+    bool folderEdited_ = false;  // typed or picked on the first page: kept even on Skip
     ScopedConnection langConn_;
 };
 

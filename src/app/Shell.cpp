@@ -7,6 +7,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
+#include "app/player/Episodes.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/PlayerView.h"
 #include "gfx/Icons.h"
@@ -31,7 +32,7 @@ public:
         // video; the library's own sidebar also switches the window to the library.
         onClick = [this] {
             if (!owner_->InPlayer()) TheApp().ShowPlayer(false);
-            TheApp().Navigate(Route{section_, {}});
+            TheApp().Navigate(Route{section_, section_ == Section::Music ? lib::LastMusicTab() : std::wstring()});
         };
     }
     bool Selected() const {
@@ -73,6 +74,8 @@ public:
                              [] { lib::AddFolderToLibrary(); }});
             items.push_back({Tr(L"Open file"), ShortcutText(Action::OpenFile), "file", false, true, false, false,
                              [] { Run(Action::OpenFile); }});
+            items.push_back({Tr(L"Open folder"), ShortcutText(Action::OpenFolder), "folder", false, true, false, false,
+                             [] { Run(Action::OpenFolder); }});
             items.push_back({Tr(L"Open network stream"), ShortcutText(Action::OpenNetwork), "streaming", false, true,
                              false, false, [] { Run(Action::OpenNetwork); }});
             ShowMenu(GetHost(), rect, std::move(items), Place::Below, 220);
@@ -111,6 +114,22 @@ private:
     bool danger_;
 };
 
+// The app menu: the logo with a chevron, so it reads as "Lumen's menu" and not as the page's "⋯".
+class AppMenuButton : public IconButton {
+public:
+    AppMenuButton() : IconButton("lumen", Tr(L"Lumen menu"), 40, 20) {
+        width = Length::Px(44);
+    }
+    void Paint(Painter& p) override {
+        const bool hot = IsHot();
+        if (IsPressed()) p.Fill(rect, P().press, 4);
+        else if (hot) p.Fill(rect, P().hover, 4);
+        PaintFocusRing(p, rect, 4);
+        p.Icon("lumen", {rect.x + 6, rect.Cy() - 10, 20, 20}, P().textPrimary);
+        p.Icon("chevron_down", {rect.x + 27, rect.Cy() - 6, 12, 12}, hot ? P().textPrimary : P().textSecondary);
+    }
+};
+
 std::wstring FolderNameOf(const std::wstring& path) {
     const size_t slash = path.find_last_of(L"\\/");
     if (slash == std::wstring::npos || path.find(L"://") != std::wstring::npos) return {};
@@ -130,11 +149,7 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     gap = 2;
     ncRole = NcRole::Caption;
 
-    auto* logo = Add<IconView>("lumen", 20, Tone::Primary);
-    logo->width = Length::Px(32);
-    logo->color = [] { return P().textPrimary; };
-
-    moreBtn_ = Add<IconButton>("more", Tr(L"Menu"), 32, 20);
+    moreBtn_ = Add<AppMenuButton>();
     moreBtn_->onClick = [this] { ShowAppMenu(); };
 
     sidebarBtn_ = Add<IconButton>("sidebar_left", Tr(L"Toggle sidebar"), 32, 20);
@@ -175,8 +190,8 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     maxBtn_ = Add<CaptionButton>("maximize", L"", false);
     maxBtn_->ncRole = NcRole::Maximize;
     maxBtn_->onClick = [window] { window->ToggleMaximize(); };
-    fullBtn_ = Add<CaptionButton>("fullscreen", Tr(L"Fullscreen"), false);
-    fullBtn_->onClick = [] { Run(Action::Fullscreen); };
+    // No fullscreen button here: next to Maximize its corners read as the same thing. It lives at
+    // the right end of the control bar, where YouTube and VLC users look for it.
     auto* close = Add<CaptionButton>("close", Tr(L"Close"), true);
     close->onClick = [window] { window->Close(); };
 
@@ -186,8 +201,8 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     routeConn_ = Connect(TheApp().routeChanged, [this] { Refresh(); });
     screenConn_ = Connect(TheApp().screenChanged, [this] { Refresh(); });
     // Tooltips are translated when set: again on a language switch (maximize's in Refresh).
-    tips_ = {{moreBtn_, L"Menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
-             {min, L"Minimize"}, {fullBtn_, L"Fullscreen"}, {close, L"Close"}};
+    tips_ = {{moreBtn_, L"Lumen menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
+             {min, L"Minimize"}, {close, L"Close"}};
     langConn_ = Connect(TheApp().languageChanged, [this] {
         for (const auto& [w, english] : tips_) w->tooltip = Tr(english);
         Refresh();
@@ -218,6 +233,7 @@ void TitleBar::Refresh() {
         if (dot != std::wstring::npos && dot > 0) title.resize(dot);
     }
     if (media && !tags.artist.empty() && !s.hasVideo) title += L" · " + tags.artist;
+    if (std::wstring episode = media ? episodes::Title(item->path) : std::wstring(); !episode.empty()) title = episode;
     if (!app.config().GetBool("interface.titleFileName")) title.clear();
     title_->SetText(title.empty() ? L"Lumen" : title);
     std::wstring caption = title.empty() ? L"Lumen" : title + L" — Lumen";
@@ -265,6 +281,9 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Open file", "file", Action::OpenFile));
     items.push_back(item(L"Open folder", "folder", Action::OpenFolder));
     items.push_back(item(L"Open network stream", "streaming", Action::OpenNetwork));
+    MenuItem addFolder{Tr(L"Add Folder to Library…"), L"", "new-folder"};
+    addFolder.action = [] { lib::AddFolderToLibrary(); };
+    items.push_back(std::move(addFolder));
     items.push_back(item(L"Add subtitles", "subtitles", Action::OpenSubtitles));
     items.push_back(item(L"Media information", "info", Action::ShowInfo));
     items.push_back(MenuItem::Separator());
@@ -606,7 +625,11 @@ void LibraryPane::RefreshHeader() {
     back_->enabled = app.CanGoBack();
     forward_->enabled = app.CanGoForward();
     if (view_) {
-        static_cast<CrumbBar*>(crumbs_)->Set(view_->Breadcrumbs(), compact_);
+        std::vector<Crumb> crumbs = view_->Breadcrumbs();
+        // The box says where it searches (UX-9): Home searches the whole library, a page only itself.
+        searchHint_ = route_.section == Section::Home || crumbs.empty() ? std::wstring(Tr(L"Search library"))
+                                                                        : Fmt(Tr(L"Search in “{0}”"), {crumbs.back().label});
+        static_cast<CrumbBar*>(crumbs_)->Set(std::move(crumbs), compact_);
         const long long n = view_->ItemCount();
         // The side panel is too narrow for crumbs and a count side by side.
         countWanted_ = n >= 0 && !compact_;
@@ -642,6 +665,11 @@ void LibraryPane::OnLayout() {
     const bool tight = !compact_ && rect.w < 900;
     if (count_) count_->visible = countWanted_ && !tight;
     Widget::OnLayout();
+    // A box too narrow for the whole hint says just "Search", not a cut "Search in “…".
+    if (search_) {
+        const float room = search_->rect.w - 48;  // the icon and the padding
+        search_->placeholder = gfx::Text::Get().Measure(searchHint_, TextStyle::Body).width <= room ? searchHint_ : std::wstring(Tr(L"Search"));
+    }
 }
 
 bool LibraryPane::Backdrop(Color& out) const {

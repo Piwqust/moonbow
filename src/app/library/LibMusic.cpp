@@ -5,6 +5,7 @@
 #include "app/MainWindow.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
+#include "ui/Host.h"
 
 #include <shlwapi.h>
 
@@ -57,7 +58,14 @@ void PlayInOrder(std::vector<QueueItem> q, const std::wstring& name) {
     PlayQueue(std::move(q), 0, name);
 }
 
-enum class MusicMode { Root, Songs, Albums, Artists, Genres, Album, Artist, Genre };
+enum class MusicMode { Songs, Albums, Artists, Genres, Album, Artist, Genre };
+
+// The tabs of the Music section, in the order of Apple Music and Spotify: albums first.
+struct MusicTab {
+    const wchar_t* label;
+    const wchar_t* path;
+};
+constexpr MusicTab kMusicTabs[] = {{L"Albums", L"albums"}, {L"Artists", L"artists"}, {L"Songs", L"songs"}, {L"Genres", L"genres"}};
 
 // Cover of the album / artist page header: the embedded art of a track, or a placeholder.
 class CoverArt : public Widget {
@@ -113,15 +121,15 @@ struct Group {
 class MusicPage : public Page {
 public:
     MusicPage(Route r, bool compact) : Page(r, compact, "music") {
-        const std::wstring& p = route_.path;
+        // "Music" itself opens the tab used last (UX-7): no hub of four tiles before the music.
+        const std::wstring p = route_.path.empty() ? LastMusicTab() : route_.path;
         auto starts = [&](const wchar_t* prefix, std::wstring* rest) {
             const size_t n = wcslen(prefix);
             if (p.compare(0, n, prefix) != 0) return false;
             *rest = p.substr(n);
             return true;
         };
-        if (p.empty()) mode_ = MusicMode::Root;
-        else if (p == L"songs") mode_ = MusicMode::Songs;
+        if (p == L"songs") mode_ = MusicMode::Songs;
         else if (p == L"albums") mode_ = MusicMode::Albums;
         else if (p == L"artists") mode_ = MusicMode::Artists;
         else if (p == L"genres") mode_ = MusicMode::Genres;
@@ -140,6 +148,10 @@ public:
                                  mode_ == MusicMode::Genre;
         list_ = ListModeFor(key_, listDefault);
         queueName_ = Title();
+        if (const wchar_t* tab = TabPath()) {
+            TheApp().SetUiValue("music.tab", WideToUtf8(tab));
+            if (!compact) AddTabs(tab);
+        }
         if ((mode_ == MusicMode::Album || mode_ == MusicMode::Artist) && !compact) {
             // Header: cover, what it is, the name, artist / albums, year · genre · songs · length,
             // then the buttons.
@@ -169,8 +181,7 @@ public:
             shuffle->onClick = [this] { PlayShuffled(queue_, queueName_); };
             toolbar_->visible = true;
             if (mode_ == MusicMode::Artist) AddAlbumsBlock();
-        } else if (mode_ != MusicMode::Root && mode_ != MusicMode::Albums && mode_ != MusicMode::Artists &&
-                   mode_ != MusicMode::Genres) {
+        } else if (mode_ != MusicMode::Albums && mode_ != MusicMode::Artists && mode_ != MusicMode::Genres) {
             auto* play = toolbar_->Add<Button>(Tr(L"Play All"), ButtonKind::Primary, "play");
             play->onClick = [this] { PlayInOrder(queue_, queueName_); };
             auto* shuffle = toolbar_->Add<Button>(Tr(L"Shuffle"), ButtonKind::Secondary, "shuffle_right");
@@ -188,13 +199,12 @@ public:
     }
 
     std::vector<Crumb> Breadcrumbs() const override {
-        std::vector<Crumb> c = {{Tr(L"Music"), Route{Section::Music, {}}}};
+        std::vector<Crumb> c = {{Tr(L"Music"), Route{Section::Music, LastMusicTab()}}};
         switch (mode_) {
-            case MusicMode::Root: break;
-            case MusicMode::Songs: c.push_back({Tr(L"Songs"), route_}); break;
-            case MusicMode::Albums: c.push_back({Tr(L"Albums"), route_}); break;
-            case MusicMode::Artists: c.push_back({Tr(L"Artists"), route_}); break;
-            case MusicMode::Genres: c.push_back({Tr(L"Genres"), route_}); break;
+            case MusicMode::Songs:
+            case MusicMode::Albums:
+            case MusicMode::Artists:
+            case MusicMode::Genres: c[0].route = route_; break;  // the tabs say which list it is
             case MusicMode::Album:
                 c.push_back({Tr(L"Albums"), Route{Section::Music, L"albums"}});
                 c.push_back({AlbumLabel(arg_), route_});
@@ -211,7 +221,7 @@ public:
         return c;
     }
 
-    bool HasViewModes() const override { return !compact_ && mode_ != MusicMode::Root; }
+    bool HasViewModes() const override { return !compact_; }
     void OnLayout() override {
         Page::OnLayout();
         if (summary_ && summary_->visible) {
@@ -231,7 +241,6 @@ public:
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;
         switch (mode_) {
-            case MusicMode::Root: return m;
             case MusicMode::Albums:
             case MusicMode::Artists:
             case MusicMode::Genres:
@@ -256,7 +265,20 @@ public:
 
     std::vector<MenuItem> MoreMenu() override {
         std::vector<MenuItem> m;
-        if (!queue_.empty() && mode_ != MusicMode::Root) {
+        if (compact_ && TabPath()) {
+            // The side panel has no room for the tabs: they are the first items of its "⋯" menu.
+            for (const MusicTab& t : kMusicTabs) {
+                MenuItem it;
+                it.label = Tr(t.label);
+                it.radio = true;
+                it.checked = wcscmp(TabPath(), t.path) == 0;
+                const std::wstring p = t.path;
+                it.action = [p] { TheApp().Navigate(Route{Section::Music, p}); };
+                m.push_back(std::move(it));
+            }
+            m.push_back(MenuItem::Separator());
+        }
+        if (!queue_.empty()) {
             const SharedQueue q = ShareQueue(queue_);
             const std::wstring name = queueName_;
             m.push_back(Item(L"Play All", "playback", [q, name] { PlayInOrder(*q, name); }));
@@ -267,7 +289,6 @@ public:
             m.push_back(std::move(pl));
             m.push_back(MenuItem::Separator());
         }
-        m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
         return m;
     }
@@ -275,12 +296,14 @@ public:
 protected:
     GridStyle CardStyle() const override { return GridStyle::SquareCards; }
     unsigned RowColumns() const override {
-        if (mode_ == MusicMode::Albums || mode_ == MusicMode::Artists || mode_ == MusicMode::Genres || mode_ == MusicMode::Root)
+        if (mode_ == MusicMode::Albums || mode_ == MusicMode::Artists || mode_ == MusicMode::Genres)
             return kColSubtitle;
         // Album page: every row has the same album (and usually artist); artist page: same artist.
+        // The track number only means something on the album page: in a list of many albums it
+        // runs 1–4, then 1–2 again and reads like an error (UX-14).
         if (mode_ == MusicMode::Album) return kColTrack | kColDuration | (mixedArtists_ ? kColSubtitle : 0u);
-        if (mode_ == MusicMode::Artist) return kColTrack | kColExtra | kColDuration;
-        return kColTrack | kColSubtitle | kColExtra | kColDuration;
+        if (mode_ == MusicMode::Artist) return kColExtra | kColDuration;
+        return kColSubtitle | kColExtra | kColDuration;
     }
 
     void Build() override {
@@ -288,9 +311,12 @@ protected:
         auto songs = snap_->Music();
         grid_->roundImages = mode_ == MusicMode::Artists;
         grid_->thumbs = mode_ != MusicMode::Album;  // every row would repeat the album's cover
+        grid_->onPlay = [this](int i) {
+            if (const Entry* e = EntryAt(i); e && e->kind == EntryKind::Album) PlayInOrder(GroupQueue(i), e->title);
+        };
+        if (tabs_) tabs_->Parent()->visible = !songs.empty();  // no music at all: the empty state alone
 
         switch (mode_) {
-            case MusicMode::Root: BuildRoot(songs); break;
             case MusicMode::Songs: BuildSongs(songs, "track"); break;
             case MusicMode::Albums: BuildGroups(Groups(songs, MusicMode::Albums), EntryKind::Album, "album", L"album:"); break;
             case MusicMode::Artists:
@@ -454,6 +480,13 @@ private:
         albums_->onActivate = [this](int i) {
             if (i >= 0 && i < static_cast<int>(albumRoutes_.size())) TheApp().Navigate(albumRoutes_[static_cast<size_t>(i)]);
         };
+        albums_->onPlay = [this](int i) {
+            if (i < 0 || i >= static_cast<int>(albumSongs_.size())) return;
+            std::vector<QueueItem> q;
+            for (const library::MediaItem* m : albumSongs_[static_cast<size_t>(i)])
+                q.push_back(MakeQueueItem(m->path, m->DisplayTitle(), m->duration));
+            PlayInOrder(std::move(q), albums_->Entries()[static_cast<size_t>(i)].title);
+        };
         albums_->onMenu = [this](int i, Point at) {
             if (i < 0 || i >= static_cast<int>(albumRoutes_.size())) return;
             std::vector<QueueItem> q;
@@ -504,9 +537,42 @@ private:
         albums_->visible = albumsTitle_->visible = songsTitle_->visible = any;
     }
 
+    // The tab this page is (Albums, Artists, Songs, Genres), null on an album, artist or genre page.
+    const wchar_t* TabPath() const {
+        switch (mode_) {
+            case MusicMode::Albums: return L"albums";
+            case MusicMode::Artists: return L"artists";
+            case MusicMode::Songs: return L"songs";
+            case MusicMode::Genres: return L"genres";
+            default: return nullptr;
+        }
+    }
+
+    // The tabs as segments above the content, as on the History page.
+    void AddTabs(const wchar_t* current) {
+        auto* row = content_->AddChild(std::make_unique<Widget>(), 0);
+        row->dir = Dir::Row;
+        row->width = Length::Grow();
+        row->pad = {0, 0, 0, 24};
+        int selected = 0;
+        std::vector<Choice> choices;
+        float widest = 96;  // segments share one width: the longest label sets it
+        for (const MusicTab& t : kMusicTabs) {
+            if (wcscmp(t.path, current) == 0) selected = static_cast<int>(choices.size());
+            choices.push_back({Tr(t.label), {}, {}});
+            widest = std::max(widest, std::ceil(gfx::Text::Get().Measure(choices.back().label, TextStyle::Body).width) + 24);
+        }
+        tabs_ = row->Add<Segmented>(std::move(choices), selected);
+        tabs_->segmentWidth = widest;
+        tabs_->onChange = [this](int i) {
+            const std::wstring path = kMusicTabs[i].path;
+            // Posted: navigating replaces this page while its control is still handling the click.
+            if (Host* h = GetHost()) h->Post([path] { TheApp().Navigate(Route{Section::Music, path}); });
+        };
+    }
+
     const char* ModeKey() const {
         switch (mode_) {
-            case MusicMode::Root: return "root";
             case MusicMode::Songs: return "songs";
             case MusicMode::Albums: return "albums";
             case MusicMode::Artists: return "artists";
@@ -515,7 +581,7 @@ private:
             case MusicMode::Artist: return "artist";
             case MusicMode::Genre: return "genre";
         }
-        return "root";
+        return "albums";
     }
 
     std::wstring Title() const {
@@ -562,42 +628,6 @@ private:
         return q;
     }
 
-    void BuildRoot(const std::vector<const library::MediaItem*>& songs) {
-        if (songs.empty()) return;  // the empty state offers "Add folder"
-        // The four categories. "Add folder" leads the side panel's list (its design); on the page it
-        // lives in the header's "⋯" menu, not as a fifth tile that reads like a category.
-        auto addFolder = [&] {
-            Entry add;
-            add.kind = EntryKind::Action;
-            add.title = Tr(L"Add folder");
-            add.icon = "add";
-            AddAction(std::move(add), [] { AddFolderToLibrary(); });
-        };
-        if (compact_) addFolder();
-        auto cat = [&](const wchar_t* title, const char* icon, const wchar_t* path, std::wstring sub, int count) {
-            Entry e;
-            e.kind = EntryKind::Category;
-            e.title = Tr(title);
-            e.subtitle = std::move(sub);
-            e.icon = icon;
-            e.count = list_ || compact_ ? count : -1;
-            AddRoute(std::move(e), Route{Section::Music, path});
-        };
-        const auto albums = Groups(songs, MusicMode::Albums);
-        const auto artists = Groups(songs, MusicMode::Artists);
-        const auto genres = Groups(songs, MusicMode::Genres);
-        const long long n = static_cast<long long>(songs.size());
-        cat(L"Songs", "songs", L"songs", CountSongs(n), static_cast<int>(n));
-        cat(L"Albums", "album", L"albums", CountAlbums(static_cast<long long>(albums.size())), static_cast<int>(albums.size()));
-        cat(L"Artists", "artist", L"artists", CountArtists(static_cast<long long>(artists.size())),
-            static_cast<int>(artists.size()));
-        // Until the scanner's tag pass is done (first scan only: later starts read the cache) the
-        // genre count would still grow.
-        const bool reading = !snap_->complete;
-        cat(L"Genres", "genre", L"genres", reading ? std::wstring(Tr(L"Reading tags…")) : CountGenres(static_cast<long long>(genres.size())),
-            static_cast<int>(genres.size()));
-    }
-
     void BuildSongs(std::vector<const library::MediaItem*> v, const std::string& defaultSort) {
         std::vector<const library::MediaItem*> filtered;
         for (const library::MediaItem* m : v)
@@ -610,13 +640,11 @@ private:
                               {kHeadSubtitle, L"Artist", "artist"},
                               {kHeadDuration, L"Length", "duration"}});
         else if (mode_ == MusicMode::Artist)
-            AddColumns(sort, {{kHeadTrack, L"#", "track"},
-                              {kHeadTitle, L"Title", "title"},
+            AddColumns(sort, {{kHeadTitle, L"Title", "title"},
                               {kHeadExtra, L"Album", "album"},
                               {kHeadDuration, L"Length", "duration"}});
         else
-            AddColumns(sort, {{kHeadTrack, L"#", "track"},
-                              {kHeadTitle, L"Title", "title"},
+            AddColumns(sort, {{kHeadTitle, L"Title", "title"},
                               {kHeadSubtitle, L"Artist", "artist"},
                               {kHeadExtra, L"Album", "album"},
                               {kHeadDuration, L"Length", "duration"}});
@@ -682,7 +710,8 @@ private:
         }
     }
 
-    MusicMode mode_ = MusicMode::Root;
+    MusicMode mode_ = MusicMode::Albums;
+    Segmented* tabs_ = nullptr;
     std::wstring arg_;
     std::wstring albumFolder_;  // album page: AlbumFolderKey of the album, empty = any folder
     Label* summary_ = nullptr;
@@ -702,6 +731,13 @@ private:
 };
 
 }  // namespace
+
+std::wstring LastMusicTab() {
+    const std::wstring t = Utf8ToWide(TheApp().UiValue("music.tab", "albums"));
+    for (const MusicTab& m : kMusicTabs)
+        if (t == m.path) return t;
+    return L"albums";
+}
 
 std::unique_ptr<LibraryView> MakeMusicPage(const Route& route, bool compact) {
     if (LooksLikeFolder(route.path)) return MakeFolderPage(route, compact);

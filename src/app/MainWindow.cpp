@@ -10,6 +10,7 @@
 #include "app/player/ControlBar.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/PlayerView.h"
+#include "app/player/SeekPreview.h"
 
 #include <shlwapi.h>
 #include <windowsx.h>
@@ -39,16 +40,20 @@ public:
         const bool playerShown = TheApp().PlayerShown();
         library_->visible = !playerShown;
         player_->visible = playerShown;
+        const PlayerState& s = TheApp().player().State();
+        mini_->visible = !playerShown && s.fileLoaded;
+        // The mini player goes first: the library's scroll views keep their last rows reachable above it.
+        Rect card;
+        if (mini_->visible) {
+            const Size m = mini_->Measure(rect.w, rect.h);
+            card = {rect.Right() - m.w - 24, rect.Bottom() - m.h - 24, m.w, m.h};
+        }
+        if (Host* h = GetHost()) h->floatingCard = card;
         if (playerShown)
             player_->Arrange(rect);
         else
             library_->Arrange(rect);
-        const PlayerState& s = TheApp().player().State();
-        mini_->visible = !playerShown && s.fileLoaded;
-        if (mini_->visible) {
-            const Size m = mini_->Measure(rect.w, rect.h);
-            mini_->Arrange({rect.Right() - m.w - 24, rect.Bottom() - m.h - 24, m.w, m.h});
-        }
+        if (mini_->visible) mini_->Arrange(card);
     }
 
 private:
@@ -112,24 +117,19 @@ bool MainWindow::Create() {
     if (!video_) return false;
 
     BuildUi();
-    // Over video toasts sit at the top; in the library below its header, so they never cover
-    // back/forward, the search or the "⋯" button.
+    // Over video toasts sit at the top. In the library they sit at the bottom, like a snackbar:
+    // at the top they covered the page's header rows (tabs, "Shuffle", an album's title).
     // In fullscreen they go below the top info panel while it shows (PlayerView::PaintTopInfo).
-    toastTop = [this](float) {
+    toastTop = [this](float h) {
         if (!TheApp().PlayerShown()) {
-            // Below the scan banner too while a scan shows one (it is the strip under the header).
-            float top = 122.0f;
-            std::function<void(Widget*)> find = [&](Widget* w) {
-                if (!w->visible) return;
-                if (w->id == "scan-banner") top = std::max(top, w->rect.Bottom() + 12);
-                else
-                    for (auto& c : w->Children()) find(c.get());
-            };
-            if (library_) find(library_);
-            return top;
+            float bottom = ClientSize().h - 24;
+            // Above the mini player when a centred toast (at most 600 DIP wide) could reach it.
+            if (mini_ && mini_->visible && mini_->rect.x < (ClientSize().w + 600) / 2) bottom = mini_->rect.y - 12;
+            return bottom - h;
         }
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
+    toastBand = [this] { return TheApp().PlayerShown() ? player_->ToastBand() : Rect{0, 0, ClientSize().w, 0}; };
     // A new base margin from Settings is what mpv has now; recompute the lift on top of it.
     subMarginToken_ = TheApp().config().Subscribe("subtitles.marginBottom", [this](const std::string&) {
         appliedSubMargin_ = -1;
@@ -350,10 +350,10 @@ void MainWindow::PokeChrome() {
     chromeTimer_ = StartTimer(ChromeHideDelay(), [this] {
         chromeTimer_ = 0;
         if (!BarOverlays()) return;
-        // Keep the controls while the pointer is on them or a popup is open.
+        // Keep the controls while the pointer is on them or a menu or panel is open (toasts don't count).
         Widget* hot = Hot();
         const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
-        if (HasPopup() || overBar || TheApp().player().State().paused) {
+        if (HasInteractivePopup() || overBar || TheApp().player().State().paused) {
             PokeChrome();
             return;
         }
@@ -386,6 +386,9 @@ void MainWindow::UpdateSubtitleLift() {
         // PiP: above the overlay's seek bar (16 DIP from the bottom), so it doesn't strike the line through.
         margin = base + static_cast<int>(std::lround(26.0f / h * 720));
     }
+    // Above the seek bar's frame preview while it shows, not under it.
+    if (const Rect v = player_ && !pip_ ? player_->VideoRect() : Rect{}; SeekPreviewTop() > 0 && v.h > 0)
+        margin = std::max(margin, base + static_cast<int>(std::lround(std::max(0.0f, v.Bottom() - SeekPreviewTop() + 8) / v.h * 720)));
     if (margin == appliedSubMargin_) return;
     appliedSubMargin_ = margin;
     mpv.SetProperty("sub-margin-y", std::to_string(margin));

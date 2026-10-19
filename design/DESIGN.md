@@ -30,9 +30,9 @@ Lumen повторяет структуру, сетку и типографик�
 | `line` | `#262626` | `#262626` | границы панелей |
 | `line.strong` | `#404040` | `#404040` | рамки полей, ручка переключателя OFF |
 | `text.primary` | `#EAEAEA` | `#EAEAEA` | заголовки, активный текст |
-| `text.secondary` | `#8F8F8F` | `#8F8F8F` | обычный текст и иконки |
-| `text.tertiary` | `#6B6B6B` | `#6B6B6B` | подписи, неактивное |
-| `text.disabled` | `#5C5C5C` | `#9A9A9A` | недоступное (контраст около 3:1) |
+| `text.secondary` | `#A8A8A8` | `#8F8F8F` | обычный текст и иконки |
+| `text.tertiary` | `#8B8B8B` | `#6B6B6B` | подписи, неактивное (не меньше 4,5:1 на всех фонах, WCAG AA) |
+| `text.disabled` | `#646464` | `#9A9A9A` | недоступное (контраст около 3:1) |
 | `accent` | `#EDEDED` | `#D37918` | Play, бегунок, ON, выбранная иконка |
 | `accent.mid` | `#B5B5B5` | `#AB6314` | второй цвет two-tone иконок, рамка выбора |
 | `accent.dim` | `#2E2E2E` | `#371F06` | фон выбранного сегмента, пройденная часть seekbar, фон ON |
@@ -42,7 +42,7 @@ Lumen повторяет структуру, сетку и типографик�
 | `danger` | `#C42B1C` | — | только кнопка «закрыть» окна при наведении |
 
 ### Светлая тема
-Та же шкала зеркально: `bg.base #F2F2F2`, `bg.deep #E6E6E6`, `bg.panel #FFFFFF`, `bg.chrome #EBEBEB`, `bg.card #E4E4E4`, `bg.selected #DCDCDC`, `line #D6D6D6`, `line.strong #BDBDBD`, `text.primary #141414`, `text.secondary #5C5C5C`, `text.tertiary #8A8A8A`, `accent #141414`, `accent.mid #4A4A4A`, `accent.dim #D9D9D9`, `on.accent #F2F2F2`.
+Та же шкала зеркально: `bg.base #F2F2F2`, `bg.deep #E6E6E6`, `bg.panel #FFFFFF`, `bg.chrome #EBEBEB`, `bg.card #E4E4E4`, `bg.selected #DCDCDC`, `line #D6D6D6`, `line.strong #BDBDBD`, `text.primary #141414`, `text.secondary #424242`, `text.tertiary #616161`, `accent #141414`, `accent.mid #4A4A4A`, `accent.dim #D9D9D9`, `on.accent #F2F2F2`.
 
 ### Палитра акцента (онбординг и настройки)
 Вместо 9 цветов VLC предлагаются 5 тонов: «Белый» `#EDEDED`, «Жемчуг» `#D4D4D4`, «Серебро» `#B5B5B5`, «Сталь» `#8F8F8F`, «Графит» `#6B6B6B` (в светлой теме — те же ступени от `#141414`).

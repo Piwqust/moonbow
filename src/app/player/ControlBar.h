@@ -48,6 +48,8 @@ enum class PanelKind : uint8_t { Tracks, Subtitles, Settings, Queue, Chapters, B
 void TogglePlayerPanel(PanelKind kind, const ui::Rect& anchor);
 void ClosePlayerPanels();
 bool PlayerPanelOpen(PanelKind kind);
+// The open popover comes back on the same tab, built again (a language switch, App.cpp).
+void ReopenPlayerPanels();
 
 // Creates the widget for one control item.
 std::unique_ptr<ui::Widget> CreateControl(ControlId id);
@@ -66,6 +68,7 @@ public:
     bool OnWheel(const ui::WheelEvent& e) override;
     void OnMouseLeave() override;
     void PaintOver(ui::Painter& p) override;
+    void Describe(ui::A11y& a) override;
 
 private:
     double TimeAt(float x) const;
@@ -95,7 +98,7 @@ public:
 
 private:
     void ReadStyle();
-    ScopedConnection layoutConn_;
+    ScopedConnection layoutConn_, langConn_;
     Config::Token configToken_ = 0;
     bool minimal_ = false, classic_ = false;
 };

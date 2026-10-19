@@ -25,8 +25,7 @@ private:
     ui::Label* crumbLabel_ = nullptr;
     ui::Label* title_ = nullptr;
     ui::IconButton* maxBtn_ = nullptr;
-    ui::IconButton* fullBtn_ = nullptr;
-    ui::IconButton* moreBtn_ = nullptr;
+    ui::IconButton* moreBtn_ = nullptr;  // the app menu (logo + chevron)
     std::wstring windowTitle_;  // last text given to the window caption
     std::vector<std::pair<ui::Widget*, const wchar_t*>> tips_;  // tooltip widget, English text
     ScopedConnection playerConn_, routeConn_, screenConn_, langConn_;
@@ -65,6 +64,7 @@ public:
 
 private:
     bool countWanted_ = false;  // the view has a count (hidden anyway in a tight header)
+    std::wstring searchHint_;   // "Search in “Mixed”": where the search box looks
     void Build();
     void BuildHeader();
     void RefreshHeader();

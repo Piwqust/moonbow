@@ -44,13 +44,16 @@ private:
 
 // "Next episode: S01E03 · in 12 s" with Play now / Cancel over the last 30 seconds (or the
 // end credits chapter) of a series episode whose next file is in the queue or the folder.
-// Also carries the chosen audio and subtitle languages over to the next episode.
+// Also carries the chosen audio and subtitle languages over to the next episode, and keeps them
+// for the series (LiveState::RememberShowLanguages), so a later session opens with them too.
 class NextEpisodeCard : public ui::Widget {
 public:
     explicit NextEpisodeCard(MainWindow* window);
     ~NextEpisodeCard() override;
+    // The player's card: Next plays its episode when the queue has nothing after this file.
+    static NextEpisodeCard* Instance();
     bool Wanted() const { return wanted_; }
-    bool HasNext() const { return !nextPath_.empty(); }
+    bool HasNext();  // takes the folder search's result when it has just finished
     void PlayNext();
     void Paint(ui::Painter& p) override;
 
@@ -63,6 +66,7 @@ private:
     void OnEnded();
     bool AutoNext() const;  // the episode starts by itself when this one ends
     void CarryLanguages();
+    void SayLanguages(const std::wstring& audioLang, const std::wstring& text);
     void SetWanted(bool wanted);
 
     MainWindow* window_;
@@ -76,7 +80,8 @@ private:
     // Track choice of the file at carryPath_, applied to its next episode.
     std::wstring carryPath_, audioLang_, audioTitle_, subLang_, subTitle_;
     bool hadSubs_ = false, subsOff_ = false;
-    ScopedConnection playerConn_, queueConn_;
+    uint32_t choiceBase_[2] = {};  // Player::TrackChoices (audio, subtitles) when carryPath_ loaded
+    ScopedConnection playerConn_, queueConn_, langConn_;
 };
 
 // "Skip intro" / "Skip credits" while inside a chapter named Opening, Intro, OP, Credits, ED,
@@ -91,7 +96,7 @@ private:
     NextEpisodeCard* card_;
     int kind_ = 0;  // episodes::ChapterKind
     bool wanted_ = false;
-    ScopedConnection playerConn_;
+    ScopedConnection playerConn_, langConn_;
 };
 
 }  // namespace app

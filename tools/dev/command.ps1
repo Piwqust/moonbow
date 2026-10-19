@@ -36,7 +36,7 @@
 #     --automation: native dialogs and Explorer are blocked.)
 #   nav <route> [path]    show the library at a route (leaves the player screen):
 #     nav home
-#     nav videos [<folder path>]
+#     nav videos [movies|shows|folders|show:<show name, lower case>|<folder path>]
 #     nav music [songs|albums|artists|genres|album:<name>|artist:<name>|genre:<name>]
 #     nav network [<sub-page>]
 #     nav playlists [<playlist id>]
@@ -56,7 +56,7 @@
 #                         set general.theme light | set interface.autoHide always
 #                         set interface.decorations false | set general.language en
 #   menu <name>           open a menu without a click:
-#     app (title bar menu button), more / sort (library header), add (sidebar "Add"),
+#     app (the Lumen logo menu in the title bar), more / sort (library header), add (sidebar "Add"),
 #     player (video right-click menu; player screen), pip (PiP menu; PiP only), close
 #   click <selector>      OnClick() on the first visible match (topmost popup first, then the
 #                         window), walking up to an interactive ancestor:

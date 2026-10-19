@@ -359,7 +359,7 @@ void TestSchema() {
     size_t total = 0, mapped = 0;
     std::printf("  settings per category:");
     for (const Category& c : cats) {
-        CHECK(!c.label.empty() && !c.labelRu.empty() && !c.title.empty() && !c.titleRu.empty() && !c.icon.empty());
+        CHECK(!c.label.empty() && !c.labelRu.empty() && !c.icon.empty());
         bool groupOk = false;
         for (const Group& g : Groups()) groupOk = groupOk || g.id == c.group;
         CHECK_MSG(groupOk, "%s", c.id.c_str());
@@ -372,7 +372,11 @@ void TestSchema() {
                 if (!it.hidden) ++count;
                 const char* k = it.key.c_str();
                 CHECK_MSG(keys.insert(it.key).second, "duplicate key %s", k);
-                CHECK_MSG(it.key.compare(0, c.id.size() + 1, c.id + ".") == 0, "%s outside %s", k, c.id.c_str());
+                // Window behavior moved from Library to Interface keeps its keys (saved values, main.cpp).
+                const bool moved = it.key == "library.singleInstance" || it.key == "library.singleInstanceFileManager" ||
+                                   it.key == "library.enqueue";
+                CHECK_MSG(moved ? c.id == "interface" : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
+                          "%s outside %s", k, c.id.c_str());
                 CHECK_MSG(it.category == c.id && it.section == s.id, "%s", k);
                 CHECK_MSG(FindItem(it.key) == &it, "%s", k);
                 CHECK_MSG(!it.label.empty() && !it.labelRu.empty(), "%s label", k);
@@ -474,6 +478,9 @@ void TestSchema() {
         if (!a.defaultKey.empty()) CHECK_MSG(defaults.insert(a.defaultKey).second, "%s key reused", a.id.c_str());
         CHECK(FindKeyAction(a.id) == &a);
     }
+    // The old table repeats Lumen's own keys (README.md): S stops, V cycles subtitles.
+    CHECK(FindKeyAction("stop") && FindKeyAction("stop")->defaultKey == L"S");
+    CHECK(FindKeyAction("cycleSubtitles") && FindKeyAction("cycleSubtitles")->defaultKey == L"V");
 
     // A section heading is never repeated as the label of its first visible row (R3-09).
     for (const Category& c : cats)
@@ -553,6 +560,10 @@ void TestConfigValues() {
     auto kb = json::Parse(R"({"fullscreen":{"key":"Ctrl+F","junk":1},"nope":{"key":"X"},"mute":5})");
     CHECK(c.Set("controls.keyBindings", *kb));
     CHECK(json::Serialize(c.Get("controls.keyBindings")) == R"({"fullscreen":{"key":"Ctrl+F"}})");
+    // Files written before the action ids still load: ShortcutStore maps the old ids.
+    kb = json::Parse(R"({"stop":{"key":"Ctrl+S"},"cycleSubtitles":{"key":"S"}})");
+    CHECK(c.Set("controls.keyBindings", *kb));
+    CHECK(json::Serialize(c.Get("controls.keyBindings")) == R"({"stop":{"key":"Ctrl+S"},"cycleSubtitles":{"key":"S"}})");
 
     // enabledWhen.
     CHECK(!c.IsEnabled("general.logFile"));
@@ -886,7 +897,14 @@ void TestConfigMpv() {
     CHECK(FindOption(opts, "demuxer-max-bytes") == "150MiB");
     CHECK(FindOption(opts, "screenshot-format") == "png");
     CHECK(!FindOption(opts, "screenshot-dir").empty());
-    CHECK(!FindOption(opts, "slang").empty());  // system language
+    // Sound and subtitles prefer the language Lumen speaks, not Windows'; a language picked stays.
+    CHECK(FindOption(opts, "slang") == "ru,rus" && FindOption(opts, "alang") == "ru,rus");
+    c.SetString("general.language", "en");
+    CHECK(FindOption(MpvOptions(c), "slang") == "en,eng" && FindOption(MpvOptions(c), "alang") == "en,eng");
+    c.SetString("subtitles.language", "de");
+    CHECK(FindOption(MpvOptions(c), "slang") == "de,ger,deu");
+    c.SetString("general.language", "ru");
+    c.SetString("subtitles.language", "app");
     FindOption(opts, "af", &found);
     CHECK(!found);  // no audio filters by default
     FindOption(opts, "vf", &found);
@@ -1244,6 +1262,27 @@ void TestFileSettings() {
         CHECK(fs.Load() && fs.size() == 0);
     }
 
+    // A series' track languages outlive the session (the next episode opened from Explorer).
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load() && !fs.FindShow(L"show"));
+        const library::ShowLanguages ru{L"rus", L"Русский 660 Hz", L"rus", L"", false};
+        CHECK(fs.PutShow(L"show", ru) && !fs.PutShow(L"SHOW", ru) && !fs.PutShow(L"", ru));
+        CHECK(fs.PutShow(L"D:\\Сериал", {L"", L"", L"", L"", true}));  // subtitles off, sound as is
+        CHECK(fs.Flush() && fs.size() == 0);
+    }
+    {
+        library::FileSettings fs;
+        CHECK(fs.Load());
+        const library::ShowLanguages* s = fs.FindShow(L"Show");
+        CHECK(s && s->audioLang == L"rus" && s->audioTitle == L"Русский 660 Hz" && s->subLang == L"rus" && !s->subsOff);
+        const library::ShowLanguages* o = fs.FindShow(L"d:\\сериал");
+        CHECK(o && o->subsOff && o->audioLang.empty());
+        CHECK(fs.PutShow(L"D:\\Сериал", {}) && !fs.FindShow(L"D:\\Сериал"));
+        fs.Clear();  // History > Clear forgets the shows too
+        CHECK(!fs.FindShow(L"show") && fs.Flush());
+    }
+
     // Values that would break mpv's "a=1,b=2" loadfile options are dropped; bad numbers too.
     WriteFile(file, R"({"version":1,"files":[
         {"path":"C:\\a.mkv","used":5,"aspect":"16:9,script=x.lua","zoomMode":"huge","deinterlace":"yes,vf=x",
@@ -1588,6 +1627,69 @@ void TestEpisodesAndOrder() {
     CHECK(got == L"a1,a2,a-none,a-d2-1,b1,u1,");
 }
 
+// Videos › Shows: season folders, numbered files in them, grouping and "Next: S01E03".
+void TestShows() {
+    std::wstring show;
+    CHECK(library::ParseSeasonFolder(L"Season 2", &show) == 2 && show.empty());
+    CHECK(library::ParseSeasonFolder(L"Series S01", &show) == 1 && show == L"Series");
+    CHECK(library::ParseSeasonFolder(L"The.Show.Season.03.1080p", &show) == 3 && show == L"The Show");
+    CHECK(library::ParseSeasonFolder(L"Сезон 4", &show) == 4);
+    CHECK(library::ParseSeasonFolder(L"Шоу - 2 сезон", &show) == 2 && show == L"Шоу");
+    CHECK(library::ParseSeasonFolder(L"Simpsons Season 5 (2019)", &show) == 5 && show == L"Simpsons");
+    CHECK(library::ParseSeasonFolder(L"Seasons", nullptr) < 0);
+    CHECK(library::ParseSeasonFolder(L"Best S1 Clips", nullptr) < 0);
+    CHECK(library::ParseSeasonFolder(L"Videos", nullptr) < 0);
+
+    library::EpisodeInfo ep;
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\Season 2\\03 - Pilot.mkv", &ep) && ep.show == L"Show" &&
+          ep.season == 2 && ep.episode == 3 && ep.title == L"Pilot");
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\Episode 7.mkv", &ep) && ep.episode == 7);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Шоу\\Сезон 1\\Серия 4.mkv", &ep) && ep.show == L"Шоу" && ep.episode == 4);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show S02\\E05.mkv", &ep) && ep.show == L"Show" && ep.season == 2 &&
+          ep.episode == 5);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\S01E02.mkv", &ep) && ep.show == L"Show" && ep.episode == 2);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show\\S01E02.mkv", &ep) && ep.show == L"Show");
+    CHECK(library::ParseEpisodePath(L"D:\\Video\\Series S01E03.mp4", &ep) && ep.show == L"Series");
+    CHECK(!library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\Making of.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\TV\\Show\\Season 1\\1080p.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Video\\2001 A Space Odyssey.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Video\\Movie (1080p).mkv", nullptr));
+
+    // Two season folders and loose "1x02" names are one show; episodes in order, movies apart.
+    const wchar_t* paths[] = {
+        L"D:\\TV\\Show\\Season 2\\01 Return.mkv", L"D:\\TV\\Show\\Season 1\\Show S01E03.mkv",
+        L"D:\\TV\\Show\\Season 1\\Show S01E02.mkv", L"D:\\Video\\Movie.mkv", L"D:\\TV\\show 1x01.mkv",
+        L"D:\\TV\\Other.Show.S01E01.mkv", L"D:\\Video\\Clip.mp4",
+    };
+    std::vector<library::MediaItem> items(std::size(paths));
+    std::vector<const library::MediaItem*> videos;
+    for (size_t i = 0; i < items.size(); ++i) {
+        items[i].path = paths[i];
+        items[i].folder = library::ParentFolder(paths[i]);
+        videos.push_back(&items[i]);
+    }
+    std::vector<const library::MediaItem*> movies;
+    const auto shows = library::GroupShows(videos, &movies);
+    CHECK(shows.size() == 2 && movies.size() == 2 && movies[0] == &items[3] && movies[1] == &items[6]);
+    if (shows.size() == 2) {
+        CHECK(shows[0].name == L"Other Show" && shows[0].episodes.size() == 1);
+        const library::Show& s = shows[1];
+        std::wstring order;
+        for (const library::Episode& e : s.episodes)
+            order += std::to_wstring(e.info.season) + L"x" + std::to_wstring(e.info.episode) + L",";
+        CHECK(order == L"1x1,1x2,1x3,2x1,");
+        CHECK(s.folder == L"D:\\TV\\Show");
+        CHECK(s.key == library::SearchFold(s.name));
+    }
+
+    CHECK(library::NextUp({}) == -1);
+    CHECK(library::NextUp({false, false}) == 0);
+    CHECK(library::NextUp({true, false, false}) == 1);
+    CHECK(library::NextUp({true, false, true, false}) == 3);  // after the last watched, not the skipped one
+    CHECK(library::NextUp({false, true}) == 0);                // the end is watched: the first gap
+    CHECK(library::NextUp({true, true}) == -1);
+}
+
 std::shared_ptr<const library::Snapshot> ScanAndWait(library::MediaLibrary& lib, DWORD timeoutMs = 20000) {
     constexpr UINT kMsg = WM_APP + 41;
     lib.SetNotifyWindow(MessageWindow(), kMsg);
@@ -1625,6 +1727,10 @@ void TestPlayerEpisodes() {
     CHECK(ep::DisplayName(L"D:\\TV\\Show - 1x02 - Pilot.mkv") == L"Show · Pilot");
     CHECK(ep::DisplayName(L"D:\\TV\\S01E02.mkv").empty());
     CHECK(ep::DisplayName(L"D:\\TV\\Movie.mkv") == L"Movie");
+    // The window title of an episode.
+    CHECK(ep::Title(L"D:\\TV\\Show S01\\Show S01E02.mkv") == L"Show — S01E02");
+    CHECK(ep::Title(L"D:\\TV\\S01E02.mkv") == L"S01E02");
+    CHECK(ep::Title(L"D:\\TV\\Movie.mkv").empty());
 
     CHECK(ep::KindOf(L"Opening") == ep::ChapterKind::Intro);
     CHECK(ep::KindOf(L"OP1") == ep::ChapterKind::Intro);
@@ -3667,6 +3773,7 @@ const TestCase kTests[] = {
     {"bookmarks_favorites", TestBookmarksFavorites},
     {"media_types", TestMediaTypes},
     {"episodes_order", TestEpisodesAndOrder},
+    {"shows", TestShows},
     {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},

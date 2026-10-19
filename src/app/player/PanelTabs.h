@@ -1,6 +1,6 @@
 #pragma once
-// Tab bodies of the player popovers (implemented in QueuePanel.cpp, TracksPanel.cpp and
-// SettingsPanel.cpp); Panels.cpp owns the popover itself.
+// Tab bodies of the player popovers (implemented in QueuePanel.cpp, SettingsPanel.cpp and its
+// track lists in TracksPanel.cpp); Panels.cpp owns the popover itself.
 #include "ui/Widget.h"
 
 #include <memory>
@@ -21,13 +21,15 @@ std::unique_ptr<ui::Widget> BuildChaptersTab();
 // The Repeat button that tells One from All (a small "1"), at the control bar's size.
 std::unique_ptr<ui::IconButton> MakeRepeatButton();
 
-// Tracks: 0 video, 1 audio, 2 subtitles.
-std::unique_ptr<ui::Widget> BuildTracksTab(int tab);
-std::unique_ptr<ui::Widget> BuildTracksFooter(Popover* owner);
+// The track choice at the top of the Video, Audio and Subtitles tabs: "off", the embedded and
+// external tracks (add, find online, edit) and, for audio, the output device. type: video, audio, sub.
+void AddTrackLists(ui::Widget* page, const wchar_t* type);
 
 // Live settings: 0 playback, 1 video, 2 audio, 3 subtitles.
 std::unique_ptr<ui::Widget> BuildSettingsTab(int tab);
 std::unique_ptr<ui::Widget> BuildSettingsFooter(Popover* owner);
+// The tab the settings popover shows (0-3, as above; Panels.cpp).
+int SettingsTab();
 
 // Rows the mini player queue needs (header + list) to size its popover.
 float CompactQueueHeight();

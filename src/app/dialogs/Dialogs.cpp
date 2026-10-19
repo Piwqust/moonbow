@@ -1019,13 +1019,20 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::ve
     left->gap = 20;
     AddFieldHeader(left, Tr(L"Playlist Details"),
                    Tr(L"The playlist will be saved and displayed with this title and thumbnail."));
-    auto* name = left->Add<TextBox>(Tr(L"e.g., Favorite Videos"));
+    auto* name = left->Add<TextBox>(Tr(L"e.g., Evening"));
     name->width = Length::Grow();
     name->height = Length::Px(37);
     auto* cover = top->Add<CoverTile>();
 
     AddSeparator(body);
     AddFieldHeader(body, Tr(L"Select Files"), Tr(L"These files will be added to the playlist."));
+    // Above the drop zone, ticked unless the dialog came with files of its own: a new list is
+    // most often what plays now, and missing the box made an empty playlist.
+    Checkbox* addQueue = nullptr;
+    const size_t queued = TheApp().queue().Items().size();
+    if (queued > 0)
+        addQueue = body->Add<Checkbox>(Fmt(Tr(L"Also add the current queue ({0})"), {std::to_wstring(queued)}),
+                                       files.empty());
     auto* zone = body->Add<FileDropZone>();
     // The files the dialog was opened for are listed (and can be removed) instead of being
     // added silently after Create; their titles and lengths come along.
@@ -1034,11 +1041,6 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::ve
         if (!known->emplace(library::PathKey(file.path), file).second) continue;
         zone->files.push_back(file.path);
     }
-    Checkbox* addQueue = nullptr;
-    const size_t queued = TheApp().queue().Items().size();
-    if (queued > 0)
-        addQueue = body->Add<Checkbox>(
-            Fmt(Tr(L"Also add the current queue ({0})"), {std::to_wstring(queued)}));
 
     f->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
@@ -1081,7 +1083,17 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::ve
     f->OnClosed([w, previousDrop, result, done] {
         w->onDropFiles = *previousDrop;
         if (done) done(*result);
-        if (!result->empty()) ShowToast(w, Tr(L"Playlist created"), "playlist");
+        if (result->empty()) return;
+        const library::Playlist* p = TheApp().playlists().Find(*result);
+        const std::wstring route = Utf8ToWide(*result);
+        ShowToast(w, Fmt(Tr(L"Playlist “{0}” created"), {p ? p->name : std::wstring()}), "playlist", 5000, Tr(L"Open"),
+                  [w, route] {
+                      // Posted: leaving the player closes the popups, this toast among them, mid-click.
+                      w->Post([route] {
+                          TheApp().ShowPlayer(false);
+                          TheApp().Navigate(Route{Section::Playlists, route});
+                      });
+                  });
     });
     ShowFrame(w, std::move(frame), name);
 }
