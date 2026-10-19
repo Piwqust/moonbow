@@ -9,6 +9,7 @@
 #include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/MainWindow.h"
 #include "gfx/Text.h"
 
 #include <cmath>
@@ -35,7 +36,7 @@ const std::vector<ControlInfo> kControls = {
     {ControlId::Time, "time", L"Current Time", "recent", true},
     {ControlId::Duration, "duration", L"Duration", "recent", true},
     {ControlId::Volume, "volume", L"Volume", "volume_value-high", true},
-    {ControlId::Audio, "audio", L"Audio Tracks", "audio", true},
+    {ControlId::Audio, "audio", L"Audio Tracks", "audio-tracks", true},
     {ControlId::Subtitles, "subtitles", L"Subtitles", "subtitles", true},
     {ControlId::Settings, "settings", L"Playback Settings", "playback-settings", true},
     {ControlId::Playlist, "playlist", L"Queue", "list", true},
@@ -94,6 +95,29 @@ const PlayerState& PS() {
     return TheApp().player().State();
 }
 
+// "Subtitles (V)": the key as bound now (Settings > Controls can change it).
+std::wstring WithKey(const std::wstring& tip, Action a) {
+    const std::wstring key = a == Action::None ? L"" : ShortcutText(a);
+    return key.empty() ? tip : tip + L" (" + key + L")";
+}
+
+// Icon button that runs an action and names its key in the tooltip.
+class ActionButton : public IconButton {
+public:
+    ActionButton(const char* icon, const wchar_t* tip, Action a) : IconButton(icon), tip_(tip), action_(a) {
+        onClick = [a] { Run(a); };
+        tooltip = WithKey(Tr(tip_), action_);
+    }
+    void Paint(Painter& p) override {
+        tooltip = WithKey(Tr(tip_), action_);
+        IconButton::Paint(p);
+    }
+
+private:
+    const wchar_t* tip_;
+    Action action_;
+};
+
 // --- items ----------------------------------------------------------------------------------
 
 class PlayButton : public Widget, PlayerBound {
@@ -115,7 +139,7 @@ public:
         PaintFocusRing(p, rect, 4);
         const bool playing = loaded && !PS().paused;
         p.Icon(playing ? "pause" : "play", rect.Center(22, 22), loaded ? P().onAccent : P().textTertiary);
-        tooltip = playing ? Tr(L"Pause") : Tr(L"Play");
+        tooltip = WithKey(playing ? Tr(L"Pause") : Tr(L"Play"), Action::PlayPause);
     }
 };
 
@@ -474,18 +498,36 @@ private:
     ScopedConnection queueConn_;
 };
 
+// `key`: the action whose key the tooltip names (V cycles what the Subtitles button opens).
 class PanelButton : public IconButton {
 public:
-    PanelButton(const char* icon, const wchar_t* tip, PanelKind kind) : IconButton(icon, Tr(tip)), kind_(kind) {
+    PanelButton(const char* icon, const wchar_t* tip, PanelKind kind, Action key = Action::None)
+        : IconButton(icon, Tr(tip)), kind_(kind), tip_(tip), key_(key) {
         onClick = [this] { TogglePlayerPanel(kind_, rect); };
     }
     void Paint(Painter& p) override {
         active = PlayerPanelOpen(kind_);
+        if (key_ != Action::None) tooltip = WithKey(Tr(tip_), key_);
         IconButton::Paint(p);
     }
 
 private:
     PanelKind kind_;
+    const wchar_t* tip_;
+    Action key_;
+};
+
+// Last on the right of every bar style, where YouTube, VLC and MPC-HC have it.
+class FullscreenButton : public IconButton {
+public:
+    FullscreenButton() : IconButton("fullscreen") { onClick = [] { Run(Action::Fullscreen); }; }
+    void Paint(Painter& p) override {
+        const MainWindow* w = TheApp().main();
+        const bool full = w && w->IsFullscreen();
+        icon = full ? "fullscreen_active" : "fullscreen";
+        tooltip = full ? WithKey(Tr(L"Exit fullscreen"), Action::ExitFullscreen) : WithKey(Tr(L"Fullscreen"), Action::Fullscreen);
+        IconButton::Paint(p);
+    }
 };
 
 // The speed popover button; the wheel steps the speed and a right click goes back to 1×.
@@ -614,11 +656,7 @@ Signal<>& ControlLayoutChanged() {
 
 std::unique_ptr<Widget> CreateControl(ControlId id) {
     App& app = TheApp();
-    auto button = [](const char* icon, const wchar_t* tip, Action a) {
-        auto b = std::make_unique<IconButton>(icon, Tr(tip));
-        b->onClick = [a] { Run(a); };
-        return b;
-    };
+    auto button = [](const char* icon, const wchar_t* tip, Action a) { return std::make_unique<ActionButton>(icon, tip, a); };
     auto skip = [](const char* icon, const wchar_t* tip, double seconds) {
         auto b = std::make_unique<IconButton>(icon, Tr(tip));
         b->onClick = [seconds] { SeekBy(seconds); };  // with the position message, like the keys
@@ -631,11 +669,14 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
         case ControlId::Time: return std::make_unique<TimeLabel>(false);
         case ControlId::Duration: return std::make_unique<TimeLabel>(true);
         case ControlId::Volume: return std::make_unique<VolumeControl>();
-        case ControlId::Audio: return std::make_unique<PanelButton>("audio", L"Audio tracks", PanelKind::Tracks);
-        case ControlId::Subtitles: return std::make_unique<PanelButton>("subtitles", L"Subtitles", PanelKind::Subtitles);
+        case ControlId::Audio:
+            return std::make_unique<PanelButton>("audio-tracks", L"Audio tracks", PanelKind::Tracks, Action::CycleAudio);
+        case ControlId::Subtitles:
+            return std::make_unique<PanelButton>("subtitles", L"Subtitles", PanelKind::Subtitles, Action::CycleSubtitles);
         case ControlId::Settings:
             return std::make_unique<PanelButton>("playback-settings", L"Playback settings", PanelKind::Settings);
-        case ControlId::Playlist: return std::make_unique<PanelButton>("list", L"Queue", PanelKind::Queue);
+        case ControlId::Playlist:
+            return std::make_unique<PanelButton>("list", L"Queue", PanelKind::Queue, Action::TogglePlaylist);
         case ControlId::Spacer: {
             auto w = std::make_unique<Widget>();
             w->width = Length::Px(24);
@@ -841,7 +882,11 @@ void SeekBar::Paint(Painter& p) {
 
 void SeekBar::PaintOver(Painter& p) {
     const PlayerState& s = TheApp().player().State();
-    if ((hoverX_ < 0 && !dragging_) || !s.fileLoaded || s.duration <= 0 || compact) return;
+    if (compact) return;
+    if ((hoverX_ < 0 && !dragging_) || !s.fileLoaded || s.duration <= 0) {
+        HideSeekPreview();
+        return;
+    }
     const double t = dragging_ ? dragTime_ : TimeAt(hoverX_);
     std::wstring label = FormatTime(t, s.duration >= 3600);
     for (auto it = s.chapters.rbegin(); it != s.chapters.rend(); ++it)
@@ -908,6 +953,7 @@ void ControlBar::Rebuild() {
         seek->slim = true;
         seek->pad = {10, 0, 10, 0};
         for (ControlId cid : {ControlId::Duration, ControlId::Volume, ControlId::Playlist}) AddChild(CreateControl(cid));
+        Add<FullscreenButton>();
         InvalidateLayout();
         return;
     }
@@ -916,6 +962,8 @@ void ControlBar::Rebuild() {
     auto* seek = Add<SeekBar>();
     seek->pad = {10, 0, 10, 0};
     for (ControlId cid : l.right) AddChild(CreateControl(cid));
+    // Not in the customizable layout: it stays last, like the seek bar stays in the middle.
+    Add<FullscreenButton>();
     InvalidateLayout();
 }
 

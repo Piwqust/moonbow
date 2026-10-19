@@ -1,6 +1,6 @@
-// Video / Audio / Subtitles track popover: embedded tracks with check marks, external
+// Track lists at the top of the settings popover's Video / Audio / Subtitles tabs: embedded
+// tracks with check marks, external tracks (add / remove) and the audio output devices.
 #include "ui/Host.h"
-// tracks (add / remove), audio output devices and "Show Preferences".
 #include "Util.h"
 #include "app/App.h"
 #include "app/Dialogs.h"
@@ -74,6 +74,7 @@ const PlayerState& PS() {
 struct ChoiceRow {
     std::wstring label;
     std::wstring detail;  // right-aligned, tertiary
+    std::wstring tip;     // the row's tooltip (the track's format)
     bool checked = false;
     std::function<void()> select;
     std::function<void()> remove;  // shown in edit mode
@@ -143,6 +144,10 @@ public:
     bool OnMouseMove(const MouseEvent& e) override {
         const int i = RowAt(e.y);
         const bool x = i >= 0 && editing && e.x >= RowRect(i).Right() - 32;
+        if (i != hover_) {
+            const auto rows = rows_();
+            tooltip = i >= 0 && i < static_cast<int>(rows.size()) ? rows[static_cast<size_t>(i)].tip : L"";
+        }
         if (i != hover_ || x != hoverX_) {
             hover_ = i;
             hoverX_ = x;
@@ -229,7 +234,9 @@ std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
         r.label = external && t.title.empty() && !t.TitleFromFileName() && t.lang.empty()
                       ? Fmt(Tr(L"Track {0}"), static_cast<long long>(ordinal))
                       : TrackName(t, ordinal);
-        r.detail = TrackDetail(t);
+        // The codec ("SubRip", "E-AC-3") is jargon: the row says stereo or 5.1, the tooltip the format.
+        r.detail = TrackDetail(t, false);
+        r.tip = TrackDetail(t);
         r.checked = t.selected;
         const int64_t id = t.id;
         r.select = [prop, id] { TheApp().player().SetTrack(prop, id); };
@@ -310,54 +317,13 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
 
 }  // namespace
 
-std::unique_ptr<Widget> BuildTracksTab(int tab) {
-    auto sv = std::make_unique<ScrollView>();
-    sv->width = Length::Grow();
-    sv->height = Length::Grow();
-    auto* page = sv->SetContent<Widget>();
-    page->dir = Dir::Column;
-    page->width = Length::Grow();
-    page->pad = {0, 0, 0, 8};
-    if (tab == 0) {
-        AddTracksSection(page, L"video");
-    } else if (tab == 1) {
-        AddTracksSection(page, L"audio");
-        AddSectionLine(page);
-        Widget* title = AddListTitle(page, Tr(L"Output Device"));
-        AddTitleButton(title, "refresh", L"Refresh devices", [] { Live().RefreshDevices(); });
-        page->Add<ChoiceList>([] { return DeviceRows(); }, Tr(L"Default device"));
-    } else {
-        AddTracksSection(page, L"sub");
-    }
-    return sv;
-}
-
-// The same footer button as quick settings (a hairline, then "Open Advanced Settings" with the
-// gear), so the two popovers that both have Audio and Subtitles tabs end the same way.
-class TracksFooter : public Widget {
-public:
-    void Paint(Painter& p) override { p.Fill({rect.x, rect.y, rect.w, 1}, SectionLine()); }
-};
-
-std::unique_ptr<Widget> BuildTracksFooter(Popover* owner) {
-    auto footer = std::make_unique<TracksFooter>();
-    footer->dir = Dir::Column;
-    footer->width = Length::Grow();
-    footer->height = Length::Px(72);
-    footer->pad = {20, 20, 20, 20};
-    auto* b = footer->Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
-    b->width = Length::Grow();
-    b->onClick = [owner] {
-        const int t = owner->CurrentTab();
-        const std::string cat = t == 0 ? "video" : t == 1 ? "audio" : "subtitles";
-        // Closing destroys this button; do it after the click returns.
-        if (MainWindow* w = TheApp().main())
-            w->Post([cat] {
-                ClosePlayerPanels();
-                TheApp().OpenSettings(cat);
-            });
-    };
-    return footer;
+void AddTrackLists(Widget* page, const wchar_t* type) {
+    AddTracksSection(page, type);
+    if (std::wstring_view(type) != L"audio") return;
+    AddSectionLine(page);
+    Widget* title = AddListTitle(page, Tr(L"Output Device"));
+    AddTitleButton(title, "refresh", L"Refresh devices", [] { Live().RefreshDevices(); });
+    page->Add<ChoiceList>([] { return DeviceRows(); }, Tr(L"Default device"));
 }
 
 }  // namespace app::panel

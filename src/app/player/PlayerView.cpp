@@ -75,7 +75,7 @@ std::vector<MenuItem> TrackItems(const wchar_t* type, const char* prop, bool all
     int ordinal = 0;
     for (const Track& t : PS().tracks) {
         if (t.type != type) continue;
-        const std::wstring detail = panel::TrackDetail(t);
+        const std::wstring detail = panel::TrackDetail(t, false);  // no codec jargon, as in the panel
         const std::wstring name = panel::TrackName(t, ++ordinal);
         MenuItem m{detail.empty() ? name : name + L" · " + detail};
         m.radio = true;
@@ -172,7 +172,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
     video.submenu.push_back(Item(L"Snapshot", Action::Snapshot, "snapshot"));
     if (!music) items.push_back(video);
 
-    MenuItem audio{Tr(L"Audio"), L"", "audio"};
+    MenuItem audio{Tr(L"Audio"), L"", "audio-tracks"};
     audio.submenu = TrackItems(L"audio", "aid", true);
     audio.submenu.push_back(MenuItem::Separator());
     MenuItem mute = Item(L"Mute", Action::Mute);
@@ -271,7 +271,7 @@ void ShowPipContextMenu(Host* host, Point at) {
     // Short: the PiP window is as small as 256x144 DIP and an in-window menu can't leave it.
     std::vector<MenuItem> items;
     items.push_back(PlayItem());
-    MenuItem audio{Tr(L"Audio"), L"", "audio"};
+    MenuItem audio{Tr(L"Audio"), L"", "audio-tracks"};
     audio.submenu = TrackItems(L"audio", "aid", true);
     items.push_back(std::move(audio));
     MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
@@ -685,9 +685,10 @@ void PlayerView::OnLayout() {
 
     // Bottom-right of the picture, above a floating bar and above the subtitle lines; top-right
     // when that would put them in the upper half of a small picture.
-    // A floating bar lifts the subtitles above it too (MainWindow::UpdateSubtitleLift).
+    // A floating bar lifts the subtitles above it too (MainWindow::UpdateSubtitleLift). Its room
+    // stays reserved while it is hidden: the chips dropped 72 DIP in one frame as it faded out.
     const Rect v = video_->Inner(immersive);
-    const float lift = (immersive || overlay) && bar_->visible ? barSpace : 0.0f;
+    const float lift = immersive || overlay ? barSpace : 0.0f;
     const float bottom = v.Bottom() - lift - std::max(20.0f, SubtitleBand(v.h) + 12);
     auto place = [&](Widget* w, Size sz) {
         const float top = bottom - sz.h < v.y + v.h * 0.5f ? v.y + (immersive ? 64.0f : 20.0f) : bottom - sz.h;

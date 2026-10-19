@@ -61,7 +61,7 @@ std::wstring TrackName(const Track& t, int ordinal) {
     return t.title + L" (" + lang + L")";
 }
 
-std::wstring TrackDetail(const Track& t) {
+std::wstring TrackDetail(const Track& t, bool withCodec) {
     // mpv's (FFmpeg's) codec ids, by the names players and release notes use.
     static const std::pair<const wchar_t*, const wchar_t*> kCodecs[] = {
         {L"subrip", L"SubRip"}, {L"srt", L"SubRip"}, {L"ass", L"ASS"}, {L"ssa", L"SSA"}, {L"webvtt", L"WebVTT"},
@@ -82,6 +82,7 @@ std::wstring TrackDetail(const Track& t) {
         codec = t.codec;
         for (wchar_t& ch : codec) ch = static_cast<wchar_t>(std::towupper(ch));
     }
+    if (!withCodec) codec.clear();
     if (t.type != L"audio" || t.channels <= 0) return codec;
     const std::wstring layout = t.channels == 1   ? Tr(L"Mono")
                                 : t.channels == 2 ? Tr(L"Stereo")
