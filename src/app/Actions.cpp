@@ -738,7 +738,7 @@ void Run(Action a) {
             if (app.PlayerShown() && w->playerView())
                 w->playerView()->SetSidePanel(!w->playerView()->SidePanel());
             else if (w->sidebar())
-                w->sidebar()->SetCollapsed(!w->sidebar()->Collapsed());
+                w->sidebar()->Toggle();
             break;
         case Action::TogglePlaylist: TogglePlayerPanel(PanelKind::Queue, {}); break;
         case Action::Search:

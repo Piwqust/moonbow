@@ -30,6 +30,12 @@ std::wstring CountFiles(long long n);  // "12 files" / "12 файлов"
 std::wstring CountAlbums(long long n);
 std::wstring CountStations(long long n);  // "5 станций"
 std::wstring CountEpisodes(long long n);  // "1 выпуск"
+// The header counts with the page's noun (UX-19): "3 альбома", "2 сериала", "5 плейлистов".
+std::wstring CountArtists(long long n);
+std::wstring CountGenres(long long n);
+std::wstring CountMovies(long long n);
+std::wstring CountShows(long long n);
+std::wstring CountPlaylists(long long n);
 // Tag labels for untagged songs: "Unknown artist" / "Unknown album".
 std::wstring ArtistLabel(const std::wstring& artist);
 std::wstring AlbumLabel(const std::wstring& album);

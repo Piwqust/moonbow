@@ -38,6 +38,10 @@ public:
     ~NavSidebar() override;
     void SetCollapsed(bool collapsed);
     bool Collapsed() const { return collapsed_; }
+    // The user's toggle: pins the sidebar open or closed at any window width.
+    void Toggle();
+    // Until the user pins it, a window narrower than about 1000 DIP shows the rail (DESK-12).
+    void FitWindow(float windowW);
     // The rail of the player's side panel: it navigates the panel and keeps the player on screen.
     void SetInPlayer(bool inPlayer) { inPlayer_ = inPlayer; }
     bool InPlayer() const { return inPlayer_; }
@@ -47,6 +51,7 @@ public:
 private:
     bool collapsed_ = false;
     bool inPlayer_ = false;
+    enum class Pin : uint8_t { Auto, Open, Closed } pin_ = Pin::Auto;
     ScopedConnection routeConn_, langConn_;
 };
 
@@ -65,7 +70,7 @@ public:
 
 private:
     bool countWanted_ = false;  // the view has a count (hidden anyway in a tight header)
-    std::wstring searchHint_;   // "Search in “Mixed”": where the search box looks
+    std::wstring searchHint_;   // "Search in folder “Mixed”": where the search box looks
     void Build();
     void BuildHeader();
     void RefreshHeader();
@@ -75,6 +80,7 @@ private:
     ui::Widget* header_ = nullptr;
     ui::Widget* crumbs_ = nullptr;
     ui::Label* count_ = nullptr;
+    ui::Widget* countGap_ = nullptr;
     ui::IconButton* back_ = nullptr;
     ui::IconButton* forward_ = nullptr;
     ui::IconButton* sort_ = nullptr;

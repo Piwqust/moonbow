@@ -31,7 +31,8 @@ constexpr UINT kChromeHideMs = 2200;
 // Lays out the library layer, the player and the floating mini player.
 class ShellBody : public Widget {
 public:
-    ShellBody(Widget* library, PlayerView* player, MiniPlayer* mini) : library_(library), player_(player), mini_(mini) {
+    ShellBody(Widget* library, NavSidebar* nav, PlayerView* player, MiniPlayer* mini)
+        : library_(library), nav_(nav), player_(player), mini_(mini) {
         dir = Dir::None;
         width = Length::Grow();
         height = Length::Grow();
@@ -53,12 +54,16 @@ public:
         }
         if (Host* h = GetHost()) h->floatingCard = card;
         if (playerShown || pending) player_->Arrange(rect);
-        if (!playerShown) library_->Arrange(rect);
+        if (!playerShown) {
+            nav_->FitWindow(rect.w);
+            library_->Arrange(rect);
+        }
         if (mini_->visible) mini_->Arrange(card);
     }
 
 private:
     Widget* library_;
+    NavSidebar* nav_;
     PlayerView* player_;
     MiniPlayer* mini_;
 };
@@ -233,7 +238,7 @@ void MainWindow::BuildUi() {
     auto mini = std::make_unique<MiniPlayer>(this);
     mini_ = mini.get();
 
-    auto* body = root->Add<ShellBody>(libraryLayer_, player_, mini_);
+    auto* body = root->Add<ShellBody>(libraryLayer_, sidebar_, player_, mini_);
     body->AddChild(std::move(library));
     body->AddChild(std::move(player));
     body->AddChild(std::move(mini));

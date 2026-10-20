@@ -333,6 +333,17 @@ void NavSidebar::SetCollapsed(bool collapsed) {
     InvalidateLayout();
 }
 
+void NavSidebar::Toggle() {
+    pin_ = collapsed_ ? Pin::Open : Pin::Closed;
+    SetCollapsed(pin_ == Pin::Closed);
+}
+
+void NavSidebar::FitWindow(float windowW) {
+    // Fluent's NavigationView goes compact below 1008 epx: the content keeps its room.
+    const bool rail = pin_ == Pin::Closed || (pin_ == Pin::Auto && windowW < 1000);
+    if (rail != collapsed_) SetCollapsed(rail);
+}
+
 void NavSidebar::Refresh() {
     Invalidate();
 }
@@ -347,6 +358,29 @@ void NavSidebar::Paint(Painter& p) {
 // --- LibraryPane -----------------------------------------------------------------------
 
 namespace {
+
+// The search box's hint as a phrase that reads naturally (UX-18): "Search history", "Search in
+// folder “Videos”", never a section name put into "Search in “…”".
+std::wstring SearchHint(const Route& r, const std::vector<Crumb>& crumbs) {
+    const std::wstring& p = r.path;
+    auto starts = [&p](const wchar_t* prefix) { return p.rfind(prefix, 0) == 0; };
+    if (p == L"favorites") return Tr(L"Search favorites");
+    switch (r.section) {
+        case Section::Home: break;
+        case Section::Recent: return Tr(L"Search history");
+        case Section::Network: return Tr(L"Search Network");
+        case Section::Playlists: return Tr(p.empty() ? L"Search playlists" : L"Search this playlist");
+        case Section::Videos:
+        case Section::Music:
+            if (lib::LooksLikeFolder(p) && !crumbs.empty()) return Fmt(Tr(L"Search in folder “{0}”"), {crumbs.back().label});
+            if (starts(L"show:")) return Tr(L"Search episodes");
+            if (starts(L"album:")) return Tr(L"Search this album");
+            if (starts(L"artist:")) return Tr(L"Search this artist");
+            if (starts(L"genre:")) return Tr(L"Search this genre");
+            return Tr(r.section == Section::Music ? L"Search music" : L"Search videos");
+    }
+    return Tr(L"Search library");
+}
 
 class CrumbButton : public LinkButton {
 public:
@@ -548,7 +582,10 @@ void LibraryPane::BuildHeader() {
     crumbs_->width = Length::Grow();
 
     count_ = header_->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
-    count_->pad = {0, 0, 12, 0};
+    // A label ignores padding: this keeps 16 DIP (with the gaps) after the count, even when the
+    // search box follows it directly (VIS-14).
+    countGap_ = header_->Add<Widget>();
+    countGap_->width = Length::Px(8);
     sort_ = header_->Add<IconButton>("sort", Tr(L"Sort"));
     sort_->onClick = [this] {
         if (!view_) return;
@@ -631,23 +668,25 @@ void LibraryPane::RefreshHeader() {
     if (view_) {
         std::vector<Crumb> crumbs = view_->Breadcrumbs();
         // The box says where it searches (UX-9): Home searches the whole library, a page only itself.
-        searchHint_ = route_.section == Section::Home || crumbs.empty() ? std::wstring(Tr(L"Search library"))
-                                                                        : Fmt(Tr(L"Search in “{0}”"), {crumbs.back().label});
+        searchHint_ = SearchHint(route_, crumbs);
         if (search_) search_->a11yName = searchHint_;  // the count label before it is no label of it
         static_cast<CrumbBar*>(crumbs_)->Set(std::move(crumbs), compact_);
         const long long n = view_->ItemCount();
-        // The side panel is too narrow for crumbs and a count side by side.
-        countWanted_ = n >= 0 && !compact_;
+        // The side panel is too narrow for crumbs and a count side by side. "0 items" would only
+        // repeat "Nothing found" (UX-19).
+        countWanted_ = n > 0 && !compact_;
         count_->visible = countWanted_;
-        count_->SetText(n >= 0 ? CountItems(n) : L"");
+        count_->SetText(n > 0 ? view_->CountText(n) : L"");
         // Nothing to sort or lay out on an empty page (its count is hidden: n is -1 there, not 0).
         const bool content = n != 0 && !view_->IsEmpty();
         mode_->visible = view_->HasViewModes() && content;
         mode_->icon = view_->GetViewMode() == ViewMode::Grid ? "list" : "grid";
         mode_->tooltip = view_->GetViewMode() == ViewMode::Grid ? Tr(L"List view") : Tr(L"Grid view");
         sort_->visible = !view_->SortMenu().empty() && content;
-        search_->visible = view_->HasSearch() && (!compact_ || search_->visible);
-        searchBtn_->visible = compact_ && view_->HasSearch();
+        // An empty or "not found" page has nothing to search (UX-18); "Nothing found" keeps its query.
+        const bool searchable = view_->HasSearch() && !(view_->IsEmpty() && search_->Text().empty());
+        search_->visible = searchable && (!compact_ || search_->visible);
+        searchBtn_->visible = compact_ && searchable;
         more_->visible = !view_->MoreMenu().empty();
     } else {
         static_cast<CrumbBar*>(crumbs_)->Set({}, compact_);
@@ -675,6 +714,7 @@ void LibraryPane::OnLayout() {
     // page readable by folding its parents into "…").
     const bool tight = !compact_ && rect.w < 900;
     if (count_) count_->visible = countWanted_ && !tight;
+    if (countGap_) countGap_->visible = count_ && count_->visible;
     Widget::OnLayout();
     // A box too narrow for the whole hint says just "Search", not a cut "Search in “…".
     if (search_) {
