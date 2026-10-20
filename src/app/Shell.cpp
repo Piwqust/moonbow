@@ -659,6 +659,12 @@ void LibraryPane::FocusSearch() {
     InvalidateLayout();
 }
 
+void LibraryPane::Search(const std::wstring& text) {
+    if (!search_) return;
+    search_->SetText(text, true);
+    FocusSearch();
+}
+
 void LibraryPane::OnLayout() {
     if (!compact_ && search_) search_->width = Length::Px(std::clamp(rect.w - 520.0f, 140.0f, 324.0f));
     // In a tight header the item count steps aside for the crumbs (CrumbBar keeps the current

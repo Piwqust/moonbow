@@ -186,6 +186,13 @@ bool History::Remove(const std::wstring& path) {
     return true;
 }
 
+bool History::Restore(HistoryEntry e, size_t index) {
+    if (Find(e.path)) return false;
+    entries_.insert(entries_.begin() + static_cast<ptrdiff_t>(std::min(index, entries_.size())), std::move(e));
+    dirty_ = true;
+    return true;
+}
+
 void History::Clear() {
     if (!entries_.empty()) {
         entries_.clear();

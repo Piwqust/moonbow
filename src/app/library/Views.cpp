@@ -4,6 +4,8 @@
 #include "Util.h"
 #include "app/Dialogs.h"
 #include "app/I18n.h"
+#include "app/MainWindow.h"
+#include "app/Shell.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
 
@@ -93,10 +95,20 @@ ScanBanner::ScanBanner(bool compact) : compact_(compact) {
     pad = {box_.l, box_.t, box_.r + 4, 0};
     visible = false;
     id = "scan-banner";
-    if (compact)
+    if (compact) {
+        remove_ = Add<IconButton>("remove", Tr(L"Remove"), 28, 16);
+        retry_ = Add<IconButton>("refresh", Tr(L"Retry"), 28, 16);
         hide_ = Add<IconButton>("close", Tr(L"Hide"), 28, 16);
-    else
+    } else {
+        remove_ = Add<Button>(Tr(L"Remove"), ButtonKind::Ghost);
+        retry_ = Add<Button>(Tr(L"Retry"), ButtonKind::Ghost);
         hide_ = Add<Button>(Tr(L"Hide"), ButtonKind::Ghost);
+    }
+    remove_->visible = retry_->visible = false;
+    remove_->id = "missing-remove";
+    remove_->onClick = [this] { RemoveLibraryRoot(missing_); };
+    retry_->id = "missing-retry";
+    retry_->onClick = [] { RescanLibrary(); };
     hide_->id = "scan-hide";
     hide_->onClick = [this] {
         g_bannerHidden = TheApp().library().Generation();
@@ -143,8 +155,24 @@ void ScanBanner::Poll() {
             timer_ = h->StartTimer(kBannerPollMs, [this] { Poll(); }, true);
         }
     }
-    const bool show = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
-    if (show) {
+    const bool scan = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
+    // An unplugged drive is named even on an empty page: the empty state can't tell why.
+    const auto snap = lib.Current();
+    std::wstring missing = !pr.scanning && !snap->missingRoots.empty() ? snap->missingRoots.front() : std::wstring();
+    if (missing != missing_) {
+        missing_ = std::move(missing);
+        hide_->visible = missing_.empty();
+        remove_->visible = retry_->visible = !missing_.empty();
+        // The name, not the path: a long path would cut off what to do. The tooltip has the path.
+        const std::wstring name = FileNameOf(missing_).empty() ? missing_ : FileNameOf(missing_);
+        text_ = missing_.empty() ? std::wstring()
+                                 : Fmt(Tr(L"Folder “{0}” is unavailable. Connect the drive or remove it from the library."),
+                                       {name});
+        fraction_ = -1;
+        InvalidateLayout();
+    }
+    const bool show = scan || !missing_.empty();
+    if (scan) {
         std::wstring text;
         float fraction = -1;
         const long long total = static_cast<long long>(pr.total);
@@ -169,6 +197,10 @@ void ScanBanner::Poll() {
     }
 }
 
+float ScanBanner::TextRight() const {
+    return (missing_.empty() ? hide_ : remove_)->rect.x - 8;
+}
+
 Rect ScanBanner::Box() const {
     return {rect.x + box_.l, rect.y + box_.t, std::max(0.0f, rect.w - box_.l - box_.r), std::max(0.0f, rect.h - box_.t)};
 }
@@ -180,13 +212,14 @@ void ScanBanner::OnLayout() {
 
 void ScanBanner::UpdateTip() {
     const Rect b = Box();
-    const float avail = hide_->rect.x - 8 - (b.x + 36);
+    const float avail = TextRight() - (b.x + 36);
     const float need = gfx::Text::Get().Measure(text_, compact_ ? TextStyle::Small : TextStyle::Body).width;
-    tooltip = hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
+    tooltip = !missing_.empty() ? missing_ : hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
 }
 
 void ScanBanner::DebugInfo(std::string& out) const {
     if (following_) out += " following";
+    if (!missing_.empty()) out += " missing";
     if (timer_) out += " timer";
     if (fraction_ >= 0) out += " value=" + std::to_string(std::round(fraction_ * 100) / 100).substr(0, 4);
 }
@@ -201,10 +234,11 @@ void ScanBanner::Paint(Painter& p) {
     const Rect b = Box();
     p.Fill(b, c.bgPanel, 6);
     p.Stroke(b, c.line, 6);
-    p.Icon("refresh", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
+    p.Icon(missing_.empty() ? "refresh" : "warning", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
     const float tx = b.x + 36;
-    p.Text(text_, {tx, b.y, std::max(0.0f, hide_->rect.x - 8 - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
+    p.Text(text_, {tx, b.y, std::max(0.0f, TextRight() - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
            c.textSecondary);
+    if (!missing_.empty()) return;
     // The progress along the bottom edge, inside the rounded corners.
     p.PushRoundClip(b, 6);
     p.Fill({b.x, b.Bottom() - 2, b.w, 2}, c.line);
@@ -612,13 +646,48 @@ void Page::Refresh() {
     empty_->visible = showEmpty;
     if (showEmpty) {
         if (!filter_.empty())
-            empty_->Set("search", Tr(L"Nothing found"),
-                        Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {ShortQuery(filter_)}));
+            FillNoMatch(*empty_);
         else
             FillEmpty(*empty_);
     }
     InvalidateLayout();
     headerChanged.Emit();
+}
+
+// A tab or folder that has no match is often not where the file is: Music opens on Albums, and
+// "track" names songs. Say what the rest of the library has and go there with the same query (UX-3).
+void Page::FillNoMatch(EmptyState& e) {
+    const std::wstring q = ShortQuery(filter_);
+    const library::MediaKind kind = route_.section == Section::Music    ? library::MediaKind::Audio
+                                    : route_.section == Section::Videos ? library::MediaKind::Video
+                                                                        : library::MediaKind::Other;
+    const size_t all = snap_ && kind != library::MediaKind::Other ? snap_->Search(filter_).size() : 0;
+    if (all == 0) {
+        e.Set("search", Tr(L"Nothing found"),
+              Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {q}));
+        return;
+    }
+    // Posted: the new page replaces this one, and with it the button whose click runs.
+    auto searchIn = [text = filter_](Route r) {
+        return [text, r] {
+            MainWindow* w = TheApp().main();
+            if (!w) return;
+            w->Post([w, text, r] {
+                TheApp().Navigate(r);
+                if (w->library()) w->library()->Search(text);
+            });
+        };
+    };
+    std::vector<EmptyState::Btn> buttons;
+    const size_t songs = kind == library::MediaKind::Audio ? snap_->Search(filter_, kind).size() : 0;
+    const bool toSongs = songs > 0 && route_.path != L"songs";
+    if (toSongs)
+        buttons.push_back({Tr(L"Show in “Songs”"), ButtonKind::Primary, "songs", searchIn(Route{Section::Music, L"songs"})});
+    buttons.push_back({Tr(L"Search the whole library"), toSongs ? ButtonKind::Secondary : ButtonKind::Primary, "search",
+                       searchIn(Route{Section::Home, {}})});
+    const std::wstring found = toSongs ? CountSongs(static_cast<long long>(songs)) : CountFiles(static_cast<long long>(all));
+    e.Set("search", Tr(L"Nothing found here"),
+          Fmt(Tr(L"No matches for “{0}” on this page. In the library: {1}."), {q, found}), std::move(buttons));
 }
 
 void Page::FillEmpty(EmptyState& e) {
@@ -841,6 +910,7 @@ public:
             m.push_back(MenuItem::Separator());
         }
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         MenuItem hidden = Item(L"Show Hidden Files", "view", [] {
             Config& cfg = TheApp().config();
             cfg.SetBool("library.showHidden", !cfg.GetBool("library.showHidden"));
@@ -1225,21 +1295,19 @@ protected:
         if (!e || Favorites()) return;  // MediaMenu already offers "Remove from Favorites"
         const std::wstring path = e->path;
         m.push_back(MenuItem::Separator());
-        m.push_back(Item(L"Remove from History", "remove", [path] {
-            TheApp().history().Remove(path);
-            TheApp().libraryChanged.Emit();
-        }));
+        m.push_back(Item(L"Remove from History", "remove", [path] { RemoveFromHistory(path); }));
     }
 
     void Delete(int index) override {
         const Entry* e = EntryAt(index);
         if (!e || e->kind != EntryKind::Media) return;
         const int keep = index;
-        if (Favorites())
+        if (Favorites()) {
             TheApp().favorites().Remove(e->path);
-        else
-            TheApp().history().Remove(e->path);
-        TheApp().libraryChanged.Emit();
+            TheApp().libraryChanged.Emit();
+        } else {
+            RemoveFromHistory(e->path);
+        }
         // Keep the keyboard position on the next row.
         const int n = static_cast<int>(grid_->Entries().size());
         for (int i = std::min(keep, n - 1); i >= 0; --i)

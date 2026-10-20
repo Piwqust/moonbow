@@ -440,6 +440,7 @@ public:
         }
         p.PushClip(rect.Inset(2));
         const Rect area = ListRect();
+        const auto snap = TheApp().library().Current();  // songs by their title tag, as in the library
         for (size_t i = 0; i < files.size(); ++i) {
             const Rect r{area.x, area.y + i * kRowH - scroll_, area.w, kRowH};
             if (r.Bottom() < rect.y || r.y > rect.Bottom()) continue;
@@ -447,7 +448,8 @@ public:
             if (hot) p.Fill(r, c.hover, 4);
             p.Icon(library::KindOf(files[i]) == library::MediaKind::Audio ? "music" : "video",
                    {r.x + 6, r.Cy() - 10, 20, 20}, c.textTertiary);
-            p.Text(library::FileNameOf(files[i]), {r.x + 34, r.y, r.w - 74, r.h}, TextStyle::Body, SoftText());
+            const library::MediaItem* item = snap->FindItem(files[i]);
+            p.Text(item ? item->DisplayTitle() : library::FileNameOf(files[i]), {r.x + 34, r.y, r.w - 74, r.h}, TextStyle::Body, SoftText());
             if (hot) p.Icon("close", {r.Right() - 28, r.Cy() - 10, 20, 20}, hoverRemove_ ? c.textPrimary : c.textTertiary);
         }
         p.PopClip();
@@ -1017,7 +1019,7 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::ve
     left->dir = Dir::Column;
     left->width = Length::Grow();
     left->gap = 20;
-    AddFieldHeader(left, Tr(L"Playlist Details"),
+    AddFieldHeader(left, Tr(L"Name"),
                    Tr(L"The playlist will be saved and displayed with this title and thumbnail."));
     auto* name = left->Add<TextBox>(Tr(L"e.g., Evening"));
     name->width = Length::Grow();

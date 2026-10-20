@@ -499,6 +499,14 @@ void TestSchema() {
     for (const Item* it : Search(L"loudness")) foundNormalize = foundNormalize || it->key == "audio.normalize";
     CHECK(foundNormalize);
     CHECK(Search(L"").empty());
+    CHECK(Search(L"  ").empty());
+    // Words in any order, from the page and section titles too.
+    auto online = Search(L"конфиденциальность сеть");
+    CHECK(online.size() == Search(L"СЕТЬ конфиденциальность").size());
+    bool foundLyrics = false;
+    for (const Item* it : online) foundLyrics = foundLyrics || it->key == "privacy.fetchLyrics";
+    CHECK(foundLyrics);
+    CHECK(Search(L"конфиденциальность zzz").empty());
     CHECK(AdvancedOptionsLabel(Lang::Ru) == L"Дополнительные параметры");
 }
 
@@ -1161,8 +1169,14 @@ void TestHistory() {
         CHECK(!h.RecordPlay(L"C:\\Users\\me\\Private\\x.mkv"));
         CHECK(!h.RecordPlay(L"C:\\clip.SECRET.mkv"));
         CHECK(h.RecordPlay(L"C:\\clip.mkv"));
+        CHECK(h.UpdatePosition(L"C:\\clip.mkv", 30, 100));
+        const library::HistoryEntry removed = *h.Find(L"C:\\clip.mkv");
         CHECK(h.Remove(L"c:\\CLIP.mkv"));
         CHECK(!h.Remove(L"c:\\CLIP.mkv"));
+        // Undo puts the entry (and its resume point) back at its place, once.
+        CHECK(h.Restore(removed, 0) && !h.Restore(removed, 0));
+        CHECK(h.Entries().front().path == L"C:\\clip.mkv" && h.Entries().front().position == 30);
+        CHECK(h.Remove(L"C:\\clip.mkv"));
         CHECK(h.Dirty());
         CHECK(h.Flush());
         CHECK(!h.Dirty());
@@ -1429,8 +1443,12 @@ void TestPlaylists() {
         CHECK(p.RemoveAt(id, 2));
         CHECK(!p.RemoveAt(id, 5));
         CHECK(p.Rename(id, L"Вечер кино"));
+        const library::Playlist deleted = *p.Find(other);
         CHECK(p.Delete(other));
         CHECK(!p.Delete(other));
+        CHECK(p.Restore(deleted, 0) && !p.Restore(deleted, 0));
+        CHECK(p.All().front().id == other && p.All().front().name == deleted.name);
+        CHECK(p.Delete(other));
         CHECK(!p.Rename("nope", L"x"));
         CHECK(p.Flush());
     }
@@ -1546,6 +1564,13 @@ void TestMediaTypes() {
     CHECK(library::StemOf(L".hidden") == L".hidden");
     CHECK(library::PathKey(L"c:/Видео/Ёж.mkv") == library::PathKey(L"C:\\ВИДЕО\\ЁЖ.MKV"));
     CHECK(library::SearchFold(L"ЁЛКА Ёж") == L"елка еж");
+    // Search words: each must appear, in any order and any field; extra spaces are ignored.
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"track 3"));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"artist  3 "));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L""));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"umber 3"));
+    CHECK(!library::FoldedContains(L"01 track number 3\nartist a", L"track 4"));
+    CHECK(!library::FoldedContains(L"abc", L"abcd"));
     CHECK(library::UnixMsNow() > 1700000000000LL);
 
     // Subtitle matching (Add Subtitles): a prefix whose number goes on is another file.
@@ -1826,6 +1851,8 @@ void TestLibraryScan() {
     CHECK(snap->Search(L"song", library::MediaKind::Video).empty());
     CHECK(snap->Search(L"").size() == 6);
     CHECK(snap->Search(L"zzz").empty());
+    CHECK(snap->Search(L"10 фильм").size() == 1);
+    CHECK(snap->Search(L"фильм ёлок").empty());
 
     auto videos = snap->Videos();
     library::SortItems(videos, library::SortKey::Size, true);
@@ -1923,11 +1950,16 @@ void TestLibraryCacheTags() {
     CHECK(MoveFileW(usb.c_str(), unplugged.c_str()));
     WriteFile(root + L"\\Album\\03 New.mp3", std::string(64, 'z'));  // read now, so the cache is saved
     snap = ScanAndWait(lib);
-    CHECK(snap && snap->stats.metadataFiles >= 1 && !snap->FindItem(usbSong));
+    CHECK(snap && snap->stats.metadataFiles >= 1);
+    // Meanwhile its files stay in the library from the cache, offline, under the root's name.
+    m = snap ? snap->FindItem(usbSong) : nullptr;
+    CHECK(m && m->offline && m->title == L"Away" && m->folder == usb);
+    CHECK(snap && snap->missingRoots.size() == 1 && snap->missingRoots[0] == usb && snap->Folder(usb));
     CHECK(MoveFileW(unplugged.c_str(), usb.c_str()));
     snap = ScanAndWait(lib);
     m = snap ? snap->FindItem(usbSong) : nullptr;
-    CHECK(m && m->title == L"Away");  // from the cache, not the untagged file
+    CHECK(m && m->title == L"Away" && !m->offline);  // from the cache, not the untagged file
+    CHECK(snap && snap->missingRoots.empty());
 
     // Cloud-only files (OneDrive "free up space") are never read; they keep their cached tags and
     // their first-seen time across scans that save the cache.

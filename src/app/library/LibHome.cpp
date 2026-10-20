@@ -100,10 +100,7 @@ private:
             if (more_.section == Section::Recent) {
                 const std::wstring path = e.path;
                 m.push_back(MenuItem::Separator());
-                m.push_back(Item(L"Remove from History", "remove", [path] {
-                    TheApp().history().Remove(path);
-                    TheApp().libraryChanged.Emit();
-                }));
+                m.push_back(Item(L"Remove from History", "remove", [path] { RemoveFromHistory(path); }));
             }
         } else {
             const Route r = i < static_cast<int>(routes_.size()) ? routes_[static_cast<size_t>(i)] : Route{};
@@ -226,6 +223,7 @@ public:
         std::vector<MenuItem> m;
         // Adding and opening live in "+ Add" and the app menu; the page menu keeps what is about the page.
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         return m;
     }
     Widget* InitialFocus() override {
@@ -598,6 +596,9 @@ private:
                 {Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}};
             if (scanning)
                 empty_->Set("refresh", Tr(L"Scanning your library…"), Tr(L"Your videos and music will appear here in a moment."));
+            else if (!snap->missingRoots.empty())  // the banner names it and offers Remove / Retry
+                empty_->Set("warning", Tr(L"Library folder unavailable"),
+                            Tr(L"Its videos and music will be back here when the folder is."), std::move(buttons));
             else if (noRoots)
                 empty_->Set("lumen", Tr(L"Welcome to Lumen"),
                             Tr(L"Add a folder with videos or music and Lumen will keep it in order here. "

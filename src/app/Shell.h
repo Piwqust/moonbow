@@ -58,6 +58,7 @@ public:
     void ShowRoute(const Route& route);
     LibraryView* View() const { return view_; }
     void FocusSearch();
+    void Search(const std::wstring& text);  // types `text` into the box: the page filters by it
     void Paint(ui::Painter& p) override;
     bool Backdrop(ui::Color& out) const override;
     void OnLayout() override;

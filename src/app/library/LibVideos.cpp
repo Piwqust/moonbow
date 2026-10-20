@@ -76,6 +76,7 @@ public:
         std::vector<MenuItem> m;
         m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         return m;
     }
 

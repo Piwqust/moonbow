@@ -10,6 +10,7 @@
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
 
 #include <shlobj.h>
 
@@ -43,6 +44,21 @@ std::wstring DefaultVideosFolder() {
 bool IsDir(const std::wstring& p) {
     const DWORD a = GetFileAttributesW(p.c_str());
     return !p.empty() && a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// A whole drive, the user profile or Windows: thousands of folders that hold no media, and a
+// slow first scan. 1 = a drive, 2 = one of those folders, 0 = neither.
+int TooBroad(const std::wstring& p) {
+    const std::wstring key = library::PathKey(p);
+    if (key.size() <= 3 && key.size() >= 2 && key[1] == L':') return 1;
+    for (REFKNOWNFOLDERID id : {FOLDERID_Profile, FOLDERID_Windows}) {
+        PWSTR known = nullptr;
+        const bool same =
+            SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &known)) && known && library::PathKey(known) == key;
+        CoTaskMemFree(known);
+        if (same) return 2;
+    }
+    return 0;
 }
 
 // Page whose children sit at fixed design coordinates (relative to the page); a height of 0
@@ -434,9 +450,22 @@ private:
         folderBox_->onSubmit = [this](const std::wstring&) { host_.Post([this] { Next(); }); };
         auto* status = pg->At<Label>(Rect{248, 524, 595, 18}, L"", TextStyle::Small, Tone::Tertiary);
         auto check = [status](const std::wstring& t) {
-            status->SetText(t.empty()   ? Tr(L"You can add folders later from the sidebar.")
-                            : IsDir(t) ? Tr(L"Folder found. Lumen will look for videos and music in it.")
-                                        : Tr(L"This folder doesn't exist. It won't be added."));
+            const bool dir = IsDir(t);
+            const int broad = dir ? TooBroad(t) : 0;
+            const wchar_t* text =
+                t.empty()     ? L"You can add folders later from the sidebar."
+                : broad == 1 ? L"This is a whole drive: Lumen would scan all of it. Better pick your media folder."
+                : broad == 2 ? L"This is a system folder: Lumen would scan all of it. Better pick your media folder."
+                : dir        ? L"Folder found. Lumen will look for videos and music in it."
+                             : L"This folder doesn't exist. It won't be added.";
+            status->SetText(Tr(text));
+            // A missing folder is an error and a whole drive a warning, not the grey helper line.
+            status->tone = broad ? Tone::Secondary : Tone::Tertiary;
+            if (!t.empty() && !dir)
+                status->color = [] { return P().danger; };
+            else
+                status->color = nullptr;
+            status->Invalidate();
         };
         check(folder_);
         folderBox_->onChange = [this, check](const std::wstring& t) {

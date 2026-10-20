@@ -54,11 +54,24 @@ void DeletePlaylist(const std::string& id, bool leavePage) {
     ShowConfirm(Tr(L"Delete playlist"),
                 Fmt(Tr(L"“{0}” will be deleted. The media files themselves are not touched."), {p->name}), Tr(L"Delete"),
                 [id, leavePage] {
-                    TheApp().playlists().Delete(id);
+                    auto& lists = TheApp().playlists();
+                    const library::Playlist* gone = lists.Find(id);
+                    if (!gone) return;
+                    // Kept for the toast's Undo, as "Remove from playlist" keeps its item.
+                    const library::Playlist copy = *gone;
+                    const size_t index = static_cast<size_t>(gone - lists.All().data());
+                    const std::string cover = TheApp().UiValue("playlist.cover." + id);
+                    lists.Delete(id);
                     TheApp().SetUiValue("playlist.cover." + id, {});
-                    TheApp().playlists().Flush();
+                    lists.Flush();
                     if (leavePage) TheApp().Navigate(Route{Section::Playlists, {}});
                     TheApp().libraryChanged.Emit();
+                    Toast(Tr(L"Playlist deleted"), "remove", Tr(L"Undo"), [copy, index, cover] {
+                        if (!TheApp().playlists().Restore(copy, index)) return;
+                        if (!cover.empty()) TheApp().SetUiValue("playlist.cover." + copy.id, cover);
+                        TheApp().playlists().Flush();
+                        TheApp().libraryChanged.Emit();
+                    });
                 });
 }
 
