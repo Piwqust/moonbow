@@ -1561,7 +1561,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Keep quiet and loud files at a similar level. Works together with the equalizer.",
               L"Держать тихие и громкие файлы на одном уровне. Работает вместе с эквалайзером.")
         .MpvBuild("af", BuildAf);
-    b.Seg("audio.normalizeMode", L"Normalization", L"Способ выравнивания",
+    b.Pick("audio.normalizeMode", L"Normalization", L"Способ выравнивания",  // a list: the term needs the width
           {{"ebu", L"Standard (EBU R128)", L"Стандартный (EBU R128)"}, {"dynamic", L"Dynamic", L"Динамический"}}, "ebu")
         .Inferred()
         .Desc(L"Standard brings every file to one target loudness (EBU R128, as in broadcasting). Dynamic also "
