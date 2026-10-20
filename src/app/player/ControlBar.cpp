@@ -353,8 +353,8 @@ public:
         const Rect w = Wedge();
         const std::wstring label = std::to_wstring(static_cast<int>(std::lround(PS().volume))) + L"%";
         const float tw = gfx::Text::Get().Measure(label, TextStyle::Small).width + 20;
-        const float barCy = Parent() ? Parent()->rect.Cy() : rect.Cy();
-        const Rect tip{std::round(w.Cx() - tw / 2), barCy - 47, tw, 26};
+        const float barTop = Parent() ? Parent()->rect.y : rect.Cy() - 28;  // above the bar, also with two rows
+        const Rect tip{std::round(w.Cx() - tw / 2), barTop - 19, tw, 26};
         p.Shadow(tip, 4, 8, 3, 0.3f);
         p.Fill(tip, P().bgMenu, 4);
         p.Text(label, tip, TextStyle::Small, P().textPrimary, HAlign::Center);
@@ -1027,9 +1027,24 @@ void ControlBar::Rebuild() {
 }
 
 void ControlBar::OnLayout() {
+    // Taller than one row: the player gave it BarHeight() for a narrow window.
+    const bool twoRows = !minimal_ && rect.h > 56.5f;
+    // With the seek bar on its own row the buttons' row has room for the wedge again.
     for (auto& c : Children())
-        if (auto* v = dynamic_cast<VolumeControl*>(c.get())) v->SetCollapsed(minimal_ || rect.w < 900);
+        if (auto* v = dynamic_cast<VolumeControl*>(c.get())) v->SetCollapsed(minimal_ || (!twoRows && rect.w < 900));
+    if (!twoRows) {
+        Widget::OnLayout();
+        return;
+    }
+    // The items keep their row at the bottom, the seek bar's slot in it left empty between the
+    // left and right groups; then the seek bar moves up into a row across the whole bar.
+    const Rect full = rect;
+    rect = {full.x, full.Bottom() - 56, full.w, 56};
     Widget::OnLayout();
+    rect = full;
+    for (auto& c : Children())
+        if (auto* seek = dynamic_cast<SeekBar*>(c.get()))
+            seek->Arrange({full.x + pad.l - seek->pad.l, full.y + 8, full.w - pad.H() + seek->pad.H(), 32});
 }
 
 void ControlBar::Paint(Painter& p) {

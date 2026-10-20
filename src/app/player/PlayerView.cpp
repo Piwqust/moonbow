@@ -657,7 +657,7 @@ void PlayerView::OnLayout() {
         layoutMode_ = mode;
     }
     const bool audioOnly = s.fileLoaded && !s.hasVideo;
-    const float barH = bar_->BarHeight();
+    const float barH = bar_->BarHeight(rect.w);
     const bool pip = window_->PictureInPicture();
 
     // PiP has no room for it; it comes back with the full window.

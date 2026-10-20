@@ -94,7 +94,9 @@ public:
     void PaintOver(ui::Painter& p) override;
     float opacity = 1;      // fades in fullscreen, the whole bar with its controls
     bool floating = false;  // set by the player view: drawn as a rounded panel over the video
-    float BarHeight() const { return minimal_ ? 40.0f : 56.0f; }
+    // For a bar `w` DIP wide: under 900 the seek bar takes a full-width row of its own above
+    // the buttons (MPC-HC, YouTube), as the row left it ~124 DIP in a 720 DIP window (DESK-3).
+    float BarHeight(float w = ui::kInf) const { return minimal_ ? 40.0f : w < 900 ? 90.0f : 56.0f; }
     bool Minimal() const { return minimal_; }
     bool Classic() const { return classic_; }
 
