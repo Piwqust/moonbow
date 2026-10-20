@@ -741,12 +741,7 @@ void BuildApp(Builder& b) {
             {"graphite", L"Graphite", L"Графит", "", "#6B6B6B"}},
            "white", ItemType::AccentPicker);
 
-    b.Sec("startup", L"Startup", L"Запуск");
-    b.Toggle("general.showDialogs", L"Show confirmation and error dialogs", L"Показывать подтверждения и ошибки", true)
-        .Desc(L"Ask before destructive actions and show a window when a file cannot be played. When off, "
-              L"errors appear as short on-screen messages.",
-              L"Спрашивать перед необратимыми действиями и показывать окно, если файл не открылся. "
-              L"Если выключено, ошибки появляются короткими сообщениями поверх видео.");
+    b.Sec("windows", L"Windows integration", L"Интеграция с Windows");
     b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
         .Desc(L"Look for a new version of Lumen once a day. Nothing else is sent.",
               L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.")
