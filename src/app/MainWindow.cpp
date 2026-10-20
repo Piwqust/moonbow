@@ -546,6 +546,24 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
                                                                   static_cast<LONG>(144 * Scale())};
             *result = 0;
             return true;
+        case WM_SIZING: {
+            // PiP keeps the picture's shape while its edges are dragged (no black bars), like Chrome's.
+            // shortcut: the decoded aspect only, not an aspect override or a rotation; use mpv's
+            // video-out-params dw/dh if those should count.
+            const PlayerState& s = TheApp().player().State();
+            if (!pip_ || s.videoW <= 0 || s.videoH <= 0) return false;
+            RECT& r = *reinterpret_cast<RECT*>(lp);
+            const double aspect = static_cast<double>(s.videoW) / static_cast<double>(s.videoH);
+            if (wp == WMSZ_TOP || wp == WMSZ_BOTTOM) {
+                r.right = r.left + static_cast<LONG>(std::lround((r.bottom - r.top) * aspect));
+            } else {
+                const LONG h = static_cast<LONG>(std::lround((r.right - r.left) / aspect));
+                if (wp == WMSZ_TOPLEFT || wp == WMSZ_TOPRIGHT) r.top = r.bottom - h;
+                else r.bottom = r.top + h;
+            }
+            *result = TRUE;
+            return true;
+        }
         case WM_NCRBUTTONUP:
             // In PiP the video is the caption (drag to move): a right click there would open the
             // Windows system menu; show the player's PiP menu instead.
