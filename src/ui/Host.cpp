@@ -3,6 +3,7 @@
 #include "Trace.h"
 #include "gfx/Text.h"
 #include "ui/Accessibility.h"
+#include "ui/Controls.h"
 #include "ui/Theme.h"
 
 #include <dwmapi.h>
@@ -657,6 +658,21 @@ void Host::SetFocus(Widget* w, bool fromKeyboard) {
     focus_ = w;
     if (old) old->OnFocusChanged(false);
     if (focus_) focus_->OnFocusChanged(true);
+    if (fromKeyboard && w) {
+        // Tab onto a control below the fold scrolls to it, or the ring is nowhere on screen. A
+        // list taller than the view that is partly on screen keeps its place (it scrolls its rows).
+        for (Widget* a = w->Parent(); a; a = a->Parent())
+            if (auto* sv = dynamic_cast<ScrollView*>(a)) {
+                if (w->rect.h <= sv->rect.h || !w->rect.Intersects(sv->rect)) sv->ScrollIntoView(w->rect);
+                break;
+            }
+        // Icon buttons name themselves only in a tooltip: the keyboard gets it too. Not lists and
+        // grids, whose tooltip belongs to the item under the pointer.
+        if (!w->tooltip.empty() && w->rect.w < 80) {
+            HideTooltip();
+            ArmTooltip(w, true, false);
+        }
+    }
     RequestRender();
     a11y::FocusChanged(this);
 }
@@ -1153,26 +1169,45 @@ void Host::OnKey(UINT vk, bool down, bool repeat) {
 
 void Host::UpdateTooltip() {
     Widget* target = hot_ && !hot_->tooltip.empty() ? hot_ : nullptr;
+    // The keyboard focus's bubble stays while the pointer is on nothing with a tooltip of its own.
+    if (!target && tooltipForFocus_ && tooltipFor_ && tooltipFor_ == focus_ && !focus_->tooltip.empty())
+        target = focus_;
     // A widget that paints many items (a grid) changes its tooltip as the pointer moves between
     // them, and one whose tooltip was cleared (the expanded rail) or that moved loses the bubble.
     const bool moved = tooltipFor_ && (tooltipFor_->rect.x != tooltipRect_.x || tooltipFor_->rect.y != tooltipRect_.y ||
                                        tooltipFor_->rect.w != tooltipRect_.w || tooltipFor_->rect.h != tooltipRect_.h);
     if (target == tooltipFor_ && !moved && (!target || target->tooltip == tooltipText_) && (target || !tooltipWidget_))
         return;
+    const bool forFocus = tooltipForFocus_ && target == tooltipFor_;
     HideTooltip();
     if (!target || pressed_) return;
+    ArmTooltip(target, forFocus, false);
+}
+
+void Host::ShowTooltip(Widget* w) {
+    HideTooltip();
+    if (w && !w->tooltip.empty()) ArmTooltip(w, true, true);
+}
+
+// forFocus: the bubble belongs to the keyboard focus (under it, until the focus moves), not to
+// the widget under the pointer.
+void Host::ArmTooltip(Widget* target, bool forFocus, bool now) {
     tooltipFor_ = target;
+    tooltipForFocus_ = forFocus;
     tooltipText_ = target->tooltip;
     tooltipRect_ = target->rect;
-    const bool warm = AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
+    const bool warm = now || AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
     tooltipTimer_ = StartTimer(warm ? USER_TIMER_MINIMUM : kTooltipDelayMs, [this, warm] {
         tooltipTimer_ = 0;
-        if (!tooltipFor_ || hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
+        if (!tooltipFor_) return;
+        if (tooltipForFocus_ ? tooltipFor_ != focus_ : hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
         PopupOptions o;
         o.anchor = {mouse_.x, mouse_.y + 18, 0, 0};
         const Rect& r = tooltipFor_->rect;
-        // Prefer centering under small controls (icon buttons), like native tooltips.
-        if (r.w < 80) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
+        // Prefer centering under small controls (icon buttons), like native tooltips; the
+        // keyboard's bubble always goes under its control.
+        const bool under = r.w < 80 || tooltipForFocus_;
+        if (under) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
         o.place = Place::At;
         if (tooltipFor_->tooltipBeside) {
             o.anchor = {r.x, r.Cy() - 14, r.w, 28};
@@ -1185,15 +1220,17 @@ void Host::UpdateTooltip() {
         o.animate = !warm;
         auto bubble = std::make_unique<TooltipBubble>(tooltipText_);
         Size s = bubble->Measure(400, 200);
-        if (r.w < 80 && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
+        if (under && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
             o.anchor.x -= s.w / 2;
             // Controls along the bottom edge (the player bar): above them, not over the buttons.
             if (r.Bottom() + 6 + s.h > ClientSize().h - 8) o.anchor.y = r.y - 6 - s.h;
         }
         Widget* target = tooltipFor_;
         std::wstring text = tooltipText_;
+        const bool forFocus = tooltipForFocus_;
         tooltipWidget_ = ShowPopup(std::move(bubble), o);  // (ShowPopup hides any tooltip first)
         tooltipFor_ = target;
+        tooltipForFocus_ = forFocus;
         tooltipText_ = std::move(text);
         tooltipRect_ = target->rect;
     });
@@ -1205,6 +1242,7 @@ void Host::HideTooltip() {
         tooltipTimer_ = 0;
     }
     tooltipFor_ = nullptr;
+    tooltipForFocus_ = false;
     tooltipText_.clear();
     if (tooltipWidget_) {
         Widget* w = tooltipWidget_;

@@ -91,6 +91,8 @@ public:
     Point MousePos() const { return mouse_; }
     bool MouseInside() const { return mouseInside_; }
     void SetCursorHidden(bool hidden);
+    // Shows w's tooltip under it at once, until the focus moves (Enter on an "i" icon).
+    void ShowTooltip(Widget* w);
 
     // --- rendering -------------------------------------------------------------------
     void RequestRender();
@@ -246,6 +248,7 @@ private:
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();
+    void ArmTooltip(Widget* target, bool forFocus, bool now);
     void HideTooltip();
     bool ClicksThrough(const Popup& popup, float x, float y) const;
     Mods CurrentMods() const;
@@ -290,6 +293,7 @@ private:
 
     // Tooltip state.
     Widget* tooltipFor_ = nullptr;
+    bool tooltipForFocus_ = false;  // tooltipFor_ is the keyboard focus, not the widget under the pointer
     Widget* tooltipWidget_ = nullptr;
     UINT_PTR tooltipTimer_ = 0;
     std::wstring tooltipText_;  // what the bubble (or its timer) shows: a change re-arms it
