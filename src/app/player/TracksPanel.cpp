@@ -96,6 +96,7 @@ public:
     bool editing = false;
     std::wstring name;  // for screen readers when no list title stands before it
     static constexpr float kPitch = 44, kRowH = 32;
+    int Count() const { return static_cast<int>(rows_().size()); }
 
     Size MeasureContent(float availW, float) override {
         const size_t n = rows_().size();
@@ -207,6 +208,28 @@ private:
     ScopedConnection playerConn_, liveConn_;
 };
 
+// Shows the ✕ on each added track; off and dimmed while nothing is added.
+class RemoveModeButton : public IconButton {
+public:
+    explicit RemoveModeButton(ChoiceList* list) : IconButton("remove", Tr(L"Remove external tracks"), 30, 24), list_(list) {
+        onClick = [this] {
+            list_->editing = !list_->editing;
+            list_->Invalidate();
+            Invalidate();
+        };
+    }
+    void Paint(Painter& p) override {
+        enabled = list_->Count() > 0;
+        if (!enabled) list_->editing = false;
+        active = list_->editing;
+        IconButton::Paint(p);
+    }
+    void Describe(A11y& a) override { a.toggle = list_->editing ? 1 : 0; }
+
+private:
+    ChoiceList* list_;
+};
+
 // "Embedded Tracks" row (60 DIP) with optional icon buttons on the right.
 Widget* AddListTitle(Widget* page, const std::wstring& text) {
     auto* row = page->Add<Widget>();
@@ -303,12 +326,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
     AddSectionLine(page);
     Widget* title = AddListTitle(page, Tr(L"External Tracks"));
     auto* list = page->Add<ChoiceList>([type] { return TrackRows(type, true); }, Tr(L"None added"));
-    auto* edit = AddTitleButton(title, "edit", L"Remove external tracks", nullptr);
-    edit->onClick = [list, edit] {
-        list->editing = !list->editing;
-        edit->active = list->editing;
-        list->Invalidate();
-    };
+    title->Add<RemoveModeButton>(list);
     const bool subs = std::wstring_view(type) == L"sub";
     if (subs)
         AddTitleButton(title, "search", L"Find subtitles online", [] {

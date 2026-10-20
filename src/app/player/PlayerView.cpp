@@ -882,7 +882,7 @@ MiniPlayer::MiniPlayer(MainWindow*) {
 
     overlay_ = Add<Widget>();
     overlay_->dir = Dir::None;
-    auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", Action::Stop, 28, 18);
+    auto* close = overlay_->Add<MiniOverlayButton>("stop", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
     // An upward chevron, as Spotify's and YouTube's mini players expand: "open" read as a new window.
     auto* expand = overlay_->Add<MiniOverlayButton>("chevron_up", L"Open player", Action::None, 28, 18);
