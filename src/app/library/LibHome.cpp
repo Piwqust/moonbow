@@ -595,6 +595,9 @@ private:
                 {Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}};
             if (scanning)
                 empty_->Set("refresh", Tr(L"Scanning your library…"), Tr(L"Your videos and music will appear here in a moment."));
+            else if (!snap->missingRoots.empty())  // the banner names it and offers Remove / Retry
+                empty_->Set("warning", Tr(L"Library folder unavailable"),
+                            Tr(L"Its videos and music will be back here when the folder is."), std::move(buttons));
             else if (noRoots)
                 empty_->Set("lumen", Tr(L"Welcome to Lumen"),
                             Tr(L"Add a folder with videos or music and Lumen will keep it in order here. "

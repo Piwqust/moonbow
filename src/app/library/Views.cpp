@@ -93,10 +93,20 @@ ScanBanner::ScanBanner(bool compact) : compact_(compact) {
     pad = {box_.l, box_.t, box_.r + 4, 0};
     visible = false;
     id = "scan-banner";
-    if (compact)
+    if (compact) {
+        remove_ = Add<IconButton>("remove", Tr(L"Remove"), 28, 16);
+        retry_ = Add<IconButton>("refresh", Tr(L"Retry"), 28, 16);
         hide_ = Add<IconButton>("close", Tr(L"Hide"), 28, 16);
-    else
+    } else {
+        remove_ = Add<Button>(Tr(L"Remove"), ButtonKind::Ghost);
+        retry_ = Add<Button>(Tr(L"Retry"), ButtonKind::Ghost);
         hide_ = Add<Button>(Tr(L"Hide"), ButtonKind::Ghost);
+    }
+    remove_->visible = retry_->visible = false;
+    remove_->id = "missing-remove";
+    remove_->onClick = [this] { RemoveLibraryRoot(missing_); };
+    retry_->id = "missing-retry";
+    retry_->onClick = [] { RescanLibrary(); };
     hide_->id = "scan-hide";
     hide_->onClick = [this] {
         g_bannerHidden = TheApp().library().Generation();
@@ -143,8 +153,24 @@ void ScanBanner::Poll() {
             timer_ = h->StartTimer(kBannerPollMs, [this] { Poll(); }, true);
         }
     }
-    const bool show = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
-    if (show) {
+    const bool scan = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
+    // An unplugged drive is named even on an empty page: the empty state can't tell why.
+    const auto snap = lib.Current();
+    std::wstring missing = !pr.scanning && !snap->missingRoots.empty() ? snap->missingRoots.front() : std::wstring();
+    if (missing != missing_) {
+        missing_ = std::move(missing);
+        hide_->visible = missing_.empty();
+        remove_->visible = retry_->visible = !missing_.empty();
+        // The name, not the path: a long path would cut off what to do. The tooltip has the path.
+        const std::wstring name = FileNameOf(missing_).empty() ? missing_ : FileNameOf(missing_);
+        text_ = missing_.empty() ? std::wstring()
+                                 : Fmt(Tr(L"Folder “{0}” is unavailable. Connect the drive or remove it from the library."),
+                                       {name});
+        fraction_ = -1;
+        InvalidateLayout();
+    }
+    const bool show = scan || !missing_.empty();
+    if (scan) {
         std::wstring text;
         float fraction = -1;
         const long long total = static_cast<long long>(pr.total);
@@ -169,6 +195,10 @@ void ScanBanner::Poll() {
     }
 }
 
+float ScanBanner::TextRight() const {
+    return (missing_.empty() ? hide_ : remove_)->rect.x - 8;
+}
+
 Rect ScanBanner::Box() const {
     return {rect.x + box_.l, rect.y + box_.t, std::max(0.0f, rect.w - box_.l - box_.r), std::max(0.0f, rect.h - box_.t)};
 }
@@ -180,13 +210,14 @@ void ScanBanner::OnLayout() {
 
 void ScanBanner::UpdateTip() {
     const Rect b = Box();
-    const float avail = hide_->rect.x - 8 - (b.x + 36);
+    const float avail = TextRight() - (b.x + 36);
     const float need = gfx::Text::Get().Measure(text_, compact_ ? TextStyle::Small : TextStyle::Body).width;
-    tooltip = hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
+    tooltip = !missing_.empty() ? missing_ : hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
 }
 
 void ScanBanner::DebugInfo(std::string& out) const {
     if (following_) out += " following";
+    if (!missing_.empty()) out += " missing";
     if (timer_) out += " timer";
     if (fraction_ >= 0) out += " value=" + std::to_string(std::round(fraction_ * 100) / 100).substr(0, 4);
 }
@@ -201,10 +232,11 @@ void ScanBanner::Paint(Painter& p) {
     const Rect b = Box();
     p.Fill(b, c.bgPanel, 6);
     p.Stroke(b, c.line, 6);
-    p.Icon("refresh", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
+    p.Icon(missing_.empty() ? "refresh" : "warning", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
     const float tx = b.x + 36;
-    p.Text(text_, {tx, b.y, std::max(0.0f, hide_->rect.x - 8 - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
+    p.Text(text_, {tx, b.y, std::max(0.0f, TextRight() - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
            c.textSecondary);
+    if (!missing_.empty()) return;
     // The progress along the bottom edge, inside the rounded corners.
     p.PushRoundClip(b, 6);
     p.Fill({b.x, b.Bottom() - 2, b.w, 2}, c.line);

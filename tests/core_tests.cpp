@@ -1950,11 +1950,16 @@ void TestLibraryCacheTags() {
     CHECK(MoveFileW(usb.c_str(), unplugged.c_str()));
     WriteFile(root + L"\\Album\\03 New.mp3", std::string(64, 'z'));  // read now, so the cache is saved
     snap = ScanAndWait(lib);
-    CHECK(snap && snap->stats.metadataFiles >= 1 && !snap->FindItem(usbSong));
+    CHECK(snap && snap->stats.metadataFiles >= 1);
+    // Meanwhile its files stay in the library from the cache, offline, under the root's name.
+    m = snap ? snap->FindItem(usbSong) : nullptr;
+    CHECK(m && m->offline && m->title == L"Away" && m->folder == usb);
+    CHECK(snap && snap->missingRoots.size() == 1 && snap->missingRoots[0] == usb && snap->Folder(usb));
     CHECK(MoveFileW(unplugged.c_str(), usb.c_str()));
     snap = ScanAndWait(lib);
     m = snap ? snap->FindItem(usbSong) : nullptr;
-    CHECK(m && m->title == L"Away");  // from the cache, not the untagged file
+    CHECK(m && m->title == L"Away" && !m->offline);  // from the cache, not the untagged file
+    CHECK(snap && snap->missingRoots.empty());
 
     // Cloud-only files (OneDrive "free up space") are never read; they keep their cached tags and
     // their first-seen time across scans that save the cache.

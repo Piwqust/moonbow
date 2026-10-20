@@ -86,6 +86,8 @@ public:
     uint64_t generation = 0;
     bool complete = false;  // metadata pass done (or disabled)
     std::vector<std::wstring> roots;
+    // Roots that were not reachable: their files are the cached ones, offline (a drive unplugged).
+    std::vector<std::wstring> missingRoots;
     std::vector<MediaItem> items;
     std::vector<FolderNode> folders;
     ScanStats stats;
@@ -95,7 +97,7 @@ public:
     const FolderNode* Folder(std::wstring_view path) const;
     const MediaItem* FindItem(std::wstring_view path) const;
 
-    std::vector<const FolderNode*> Roots() const;  // library roots that exist
+    std::vector<const FolderNode*> Roots() const;  // library roots with files (or cached ones)
     std::vector<const FolderNode*> Children(std::wstring_view folder) const;
     std::vector<const MediaItem*> ItemsIn(std::wstring_view folder, bool recursive) const;
     std::vector<const MediaItem*> Videos() const;

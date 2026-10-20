@@ -33,6 +33,8 @@ public:
 // for a second, so quick rescans never flash it, and goes when the scan ends. "Hide" keeps it
 // away for the rest of that scan on every page. While a scan runs it polls the scan's counters
 // on a 250 ms timer; otherwise it has no timer and no work.
+// When no scan runs and a library root was not reachable (a drive unplugged), the same strip
+// names the folder, with "Remove" and "Retry" (UX-5).
 class ScanBanner : public ui::Widget {
 public:
     explicit ScanBanner(bool compact = false);
@@ -51,6 +53,7 @@ private:
     void StopTimer();
     void UpdateTip();
     ui::Rect Box() const;
+    float TextRight() const;  // where the text ends: before the first button
 
     bool compact_;
     ui::Insets box_;  // the strip inside rect
@@ -58,7 +61,10 @@ private:
     bool following_ = false;  // a scan runs: the timer should run
     std::wstring text_;
     float fraction_ = -1;  // < 0: still counting files, no fill
+    std::wstring missing_;  // the unreachable root the strip names; empty = scan progress
     ui::Widget* hide_ = nullptr;
+    ui::Widget* remove_ = nullptr;
+    ui::Widget* retry_ = nullptr;
     UINT_PTR timer_ = 0;
     ui::Host* timerHost_ = nullptr;
 };
