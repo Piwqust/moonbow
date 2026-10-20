@@ -338,6 +338,11 @@ void App::RestoreWindowPlacement() {
     wp.showCmd = ui::Host::Automation() ? SW_SHOWNOACTIVATE : max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
     wp.flags = 0;
     SetWindowPlacement(main_->Hwnd(), &wp);
+    // Onto a monitor scaled unlike the one it was made on, WM_DPICHANGED resized it by the scale
+    // ratio (Host applies the suggested rect). It is on that monitor now: once more, at the saved size.
+    WINDOWPLACEMENT now{sizeof(now)};
+    if (GetWindowPlacement(main_->Hwnd(), &now) && !EqualRect(&now.rcNormalPosition, &rc))
+        SetWindowPlacement(main_->Hwnd(), &wp);
 }
 
 void App::FlushStores() {
