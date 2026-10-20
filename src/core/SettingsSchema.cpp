@@ -869,10 +869,10 @@ void BuildApp(Builder& b) {
               L"Использовать то же окно и для файлов, открытых из Проводника.")
         .When("library.singleInstance", "true")
         .Hidden();  // not implemented yet: Explorer launches look like any other
-    b.Toggle("library.enqueue", L"Add to the playlist instead of replacing it", L"Добавлять в плейлист, а не заменять",
+    b.Toggle("library.enqueue", L"Add to the queue instead of replacing it", L"Добавлять в очередь, а не заменять",
              false)
-        .Desc(L"Files opened in a running window are appended to the playlist.",
-              L"Файлы, открытые в запущенном окне, добавляются в конец плейлиста.")
+        .Desc(L"Files opened in a running window are appended to the queue.",
+              L"Файлы, открытые в запущенном окне, добавляются в конец очереди.")
         .When("library.singleInstance", "true");
 
     b.Sec("controls", L"Playback Controls", L"Панель управления");
@@ -1157,12 +1157,12 @@ void BuildMedia(Builder& b) {
     b.Pick("playback.repeat", L"Repeat", L"Повтор",
            {{"off", L"Off", L"Выкл."}, {"one", L"Current item", L"Текущий файл"}, {"all", L"All items", L"Все файлы"}},
            "off")
-        .Desc(L"Play the current file or the whole playlist again when it ends.",
-              L"Повторять текущий файл или весь плейлист после окончания.")
+        .Desc(L"Play the current file or the whole queue again when it ends.",
+              L"Повторять текущий файл или всю очередь после окончания.")
         .MpvBuild("loop-file", BuildLoopFile, "no")
         .MpvBuild("loop-playlist", BuildLoopPlaylist, "no");
     b.Toggle("playback.shuffle", L"Shuffle", L"Перемешать", false)
-        .Desc(L"Play the playlist in random order.", L"Воспроизводить плейлист в случайном порядке.")
+        .Desc(L"Play the queue in random order.", L"Воспроизводить очередь в случайном порядке.")
         .MpvBool("shuffle");
     b.Toggle("playback.folderAsPlaylist", L"Play the folder's other files next", L"Играть остальные файлы папки",
              false)
@@ -1190,7 +1190,7 @@ void BuildMedia(Builder& b) {
             {"next", L"Play the next file in the folder", L"Следующий файл в папке"},
             {"close", L"Close the player", L"Закрыть плеер"}},
            "stop")
-        .Desc(L"What to do after the last item of the playlist.", L"Что делать после последнего файла плейлиста.");
+        .Desc(L"What to do after the last item of the queue.", L"Что делать после последнего файла очереди.");
 
     b.Sec("seeking", L"Seeking", L"Перемотка");
     b.Toggle("playback.seekPrecise", L"Seek precisely", L"Точная перемотка", true)
@@ -1964,11 +1964,11 @@ void BuildMedia(Builder& b) {
            {{"subfolders", L"Include subfolders", L"Вместе с вложенными папками"},
             {"folder", L"This folder only", L"Только эта папка"}},
            "subfolders")
-        .Desc(L"Which files go to the playlist when you open or drop a folder.",
-              L"Какие файлы попадают в плейлист, когда вы открываете или перетаскиваете папку.");
+        .Desc(L"Which files go to the queue when you open or drop a folder.",
+              L"Какие файлы попадают в очередь, когда вы открываете или перетаскиваете папку.");
     b.Toggle("library.showHidden", L"Show hidden files", L"Показывать скрытые файлы", false)
-        .Desc(L"Include hidden and system files in the library and folder playlists.",
-              L"Включать скрытые и системные файлы в медиатеку и плейлисты папок.");
+        .Desc(L"Include hidden and system files in the library and in the queue of an opened folder.",
+              L"Включать скрытые и системные файлы в медиатеку и в очередь открытой папки.");
 
     b.Sec("metadata", L"Metadata & Artwork", L"Метаданные и обложки");
     b.Pick("library.metadata", L"Fetch titles and artwork", L"Названия и обложки",

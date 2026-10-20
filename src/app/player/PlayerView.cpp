@@ -120,6 +120,8 @@ MenuItem PlayItem() {
     return Item(s.paused || !s.fileLoaded ? L"Play" : L"Pause", Action::PlayPause, s.paused || !s.fileLoaded ? "play" : "pause");
 }
 
+// Grouped by task: playback, what plays (video, audio, subtitles), the queue, what the file is,
+// opening something else, the settings.
 void ShowVideoContextMenu(Host* host, Point at) {
     App& app = TheApp();
     const PlayerState& s = PS();
@@ -129,7 +131,6 @@ void ShowVideoContextMenu(Host* host, Point at) {
     items.push_back(Item(L"Stop", Action::Stop, "stop_twotone"));
     items.push_back(Item(L"Previous Item", Action::Previous, "previous_twotone"));
     items.push_back(Item(L"Next Item", Action::Next, "next_twotone"));
-    if (!music) items.push_back(Item(L"Record", Action::Record, "record"));
     items.push_back(Item(L"Hide UI", Action::HideUI, "ui"));
 
     MenuItem playback{Tr(L"Playback"), L"", "playback"};
@@ -146,7 +147,13 @@ void ShowVideoContextMenu(Host* host, Point at) {
     shuffle.checked = app.queue().Shuffle();
     playback.submenu.push_back(shuffle);
     playback.submenu.push_back(Item(L"A-B loop", Action::ABLoop));
+    // Rare, and it writes a file: not among the first commands.
+    if (!music) {
+        playback.submenu.push_back(MenuItem::Separator());
+        playback.submenu.push_back(Item(L"Record", Action::Record));
+    }
     items.push_back(playback);
+    items.push_back(MenuItem::Separator());
 
     MenuItem video{Tr(L"Video"), L"", "video"};
     video.submenu = TrackItems(L"video", "vid", true);
@@ -180,10 +187,32 @@ void ShowVideoContextMenu(Host* host, Point at) {
     mute.checked = s.mute;
     audio.submenu.push_back(mute);
     items.push_back(audio);
+
     if (music) {
         MenuItem lyrics{Tr(L"Lyrics style"), L"", "music"};
         lyrics.submenu = LyricsStyleItems();
         items.push_back(std::move(lyrics));
+    } else {
+        MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
+        subs.submenu = TrackItems(L"sub", "sid", true);
+        subs.submenu.push_back(MenuItem::Separator());
+        subs.submenu.push_back(Item(L"Add subtitle file…", Action::OpenSubtitles, "add"));
+        items.push_back(subs);
+    }
+    items.push_back(MenuItem::Separator());
+
+    MenuItem queue{Tr(L"Queue"), L"", "list"};
+    const auto& q = app.queue().Items();
+    for (size_t i = 0; i < q.size() && i < 30; ++i) {
+        MenuItem m{q[i].title.empty() ? FileNameOf(q[i].path) : q[i].title};
+        m.radio = true;
+        m.checked = static_cast<int>(i) == app.queue().Current();
+        m.action = [i] { TheApp().PlayIndex(static_cast<int>(i)); };
+        queue.submenu.push_back(std::move(m));
+    }
+    if (queue.submenu.empty()) queue.submenu.push_back({Tr(L"Queue is empty"), L"", "", false, false});
+    items.push_back(queue);
+    if (music) {
         MenuItem dock{Tr(L"Queue beside the music"), L"", "queue"};
         const std::string side = QueueDockSide();
         for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"", L"Not pinned"},
@@ -199,42 +228,25 @@ void ShowVideoContextMenu(Host* host, Point at) {
         items.push_back(std::move(dock));
     }
     items.push_back(MenuItem::Separator());
+
     items.push_back(Item(L"Media information", Action::ShowInfo, "info"));
     MenuItem stats = Item(L"Statistics", Action::ToggleStats, "wrench");
     stats.checked = app.config().GetBool("general.developerMode");
     items.push_back(stats);
     items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
-
-    MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
-    subs.submenu = TrackItems(L"sub", "sid", true);
-    subs.submenu.push_back(MenuItem::Separator());
-    subs.submenu.push_back(Item(L"Add subtitle file…", Action::OpenSubtitles, "add"));
-    if (!music) items.push_back(subs);
-
-    MenuItem more{Tr(L"More Settings"), L"", "settings"};
-    more.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
-                            [] { TogglePlayerPanel(PanelKind::Settings, {}); }});
-    more.submenu.push_back(Item(L"Customize player", Action::CustomizePlayer, "edit"));
-    more.submenu.push_back(Item(L"Settings", Action::Settings, "preferences"));
-    items.push_back(more);
-
-    MenuItem playlist{Tr(L"Playlist"), L"", "playlist"};
-    const auto& q = app.queue().Items();
-    for (size_t i = 0; i < q.size() && i < 30; ++i) {
-        MenuItem m{q[i].title.empty() ? FileNameOf(q[i].path) : q[i].title};
-        m.radio = true;
-        m.checked = static_cast<int>(i) == app.queue().Current();
-        m.action = [i] { TheApp().PlayIndex(static_cast<int>(i)); };
-        playlist.submenu.push_back(std::move(m));
-    }
-    if (playlist.submenu.empty()) playlist.submenu.push_back({Tr(L"Queue is empty"), L"", "", false, false});
-    items.push_back(playlist);
+    items.push_back(MenuItem::Separator());
 
     MenuItem open{Tr(L"Open Media"), L"", "open"};
     open.submenu.push_back(Item(L"Open file", Action::OpenFile, "file"));
     open.submenu.push_back(Item(L"Open folder", Action::OpenFolder, "folder"));
     open.submenu.push_back(Item(L"Open network stream", Action::OpenNetwork, "streaming"));
     items.push_back(open);
+    MenuItem settings{Tr(L"Settings"), L"", "settings"};
+    settings.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
+                                [] { TogglePlayerPanel(PanelKind::Settings, {}); }});
+    settings.submenu.push_back(Item(L"Customize player", Action::CustomizePlayer, "edit"));
+    settings.submenu.push_back(Item(L"Lumen Settings", Action::Settings, "preferences"));
+    items.push_back(settings);
     items.push_back(Item(L"Quit", Action::Quit, "quit"));
     KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
 }
