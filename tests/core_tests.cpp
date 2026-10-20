@@ -454,7 +454,7 @@ void TestSchema() {
         for (size_t i = 0; i < 5 && i < accent->choices.size(); ++i) CHECK(accent->choices[i].extra == colors[i]);
     }
     const Item* theme = FindItem("general.theme");
-    CHECK(theme && theme->type == ItemType::Segmented && theme->choices.size() == 3 && theme->def.AsString() == "dark");
+    CHECK(theme && theme->type == ItemType::Segmented && theme->choices.size() == 3 && theme->def.AsString() == "system");
     const Item* lang = FindItem("general.language");
     CHECK(lang && lang->def.AsString() == "ru" && lang->FindChoice("en"));
     const Item* hwdec = FindItem("performance.hwdec");
@@ -511,7 +511,7 @@ void TestSchema() {
 void TestConfigValues() {
     FreshDataDir(L"config-values");
     Config c;
-    CHECK(c.GetString("general.theme") == "dark");
+    CHECK(c.GetString("general.theme") == "system");
     CHECK(c.GetString("general.language") == "ru");
     CHECK(c.GetBool("privacy.saveHistory"));
     CHECK(c.GetDouble("playback.speed") == 1);
@@ -591,7 +591,7 @@ void TestConfigValues() {
     CHECK(c.GetDouble("audio.eqPreamp") == 0);
 
     c.ResetAll();
-    CHECK(c.GetString("general.theme") == "dark");
+    CHECK(c.GetString("general.theme") == "system");
     CHECK(c.GetDouble("audio.eq60") == 0);
     CHECK(c.ToJson().Find("values")->size() == 0);
 }
@@ -648,7 +648,7 @@ void TestConfigPersistence() {
         CHECK(c.FilePath() == file);
         CHECK(c.Flush());  // nothing to save
         CHECK(!FileExists(file));
-        c.SetString("general.theme", "system");
+        c.SetString("general.theme", "light");
         c.SetDouble("audio.targetLevel", -16);
         c.SetWString("subtitles.font", L"Ubuntu Кириллица");
         c.SetBool("privacy.saveHistory", false);
@@ -678,7 +678,7 @@ void TestConfigPersistence() {
         CHECK(c.Load());
         CHECK(changed.size() == 3);
         CHECK(!c.Dirty());
-        CHECK(c.GetString("general.theme") == "system");
+        CHECK(c.GetString("general.theme") == "light");
         CHECK(c.GetDouble("audio.targetLevel") == -16);
         CHECK(c.GetWString("subtitles.font") == L"Ubuntu Кириллица");
         CHECK(c.GetString("general.language") == "ru");
@@ -702,7 +702,7 @@ void TestConfigPersistence() {
     {
         Config c;
         CHECK(!c.Load());
-        CHECK(c.GetString("general.theme") == "dark");
+        CHECK(c.GetString("general.theme") == "system");
         CHECK(CountFiles(dir, L"settings.corrupt-*.json") == 1);
         const std::vector<std::wstring> notices = TakeCorruptFileNotices();
         CHECK(notices.size() == 1 && notices[0] == L"settings.json");

@@ -797,7 +797,7 @@ void BuildApp(Builder& b) {
     b.Sec("appearance", L"Appearance", L"Оформление");
     b.Seg("general.theme", L"Theme", L"Тема",
           {{"dark", L"Dark", L"Тёмная"}, {"light", L"Light", L"Светлая"}, {"system", L"System", L"Системная"}},
-          "dark")
+          "system")  // follows Windows, like onboarding suggests; WM_SETTINGCHANGE re-themes live
         .Desc(L"Light, dark or the same as Windows. The OLED black skin is always dark.",
               L"Светлая, тёмная или как в Windows. Скин «Чёрный OLED» всегда тёмный.");
     b.Pick("general.accent", L"Accent color", L"Цвет акцента",
