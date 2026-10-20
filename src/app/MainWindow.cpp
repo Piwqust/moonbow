@@ -272,7 +272,9 @@ void MainWindow::SetPictureInPicture(bool on) {
             TheApp().SetUiValue("pip.rect", buf);
         }
         pip_ = false;
-        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        // Back to "Keep window above other windows" as it is set, not always off (App::ApplyWindowOptions).
+        SetWindowPos(hwnd, TheApp().config().GetBool("interface.alwaysOnTop") ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
+                     0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         SetWindowPlacement(hwnd, &pipRestore_);
     }
     chrome_.Set(1);
