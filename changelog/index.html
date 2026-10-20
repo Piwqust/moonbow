@@ -1,0 +1,1862 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Журнал изменений Lumen</title>
+<meta name="description" content="Что происходило с плеером Lumen с 17 по 20 октября 2026: четырнадцать глав, по одной на раунд правок, с иллюстрацией к каждой.">
+<meta name="color-scheme" content="dark light">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+@property --p { syntax: '<percentage>'; inherits: true; initial-value: 100%; }
+
+/* Tokens mirror design/DESIGN.md: dark is Lumen's default, light follows the system. */
+:root {
+  --ground: #0E0E0E; --deep: #090909; --panel: #191919; --card: #1E1E1E;
+  --line: #262626; --line-strong: #404040;
+  --ink: #EAEAEA; --muted: #A8A8A8; --dim: #8B8B8B;
+  --accent: #EDEDED; --accent-dim: #2E2E2E; --on-accent: #0E0E0E;
+  --shadow: 0 8px 15px rgba(0,0,0,.46);
+  --ease: cubic-bezier(.2,.7,.1,1);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #F2F2F2; --deep: #E6E6E6; --panel: #FFFFFF; --card: #E4E4E4;
+    --line: #D6D6D6; --line-strong: #BDBDBD;
+    --ink: #141414; --muted: #424242; --dim: #616161;
+    --accent: #141414; --accent-dim: #D9D9D9; --on-accent: #F2F2F2;
+    --shadow: 0 8px 15px rgba(0,0,0,.10);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #F2F2F2; --deep: #E6E6E6; --panel: #FFFFFF; --card: #E4E4E4;
+  --line: #D6D6D6; --line-strong: #BDBDBD;
+  --ink: #141414; --muted: #424242; --dim: #616161;
+  --accent: #141414; --accent-dim: #D9D9D9; --on-accent: #F2F2F2;
+  --shadow: 0 8px 15px rgba(0,0,0,.10);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  margin: 0; background: var(--ground); color: var(--muted);
+  font: 400 17px/1.55 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "tnum";
+  padding-bottom: 120px;
+}
+a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; transition: text-decoration-color .14s; }
+a:hover { text-decoration-color: var(--ink); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+code, kbd { font: 500 .88em/1 Inter, system-ui, sans-serif; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; white-space: nowrap; }
+
+.skip { position: absolute; left: 16px; top: -60px; z-index: 20; background: var(--accent); color: var(--on-accent); padding: 10px 14px; border-radius: 4px; font-weight: 600; text-decoration: none; }
+.skip:focus { top: 16px; }
+
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 40px; }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
+
+/* Header */
+.top { display: flex; justify-content: space-between; align-items: center; height: 72px; font-size: 13px; color: var(--dim); }
+.mark { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 500; font-size: 15px; letter-spacing: -.01em; }
+.mark svg { width: 18px; height: 18px; }
+
+/* Hero */
+.hero { padding: 8vh 0 14vh; }
+h1 {
+  grid-column: 1 / -1; margin: 0 0 56px -.06em; color: var(--ink);
+  font-weight: 300; font-size: clamp(52px, 9vw, 136px); line-height: .9; letter-spacing: -.055em;
+}
+.lede { grid-column: 1 / 7; margin: 0; font-size: 20px; line-height: 1.5; color: var(--muted); }
+.lede strong { color: var(--ink); font-weight: 500; }
+.now { grid-column: 8 / 13; border-top: 1px solid var(--line-strong); padding-top: 18px; }
+.now h2 { margin: 0 0 18px; font-size: 13px; font-weight: 500; color: var(--ink); letter-spacing: .01em; }
+.now dl { margin: 0; display: grid; gap: 16px; }
+.now dt { font-size: 13px; color: var(--dim); margin-bottom: 2px; }
+.now dd { margin: 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+
+/* Chapters */
+.ch { padding: 104px 0; border-top: 1px solid var(--line); scroll-margin-top: 0; }
+.ch .meta { grid-column: 1 / 3; position: sticky; top: 96px; align-self: start; }
+.ch .body { grid-column: 3 / 8; }
+.ch .plate { grid-column: 8 / 13; position: sticky; top: 96px; align-self: start; margin: 0; }
+.ch .meta, .ch .body, .ch .plate { grid-row: 1; }
+/* Three layouts keep a long page from reading as one repeated block */
+.ch.flip .plate { grid-column: 3 / 8; }
+.ch.flip .body { grid-column: 8 / 13; }
+.ch.wide .body { grid-column: 3 / 10; }
+.ch.wide .plate { grid-column: 3 / 13; grid-row: 2; position: relative; top: auto; margin-top: 56px; }
+.num { display: block; color: var(--ink); font-weight: 300; font-size: 72px; line-height: .9; letter-spacing: -.05em; margin-left: -.05em; }
+.date { display: block; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.tag { display: block; margin-top: 2px; font-size: 13px; color: var(--dim); }
+.state { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; font-size: 12px; font-weight: 500; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 10px 3px 8px; }
+.state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+.state.open { color: var(--ink); border-color: var(--ink); }
+.state.open::before { background: var(--ink); }
+
+h2.t { margin: -6px 0 20px -.03em; color: var(--ink); font-weight: 300; font-size: clamp(32px, 3.4vw, 46px); line-height: 1.04; letter-spacing: -.035em; }
+h2.t:focus { outline: none; }
+.say { margin: 0 0 28px; font-size: 19px; line-height: 1.5; color: var(--ink); opacity: .86; }
+.body ul { list-style: none; margin: 0; padding: 0; }
+.body li { position: relative; padding: 10px 0 10px 26px; border-top: 1px solid var(--line); }
+.body li:last-child { border-bottom: 1px solid var(--line); }
+.body li::before { content: ""; position: absolute; left: 2px; top: 1.05em; width: 12px; height: 1px; background: var(--line-strong); }
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px 24px; margin: 32px 0 0; }
+.figs div { margin: 0; }
+.figs dd { margin: 0; color: var(--ink); font-weight: 300; font-size: 34px; line-height: 1.05; letter-spacing: -.03em; }
+.figs dt { margin-top: 6px; font-size: 13px; line-height: 1.4; color: var(--dim); }
+.src { margin: 28px 0 0; font-size: 13px; color: var(--dim); }
+
+/* Plates: each figure "decodes" in like a seek preview */
+.frame { background: var(--deep); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.plate figcaption { margin-top: 12px; font-size: 13px; color: var(--dim); }
+.js .plate .frame { opacity: 0; filter: blur(10px); transform: scale(1.02); transition: opacity .45s var(--ease), filter .7s var(--ease), transform .9s var(--ease); }
+.js .plate.on .frame { opacity: 1; filter: none; transform: none; }
+
+/* Illustration kit */
+.ill { display: block; width: 100%; height: auto; }
+.ill text { font-family: Inter, "Segoe UI", system-ui, sans-serif; font-feature-settings: "tnum"; }
+.ill .t { font-size: 11px; fill: var(--dim); }
+.ill .tm { font-size: 13px; fill: var(--muted); }
+.ill .tB { font-size: 26px; font-weight: 300; fill: var(--ink); letter-spacing: -.02em; }
+.ill .tk { font-size: 11px; font-weight: 600; fill: var(--on-accent); }
+.ill .tr { font-size: 13px; fill: var(--ink); }
+.ill .pn { fill: var(--panel); } .ill .cd { fill: var(--card); } .ill .dp { fill: var(--deep); } .ill .gr { fill: var(--ground); }
+.ill .ac { fill: var(--accent); } .ill .ad { fill: var(--accent-dim); } .ill .ik { fill: var(--ink); } .ill .dm { fill: var(--dim); } .ill .ms { fill: var(--line-strong); } .ill .oa { fill: var(--on-accent); }
+.ill .ln { fill: none; stroke: var(--line); } .ill .ls { fill: none; stroke: var(--line-strong); } .ill .lk { fill: none; stroke: var(--ink); } .ill .lm { fill: none; stroke: var(--muted); } .ill .ld { fill: none; stroke: var(--dim); }
+.ill .wa { stroke: var(--dim); stroke-width: 2; } .ill .wb { stroke: var(--muted); stroke-width: 2; }
+.ill .mk { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+
+/* Idle motion inside plates: runs only while the plate is on screen (.live) */
+.ill .hv, .ill .ph, .ill .bf, .ill .fl, .ill .rg, .ill .dg, .ill .bb, .ill .cr { transform-box: view-box; }
+.ill .fl, .ill .tp { transform-box: fill-box; transform-origin: left center; }
+.ill .kb { transform-box: view-box; }
+.live .kb { animation: kb 8s var(--ease) infinite; }
+.live .tp { animation: tp 5s linear infinite; }
+.live .ct { animation: ct 1.1s steps(1) infinite; }
+.live .pf { animation: pf 4.5s var(--ease) infinite; }
+@keyframes kb { 0%, 9% { transform: translateX(0); } 12.5%, 21.5% { transform: translateX(31px); } 25%, 34% { transform: translateX(62px); } 37.5%, 46.5% { transform: translateX(90px); } 50%, 59% { transform: translateX(174px); } 62.5%, 71.5% { transform: translateX(302px); } 75%, 84% { transform: translateX(346px); } 87.5%, 96.5% { transform: translateX(374px); } 100% { transform: translateX(0); } }
+@keyframes tp { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes ct { 50% { opacity: 0; } }
+@keyframes pf { 0%, 12% { opacity: 0; } 42%, 88% { opacity: 1; } 100% { opacity: 0; } }
+.live .hv { animation: hv 9s ease-in-out infinite alternate; }
+.live .ph { animation: ph 7s linear infinite; }
+.live .bf { animation: bf 7.5s var(--ease) infinite; }
+.live .bf2 { animation-delay: 2.5s; } .live .bf3 { animation-delay: 5s; }
+.live .fl { animation: fl 5s linear infinite; }
+.live .rg { animation: rg 4s var(--ease) infinite; }
+.live .dg { animation: dg 6s var(--ease) infinite; }
+.live .bb { animation: bb 6s linear infinite; }
+.live .cr { animation: cr 6s var(--ease) infinite; }
+@keyframes hv { from { transform: translateX(0); } to { transform: translateX(150px); } }
+@keyframes ph { from { transform: translateX(0); } to { transform: translateX(400px); } }
+@keyframes bf { 0%, 55% { opacity: 1; } 65%, 88% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes fl { from { transform: scaleX(.08); } to { transform: scaleX(1); } }
+@keyframes rg { 0%, 42% { transform: translateY(0); } 50%, 92% { transform: translateY(52px); } 100% { transform: translateY(0); } }
+@keyframes dg { 0% { transform: translateX(0); } 50%, 100% { transform: translateX(200px); } }
+@keyframes bb { 0%, 52% { opacity: 1; } 58%, 96% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes cr { 0%, 52% { transform: translate(0, 0); } 80%, 100% { transform: translate(44px, -64px); } }
+
+/* Level of detail: numbered keys in the figure, the legend under it, a zoom view on demand */
+.ill .key { transform-box: fill-box; transform-origin: center; transition: transform .2s var(--ease); }
+.ill .key circle { fill: var(--ground); stroke: var(--ink); stroke-width: 1.5; transition: fill .14s; }
+.ill .key text { font-size: 11px; font-weight: 600; fill: var(--ink); transition: fill .14s; }
+.ill .key.hl { transform: scale(1.3); }
+.ill .key.hl circle { fill: var(--ink); }
+.ill .key.hl text { fill: var(--on-accent); }
+.keys { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 2px 24px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+.ch.wide .keys { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.keys li { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; transition: background .14s, color .14s; }
+.keys li::before { content: attr(data-k); display: grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid var(--ink); border-radius: 50%; box-sizing: border-box; font-size: 11px; font-weight: 600; color: var(--ink); transition: background .14s, color .14s; }
+.keys li.hl { background: var(--panel); color: var(--ink); }
+.keys li.hl::before { background: var(--ink); color: var(--on-accent); }
+.plate { position: relative; }
+.frame { cursor: zoom-in; }
+.plate figcaption { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.zoom {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 30px; margin-top: -6px; padding: 0 10px 0 8px;
+  border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); color: var(--muted); font: 500 13px/1 inherit; cursor: pointer;
+  transition: color .14s, border-color .14s, transform .14s var(--ease);
+}
+.zoom svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; transition: transform .2s var(--ease); }
+.zoom:hover { color: var(--ink); border-color: var(--ink); }
+.zoom:hover svg { transform: scale(1.18); }
+.zoom:active { transform: scale(.92); }
+.zd {
+  width: min(1280px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--ground); color: var(--muted); box-shadow: var(--shadow);
+}
+.zd::backdrop { background: rgba(0, 0, 0, .66); }
+.zd[open] { animation: zin .34s var(--ease); }
+@keyframes zin { from { opacity: 0; filter: blur(8px); transform: scale(.985); } }
+.zd-in { padding: 18px 24px 24px; }
+.zd header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 16px; }
+.zd-c { margin: 0 0 2px; font-size: 13px; color: var(--dim); }
+.zd h2 { margin: 0; font-size: 24px; font-weight: 300; letter-spacing: -.02em; color: var(--ink); }
+.zd-x { flex: none; width: 36px; height: 36px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer; transition: transform .14s var(--ease), border-color .14s; }
+.zd-x:hover { border-color: var(--ink); transform: rotate(90deg); }
+.zd-fig { background: var(--deep); border: 1px solid var(--line); border-radius: 12px; overflow: auto; }
+.zd-fig svg { display: block; width: 100%; max-height: calc(100dvh - 300px); }
+.zd .keys { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); font-size: 15px; }
+.zd-cap { margin: 14px 0 0; font-size: 13px; color: var(--dim); }
+
+/* Index */
+.toc { padding-bottom: 12vh; }
+.toc > h2 { margin: 0 0 20px; font-size: 13px; font-weight: 500; color: var(--ink); }
+.toc-g { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px 24px; align-items: start; }
+.toc h3 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--dim); }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc .big ol { columns: 2; column-gap: 24px; }
+.toc li { break-inside: avoid; }
+.toc a { display: grid; grid-template-columns: 28px 1fr; gap: 6px; padding: 7px 0; border-top: 1px solid var(--line); color: var(--muted); text-decoration: none; font-size: 15px; line-height: 1.35; transition: color .14s; }
+.toc a span { color: var(--dim); font-size: 13px; padding-top: 1px; transition: transform .2s var(--ease), color .14s; }
+.toc a:hover { color: var(--ink); }
+.toc a:hover span { color: var(--ink); transform: translateX(3px); }
+
+/* Footer */
+.foot { border-top: 1px solid var(--line); padding: 56px 0 40px; font-size: 13px; color: var(--dim); }
+.foot p { margin: 0 0 6px; max-width: 64ch; }
+
+/* Player bar: Lumen's floating control bar, here the chapter navigation */
+.bar {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 10; margin: 0 auto; max-width: 1040px;
+  display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px 0 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+}
+.nb {
+  flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer; transition: background .14s, color .14s, transform .14s var(--ease);
+}
+.nb svg { width: 18px; height: 18px; transition: transform .2s var(--ease); }
+.nb:hover:not(:disabled) { background: var(--card); color: var(--ink); }
+.nb.prev:hover:not(:disabled) svg { transform: translateX(-2px); }
+.nb.next:hover:not(:disabled) svg { transform: translateX(2px); }
+.nb:active:not(:disabled) { transform: scale(.92); }
+.nb:disabled { color: var(--line-strong); cursor: default; }
+.pill { flex: none; display: grid; place-items: center; width: 54px; height: 28px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: 14px; letter-spacing: .01em; }
+.cur { flex: 0 1 220px; min-width: 0; margin: 0 6px; font-size: 13px; line-height: 1.25; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cur span { display: block; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.seek { position: relative; flex: 1 1 auto; min-width: 120px; height: 36px; transition: --p .55s var(--ease); }
+.seek .trk { position: absolute; left: 0; right: 0; top: 16px; height: 4px; border-radius: 2px; background: var(--deep); }
+.seek .fill { position: absolute; left: 0; top: 16px; height: 4px; border-radius: 2px; width: var(--p); background: var(--accent-dim); }
+.seek .ticks i { position: absolute; top: 12px; width: 1px; height: 12px; margin-left: -.5px; background: var(--line-strong); }
+.seek .ticks i.past { background: var(--dim); }
+.seek .ticks i.day { top: 9px; height: 18px; }
+.seek .hd { position: absolute; top: 8px; left: var(--p); width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; background: var(--accent); transition: transform .14s var(--ease); }
+.seek:hover .hd { transform: scaleY(1.2); }
+.seek input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.seek input::-webkit-slider-thumb { -webkit-appearance: none; width: 4px; height: 20px; }
+.seek input::-moz-range-thumb { width: 4px; height: 20px; border: 0; }
+.seek:has(input:focus-visible) .hd { outline: 2px solid var(--ink); outline-offset: 3px; }
+.total { flex: none; font-size: 13px; color: var(--dim); }
+.pv {
+  position: absolute; bottom: calc(100% + 14px); left: var(--x, 50%); width: 220px; margin-left: -110px;
+  background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow); padding: 8px;
+  opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity .14s, transform .2s var(--ease);
+}
+.pv.on { opacity: 1; transform: none; }
+.pv-img { display: grid; place-items: center; background: var(--deep); border-radius: 6px; overflow: hidden; aspect-ratio: 480 / 300; }
+.pv-t { padding: 8px 4px 2px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.pv-t b { display: block; color: var(--ink); font-weight: 500; }
+
+@media (max-width: 1080px) {
+  .lede, .now { grid-column: 1 / -1; }
+  .now { margin-top: 48px; }
+  .ch { padding: 72px 0; }
+  .ch .meta { grid-column: 1 / -1; position: static; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 20px; }
+  .ch .meta .num { font-size: 48px; margin-right: 4px; }
+  .ch .meta .date, .ch .meta .tag { margin: 0; }
+  .ch .meta .state { margin: 0; }
+  .ch .body { grid-column: 1 / -1; }
+  .ch .plate { grid-column: 1 / -1; position: relative; top: auto; margin-top: 36px; max-width: 640px; }
+  .ch .meta, .ch .body, .ch .plate { grid-row: auto; }
+  .ch.flip .plate, .ch.flip .body, .ch.wide .body, .ch.wide .plate { grid-column: 1 / -1; }
+  .ch.wide .plate { max-width: none; margin-top: 36px; grid-row: auto; }
+}
+@media (max-width: 1080px) {
+  .toc-g { grid-template-columns: 1fr 1fr; }
+  .toc .big { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .toc-g { grid-template-columns: 1fr; }
+  .toc .big ol { columns: 1; }
+  .ch.wide .keys { grid-template-columns: 1fr; }
+  .zd-in { padding: 14px 14px 18px; }
+  .zd-fig svg { min-width: var(--min, 480px); max-height: none; }
+  .ch.wide .frame { overflow-x: auto; }
+  .ch.wide .ill { width: 760px; max-width: none; }
+  .ch.wide figcaption { flex-wrap: wrap; }
+  .ch.wide figcaption::after { content: "Рисунок листается вбок или открывается крупно."; flex-basis: 100%; }
+}
+@media (max-width: 640px) {
+  body { font-size: 16px; padding-bottom: 104px; }
+  .wrap { padding: 0 16px; }
+  .top { height: 60px; }
+  .hero { padding: 6vh 0 10vh; }
+  h1 { margin-bottom: 36px; }
+  .lede { font-size: 18px; }
+  .say { font-size: 17px; }
+  .figs dd { font-size: 28px; }
+  .bar { left: 8px; right: 8px; bottom: 8px; gap: 4px; padding: 0 10px 0 4px; }
+  .cur { display: none; }
+  .pill { width: 44px; }
+  .pv { width: 180px; margin-left: -90px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .js .plate .frame { opacity: 1; filter: none; transform: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#chapters">Перейти к главам</a>
+
+<div class="wrap">
+  <header class="top">
+    <span class="mark"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v7l5.5-3.5z" fill="currentColor"/></svg>Lumen</span>
+    <span>17.10 → 20.10.2026 · 28 глав</span>
+  </header>
+
+  <section class="hero grid" id="now" aria-labelledby="h1">
+    <h1 id="h1">Lumen,<br>глава за главой</h1>
+    <p class="lede"><strong>Lumen</strong>: минималистичный видео- и аудиоплеер для Windows с медиатекой, на C++20, Direct2D и libmpv, в монохроме «белый на графите». Здесь всё, что с ним произошло за четыре дня, по раундам правок. Внизу экрана полоса перемотки, как в самом плеере: каждая засечка это глава. Листайте вниз, и вы перематываете назад, к первой сборке.</p>
+    <aside class="now" aria-labelledby="now-h">
+      <h2 id="now-h">Где проект сейчас, 20.10</h2>
+      <dl>
+        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>.</dd></div>
+        <div><dt>Открыто</dt><dd>Частично: размер текста Windows 200 % и заголовок первой страницы знакомства. Отложено: серый фон под белой обложкой.</dd></div>
+        <div><dt>Проверить вам руками</dt><dd>Alt+Space, изменение размера мышью за край, живой Narrator, медиа-карточка Windows и недавние файлы на панели задач, размер текста 150-200 %.</dd></div>
+        <div><dt>Решения, которые можно поменять</dt><dd>Тема «Как в системе» по умолчанию, Ctrl+F для поиска, клавиши громкости у Windows, «Избранное» первым в плейлистах.</dd></div>
+        <div><dt>Ждут вашего выбора</dt><dd>last.fm и ListenBrainz, веб-пульт, DLNA и Chromecast, субтитры через Whisper, SVP.</dd></div>
+        <div><dt>Проверено только по коду</dt><dd>Сбой видеодрайвера, два монитора с разным масштабом, настоящий выход из Windows, ключи OpenSubtitles и TMDB.</dd></div>
+      </dl>
+    </aside>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">Все главы</h2>
+    <div class="toc-g"></div>
+  </nav>
+</div>
+
+<main id="chapters" class="wrap" tabindex="-1">
+
+<!-- 28 -->
+<article class="ch grid flip" id="ch-28" data-n="28" data-date="20.10" aria-labelledby="t28">
+  <div class="meta"><span class="num">28</span><span class="date">20.10.2026</span><span class="tag">Запуск</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t28" tabindex="-1">Файл открывается как видео</h2>
+    <p class="say">При запуске файла окно было пустым 0,2 с, потом всё приходило разом: яркая картинка вместе с панелями. Теперь рамка плеера есть с первого кадра окна, а картинка проявляется внутри неё.</p>
+    <ul>
+      <li>Очередь строится при запуске, не дожидаясь видеодвижка, поэтому в первом кадре уже есть имя файла, панель и чёрная область картинки.</li>
+      <li>Картинка проявляется из чёрного за 200 мс, рамка вокруг не меняется. В светлой теме нет перехода «светлое → чёрное».</li>
+      <li>Если файл открывается дольше 0,3 с, по полосе перемотки бегает отрезок загрузки. На быстрых файлах его нет.</li>
+      <li>Песня сразу открывается музыкальным экраном. Заглушка без обложки проявляется, как сама обложка.</li>
+      <li>Убран серый кадр через 70 мс после появления окна: при переходе с программного рендера на видеокарту окно больше не пересобирается, новая картинка подменяет старую. Нашёлся только записью настоящего экрана на 60 кадрах в секунду.</li>
+      <li>Проверка кадров знает новую схему: 9 сценариев в обеих темах, включая медленный источник и несуществующий файл.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>286 → 81</dd><dt>мс до рамки плеера</dt></div>
+      <div><dd>283 → 274</dd><dt>мс до первого кадра</dt></div>
+      <div><dd>140 → 200</dd><dt>мс проявления картинки</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6з</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,86;20,164;462,178" viewBox="0 0 480 300" role="img" aria-label="Две шкалы времени запуска от 0 до 500 мс: раньше пустое окно и всё разом, теперь рамка плеера с 81 мс и картинка, которая проявляется с 274 мс">
+        <text class="tm" x="40" y="58" style="fill:var(--ink)">было</text><text class="t" x="440" y="58" text-anchor="end">пустое окно → всё разом</text>
+        <rect class="pn" x="105.6" y="68" width="163.2" height="36" rx="3"/>
+        <g class="ac"><rect x="268.8" y="68" width="22.4" height="36" opacity=".2"/><rect x="291.2" y="68" width="22.4" height="36" opacity=".4"/><rect x="313.6" y="68" width="22.4" height="36" opacity=".6"/><rect x="336" y="68" width="22.4" height="36" opacity=".8"/><rect x="358.4" y="68" width="22.4" height="36"/></g>
+        <text class="tm" x="40" y="148" style="fill:var(--ink)">стало</text><text class="t" x="440" y="148" text-anchor="end">рамка сразу, картинка проявляется</text>
+        <rect class="ms" x="104.8" y="158" width="314.4" height="8" rx="2"/>
+        <rect x="104.8" y="168" width="154.4" height="28" rx="2" fill="#000"/><rect class="ls" x="105.3" y="168.5" width="153.4" height="27" rx="2"/>
+        <g class="ac"><rect x="259.2" y="168" width="32" height="28" opacity=".2"/><rect x="291.2" y="168" width="32" height="28" opacity=".4"/><rect x="323.2" y="168" width="32" height="28" opacity=".6"/><rect x="355.2" y="168" width="32" height="28" opacity=".8"/><rect x="387.2" y="168" width="32" height="28"/></g>
+        <path class="ln" d="M40 222H440M40 218v8M120 218v8M200 218v8M280 218v8M360 218v8M440 218v8"/>
+        <text class="t" x="40" y="242">0</text><text class="t" x="120" y="242" text-anchor="middle">100</text><text class="t" x="200" y="242" text-anchor="middle">200</text><text class="t" x="280" y="242" text-anchor="middle">300</text><text class="t" x="360" y="242" text-anchor="middle">400</text><text class="t" x="440" y="242" text-anchor="end">500 мс</text>
+        <g class="ph"><path class="lk" d="M40 64V200" stroke-width="1.5"/></g>
+        <text class="tB" x="40" y="284">−205 мс</text><text class="t" x="160" y="278">до рамки плеера, кадр видео</text><text class="t" x="160" y="292">приходит в то же время</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Было: 0,2 с пустого окна, потом картинка и панели проявлялись вместе за 140 мс</li><li data-k="2">Стало: заголовок, панель и чёрная область картинки с первого кадра окна, на 81 мс</li><li data-k="3">Картинка проявляется из чёрного за 200 мс, рамка вокруг уже стоит</li></ol>
+    <figcaption>Рис. 28. Запуск файла на шкале времени, медиана 5 запусков</figcaption>
+  </figure>
+</article>
+
+<!-- 27 -->
+<article class="ch grid wide" id="ch-27" data-n="27" data-date="20.10" aria-labelledby="t27">
+  <div class="meta"><span class="num">27</span><span class="date">20.10.2026</span><span class="tag">Итог раунда 9</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t27" tabindex="-1">Раунд 9: исправления UI-ревью</h2>
+    <p class="say">За два часа после обеда 20.10 исправлена 81 находка ревью из 84. Работали две волны агентов, всё сведено в ветку <code>ui-review-fixes</code> и влито в <code>main</code>. Главы 15-26 ниже разбирают, что именно поменялось.</p>
+    <ul>
+      <li>Первая волна: пять агентов на Opus (доступность, фокус, плеер, панели, данные медиатеки). Ещё четырёх вы остановили ради лимитов.</li>
+      <li>Вторая волна: три агента на Sonnet доделали черновики остановленных. Им хватило 115-250 тыс. токенов на агента против 320-490 тыс. у Opus.</li>
+      <li>При слиянии нашлись и исправлены четыре новые ошибки. Например, закрывающийся тост закрывал панели, открытые уже после него.</li>
+      <li>Сборка /W4 чистая, 51 тест без ошибок, все проверки проходят. Прогон 375 состояний: 373 в порядке, 2 частично, как и до правок.</li>
+      <li>Сделано частично: крупный размер текста Windows (200 %) и заголовок первой страницы знакомства. Отложено: серый фон под белой обложкой.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>81 из 84</dd><dt>находки исправлены</dt></div>
+      <div><dd>87</dd><dt>коммитов с 11:26 до 13:22</dt></div>
+      <div><dd>47 → 51</dd><dt>тест, все без ошибок</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/research/ui-review-2026-10-20/FIX-STATUS.md">FIX-STATUS.md</a>, <a href="../STATUS.md">STATUS.md</a>, раздел 6ж</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="12,36;12,232;720,128" viewBox="0 0 960 300" role="img" aria-label="Схема раунда: пять агентов первой волны, четыре остановленных, три агента второй волны, все ветки сходятся в main">
+        <text class="tm" x="24" y="40">волна 1, Opus</text>
+        <text class="t" x="936" y="40" text-anchor="end">схема, без масштаба времени</text>
+        <g data-lanes='[["a11y","done",164,470,64],["focus","done",164,440,81],["player","done",164,455,98],["panels","done",164,430,115],["libdata","done",164,460,132],["copy","stop",164,330,149],["windows","stop",164,330,166],["libui","stop",164,330,183],["visual","stop",164,330,200],["visual2","next",350,560,250],["libui2","next",350,560,267],["startup","next",350,560,284]]'></g>
+        <text class="t" x="164" y="222">остановлены ради лимитов</text>
+        <text class="tm" x="24" y="236">волна 2, Sonnet</text>
+        <path class="ld" d="M330 200C348 200 332 250 350 250M330 183C356 183 328 267 350 267" stroke-dasharray="3 3"/>
+        <circle class="ac" cx="720" cy="150" r="7"/>
+        <text class="tm" x="740" y="146" style="fill:var(--ink)">ui-review-fixes → main</text>
+        <text class="t" x="740" y="164">20.10, 13:22</text>
+        <text class="tB" x="740" y="232">81 из 84</text>
+        <text class="t" x="740" y="252">сделано, 2 частично, 1 отложена</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Первая волна: пять агентов на Opus</li><li data-k="2">Вторая волна на Sonnet доделала черновики остановленных</li><li data-k="3">Всё сходится в ветку ui-review-fixes, затем в main</li></ol>
+    <figcaption>Рис. 27. Две волны агентов и одна ветка слияния</figcaption>
+  </figure>
+</article>
+
+<!-- 26 -->
+<article class="ch grid" id="ch-26" data-n="26" data-date="20.10" aria-labelledby="t26">
+  <div class="meta"><span class="num">26</span><span class="date">20.10.2026</span><span class="tag">Запуск</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t26" tabindex="-1">Рамка окна с первого кадра</h2>
+    <p class="say">На большой медиатеке окно около 350 мс стояло пустым фоном. Теперь заголовок и боковая панель рисуются с первого кадра, а проявляется только страница.</p>
+    <ul>
+      <li>Окно узнаётся сразу: видно кнопки окна и разделы, пока грузятся данные страницы.</li>
+      <li>Это продолжение главы 12: там убрали белый кадр и мигание, здесь пустое ожидание.</li>
+      <li>Тосты больше не заходят на панели и на обложку альбома.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/ui-review-2026-10-20/FIX-STATUS.md">FIX-STATUS.md</a> (DESK-19, VIS-13)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="358,72;358,120;358,168" viewBox="0 0 480 300" role="img" aria-label="Окно, разобранное на три слоя: фон темы, рамка окна с первого кадра и страница, которая проявляется">
+        <rect class="gr" x="40" y="120" width="260" height="150" rx="8"/><rect class="ls" x="40.5" y="120.5" width="259" height="149" rx="8"/>
+        <g transform="translate(28 -26)">
+          <rect class="ls" x="40.5" y="120.5" width="259" height="149" rx="8" stroke-dasharray="3 3"/>
+          <path class="pn" d="M48 120H292A8 8 0 0 1 300 128V142H40V128A8 8 0 0 1 48 120Z"/>
+          <path class="ld" d="M252 131h8M268 127h7v7h-7zM283 127l7 7M290 127l-7 7"/>
+          <rect class="pn" x="46" y="148" width="50" height="116" rx="5"/>
+          <rect class="ms" x="54" y="160" width="32" height="4" rx="2"/><rect class="ms" x="54" y="176" width="26" height="4" rx="2"/><rect class="ms" x="54" y="192" width="30" height="4" rx="2"/><rect class="ms" x="54" y="208" width="22" height="4" rx="2"/>
+        </g>
+        <g transform="translate(56 -52)"><g class="pf">
+          <rect class="ld" x="102.5" y="146.5" width="193" height="117" rx="4" stroke-dasharray="2 3"/>
+          <rect class="ik" x="112" y="156" width="70" height="5" rx="2"/>
+          <rect class="ms" x="112" y="170" width="52" height="34" rx="3"/><rect class="ms" x="172" y="170" width="52" height="34" rx="3"/><rect class="ms" x="232" y="170" width="52" height="34" rx="3"/>
+          <rect class="ms" x="112" y="212" width="52" height="34" rx="3"/><rect class="ms" x="172" y="212" width="52" height="34" rx="3"/><rect class="ms" x="232" y="212" width="52" height="34" rx="3"/>
+        </g></g>
+        <text class="tm" x="372" y="76" style="fill:var(--ink)">страница</text><text class="t" x="372" y="92">проявляется</text>
+        <text class="tm" x="372" y="124" style="fill:var(--ink)">рамка окна</text><text class="t" x="372" y="140">с первого кадра</text>
+        <text class="tm" x="372" y="172" style="fill:var(--ink)">фон темы</text><text class="t" x="372" y="188">первый кадр GPU</text>
+        <text class="t" x="40" y="292">раньше проявлялось всё окно целиком</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Страница проявляется, когда готовы данные</li><li data-k="2">Заголовок и боковая панель видны с первого кадра</li><li data-k="3">Фон темы: самый первый кадр окна</li></ol>
+    <figcaption>Рис. 26. Окно в слоях: что видно сразу, а что проявляется</figcaption>
+  </figure>
+</article>
+
+<!-- 25 -->
+<article class="ch grid wide" id="ch-25" data-n="25" data-date="20.10" aria-labelledby="t25">
+  <div class="meta"><span class="num">25</span><span class="date">20.10.2026</span><span class="tag">Windows</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t25" tabindex="-1">Lumen как своя программа Windows</h2>
+    <p class="say">Медиа-карточка с обложкой, недавние файлы на панели задач, команды в Проводнике: Lumen встраивается туда, где Windows их ждёт.</p>
+    <ul>
+      <li>Медиа-карточка Windows показывает обложку и позицию, а Play продолжает с места остановки.</li>
+      <li>Список последних файлов в меню значка на панели задач. Кнопки на миниатюре видны и на светлой панели задач.</li>
+      <li>В Проводнике «Воспроизвести в Lumen» и «Добавить в очередь Lumen». Они появятся после «Сделать плеером по умолчанию».</li>
+      <li>Ссылку из браузера можно перетащить в окно. У полей ввода есть меню «Вырезать, Копировать, Вставить».</li>
+      <li>Клавиши громкости по умолчанию снова меняют громкость Windows, старое поведение включается в настройках. Тема по умолчанию «Как в системе», старые настройки остаются тёмными.</li>
+    </ul>
+    <p class="src">Проверить руками: карточку, список и команды тестовые экземпляры не видят. Список в <a href="../qa/research/ui-review-2026-10-20/FIX-STATUS.md">FIX-STATUS.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="18,36;354,36;644,36" viewBox="0 0 960 300" role="img" aria-label="Медиа-карточка Windows с обложкой и позицией, список недавних файлов на панели задач, команды Lumen в меню Проводника">
+        <rect class="pn" x="24" y="40" width="296" height="150" rx="8"/><rect class="ls" x="24.5" y="40.5" width="295" height="149" rx="8"/>
+        <text class="t" x="40" y="62">Lumen</text>
+        <rect class="cd" x="40" y="72" width="64" height="64" rx="4"/><circle class="ms" cx="72" cy="104" r="20"/><circle class="dp" cx="72" cy="104" r="7"/>
+        <text class="tm" x="118" y="94" style="fill:var(--ink)">Название песни</text>
+        <text class="t" x="118" y="112">Исполнитель</text>
+        <rect class="dp" x="40" y="150" width="264" height="4" rx="2"/><rect class="ac fl" x="40" y="150" width="264" height="4" rx="2"/>
+        <text class="t" x="40" y="178">1:12</text><text class="t" x="304" y="178" text-anchor="end">3:40</text>
+        <path class="dm" d="M136 168h2v12h-2zM150 168v12l-10-6zM194 168v12l10-6zM206 168h2v12h-2z"/>
+        <circle class="ac" cx="172" cy="174" r="11"/><path class="oa" d="M169 169v10l8-5z"/>
+        <text class="tm" x="24" y="222" style="fill:var(--ink)">медиа-карточка Windows</text><text class="t" x="24" y="240">обложка и позиция, Play продолжает</text>
+
+        <rect class="pn" x="360" y="40" width="250" height="150" rx="8"/><rect class="ls" x="360.5" y="40.5" width="249" height="149" rx="8"/>
+        <text class="t" x="376" y="62">Недавние</text>
+        <path class="ld" d="M378 72h9l4 4v12h-13zM378 96h9l4 4v12h-13zM378 120h9l4 4v12h-13z"/>
+        <text class="tm" x="400" y="86">Фильм.mkv</text>
+        <text class="tm" x="400" y="110">Сериал S01E03.mkv</text>
+        <text class="tm" x="400" y="134">Альбом.flac</text>
+        <path class="ln" d="M370 148.5H600"/>
+        <circle class="lm" cx="385" cy="168" r="7"/><path class="dm" d="M383 164.5v7l5.5-3.5z"/>
+        <text class="tm" x="400" y="172">Lumen</text>
+        <text class="tm" x="360" y="222" style="fill:var(--ink)">недавние на панели задач</text><text class="t" x="360" y="240">меню по правому щелчку на значке</text>
+
+        <rect class="pn" x="650" y="40" width="286" height="150" rx="8"/><rect class="ls" x="650.5" y="40.5" width="285" height="149" rx="8"/>
+        <text class="tm" x="670" y="70">Открыть</text>
+        <rect class="ad" x="656" y="82" width="274" height="26" rx="4"/>
+        <text class="tm" x="670" y="100" style="fill:var(--ink)">Воспроизвести в Lumen</text>
+        <text class="tm" x="670" y="130">Добавить в очередь Lumen</text>
+        <path class="ln" d="M660 146.5H926"/>
+        <text class="tm" x="670" y="172">Копировать путь</text>
+        <text class="tm" x="650" y="222" style="fill:var(--ink)">команды в Проводнике</text><text class="t" x="650" y="240">после «Сделать плеером по умолчанию»</text>
+
+        <text class="t" x="24" y="282">ещё: ссылка из браузера перетаскивается в окно · клавиши громкости снова у Windows · тема «Как в системе»</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Медиа-карточка Windows: обложка и позиция</li><li data-k="2">Недавние файлы в меню значка на панели задач</li><li data-k="3">Команды Lumen в контекстном меню Проводника</li></ol>
+    <figcaption>Рис. 25. Три места Windows, где теперь есть Lumen</figcaption>
+  </figure>
+</article>
+
+<!-- 24 -->
+<article class="ch grid wide" id="ch-24" data-n="24" data-date="20.10" aria-labelledby="t24">
+  <div class="meta"><span class="num">24</span><span class="date">20.10.2026</span><span class="tag">Окно</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t24" tabindex="-1">Узкое окно перестраивается</h2>
+    <p class="say">В самом узком окне полоса перемотки сжималась примерно до 124 px, а боковая панель занимала место у страницы. Теперь окно меняет раскладку по ширине.</p>
+    <ul>
+      <li>Уже 900 DIP: полоса перемотки уходит в отдельную строку над кнопками.</li>
+      <li>Уже примерно 1000 DIP: боковая панель медиатеки сама сворачивается до значков.</li>
+      <li>Окно на мониторе с другим масштабом открывается с сохранённым размером, а не меняет его при каждом запуске.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (DESK-3, DESK-11, DESK-12)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="16,48;296,48;512,48;792,48" viewBox="0 0 960 300" role="img" aria-label="Медиатека в широком и узком окне: боковая панель сворачивается до значков. Плеер в широком и узком окне: полоса перемотки уходит в отдельную строку">
+        <rect class="gr" x="24" y="40" width="260" height="160" rx="6"/><rect class="ls" x="24.5" y="40.5" width="259" height="159" rx="6"/>
+        <path class="ln" d="M24 56.5H284"/>
+        <rect class="pn" x="30" y="62" width="64" height="132" rx="4"/>
+        <g class="ms"><rect x="38" y="72" width="44" height="4" rx="2"/><rect x="38" y="88" width="36" height="4" rx="2"/><rect x="38" y="104" width="40" height="4" rx="2"/><rect x="38" y="120" width="30" height="4" rx="2"/></g>
+        <g class="cd"><rect x="104" y="66" width="52" height="34" rx="3"/><rect x="164" y="66" width="52" height="34" rx="3"/><rect x="224" y="66" width="52" height="34" rx="3"/><rect x="104" y="110" width="52" height="34" rx="3"/><rect x="164" y="110" width="52" height="34" rx="3"/><rect x="224" y="110" width="52" height="34" rx="3"/></g>
+        <text class="tm" x="24" y="226" style="fill:var(--ink)">шире 1000 DIP</text><text class="t" x="24" y="244">боковая панель с подписями</text>
+
+        <rect class="gr" x="304" y="40" width="148" height="160" rx="6"/><rect class="ls" x="304.5" y="40.5" width="147" height="159" rx="6"/>
+        <path class="ln" d="M304 56.5H452"/>
+        <rect class="pn" x="310" y="62" width="22" height="132" rx="4"/>
+        <g class="ms"><circle cx="321" cy="74" r="3"/><circle cx="321" cy="90" r="3"/><circle cx="321" cy="106" r="3"/><circle cx="321" cy="122" r="3"/></g>
+        <g class="cd"><rect x="340" y="66" width="50" height="34" rx="3"/><rect x="396" y="66" width="50" height="34" rx="3"/><rect x="340" y="110" width="50" height="34" rx="3"/><rect x="396" y="110" width="50" height="34" rx="3"/></g>
+        <text class="tm" x="304" y="226" style="fill:var(--ink)">уже ~1000 DIP</text><text class="t" x="304" y="244">панель сворачивается до значков</text>
+
+        <rect class="ms" x="520" y="40" width="260" height="160" rx="6"/>
+        <rect class="pn" x="528" y="168" width="244" height="24" rx="6"/>
+        <rect class="ac" x="534" y="173" width="20" height="14" rx="3"/>
+        <text class="t" x="560" y="184">38:12</text>
+        <rect class="dp" x="594" y="178" width="130" height="3" rx="1.5"/><rect class="ac" x="594" y="178" width="50" height="3" rx="1.5"/>
+        <text class="t" x="766" y="184" text-anchor="end">1:48</text>
+        <text class="tm" x="520" y="226" style="fill:var(--ink)">шире 900 DIP</text><text class="t" x="520" y="244">всё в одну строку</text>
+
+        <rect class="ms" x="800" y="40" width="136" height="160" rx="6"/>
+        <rect class="pn" x="806" y="148" width="124" height="44" rx="6"/>
+        <rect class="dp" x="814" y="158" width="108" height="3" rx="1.5"/><rect class="ac" x="814" y="158" width="40" height="3" rx="1.5"/>
+        <rect class="ac" x="814" y="170" width="20" height="14" rx="3"/>
+        <text class="t" x="840" y="181">38:12</text>
+        <text class="t" x="922" y="181" text-anchor="end">1:48</text>
+        <text class="tm" x="800" y="226" style="fill:var(--ink)">уже 900 DIP</text><text class="t" x="800" y="244">перемотка отдельно</text>
+        <text class="t" x="24" y="284">медиатека</text><text class="t" x="520" y="284">плеер</text>
+        <path class="ln" d="M490.5 40V270"/>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Медиатека шире 1000 DIP: боковая панель с подписями</li><li data-k="2">Уже ~1000 DIP: панель сворачивается до значков, страница получает место</li><li data-k="3">Плеер шире 900 DIP: всё в одну строку</li><li data-k="4">Уже 900 DIP: перемотка отдельной строкой и снова удобной длины</li></ol>
+    <figcaption>Рис. 24. Медиатека и плеер в широком и узком окне</figcaption>
+  </figure>
+</article>
+
+<!-- 23 -->
+<article class="ch grid flip" id="ch-23" data-n="23" data-date="20.10" aria-labelledby="t23">
+  <div class="meta"><span class="num">23</span><span class="date">20.10.2026</span><span class="tag">Окно</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t23" tabindex="-1">Край окна как в Windows 11</h2>
+    <p class="say">Зона, за которую тянут окно, лежала внутри содержимого: кто хватал полосу прокрутки, тот менял размер окна. Теперь она снаружи видимого края, как у Windows Terminal.</p>
+    <ul>
+      <li>Кнопки заголовка шириной 46 DIP, у неактивного окна заголовок приглушён.</li>
+      <li>Alt+Space открывает меню окна.</li>
+      <li>«Картинка в картинке» держит пропорции видео, а после выхода из неё «Поверх других окон» остаётся включённым.</li>
+      <li>После обновления окно станет на 16 × 8 px меньше: рамка ушла наружу. Тень и изменение размера мышью стоит проверить руками.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (DESK-1, DESK-2, DESK-14, DESK-18)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="118,44;240,128;360,282" viewBox="0 0 480 300" role="img" aria-label="Правый верхний угол окна: зона изменения размера снаружи видимого края, кнопки заголовка по 46 DIP, раньше зона лежала на полосе прокрутки">
+        <path class="ms" d="M-20 58H412V300H400V70H-20Z" style="opacity:.6"/>
+        <path class="ld" d="M-20 57.5H412.5V300" stroke-dasharray="3 3"/>
+        <text class="t" x="132" y="48">зона изменения размера, снаружи края</text>
+        <rect class="gr" x="-20" y="70" width="420" height="260" rx="8"/><rect class="ls" x="-19.5" y="70.5" width="419" height="259" rx="8"/>
+        <path class="pn" d="M-20 70H392A8 8 0 0 1 400 78V110H-20Z"/>
+        <text class="tm" x="16" y="95">Lumen</text>
+        <path class="ld" d="M279 90h12M325 84h12v12h-12zM371 84l12 12M383 84l-12 12"/>
+        <path class="ln" d="M308.5 70V110M354.5 70V110"/>
+        <path class="ls" d="M262 120v4h46v-4"/>
+        <text class="t" x="285" y="140" text-anchor="middle">46 DIP</text>
+        <rect class="cd" x="384" y="118" width="8" height="176" rx="4"/><rect class="ms" x="384" y="150" width="8" height="60" rx="4"/>
+        <rect class="lk" x="372.5" y="114.5" width="25" height="183" rx="3" stroke-dasharray="3 3" style="opacity:.55"/>
+        <text class="t" x="356" y="238" text-anchor="end">было: зона внутри,</text>
+        <text class="t" x="356" y="254" text-anchor="end">на полосе прокрутки</text>
+        <g class="ms" style="opacity:.6"><rect x="20" y="132" width="150" height="5" rx="2"/><rect x="20" y="150" width="210" height="5" rx="2"/><rect x="20" y="168" width="180" height="5" rx="2"/><rect x="20" y="186" width="120" height="5" rx="2"/></g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Зона изменения размера теперь снаружи видимого края</li><li data-k="2">Кнопки заголовка по 46 DIP, как в Windows 11</li><li data-k="3">Было: зона внутри окна, на полосе прокрутки</li></ol>
+    <figcaption>Рис. 23. Угол окна: за что теперь тянуть</figcaption>
+  </figure>
+</article>
+
+<!-- 22 -->
+<article class="ch grid" id="ch-22" data-n="22" data-date="20.10" aria-labelledby="t22">
+  <div class="meta"><span class="num">22</span><span class="date">20.10.2026</span><span class="tag">Тексты</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t22" tabindex="-1">Одно понятие, одно слово</h2>
+    <p class="say">Одно и то же называлось по-разному в меню, настройках и знакомстве. Теперь у каждого понятия одно слово, а пары сверяет <code>check-language.py</code>.</p>
+    <ul>
+      <li>Очередь везде называется очередью, а не «Плейлистом» в меню плеера и в настройках.</li>
+      <li>Счётчики пишут существительное страницы: «3 альбома», «2 сериала», «8 песен» вместо «элементов».</li>
+      <li>Подсказки поиска звучат по-русски: «Поиск в истории» вместо «Поиск в «История»».</li>
+      <li>«Щелчок» вместо «клика», «Не удалось» для любой ошибки, «Убрать из истории», когда файл остаётся на диске.</li>
+      <li>Термины поясняются словами, а сам термин стоит в скобках: «Сглаживать градиенты (дебандинг)».</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (UX-10, UX-18, UX-19, UX-21, UX-23)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,80;24,138" viewBox="0 0 480 300" role="img" aria-label="Слова до и после: Плейлист стал Очередью, элементы стали альбомами, Поиск в История стал Поиском в истории, клик стал щелчком">
+        <text class="t" x="40" y="44">было</text><text class="t" x="262" y="44">стало</text>
+        <text class="tm" x="40" y="84" style="text-decoration:line-through;fill:var(--dim)">Плейлист</text><text class="t" x="40" y="100">в меню плеера</text>
+        <path class="ls" d="M214 80h24m-5-4 5 4-5 4"/><text class="tr" x="262" y="84">Очередь</text>
+        <path class="ln" d="M40 116.5H440"/>
+        <text class="tm" x="40" y="142" style="text-decoration:line-through;fill:var(--dim)">3 элемента</text>
+        <path class="ls" d="M214 138h24m-5-4 5 4-5 4"/><text class="tr" x="262" y="142">3 альбома</text>
+        <path class="ln" d="M40 160.5H440"/>
+        <text class="tm" x="40" y="186" style="text-decoration:line-through;fill:var(--dim)">Поиск в «История»</text>
+        <path class="ls" d="M214 182h24m-5-4 5 4-5 4"/><text class="tr" x="262" y="186">Поиск в истории</text>
+        <path class="ln" d="M40 204.5H440"/>
+        <text class="tm" x="40" y="230" style="text-decoration:line-through;fill:var(--dim)">клик</text>
+        <path class="ls" d="M214 226h24m-5-4 5 4-5 4"/><text class="tr" x="262" y="230">щелчок</text>
+        <text class="t" x="40" y="272">пары сверяет check-language.py</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Одно понятие называется одним словом во всём интерфейсе</li><li data-k="2">Счётчик берёт существительное страницы</li></ol>
+    <figcaption>Рис. 22. Четыре пары слов из исправлений</figcaption>
+  </figure>
+</article>
+
+<!-- 21 -->
+<article class="ch grid flip" id="ch-21" data-n="21" data-date="20.10" aria-labelledby="t21">
+  <div class="meta"><span class="num">21</span><span class="date">20.10.2026</span><span class="tag">Плеер</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t21" tabindex="-1">Быстрая панель: этот файл и все файлы</h2>
+    <p class="say">Под одним заголовком «Основные» лежали настройки, которые действуют только на играющий файл, и те, что меняют все следующие. Теперь это две отдельные группы.</p>
+    <ul>
+      <li>Вкладка «Видео»: «Для этого файла» (отражение, поворот, масштаб, соотношение сторон, с пометкой, что они сбрасываются) и «Для всех файлов» (кроп, деинтерлейс, HDR, тональная компрессия, разрешение).</li>
+      <li>Под строкой наборов одна фраза объясняет, зачем они: вернуться к сохранённым значениям.</li>
+      <li>Меню плеера сгруппировано по задачам.</li>
+      <li>Карточка ошибки воспроизведения стала диалогом с выходом, и после ошибки одного файла плеер больше не остаётся мёртвым.</li>
+      <li>У внешних дорожек значок удаления вместо карандаша, у «Стопа» значок стопа.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (UX-13, UX-14, UX-22, UX-25)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="52,84;52,210" viewBox="0 0 480 300" role="img" aria-label="Быстрая панель, вкладка Видео: группа для этого файла и группа для всех файлов">
+        <rect class="pn" x="70" y="18" width="340" height="266" rx="12"/><rect class="ls" x="70.5" y="18.5" width="339" height="265" rx="12"/>
+        <text class="t" x="86" y="46">Воспроизведение</text>
+        <text class="tm" x="196" y="46" style="fill:var(--ink)">Видео</text><rect class="ac" x="196" y="54" width="38" height="2" rx="1"/>
+        <text class="t" x="254" y="46">Аудио</text>
+        <text class="t" x="304" y="46">Субтитры</text>
+        <path class="ln" d="M70 62.5H410"/>
+        <path class="ls" d="M86 76h9l4 4v13H86z"/>
+        <text class="tm" x="110" y="88" style="fill:var(--ink)">Для этого файла</text>
+        <text class="t" x="110" y="104">сбрасываются при смене файла</text>
+        <text class="t" x="110" y="130">Отражение</text><text class="t" x="394" y="130" text-anchor="end">нет</text>
+        <text class="t" x="110" y="152">Поворот</text><text class="t" x="394" y="152" text-anchor="end">0°</text>
+        <text class="t" x="110" y="174">Соотношение сторон</text><text class="t" x="394" y="174" text-anchor="end">авто</text>
+        <path class="ln" d="M86 190.5H394"/>
+        <path class="ls" d="M90 202h9l4 4v13H90zM86 206v17h13"/>
+        <text class="tm" x="110" y="216" style="fill:var(--ink)">Для всех файлов</text>
+        <text class="t" x="110" y="242">Кроп</text><text class="t" x="394" y="242" text-anchor="end">нет</text>
+        <text class="t" x="110" y="264">Деинтерлейс</text><text class="t" x="394" y="264" text-anchor="end">авто</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Только этот файл: сбрасывается при смене файла</li><li data-k="2">Все следующие файлы</li></ol>
+    <figcaption>Рис. 21. Один файл и стопка файлов: две группы вместо «Основных»</figcaption>
+  </figure>
+</article>
+
+<!-- 20 -->
+<article class="ch grid" id="ch-20" data-n="20" data-date="20.10" aria-labelledby="t20">
+  <div class="meta"><span class="num">20</span><span class="date">20.10.2026</span><span class="tag">Медиатека</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t20" tabindex="-1">Плейлисты: несколько сразу и отмена</h2>
+    <p class="say">Плейлист собирался только мышью и по одной песне, а удалённое пропадало без возврата. Теперь можно выделить много и передумать.</p>
+    <ul>
+      <li>Несколько элементов выделяются с Ctrl и Shift, строки плейлиста двигаются клавишами.</li>
+      <li>Удаление плейлиста и записи истории можно отменить в течение 5 с. «Назад» больше не ведёт на «Плейлист не найден».</li>
+      <li>«Избранное» стоит первым на странице «Плейлисты», а действие называется «В избранное».</li>
+      <li>В новом плейлисте видны названия песен, пустое имя при переименовании не принимается.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (UX-9, UX-11, UX-12, UX-17)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,40;24,127;24,255" viewBox="0 0 480 300" role="img" aria-label="Страница плейлистов: Избранное первым, три песни выделены сразу, тост удаления с кнопкой Отменить и отсчётом">
+        <rect class="pn" x="40" y="22" width="120" height="36" rx="6"/><rect class="lk" x="40.5" y="22.5" width="119" height="35" rx="6"/>
+        <path class="lk" d="M58 46c-6-4-8-7-8-10a4 4 0 0 1 8-1 4 4 0 0 1 8 1c0 3-2 6-8 10z"/>
+        <text class="tm" x="74" y="45" style="fill:var(--ink)">Избранное</text>
+        <rect class="pn" x="170" y="22" width="120" height="36" rx="6"/><text class="t" x="184" y="45">Дорога</text>
+        <rect class="pn" x="300" y="22" width="140" height="36" rx="6"/><text class="t" x="314" y="45">Вечер</text>
+        <rect class="ad" x="40" y="94" width="400" height="66" rx="3"/><rect class="ac" x="40" y="94" width="3" height="66"/>
+        <g data-rows="40 72 22 6 1 3"></g>
+        <text class="t" x="40" y="222">Ctrl и Shift выделяют несколько, клавиши двигают строки</text>
+        <rect class="pn" x="40" y="236" width="400" height="38" rx="8"/><rect class="ls" x="40.5" y="236.5" width="399" height="37" rx="8"/>
+        <text class="tm" x="56" y="259">Плейлист удалён</text>
+        <text class="tm" x="424" y="259" text-anchor="end" style="fill:var(--ink);text-decoration:underline">Отменить</text>
+        <rect class="ac tp" x="48" y="268" width="384" height="2" rx="1"/>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">«Избранное» стоит первым</li><li data-k="2">Три песни выделены сразу, с Ctrl и Shift</li><li data-k="3">Удаление можно отменить, пока идёт полоска, 5 с</li></ol>
+    <figcaption>Рис. 20. Выделено три песни, удаление можно отменить 5 с</figcaption>
+  </figure>
+</article>
+
+<!-- 19 -->
+<article class="ch grid flip" id="ch-19" data-n="19" data-date="20.10" aria-labelledby="t19">
+  <div class="meta"><span class="num">19</span><span class="date">20.10.2026</span><span class="tag">Поиск</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t19" tabindex="-1">Поиск по словам в любом порядке</h2>
+    <p class="say">Поиск требовал точную подстроку: «track 3» ничего не находил. Теперь каждое слово ищется отдельно, в любом порядке и в любом поле.</p>
+    <ul>
+      <li>Совпадения подчёркнуты в результатах.</li>
+      <li>Если на открытой вкладке пусто, Lumen говорит, где нашлось («Найдено: 4 песни»), и предлагает «Искать во всей медиатеке».</li>
+      <li><kbd>Ctrl+F</kbd> открывает поиск, «Открыть папку» переехала на <kbd>Ctrl+Shift+O</kbd>.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (UX-3, UX-4, UX-15, VIS-17)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,44;24,113;24,234" viewBox="0 0 480 300" role="img" aria-label="Поле поиска с запросом track night: найдены песни, где слова стоят в другом порядке и в разных полях, совпадения подчёркнуты. Пустая вкладка подсказывает, где нашлось">
+        <rect class="cd" x="40" y="26" width="400" height="36" rx="6"/>
+        <circle class="ld" cx="58" cy="43" r="6"/><path class="ld" d="M62.5 47.5l5 5"/>
+        <text class="tm" x="78" y="49" style="fill:var(--ink)">track night</text>
+        <rect class="ik ct" x="150" y="35" width="1.5" height="18"/>
+        <rect class="ls" x="380.5" y="34.5" width="51" height="19" rx="4"/><text class="t" x="406" y="48" text-anchor="middle">Ctrl+F</text>
+        <text class="t" x="40" y="88">Песни</text>
+        <rect class="cd" x="40" y="98" width="30" height="30" rx="3"/>
+        <text class="tm" x="82" y="111" style="fill:var(--ink)"><tspan style="text-decoration:underline">Track</tspan> 07</text>
+        <text class="t" x="82" y="126">альбом <tspan style="text-decoration:underline">Night</tspan> Drive</text>
+        <rect class="cd" x="40" y="138" width="30" height="30" rx="3"/>
+        <text class="tm" x="82" y="151" style="fill:var(--ink)"><tspan style="text-decoration:underline">Night</tspan> <tspan style="text-decoration:underline">Track</tspan></text>
+        <text class="t" x="82" y="166">сингл</text>
+        <text class="t" x="440" y="126" text-anchor="end">слова в другом поле</text>
+        <text class="t" x="440" y="166" text-anchor="end">в другом порядке</text>
+        <rect class="pn" x="40" y="194" width="400" height="80" rx="8"/><rect class="ls" x="40.5" y="194.5" width="399" height="79" rx="8"/>
+        <text class="t" x="56" y="216">вкладка «Альбомы», запрос «track»</text>
+        <text class="tm" x="56" y="236" style="fill:var(--ink)">Найдено: 4 песни</text>
+        <rect class="ac" x="56" y="246" width="176" height="20" rx="4"/><text class="tk" x="144" y="260" text-anchor="middle">Искать во всей медиатеке</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Запрос из двух слов; поиск открывается по Ctrl+F</li><li data-k="2">Слова найдены в другом порядке и в другом поле, совпадения подчёркнуты</li><li data-k="3">Пустая вкладка говорит, где нашлось, и ведёт туда</li></ol>
+    <figcaption>Рис. 19. Слова находятся в любом порядке и в любом поле</figcaption>
+  </figure>
+</article>
+
+<!-- 18 -->
+<article class="ch grid" id="ch-18" data-n="18" data-date="20.10" aria-labelledby="t18">
+  <div class="meta"><span class="num">18</span><span class="date">20.10.2026</span><span class="tag">Медиатека</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t18" tabindex="-1">Список папок медиатеки</h2>
+    <p class="say">Списка папок медиатеки не было нигде: неверную папку можно было убрать только правкой <code>library.json</code>. Теперь он есть в Настройки › Медиатека.</p>
+    <ul>
+      <li>У каждой папки статус и «Убрать» с отменой.</li>
+      <li>Отключённый диск больше не выглядит пустой медиатекой: «Папка «D:\Films» недоступна. Подключите диск или уберите её из медиатеки». Её файлы остаются в медиатеке.</li>
+      <li>Знакомство предупреждает, если выбрать целый диск, а несуществующая папка показана как ошибка, а не подсказка.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (UX-1, UX-5, UX-16)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,56;24,138;24,239" viewBox="0 0 480 300" role="img" aria-label="Настройки медиатеки: список папок со статусом, недоступная папка с кнопками Повторить и Убрать, тост с отменой">
+        <text class="t" x="40" y="36">Настройки › Медиатека</text>
+        <text class="tm" x="40" y="60" style="fill:var(--ink)">Папки медиатеки</text>
+        <g data-folder="40 72 C:\Users\…\Videos|найдена|0"></g>
+        <g data-folder="40 116 D:\Films|недоступна: подключите диск|1"></g>
+        <g data-folder="40 160 E:\Музыка|найдена|0"></g>
+        <rect class="pn" x="40" y="220" width="400" height="38" rx="8"/><rect class="ls" x="40.5" y="220.5" width="399" height="37" rx="8"/>
+        <text class="tm" x="56" y="243">Папка убрана из медиатеки</text>
+        <text class="tm" x="424" y="243" text-anchor="end" style="fill:var(--ink);text-decoration:underline">Отменить</text>
+        <rect class="ac tp" x="48" y="252" width="384" height="2" rx="1"/>
+        <text class="t" x="40" y="286">раньше: только правка library.json</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Новый список в Настройки › Медиатека</li><li data-k="2">Недоступная папка названа прямо, её файлы остаются в медиатеке</li><li data-k="3">Убранную папку можно вернуть кнопкой в тосте</li></ol>
+    <figcaption>Рис. 18. Недоступная папка названа прямо и не прячет файлы</figcaption>
+  </figure>
+</article>
+
+<!-- 17 -->
+<article class="ch grid wide" id="ch-17" data-n="17" data-date="20.10" aria-labelledby="t17">
+  <div class="meta"><span class="num">17</span><span class="date">20.10.2026</span><span class="tag">Видимость</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t17" tabindex="-1">Контраст 3:1 и одно кольцо фокуса</h2>
+    <p class="say">Многие элементы различались только оттенками серого 1,3-1,6:1. Теперь у элементов управления контраст не меньше 3:1, а пары цветов из кода проверяет <code>check-contrast.py</code>.</p>
+    <ul>
+      <li>Громкость: пустая часть клина стала контуром, и 0 % больше не выглядит полным клином.</li>
+      <li>Сыгранная часть полосы перемотки отделена от дорожки.</li>
+      <li>Переключатели в светлой теме: «вкл» видно по заливке, как в Windows и iOS.</li>
+      <li>Кольцо фокуса толщиной 2 DIP и от 3:1 при любом акценте; у полей ввода то же кольцо, а не линия.</li>
+      <li>Значки «картинки в картинке» белые в обеих темах.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (VIS-1, VIS-2, VIS-3, VIS-7, VIS-9, A11Y-14, A11Y-15)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="18,40;258,40;498,40;738,40" viewBox="0 0 960 300" role="img" aria-label="Четыре элемента до и после: клин громкости, полоса перемотки, переключатель в светлой теме и кольцо фокуса">
+        <path class="ln" d="M252.5 40V280M492.5 40V280M732.5 40V280"/>
+        <text class="tm" x="32" y="40" style="fill:var(--ink)">громкость</text>
+        <text class="tm" x="272" y="40" style="fill:var(--ink)">полоса перемотки</text>
+        <text class="tm" x="512" y="40" style="fill:var(--ink)">переключатель, светлая тема</text>
+        <text class="tm" x="752" y="40" style="fill:var(--ink)">кольцо фокуса</text>
+        <g class="t"><text x="32" y="74">было</text><text x="272" y="74">было</text><text x="512" y="74">было</text><text x="752" y="74">было</text><text x="32" y="184">стало</text><text x="272" y="184">стало</text><text x="512" y="184">стало</text><text x="752" y="184">стало</text></g>
+        <polygon class="cd" points="32,124 182,124 182,94"/><polygon class="ms" points="32,124 122,124 122,106"/>
+        <text class="t" x="32" y="150">1,58:1, 0 % похож на полный клин</text>
+        <polygon class="ls" points="32.5,234 182,234 182,204.5"/><polygon class="ac" points="32,234 122,234 122,216"/>
+        <text class="tm" x="32" y="260" style="fill:var(--ink)">от 3:1, пустое контуром</text>
+
+        <rect class="cd" x="272" y="106" width="190" height="4" rx="2"/><rect class="ad" x="272" y="106" width="100" height="4" rx="2"/><rect class="ac" x="370" y="100" width="4" height="16" rx="2"/>
+        <text class="t" x="272" y="150">2,55:1, с «Графитом» 1,35:1</text>
+        <rect class="ms" x="378" y="216" width="84" height="4" rx="2"/><rect class="ac" x="272" y="216" width="96" height="4" rx="2"/><rect class="ac" x="370" y="210" width="4" height="16" rx="2"/>
+        <text class="tm" x="272" y="260" style="fill:var(--ink)">сыгранное отделено от дорожки</text>
+
+        <rect x="512" y="88" width="200" height="44" rx="6" fill="#F2F2F2"/>
+        <rect x="526" y="101" width="36" height="18" rx="9" fill="#D9D9D9"/><circle cx="535" cy="110" r="6" fill="#141414"/><text x="568" y="114" style="font-size:11px;fill:#616161">выкл</text>
+        <rect x="614" y="101" width="36" height="18" rx="9" fill="#CFCFCF"/><circle cx="641" cy="110" r="6" fill="#141414"/><text x="656" y="114" style="font-size:11px;fill:#616161">вкл</text>
+        <text class="t" x="512" y="150">обе ручки тёмные, дорожки похожи</text>
+        <rect x="512" y="198" width="200" height="44" rx="6" fill="#F2F2F2"/>
+        <rect x="526.75" y="211.75" width="34.5" height="16.5" rx="8.25" fill="#F2F2F2" stroke="#616161" stroke-width="1.5"/><circle cx="535" cy="220" r="5" fill="#616161"/><text x="568" y="224" style="font-size:11px;fill:#616161">выкл</text>
+        <rect x="614" y="211" width="36" height="18" rx="9" fill="#141414"/><circle cx="641" cy="220" r="6" fill="#FFFFFF"/><text x="656" y="224" style="font-size:11px;fill:#141414">вкл</text>
+        <text class="tm" x="512" y="260" style="fill:var(--ink)">«вкл» видно по заливке</text>
+
+        <rect class="pn" x="760" y="94" width="120" height="32" rx="4"/><text class="tm" x="820" y="115" text-anchor="middle">Открыть</text>
+        <rect x="756.75" y="90.75" width="126.5" height="38.5" rx="6.5" fill="none" stroke="#6B6B6B" stroke-width="1.5"/>
+        <text class="t" x="752" y="150">1,5 DIP, с «Графитом» 2,2:1</text>
+        <rect class="pn" x="760" y="204" width="120" height="32" rx="4"/><text class="tm" x="820" y="225" text-anchor="middle">Открыть</text>
+        <rect class="lk" x="756" y="200" width="128" height="40" rx="7" stroke-width="2"/>
+        <text class="tm" x="752" y="260" style="fill:var(--ink)">2 DIP, от 3:1 всегда</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Громкость: пустая часть клина стала контуром</li><li data-k="2">Перемотка: сыгранная часть отделена зазором и светлее</li><li data-k="3">Переключатель: «вкл» выражен заливкой</li><li data-k="4">Кольцо фокуса: 2 DIP и от 3:1 при любом акценте</li></ol>
+    <figcaption>Рис. 17. Четыре элемента до и после, цифры из ревью</figcaption>
+  </figure>
+</article>
+
+<!-- 16 -->
+<article class="ch grid flip" id="ch-16" data-n="16" data-date="20.10" aria-labelledby="t16">
+  <div class="meta"><span class="num">16</span><span class="date">20.10.2026</span><span class="tag">Клавиатура</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t16" tabindex="-1">Всё доступно с клавиатуры</h2>
+    <p class="say">Панель управления пряталась вместе с фокусом, и вернуть её можно было только мышью. Теперь по Lumen можно пройти целиком без мыши.</p>
+    <ul>
+      <li>Панель не прячется, пока в ней фокус, а Tab её показывает.</li>
+      <li>Полоса перемотки, переключатель «осталось/прошло» и кнопки мини-плеера доступны с Tab.</li>
+      <li>Фокус не уходит на невидимое: свёрнутые секции пропускаются, страница прокручивается к фокусу, подсказки показываются и для фокуса.</li>
+      <li>Контекстные меню открываются с клавиатуры, Alt+Space открывает меню окна.</li>
+      <li>«Назад» и «Вперёд» в медиатеке: Alt+стрелки и боковые кнопки мыши. Под открытым плеером они медиатеку не листают.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a> (A11Y-1, A11Y-9, A11Y-10, A11Y-13, DESK-4, DESK-5, DESK-10)</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,34;24,166;24,226" viewBox="0 0 480 300" role="img" aria-label="Панель управления с восемью остановками фокуса по Tab; кольцо фокуса идёт по ним, панель остаётся на экране">
+        <rect class="pn" x="40" y="22" width="44" height="24" rx="4"/><rect class="ls" x="40.5" y="22.5" width="43" height="23" rx="4"/><text class="t" x="62" y="38" text-anchor="middle" style="fill:var(--ink)">Tab</text>
+        <rect class="pn" x="124" y="22" width="84" height="24" rx="4"/><rect class="ls" x="124.5" y="22.5" width="83" height="23" rx="4"/><text class="t" x="166" y="38" text-anchor="middle" style="fill:var(--ink)">Alt+Space</text>
+        <rect class="pn" x="248" y="22" width="60" height="24" rx="4"/><rect class="ls" x="248.5" y="22.5" width="59" height="23" rx="4"/><text class="t" x="278" y="38" text-anchor="middle" style="fill:var(--ink)">Alt+←</text>
+        <text class="t" x="40" y="64">по порядку</text><text class="t" x="124" y="64">меню окна</text><text class="t" x="248" y="64">назад</text>
+        <rect class="cd" x="24" y="80" width="432" height="196"/>
+        <text class="t" x="40" y="106" style="fill:var(--muted)">панель не прячется, пока в ней фокус</text>
+        <path class="ld" d="M56 166H430" stroke-dasharray="2 4"/>
+        <g data-stops="56 87 118 146 230 358 402 430"></g>
+        <rect class="pn" x="36" y="204" width="408" height="44" rx="10"/>
+        <path class="dm" d="M50 220h2v12h-2zM62 220v12l-9-6z"/>
+        <rect class="ac" x="72" y="216" width="30" height="20" rx="5"/><path class="oa" d="M84 221v10l7-5z"/>
+        <path class="dm" d="M112 220v12l9-6zM122 220h2v12h-2z"/>
+        <text class="t" x="146" y="230" text-anchor="middle">38:12</text>
+        <rect class="dp" x="170" y="224" width="160" height="4" rx="2"/><rect class="ad" x="170" y="224" width="60" height="4" rx="2"/><rect class="ac" x="228" y="218" width="4" height="16" rx="2"/>
+        <text class="t" x="358" y="230" text-anchor="middle">−1:10:00</text>
+        <polygon class="ms" points="392,232 412,232 412,220"/><polygon class="ac" points="392,232 404,232 404,224.8"/>
+        <circle class="ld" cx="430" cy="226" r="6"/><circle class="dm" cx="430" cy="226" r="2"/>
+        <g class="kb"><rect class="lk" x="42" y="212" width="28" height="28" rx="6" stroke-width="2"/></g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Клавиши: Tab по порядку, Alt+Space для меню окна, Alt+← назад</li><li data-k="2">Восемь остановок Tab, включая полосу перемотки и время</li><li data-k="3">Панель не прячется, пока в ней фокус</li></ol>
+    <figcaption>Рис. 16. Восемь остановок Tab на панели управления</figcaption>
+  </figure>
+</article>
+
+<!-- 15 -->
+<article class="ch grid" id="ch-15" data-n="15" data-date="20.10" aria-labelledby="t15">
+  <div class="meta"><span class="num">15</span><span class="date">20.10.2026</span><span class="tag">Доступность</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t15" tabindex="-1">Экранный диктор видит Lumen</h2>
+    <p class="say">Для экранного диктора очередь, закладки, главы и дорожки были одной кнопкой, в имени которой все пункты подряд. Теперь диктор видит списки, выбранный пункт и изменения.</p>
+    <ul>
+      <li>Списки в панелях описывают себя: роль, число пунктов, выбранный пункт.</li>
+      <li>Тосты, баннер сканирования, смена трека и ошибки объявляются. Тост держится не меньше 3 с, с действием 8 с.</li>
+      <li>Элементы называются по своему тексту и подписи, заголовки размечены, у полей ввода есть текстовый шаблон UI Automation.</li>
+      <li>Диктор знает текущий раздел, страницу, тему, акцент и язык интерфейса.</li>
+      <li>Живой Narrator стоит проверить вам: тестовые экземпляры его не запускают.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/research/ui-review-2026-10-20/area-a11y.md">area-a11y.md</a>; проверка <code>tools/dev/uia-dump.ps1</code></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="14,50;468,60;468,158;468,236" viewBox="0 0 480 300" role="img" aria-label="Очередь и что о ней говорит экранный диктор: раньше одна кнопка со всеми песнями в имени, теперь список с выбранным пунктом и объявление о смене трека">
+        <rect class="pn" x="24" y="24" width="176" height="252" rx="10"/>
+        <text class="tm" x="40" y="50" style="fill:var(--ink)">Очередь</text>
+        <rect class="ad" x="30" y="128" width="164" height="30" rx="4"/>
+        <g data-queue="40 66 6 2"></g>
+        <text class="t" x="224" y="44">было</text>
+        <rect class="cd" x="224" y="52" width="232" height="62" rx="10"/><rect class="ls" x="224.5" y="52.5" width="231" height="61" rx="10"/>
+        <text class="t" x="238" y="76">Кнопка «Песня 1 Песня 2 Песня 3</text>
+        <text class="t" x="238" y="94">Песня 4 Песня 5 Песня 6…»</text>
+        <text class="t" x="224" y="140">стало</text>
+        <path class="pn" d="M226 152L206 143L226 170Z"/>
+        <rect class="pn" x="224" y="148" width="232" height="62" rx="10"/><rect class="lk" x="224.5" y="148.5" width="231" height="61" rx="10"/>
+        <text class="tm" x="238" y="172" style="fill:var(--ink)">Список «Очередь»</text>
+        <text class="t" x="238" y="192" style="fill:var(--muted)">Песня 3, 3 из 6, выбрано</text>
+        <rect class="cd" x="224" y="226" width="232" height="46" rx="10"/><rect class="ls" x="224.5" y="226.5" width="231" height="45" rx="10"/>
+        <text class="t" x="238" y="245">объявление при смене трека</text>
+        <text class="tm" x="238" y="263" style="fill:var(--ink)">«Песня 4»</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Очередь в плеере, выбрана третья песня</li><li data-k="2">Было: диктор видел одну кнопку со всеми песнями в имени</li><li data-k="3">Стало: список, позиция и выбранный пункт</li><li data-k="4">Изменения объявляются вслух, например смена трека</li></ol>
+    <figcaption>Рис. 15. Что слышит пользователь диктора, было и стало</figcaption>
+  </figure>
+</article>
+
+<!-- 14 -->
+<article class="ch grid" id="ch-14" data-n="14" data-date="20.10" aria-labelledby="t14">
+  <div class="meta"><span class="num">14</span><span class="date">20.10.2026</span><span class="tag">Ревью</span><span class="state">исправлено</span></div>
+  <div class="body">
+    <h2 class="t" id="t14" tabindex="-1">UI-ревью: 84 находки</h2>
+    <p class="say">Четыре ревьюера прошли 375 состояний интерфейса: доступность, платформа Windows, визуальный дизайн, UX и тексты. Lumen быстрый и цельный, но с клавиатурой и экранным диктором формально не проходит уровень A по WCAG.</p>
+    <ul>
+      <li>Окно появляется за 75-83 мс, файл играет примерно через 290 мс, повторный запуск передаёт файл за 34 мс.</li>
+      <li>Главное, что тянет вниз: панель управления прячется, пока в ней фокус; списки в панелях не описывают себя для диктора; тосты диктор не слышит.</li>
+      <li>12 пунктов «сделать первым» дают уровень A: контраст громкости и переключателей 3:1, кольцо фокуса от 2 DIP, Alt+стрелки для «Назад», поиск по словам в любом порядке.</li>
+      <li>В тот же день исправлена 81 находка, 2 частично, 1 отложена: главы 15-27.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>84</dd><dt>находки после слияния дублей</dt></div>
+      <div><dd>14 + 6</dd><dt>нарушений уровней A и AA</dt></div>
+      <div><dd>12</dd><dt>пунктов «сделать первым»</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/research/UI-REVIEW-2026-10-20.md">UI-REVIEW-2026-10-20.md</a>, раздел 7</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,73;24,165;448,163" viewBox="0 0 480 300" role="img" aria-label="Полоса из 84 находок по серьёзности и кольцо фокуса, которое переходит между кнопками">
+        <text class="t" x="40" y="34">84 находки по серьёзности</text>
+        <text class="t" x="40" y="54">3 крит.</text>
+        <rect class="ik" x="40" y="62" width="14" height="22" rx="2"/>
+        <rect class="lm" x="57" y="62.5" width="92" height="21" rx="2" style="fill:var(--line-strong);stroke:none"/>
+        <rect class="ms" x="152" y="62" width="154" height="22" rx="2" style="fill:var(--accent-dim)"/>
+        <rect class="ls" x="309.5" y="62.5" width="130" height="21" rx="2"/>
+                <text class="t" x="57" y="104">20 высоких</text>
+        <text class="t" x="152" y="104">33 средних</text>
+        <text class="t" x="310" y="104">28 низких</text>
+        <text class="tB" x="40" y="172">14</text><text class="t" x="40" y="192">нарушений уровня A</text>
+        <text class="tB" x="160" y="172">6</text><text class="t" x="160" y="192">уровня AA</text>
+        <rect class="pn" x="300" y="146" width="120" height="34" rx="4"/><rect class="ls" x="300.5" y="146.5" width="119" height="33" rx="4"/>
+        <text class="tm" x="360" y="168" text-anchor="middle">Открыть</text>
+        <rect class="pn" x="300" y="198" width="120" height="34" rx="4"/><rect class="ls" x="300.5" y="198.5" width="119" height="33" rx="4"/>
+        <text class="tm" x="360" y="220" text-anchor="middle">Добавить</text>
+        <g class="rg"><rect class="lk" x="295" y="141" width="130" height="44" rx="7" stroke-width="2"/></g>
+        <text class="t" x="300" y="256">Tab: кольцо от 2 DIP</text>
+        <text class="t" x="40" y="256">12 пунктов дают уровень A</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">84 находки по серьёзности: 3 критические, 20 высоких, 33 средних, 28 низких</li><li data-k="2">Нарушения WCAG до правок: 14 уровня A и 6 уровня AA</li><li data-k="3">Кольцо фокуса должно идти по Tab и быть видно на любом фоне</li></ol>
+    <figcaption>Рис. 14. Находки по серьёзности и кольцо фокуса, которое должно вести по Tab (сделано в главе 16)</figcaption>
+  </figure>
+</article>
+
+<!-- 13 -->
+<article class="ch grid" id="ch-13" data-n="13" data-date="19.10" aria-labelledby="t13">
+  <div class="meta"><span class="num">13</span><span class="date">19.10.2026</span><span class="tag">Исправления</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t13" tabindex="-1">Ничего не залипает после перетаскивания</h2>
+    <p class="say">Если потянуть бегунок и отпустить кнопку мыши за окном, превью перемотки оставалось висеть с «0:00». Нашлось ещё шесть похожих мест.</p>
+    <ul>
+      <li>Превью перемотки, наведение, нажатие, оверлей мини-плеера, ползунок громкости и панель, скрытая посреди перетаскивания, больше не залипают.</li>
+      <li>Нажатия до того, как проявился первый экран, игнорируются.</li>
+      <li>Появилась проверка <code>check-stuck-hover.ps1</code>, она повторяет все семь случаев.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 8</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="28,224;448,150" viewBox="0 0 480 300" role="img" aria-label="Курсор тянет бегунок с превью, после отпускания превью исчезает">
+        <text class="t" x="40" y="48">было: после перетаскивания «0:00» оставалось на экране</text>
+        <text class="t" x="40" y="66">стало: превью уходит вместе с кнопкой мыши</text>
+        <rect class="pn" x="40" y="196" width="400" height="56" rx="12"/>
+        <rect class="ac" x="54" y="210" width="40" height="28" rx="6"/><path class="oa" d="M70 217v14l11-7z"/>
+        <rect class="dp" x="120" y="222" width="290" height="4" rx="2"/>
+        <g class="dg">
+          <rect class="ac" x="158" y="214" width="4" height="20" rx="2"/>
+          <g class="bb">
+            <rect class="pn" x="110" y="112" width="100" height="70" rx="8"/><rect class="ls" x="110.5" y="112.5" width="99" height="69" rx="8"/>
+            <rect class="cd" x="116" y="118" width="88" height="44" rx="4"/>
+            <path class="ms" d="M116 162l22-16 18 10 20-14 28 14v6z"/>
+            <text class="t" x="160" y="176" text-anchor="middle">0:42</text>
+          </g>
+          <g class="cr"><path class="ik" d="M160 222l0 22 6-6 5 10 4-2-5-10 8 0z"/><path class="ls" d="M160 222l0 22 6-6 5 10 4-2-5-10 8 0z" style="stroke:var(--deep)"/></g>
+        </g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Бегунок тянут мышью</li><li data-k="2">Превью исчезает, когда кнопку отпустили, даже за пределами окна</li></ol>
+    <figcaption>Рис. 13. Превью уходит вместе с кнопкой мыши</figcaption>
+  </figure>
+</article>
+
+<!-- 12 -->
+<article class="ch grid flip" id="ch-12" data-n="12" data-date="19.10" aria-labelledby="t12">
+  <div class="meta"><span class="num">12</span><span class="date">19.10.2026</span><span class="tag">Исправления</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t12" tabindex="-1">Без мигания при запуске</h2>
+    <p class="say">Вы видели мигание и «недогрузку» при запуске и открытии файлов. Серии кадров показали четыре причины, все исправлены, и вы проверили видимое окно.</p>
+    <ul>
+      <li>Окно появляется с первым кадром видеокарты, примерно через 100 мс после запуска. Раньше через 260-330 мс, и сначала мелькали белый кадр и скелет.</li>
+      <li>Интерфейс проявляется из фона темы за 140 мс, один раз, когда готов первый экран.</li>
+      <li>Пока картинка грузится, видна пустая карточка, потом картинка проявляется.</li>
+      <li>Файл открывается сразу в свой первый кадр, без пустого чёрного плеера. Два тоста подряд больше не накладываются.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>260-330 → 100</dd><dt>мс до окна на экране</dt></div>
+      <div><dd>140</dd><dt>мс на одно проявление</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6е; инструмент <code>tools/dev/frames.ps1</code></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="14,88;14,226" viewBox="0 0 480 300" role="img" aria-label="Две плёнки по шесть кадров: раньше белый кадр, скелет и рывок, теперь фон и плавное проявление">
+        <text class="t" x="24" y="38">было</text>
+        <rect class="pn" x="24" y="46" width="432" height="84" rx="4"/>
+        <g class="dp" data-perf="30 450 49 123"></g>
+        <rect x="36" y="65" width="62" height="46" rx="2" fill="#FFFFFF" class="ls" style="fill:#FFFFFF"/>
+        <g><rect class="cd" x="106" y="65" width="62" height="46" rx="2"/><rect class="ms" x="110" y="69" width="10" height="38" rx="1"/><rect class="ms" x="124" y="71" width="38" height="4" rx="1"/><rect class="ms" x="124" y="79" width="28" height="4" rx="1"/></g>
+        <g><rect class="cd" x="176" y="65" width="62" height="46" rx="2"/><rect class="ms" x="180" y="69" width="10" height="38" rx="1"/><rect class="ms" x="194" y="71" width="38" height="4" rx="1"/><rect class="ms" x="194" y="79" width="28" height="4" rx="1"/></g>
+        <rect class="dp" x="246" y="65" width="62" height="46" rx="2"/><rect class="ls" x="246.5" y="65.5" width="61" height="45" rx="2"/>
+        <g data-ui="316 65 1"></g>
+        <g data-ui="386 65 1"></g>
+        <text class="t" x="67" y="146" text-anchor="middle">белый</text>
+        <text class="t" x="172" y="146" text-anchor="middle">скелет</text>
+        <text class="t" x="277" y="146" text-anchor="middle">чёрный</text>
+        <text class="t" x="382" y="146" text-anchor="middle">рывок</text>
+        <text class="t" x="24" y="176">стало</text>
+        <rect class="pn" x="24" y="184" width="432" height="84" rx="4"/>
+        <g class="dp" data-perf="30 450 187 261"></g>
+        <rect class="cd" x="36" y="203" width="62" height="46" rx="2"/>
+        <rect class="cd" x="106" y="203" width="62" height="46" rx="2"/>
+        <g data-ui="176 203 .25"></g>
+        <g data-ui="246 203 .6"></g>
+        <g data-ui="316 203 1"></g>
+        <g data-ui="386 203 1"></g>
+        <text class="t" x="102" y="284" text-anchor="middle">фон темы, ~100 мс</text>
+        <path class="ls" d="M176 274v-4h202v4"/>
+        <text class="t" x="277" y="290" text-anchor="middle">проявление 140 мс</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Было: белый кадр, скелет, чёрный кадр, рывок</li><li data-k="2">Стало: фон темы с первого кадра, интерфейс проявляется один раз</li></ol>
+    <figcaption>Рис. 12. Первые кадры окна, было и стало</figcaption>
+  </figure>
+</article>
+
+<!-- 11 -->
+<article class="ch grid" id="ch-11" data-n="11" data-date="19.10" aria-labelledby="t11">
+  <div class="meta"><span class="num">11</span><span class="date">19.10.2026</span><span class="tag">Аудит и исправления</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t11" tabindex="-1">UX-аудит: три сценария новичка</h2>
+    <p class="say">Аудит всего приложения: 31 находка и три сценария, в которых агенты играли новичков, пришедших из VLC, MPC-HC и Spotify. Восемь агентов исправили находки параллельно, потом сценарии прогнали заново.</p>
+    <ul>
+      <li>Одна панель «Воспроизведение, Видео, Аудио, Субтитры» вместо двух окон. Кнопки «Аудио» и «Субтитры» открывают её на своей вкладке.</li>
+      <li><kbd>S</kbd> по-прежнему «Стоп», но Пробел после него продолжает с места остановки.</li>
+      <li>Сохранение очереди как плейлиста, кнопка текста песни, отмена удаления в плейлистах.</li>
+      <li>Плеер переключает язык на ходу, первый запуск спрашивает язык до появления окна.</li>
+      <li>Сериалы сгруппированы по сезонам, на главной одна карточка на сериал.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>60 → 68</dd><dt>оценка аудита из 85</dt></div>
+      <div><dd>0 → 80 %</dd><dt>успех с первой попытки в музыкальном сценарии</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/research/UX-AUDIT-2026-10-19.md">UX-AUDIT-2026-10-19.md</a>, <a href="../qa/research/ux-2026-10-19/FIX-STATUS.md">FIX-STATUS.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,70;24,160" viewBox="0 0 480 300" role="img" aria-label="Оценка аудита выросла с 60 до 68 из 85, успех трёх сценариев с первой попытки вырос">
+        <text class="t" x="40" y="44">оценка аудита, из 85</text>
+        <path class="ls" d="M40 70H440"/>
+        <g data-ticks="40 440 70 17"></g>
+        <circle class="gr" cx="322" cy="70" r="6"/><circle class="lm" cx="322" cy="70" r="6"/>
+        <circle class="ac" cx="360" cy="70" r="7"/>
+        <text class="t" x="322" y="96" text-anchor="middle">60</text>
+        <text class="tm" x="360" y="56" text-anchor="middle">68</text>
+        <text class="t" x="40" y="134">успех с первой попытки, до и после</text>
+        <text class="t" x="40" y="164">фильм и субтитры</text>
+        <rect class="ls" x="170.5" y="153.5" width="139" height="7" rx="2"/><rect class="ac" x="170" y="162" width="180" height="7" rx="2"/>
+        <text class="t" x="440" y="168" text-anchor="end">70 → 90</text>
+        <text class="t" x="40" y="204">серия и дорожки</text>
+        <rect class="ls" x="170.5" y="193.5" width="109" height="7" rx="2"/><rect class="ac" x="170" y="202" width="170" height="7" rx="2"/>
+        <text class="t" x="440" y="208" text-anchor="end">55 → 85</text>
+        <text class="t" x="40" y="244">альбом и плейлист</text>
+        <rect class="ms" x="170" y="233" width="2" height="8" rx="1"/><rect class="ac" x="170" y="242" width="160" height="7" rx="2"/>
+        <text class="t" x="440" y="248" text-anchor="end">0 → 80</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Оценка аудита: 60 → 68 из 85</li><li data-k="2">Успех с первой попытки: контур до правок, заливка после</li></ol>
+    <figcaption>Рис. 11. Оценка аудита и успех с первой попытки, до и после</figcaption>
+  </figure>
+</article>
+
+<!-- 10 -->
+<article class="ch grid" id="ch-10" data-n="10" data-date="19.10" aria-labelledby="t10">
+  <div class="meta"><span class="num">10</span><span class="date">19.10.2026</span><span class="tag">Новое</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t10" tabindex="-1">Тексты песен и порядок папки</h2>
+    <p class="say">Экран музыки стал настраиваемым, а открытие файлов из папки стало предсказуемым.</p>
+    <ul>
+      <li>Пять стилей текста песен: Lumen, как в Spotify, Apple Music, Яндекс Музыке и караоке. Поверх стиля свой шрифт, размер, место поющейся строки и заливка по мере пения.</li>
+      <li>Очередь из папки идёт «как в Проводнике»: Lumen берёт сортировку открытого окна Проводника с этой папкой.</li>
+      <li>Открытый файл играет один: следующая серия только предлагается, без обратного отсчёта.</li>
+      <li>Песни всегда начинаются сначала, видео продолжаются с места остановки.</li>
+      <li>Текст поверх обложки стал белым с прозрачностью вместо мутных серых плашек. Очередь можно закрепить сбоку от музыки.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6г; <a href="../qa/visual-rules.md">visual-rules.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="28,39;184,147;184,98" viewBox="0 0 480 300" role="img" aria-label="Экран музыки: обложка, строки текста, текущая строка заливается по мере пения">
+        <rect class="ad" x="40" y="28" width="52" height="22" rx="11"/><rect class="ls" x="40.5" y="28.5" width="51" height="21" rx="10.5"/><text class="t" x="66" y="43" text-anchor="middle" style="fill:var(--ink)">Lumen</text>
+        <rect class="ls" x="98.5" y="28.5" width="59" height="21" rx="10.5"/><text class="t" x="128" y="43" text-anchor="middle">Spotify</text>
+        <rect class="ls" x="164.5" y="28.5" width="79" height="21" rx="10.5"/><text class="t" x="204" y="43" text-anchor="middle">Apple Music</text>
+        <rect class="ls" x="250.5" y="28.5" width="99" height="21" rx="10.5"/><text class="t" x="300" y="43" text-anchor="middle">Яндекс Музыка</text>
+        <rect class="ls" x="356.5" y="28.5" width="65" height="21" rx="10.5"/><text class="t" x="389" y="43" text-anchor="middle">караоке</text>
+        <rect class="cd" x="40" y="86" width="124" height="124" rx="6"/>
+        <circle class="ms" cx="102" cy="148" r="44" style="opacity:.5"/><circle class="dp" cx="102" cy="148" r="20"/><circle class="ms" cx="102" cy="148" r="4"/>
+        <text class="tm" x="40" y="232" style="fill:var(--ink)">Название песни</text>
+        <text class="t" x="40" y="250">Исполнитель</text>
+        <rect class="dm" x="196" y="94" width="160" height="8" rx="4" style="opacity:.25"/>
+        <rect class="dm" x="196" y="118" width="214" height="8" rx="4" style="opacity:.5"/>
+        <rect class="ms" x="196" y="140" width="244" height="14" rx="7"/>
+        <rect class="ac fl" x="196" y="140" width="244" height="14" rx="7"/>
+        <rect class="dm" x="196" y="170" width="196" height="8" rx="4" style="opacity:.5"/>
+        <rect class="dm" x="196" y="194" width="140" height="8" rx="4" style="opacity:.25"/>
+        <text class="t" x="196" y="250">строка заливается по мере пения</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Пять готовых стилей текста песен</li><li data-k="2">Поющаяся строка заливается по мере пения</li><li data-k="3">Строки к краям гаснут</li></ol>
+    <figcaption>Рис. 10. Поющаяся строка заливается, края гаснут</figcaption>
+  </figure>
+</article>
+
+<!-- 09 -->
+<article class="ch grid flip" id="ch-09" data-n="9" data-date="19.10" aria-labelledby="t9">
+  <div class="meta"><span class="num">09</span><span class="date">19.10.2026</span><span class="tag">Аудит кода</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t9" tabindex="-1">Раунд 8: аудит всего кода</h2>
+    <p class="say">Пять аудиторов прочитали весь код по зонам и нашли 57 основных проблем и около 60 мелких. Каждую находку сначала подтверждали в коде или в запущенной программе, потом исправляли.</p>
+    <ul>
+      <li><code>settings.json</code> и <code>library.json</code> больше не перезаписываются, если файл занят.</li>
+      <li>Безопасные имена скачанных субтитров, два вылета устранены, данные сохраняются при выходе из Windows.</li>
+      <li>Файлы OneDrive, которые лежат только в облаке, не подвешивают сканирование.</li>
+      <li>«Удалить всё» в очереди: 4 с → 17 мс. Плавный переход больше не пропускает песни.</li>
+      <li>На каждое рискованное место есть тест, и каждый новый тест падал на старом коде.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>112</dd><dt>исправлено</dt></div>
+      <div><dd>8</dd><dt>отклонено, с причинами</dt></div>
+      <div><dd>146 → 2,2 с</dd><dt>скан 24 000 файлов после раундов 7 и 8</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/round8/REPORT.md">qa/round8/REPORT.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="60,42;418,204" viewBox="0 0 480 300" role="img" aria-label="Сетка из 120 клеток: 112 исправленных находок и 8 отклонённых">
+        <g data-tally="75 36 120 112"></g>
+        <text class="tB" x="75" y="250">112</text><text class="t" x="75" y="270">исправлено</text>
+        <text class="tB" x="250" y="250">8</text><text class="t" x="250" y="270">отклонено с причинами</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Закрашенная клетка: находка подтверждена и исправлена</li><li data-k="2">Перечёркнутая: отклонена, причина записана в отчёте</li></ol>
+    <figcaption>Рис. 09. Одна клетка на находку раунда 8</figcaption>
+  </figure>
+</article>
+
+<!-- 08 -->
+<article class="ch grid" id="ch-08" data-n="8" data-date="18.10" aria-labelledby="t8">
+  <div class="meta"><span class="num">08</span><span class="date">18-19.10.2026</span><span class="tag">Новое</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t8" tabindex="-1">Раунд 7: новые возможности</h2>
+    <p class="say">Семь агентов, каждый в своей ветке, добавили семь крупных частей. После слияния перепроверка нашла 10 проблем, все исправлены в раунде 8.</p>
+    <ul>
+      <li>Плавный переход между песнями на 1-12 с, по умолчанию только между разными альбомами. Визуализация слушает только звук самого Lumen.</li>
+      <li>Настройки для каждого файла: дорожки и задержки запоминаются, до 5000 файлов.</li>
+      <li>На паузе можно щёлкнуть слово в субтитрах: скопировать, найти в словаре, перевести.</li>
+      <li>Скины: Lumen, чёрный OLED, высокий контраст, сепия или свой файл с перезагрузкой на лету.</li>
+      <li>Свой парсер тегов: сканирование в 30-60 раз быстрее, правильно читается cp1251.</li>
+      <li>Онлайн по вашему выбору: тексты LRCLIB, субтитры OpenSubtitles, постеры TMDB. Всё выключено по умолчанию, ключи хранятся через DPAPI.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/round7/">qa/round7/</a>, <a href="../design/SKINS.md">SKINS.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="150,64;400,64;380,264" viewBox="0 0 480 300" role="img" aria-label="Две кривые громкости: одна песня затухает, другая нарастает, перекрытие от 1 до 12 секунд">
+        <text class="t" x="48" y="54">громкость</text>
+        <rect class="ad" x="250" y="64" width="110" height="176" style="opacity:.7"/>
+        <path class="ls" d="M40 64V240H440"/>
+        <path class="lk" d="M40 76H250C290 76 320 240 360 240" stroke-width="2"/>
+        <path class="lm" d="M250 240C290 240 320 76 360 76H440" stroke-width="2"/>
+        <text class="tm" x="60" y="100">песня A</text>
+        <text class="tm" x="372" y="100">песня B</text>
+        <path class="ls" d="M250 252v6H360v-6"/>
+        <text class="t" x="305" y="276" text-anchor="middle">1-12 с</text>
+        <g class="ph"><path class="ld" d="M40 64V240" stroke-dasharray="2 4"/></g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Песня A держит громкость, потом затухает</li><li data-k="2">Песня B нарастает и дальше играет одна</li><li data-k="3">Перекрытие 1-12 с, по умолчанию только между разными альбомами</li></ol>
+    <figcaption>Рис. 08. Плавный переход: одна песня уходит, другая приходит</figcaption>
+  </figure>
+</article>
+
+<!-- 07 -->
+<article class="ch grid" id="ch-07" data-n="7" data-date="18.10" aria-labelledby="t7">
+  <div class="meta"><span class="num">07</span><span class="date">18.10.2026</span><span class="tag">Метод</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t7" tabindex="-1">Раунд 5: охота на все баги интерфейса</h2>
+    <p class="say">Вы сказали, что багов в интерфейсе всё ещё много. Осмотр на глаз заменили четырьмя слоями проверок и инструментами, которые остались в проекте.</p>
+    <ul>
+      <li><code>sweep.ps1</code> проходит все экраны в разных размерах, темах и масштабах за 6 минут и собирает страницу скриншотов.</li>
+      <li><code>ui-audit.py</code> ищет перекрытия, обрезанный текст, мелкие кнопки и мёртвые зоны; <code>hitmap.ps1</code> показывает, куда попадёт настоящий щелчок.</li>
+      <li>Худшие данные: длинные названия, CJK, RTL, эмодзи, 1200 файлов, 12 уровней папок.</li>
+      <li>Нашлась причина, почему очередь не работала в полноэкранном режиме: панель рисовалась поверх видео, а щелчки уходили видео. Теперь очередь работает как в VLC.</li>
+      <li>Перетаскивание окна стоит 5 мс вместо 62.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>111</dd><dt>находок в шести отчётах</dt></div>
+      <div><dd>126 → 35</dd><dt>находок автоаудита после исправлений</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/round5/METHOD.md">qa/round5/METHOD.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="14,36;243,34;14,248" viewBox="0 0 480 300" role="img" aria-label="Страница прогона: сорок миниатюр экранов в разных темах, некоторые обведены как находки">
+        <g data-sheet="7"></g>
+        <text class="tB" x="27" y="252">378</text><text class="t" x="27" y="272">сценариев за 6 минут</text>
+        <text class="tB" x="250" y="252">126 → 35</text><text class="t" x="250" y="272">находок автоаудита</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Миниатюра экрана: свой размер, тема и масштаб</li><li data-k="2">Обводка: здесь автоаудит нашёл проблему</li><li data-k="3">378 сценариев проходятся за 6 минут</li></ol>
+    <figcaption>Рис. 07. Так выглядит страница прогона, обводка отмечает находку</figcaption>
+  </figure>
+</article>
+
+<!-- 06 -->
+<article class="ch grid flip" id="ch-06" data-n="6" data-date="18.10" aria-labelledby="t6">
+  <div class="meta"><span class="num">06</span><span class="date">18.10.2026</span><span class="tag">Исправления</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t6" tabindex="-1">Раунд 4: четыре жалобы владельца</h2>
+    <p class="say">Интерфейс просвечивал, очередь в полноэкранном режиме не редактировалась, окно меняло размер при смене видео, а нижняя панель закрывала видео. Два охотника за багами нашли ещё 33 проблемы.</p>
+    <ul>
+      <li>Каждое окно в каждом кадре заливает фон целиком, просвечивания больше нет.</li>
+      <li>«Подгонять окно под видео» по умолчанию стоит на «Никогда».</li>
+      <li>Новая настройка «Вид панели управления»: плавающая, во всю ширину или минимальная на 40 DIP. Субтитры поднимаются над плавающей панелью.</li>
+      <li>Подсказки не застревают, развёрнутое окно не закрывает панель задач, у всех строк очереди видна длительность.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/round4/">qa/round4/</a>, <a href="../STATUS.md">STATUS.md</a>, раздел 6а</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="156,70;306,70;456,70" viewBox="0 0 480 300" role="img" aria-label="Три вида панели управления поверх видео: плавающая, во всю ширину, минимальная">
+        <text class="t" x="24" y="52">настройка «Вид панели управления»</text>
+        <rect class="ms" x="24" y="70" width="132" height="86"/>
+        <rect class="ms" x="174" y="70" width="132" height="86"/>
+        <rect class="ms" x="324" y="70" width="132" height="86"/>
+        <rect class="ik" x="62" y="108" width="56" height="4" rx="2" style="opacity:.7"/><rect class="ik" x="70" y="115" width="40" height="4" rx="2" style="opacity:.7"/>
+        <g class="bf">
+          <rect class="pn" x="32" y="128" width="116" height="20" rx="5"/>
+          <rect class="ac" x="36" y="132" width="16" height="12" rx="3"/>
+          <rect class="dp" x="58" y="137" width="84" height="2" rx="1"/><rect class="ad" x="58" y="137" width="30" height="2"/>
+        </g>
+        <g class="bf bf2">
+          <rect class="pn" x="174" y="134" width="132" height="22"/>
+          <rect class="ac" x="180" y="139" width="16" height="12" rx="3"/>
+          <rect class="dp" x="202" y="144" width="98" height="2" rx="1"/><rect class="ad" x="202" y="144" width="40" height="2"/>
+        </g>
+        <g class="bf bf3">
+          <rect class="ac" x="330" y="143" width="9" height="7" rx="2"/>
+          <rect class="dp" x="344" y="146" width="106" height="2" rx="1"/><rect class="ac" x="344" y="146" width="52" height="2" rx="1"/>
+        </g>
+        <text class="tm" x="24" y="186">плавающая</text><text class="t" x="24" y="204">по умолчанию</text>
+        <text class="tm" x="174" y="186">во всю ширину</text>
+        <text class="tm" x="324" y="186">минимальная</text><text class="t" x="324" y="204">40 DIP</text>
+        <text class="t" x="24" y="258">панель гаснет целиком, субтитры над плавающей панелью</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Плавающая панель по умолчанию, субтитры поднимаются над ней</li><li data-k="2">Во всю ширину, как в классических плеерах</li><li data-k="3">Минимальная, 40 DIP: пауза, время и тонкая полоса</li></ol>
+    <figcaption>Рис. 06. Три вида панели управления</figcaption>
+  </figure>
+</article>
+
+<!-- 05 -->
+<article class="ch grid" id="ch-05" data-n="5" data-date="18.10" aria-labelledby="t5">
+  <div class="meta"><span class="num">05</span><span class="date">18.10.2026</span><span class="tag">Ревью</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t5" tabindex="-1">Раунд 3: четыре свежих взгляда</h2>
+    <p class="say">Опытный пользователь, коллекционер, дизайнер и инженер по производительности. Находки второго раунда почти все закрыты, регрессий, падений и зависаний нет.</p>
+    <ul>
+      <li>Gapless на самом деле не работал. Теперь следующий файл заранее загружается в mpv, и песни идут без паузы.</li>
+      <li>Порядок дисков в MP3 исправлен, жанры больше не перечитываются при каждом запуске.</li>
+      <li>Деинтерлейсеры на процессоре молча отключались, пропадали тосты, плохо читался оверлей статистики. Всё это исправлено.</li>
+      <li>Неактивные элементы больше не ярче активных, у ползунков видно значение, появился образец субтитров.</li>
+      <li>Страницы альбома и исполнителя, названия серий «S01E02 · Название».</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/round3/">qa/round3/</a>, <a href="../STATUS.md">STATUS.md</a>, раздел 6</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,92;24,210" viewBox="0 0 480 300" role="img" aria-label="Две волны звука: раньше между песнями пауза, теперь стык без паузы">
+        <text class="t" x="40" y="46">было</text>
+        <g class="wa" data-wave="40 224 92 24 3"></g>
+        <path class="ls" d="M228 92H260" stroke-dasharray="3 3"/>
+        <text class="t" x="244" y="128" text-anchor="middle">пауза</text>
+        <g class="wb" data-wave="264 440 92 24 9"></g>
+        <text class="t" x="40" y="166">стало</text>
+        <g class="wa" data-wave="40 236 210 24 3"></g>
+        <g class="wb" data-wave="240 440 210 24 9"></g>
+        <path class="lk" d="M238 176V244" stroke-width="1.5"/>
+        <text class="t" x="238" y="266" text-anchor="middle">стык, 0 мс</text>
+        <g class="ph"><path class="ld" d="M40 180V240" stroke-dasharray="2 4"/></g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Было: между песнями пауза, gapless на деле не работал</li><li data-k="2">Стало: следующий файл заранее загружен в mpv, стык без паузы</li></ol>
+    <figcaption>Рис. 05. Стык двух песен: пауза была, теперь нет</figcaption>
+  </figure>
+</article>
+
+<!-- 04 -->
+<article class="ch grid" id="ch-04" data-n="4" data-date="18.10" aria-labelledby="t4">
+  <div class="meta"><span class="num">04</span><span class="date">18.10.2026</span><span class="tag">Производительность</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t4" tabindex="-1">Скорость</h2>
+    <p class="say">Замеры на RTX 4080 и большой медиатеке. Упор на то, что видно сразу: первый кадр, первый скан и память.</p>
+    <ul>
+      <li>Устройство Direct3D создаётся при старте процесса, а первые кадры рисует WARP, пока грузится драйвер видеокарты.</li>
+      <li>Кадры рисуются из <code>WM_PAINT</code>, поэтому ввод во время анимации обрабатывается сразу.</li>
+      <li>Сканирование идёт в 4 фоновых потока, кэш сохраняется по ходу. Жанр читается при скане и хранится в кэше.</li>
+      <li>Превью карточек, ушедших с экрана, отменяются; память под превью ограничена по байтам.</li>
+      <li>В простое медиатеки 0 % процессора.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>225 → 70-85</dd><dt>мс до первого кадра интерфейса</dt></div>
+      <div><dd>1,3 ГБ → 620 МБ</dd><dt>памяти на 4K-видео</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/perf/README.md">qa/perf/README.md</a>, <a href="../STATUS.md">STATUS.md</a>, раздел 5</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,58;24,120;24,182;24,244" viewBox="0 0 480 300" role="img" aria-label="Четыре пары полос до и после: первый кадр, первый скан, память 4K, жанры">
+        <rect class="ls" x="300.5" y="24.5" width="15" height="7" rx="2"/><text class="t" x="322" y="32">до</text>
+        <rect class="ac" x="360" y="24" width="16" height="8" rx="2"/><text class="t" x="382" y="32">после</text>
+        <text class="tm" x="40" y="62">Первый кадр интерфейса</text><text class="t" x="440" y="62" text-anchor="end">225 → 70-85 мс</text>
+        <rect class="ls" x="40.5" y="70.5" width="399" height="9" rx="2"/><rect class="ac" x="40" y="84" width="139" height="10" rx="2"/>
+        <text class="tm" x="40" y="124">Первый скан, 3500 файлов</text><text class="t" x="440" y="124" text-anchor="end">60 → 16-19 с</text>
+        <rect class="ls" x="40.5" y="132.5" width="399" height="9" rx="2"/><rect class="ac" x="40" y="146" width="117" height="10" rx="2"/>
+        <text class="tm" x="40" y="186">4K, память процесса</text><text class="t" x="440" y="186" text-anchor="end">1,3 ГБ → 620 МБ</text>
+        <rect class="ls" x="40.5" y="194.5" width="399" height="9" rx="2"/><rect class="ac" x="40" y="208" width="191" height="10" rx="2"/>
+        <text class="tm" x="40" y="248">Жанры при тёплом старте</text><text class="t" x="440" y="248" text-anchor="end">40 с → сразу</text>
+        <rect class="ls" x="40.5" y="256.5" width="399" height="9" rx="2"/><rect class="ac" x="40" y="270" width="3" height="10" rx="1"/>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Первый кадр: Direct3D создаётся при старте, первые кадры рисует WARP</li><li data-k="2">Первый скан: 4 фоновых потока, кэш сохраняется по ходу</li><li data-k="3">Память на 4K: меньше потоков декодера</li><li data-k="4">Жанры читаются при скане и хранятся в кэше</li></ol>
+    <figcaption>Рис. 04. До и после, полосы в масштабе каждой пары</figcaption>
+  </figure>
+</article>
+
+<!-- 03 -->
+<article class="ch grid flip" id="ch-03" data-n="3" data-date="18.10" aria-labelledby="t3">
+  <div class="meta"><span class="num">03</span><span class="date">18.10.2026</span><span class="tag">Новое</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t3" tabindex="-1">Рынок и волна 2</h2>
+    <p class="say">Исследование плееров на рынке и сравнение с ними Lumen. По его итогам сделаны все пункты P0 и P1, которым не нужна сеть.</p>
+    <ul>
+      <li>Кроп, резкость и деинтерлейс идут на видеокарте без копирования кадров. Раньше при аппаратном декодировании они молча отключались.</li>
+      <li>Передача объёмного звука на ресивер, монопольный режим, gapless.</li>
+      <li>Статистика поверх видео по <kbd>Ctrl+Shift+I</kbd>.</li>
+      <li>Быстрые превью кадров на полосе перемотки, по образцу thumbfast.</li>
+      <li>Сериалы по сезонам, «Следующая серия», пропуск заставки и титров, жесты мыши, удержание для 2×.</li>
+      <li>Пресеты качества, RTX и Intel VSR, RTX HDR, тональная компрессия, свои шейдеры.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>589 → 86</dd><dt>мс до превью в 4K</dt></div>
+      <div><dd>144 → 28</dd><dt>мс до превью в 1080p</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../qa/research/MARKET.md">MARKET.md</a>, <a href="../qa/wave2/">qa/wave2/</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="28,40;448,180;28,256" viewBox="0 0 480 300" role="img" aria-label="Видео с панелью управления, над полосой перемотки превью кадра под курсором">
+        <rect class="cd" x="40" y="24" width="400" height="200"/>
+        <circle class="ms" cx="350" cy="74" r="16"/>
+        <path class="pn" d="M40 176L118 124L186 164L268 102L360 156L440 120V224H40Z"/>
+        <path class="dp" d="M40 206L140 172L230 198L330 166L440 194V224H40Z" style="opacity:.8"/>
+        <text class="t" x="52" y="44" style="fill:var(--muted)">превью кадра в 4K: 589 → 86 мс</text>
+        <rect class="pn" x="56" y="236" width="368" height="40" rx="10"/>
+        <rect class="ac" x="68" y="246" width="34" height="20" rx="5"/><path class="oa" d="M81 251v10l8-5z"/>
+        <text class="t" x="110" y="260">38:12</text>
+        <rect class="dp" x="148" y="254" width="220" height="4" rx="2"/><rect class="ad" x="148" y="254" width="70" height="4" rx="2"/>
+        <path class="ls" d="M190 250v12M236 250v12M300 250v12M340 250v12"/>
+        <rect class="ac" x="216" y="248" width="4" height="16" rx="2"/>
+        <text class="t" x="378" y="260">1:48:10</text>
+        <g class="hv">
+          <path class="lk" d="M205 250v12"/>
+          <rect class="pn" x="155" y="146" width="100" height="72" rx="6"/><rect class="lk" x="155.75" y="146.75" width="98.5" height="70.5" rx="6" stroke-width="1.5"/>
+          <rect class="cd" x="160" y="151" width="90" height="48" rx="3"/>
+          <circle class="ms" cx="232" cy="164" r="6"/>
+          <path class="ms" d="M160 187l20-14 17 10 20-16 33 16v16h-90z"/>
+          <text class="t" x="205" y="212" text-anchor="middle" style="fill:var(--ink)">1:12:40</text>
+        </g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Время до превью: в 4K было 589 мс, стало 86</li><li data-k="2">Превью кадра под курсором едет вместе с ним</li><li data-k="3">Полоса перемотки с засечками глав, как в самом Lumen</li></ol>
+    <figcaption>Рис. 03. Превью кадра над полосой перемотки</figcaption>
+  </figure>
+</article>
+
+<!-- 02 -->
+<article class="ch grid" id="ch-02" data-n="2" data-date="18.10" aria-labelledby="t2">
+  <div class="meta"><span class="num">02</span><span class="date">17-18.10.2026</span><span class="tag">Ревью</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t2" tabindex="-1">Раунды 1 и 2: придирчивые новички</h2>
+    <p class="say">Четыре ревьюера в роли новых пользователей, каждый в своей замороженной сборке: дизайн, медиатека, опытный пользователь и стабильность. В первом раунде отчёт успел сдать только один, второй прошёл целиком.</p>
+    <ul>
+      <li>Невидимые засечки, чёрные поля ввода и нечитаемые неактивные строки исправлены.</li>
+      <li>История, автозапуск, пропуски и навигация работают как ожидается.</li>
+      <li>Досмотренный файл больше не продолжается с конца, а начинается сначала.</li>
+      <li>Правила для ревьюеров записаны в бриф, им следуют все следующие раунды.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../qa/round2/">qa/round2/</a>, <a href="../qa/REVIEWER-BRIEF.md">REVIEWER-BRIEF.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="30,30;240,30;30,156;240,156" viewBox="0 0 480 300" role="img" aria-label="Четыре окна-сборки, по одному на роль: дизайн, медиатека, опытный пользователь, стабильность">
+        <g data-win="40 34"></g><g data-win="250 34"></g><g data-win="40 160"></g><g data-win="250 160"></g>
+        <g class="ms" style="opacity:.6"><rect x="62" y="64" width="12" height="9" rx="1"/><rect x="78" y="64" width="12" height="9" rx="1"/><rect x="94" y="64" width="12" height="9" rx="1"/><rect x="62" y="77" width="12" height="9" rx="1"/><rect x="78" y="77" width="12" height="9" rx="1"/><rect x="94" y="77" width="12" height="9" rx="1"/><rect x="62" y="90" width="12" height="9" rx="1"/><rect x="78" y="90" width="12" height="9" rx="1"/><rect x="94" y="90" width="12" height="9" rx="1"/></g>
+        <circle class="gr" cx="128" cy="82" r="17" style="opacity:.6"/><circle class="lk" cx="128" cy="82" r="17" stroke-width="1.5"/><path class="lk" d="M140 94l14 14" stroke-width="3" stroke-linecap="round"/>
+        <rect class="cd" x="280" y="62" width="58" height="38" rx="4"/><rect class="ls" x="280.5" y="62.5" width="57" height="37" rx="4"/>
+        <rect class="cd" x="290" y="70" width="58" height="38" rx="4"/><rect class="ls" x="290.5" y="70.5" width="57" height="37" rx="4"/>
+        <rect class="cd" x="300" y="78" width="58" height="38" rx="4"/><rect class="ls" x="300.5" y="78.5" width="57" height="37" rx="4"/>
+        <rect class="cd" x="62" y="196" width="40" height="26" rx="4"/><rect class="ls" x="62.5" y="196.5" width="39" height="25" rx="4"/><text class="t" x="82" y="213" text-anchor="middle">Ctrl</text>
+        <rect class="cd" x="108" y="196" width="44" height="26" rx="4"/><rect class="ls" x="108.5" y="196.5" width="43" height="25" rx="4"/><text class="t" x="130" y="213" text-anchor="middle">Shift</text>
+        <rect class="cd" x="158" y="196" width="26" height="26" rx="4"/><rect class="ls" x="158.5" y="196.5" width="25" height="25" rx="4"/><text class="t" x="171" y="213" text-anchor="middle">I</text>
+        <path class="lk" d="M266 214h34l8-18 10 34 9-26 6 10h58" stroke-width="1.5" stroke-linejoin="round"/>
+        <text class="tm" x="52" y="132">дизайн</text>
+        <text class="tm" x="262" y="132">медиатека</text>
+        <text class="tm" x="52" y="258">опытный пользователь</text>
+        <text class="tm" x="262" y="258">стабильность</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Дизайн: вид, отступы, контраст, состояния</li><li data-k="2">Медиатека: коллекционер с большой библиотекой</li><li data-k="3">Опытный пользователь: клавиши, настройки, редкие сценарии</li><li data-k="4">Стабильность: падения, зависания, плохие файлы</li></ol>
+    <figcaption>Рис. 02. Четыре роли, у каждой своя замороженная сборка</figcaption>
+  </figure>
+</article>
+
+<!-- 01 -->
+<article class="ch grid" id="ch-01" data-n="1" data-date="17.10" aria-labelledby="t1">
+  <div class="meta"><span class="num">01</span><span class="date">17.10.2026</span><span class="tag">Начало</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t1" tabindex="-1">Первая сборка</h2>
+    <p class="say">Lumen собран по макету Figma «VLC Redesign»: та же структура, сетка и типографика, но в монохроме. Оранжевый акцент VLC заменён шкалой белого.</p>
+    <ul>
+      <li>Свой UI-фреймворк на Direct2D и DirectComposition, видео через libmpv, без браузерного движка.</li>
+      <li>57 экранов макета, 206 иконок, шрифт Inter вшит в exe.</li>
+      <li>Медиатека: Главная, Видео, Музыка, Сеть, Плейлисты, Недавние.</li>
+      <li>Плеер с панелями, экран музыки, «картинка в картинке», окно настроек по схеме, диалоги и знакомство при первом запуске.</li>
+      <li>Кнопки на превью в панели задач, медиаклавиши, ассоциации файлов.</li>
+    </ul>
+    <p class="src">Подробно: <a href="../design/DESIGN.md">design/DESIGN.md</a>, <a href="../ARCHITECTURE.md">ARCHITECTURE.md</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="24,74;24,190;24,244" viewBox="0 0 480 300" role="img" aria-label="Панель управления из макета с оранжевым акцентом и та же панель в Lumen в монохроме, ниже пять тонов акцента">
+        <text class="t" x="40" y="44">Figma, VLC Redesign</text>
+        <rect class="pn" x="40" y="52" width="400" height="44" rx="10"/>
+        <path class="dm" d="M58 67h2v14h-2zM72 67v14l-10-7z"/>
+        <rect x="80" y="63" width="40" height="22" rx="5" fill="#D37918"/><path d="M96 69v10l8-5z" fill="#1A1611"/>
+        <path class="dm" d="M128 67v14l10-7zM138 67h2v14h-2z"/>
+        <text class="t" x="150" y="78">12:04</text>
+        <rect class="dp" x="188" y="72" width="198" height="4" rx="2"/><rect x="188" y="72" width="90" height="4" rx="2" fill="#371F06"/><rect x="276" y="66" width="4" height="16" rx="2" fill="#D37918"/>
+        <text class="t" x="394" y="78">1:48</text>
+        <path class="ls" d="M240 106v30M234 130l6 6 6-6"/>
+        <text class="t" x="254" y="124">#D37918 → шкала белого</text>
+        <text class="t" x="40" y="160">Lumen</text>
+        <rect class="pn" x="40" y="168" width="400" height="44" rx="10"/>
+        <path class="dm" d="M58 183h2v14h-2zM72 183v14l-10-7z"/>
+        <rect class="ac" x="80" y="179" width="40" height="22" rx="5"/><path class="oa" d="M96 185v10l8-5z"/>
+        <path class="dm" d="M128 183v14l10-7zM138 183h2v14h-2z"/>
+        <text class="t" x="150" y="194">12:04</text>
+        <rect class="dp" x="188" y="188" width="198" height="4" rx="2"/><rect class="ad" x="188" y="188" width="90" height="4" rx="2"/><rect class="ac" x="276" y="182" width="4" height="16" rx="2"/>
+        <text class="t" x="394" y="194">1:48</text>
+        <rect x="40" y="232" width="72" height="24" rx="4" fill="#EDEDED"/><rect x="122" y="232" width="72" height="24" rx="4" fill="#D4D4D4"/><rect x="204" y="232" width="72" height="24" rx="4" fill="#B5B5B5"/><rect x="286" y="232" width="72" height="24" rx="4" fill="#8F8F8F"/><rect x="368" y="232" width="72" height="24" rx="4" fill="#6B6B6B"/>
+        <text class="t" x="40" y="274">Белый</text><text class="t" x="122" y="274">Жемчуг</text><text class="t" x="204" y="274">Серебро</text><text class="t" x="286" y="274">Сталь</text><text class="t" x="368" y="274">Графит</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Панель из макета Figma: оранжевый акцент VLC на кнопке, бегунке и пройденной части</li><li data-k="2">Та же панель в Lumen: акцент белый, пройденная часть тёмно-серая</li><li data-k="3">Пять тонов акцента на выбор; в светлой теме те же ступени от чёрного</li></ol>
+    <figcaption>Рис. 01. Панель управления в макете и в Lumen, пять тонов акцента</figcaption>
+  </figure>
+</article>
+
+</main>
+
+<footer class="wrap foot">
+  <p>Собрано из <a href="../STATUS.md">STATUS.md</a>, отчётов в <a href="../qa/">qa/</a> и истории git: 542 коммита с 17 по 20 октября.</p>
+  <p>Шрифт Inter и цвета из <a href="../design/DESIGN.md">design/DESIGN.md</a>, как в самом плеере. Как добавить главу: <a href="README.md">changelog/README.md</a>.</p>
+</footer>
+
+<nav class="bar" aria-label="Главы">
+  <button class="nb prev" type="button" aria-label="Глава раньше"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h2v12H5zM16 4v12l-8-6z" fill="currentColor"/></svg></button>
+  <span class="pill" aria-hidden="true">28</span>
+  <button class="nb next" type="button" aria-label="Глава позже"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12l8-6zM13 4h2v12h-2z" fill="currentColor"/></svg></button>
+  <p class="cur" aria-hidden="true">Сейчас<span>20.10</span></p>
+  <div class="seek">
+    <div class="trk"></div><div class="fill"></div><div class="ticks"></div><div class="hd"></div>
+    <input type="range" min="1" max="28" step="1" value="28" aria-label="Глава">
+  </div>
+  <span class="total">из 28</span>
+  <div class="pv" aria-hidden="true"><div class="pv-img live"></div><div class="pv-t"></div></div>
+</nav>
+
+<dialog class="zd" aria-labelledby="zd-t">
+  <div class="zd-in">
+    <header><div><p class="zd-c"></p><h2 id="zd-t"></h2></div><button class="zd-x" type="button" aria-label="Закрыть">×</button></header>
+    <div class="zd-fig live"></div>
+    <ol class="keys"></ol>
+    <p class="zd-cap"></p>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const doc = document.documentElement;
+  doc.classList.add('js');
+  const NS = 'http://www.w3.org/2000/svg';
+  const add = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e);
+    return e;
+  };
+  // mulberry32: the same marks on every load
+  const rng = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const nums = s => s.split(' ').map(Number);
+
+  // Repetitive marks inside the figures
+  document.querySelectorAll('[data-wave]').forEach(g => {
+    const [x0, x1, y, a, s] = nums(g.dataset.wave), r = rng(s);
+    let d = '';
+    for (let x = x0; x <= x1; x += 4) {
+      const h = Math.max(1.5, a * (0.25 + 0.75 * Math.abs(Math.sin(x / (14 + s) + s)) * (0.45 + 0.55 * r())));
+      d += `M${x} ${(y - h).toFixed(1)}V${(y + h).toFixed(1)}`;
+    }
+    add('path', { d }, g);
+  });
+  document.querySelectorAll('[data-perf]').forEach(g => {
+    const [x0, x1, yt, yb] = nums(g.dataset.perf);
+    for (let x = x0; x < x1; x += 14) { add('rect', { x, y: yt, width: 6, height: 4, rx: 1 }, g); add('rect', { x, y: yb, width: 6, height: 4, rx: 1 }, g); }
+  });
+  document.querySelectorAll('[data-ui]').forEach(g => {
+    const [x, y, o] = nums(g.dataset.ui);
+    add('rect', { x, y, width: 62, height: 46, rx: 2, class: 'gr' }, g);
+    const u = add('g', { opacity: o }, g);
+    add('rect', { x: x + 3, y: y + 3, width: 12, height: 40, rx: 1, class: 'pn' }, u);
+    for (let k = 0; k < 3; k++) add('rect', { x: x + 19 + k * 13, y: y + 6, width: 11, height: 9, rx: 1, class: 'ms' }, u);
+    add('rect', { x: x + 19, y: y + 21, width: 36, height: 3, rx: 1, class: 'dm' }, u);
+    add('rect', { x: x + 19, y: y + 28, width: 26, height: 3, rx: 1, class: 'ms' }, u);
+  });
+  document.querySelectorAll('[data-ticks]').forEach(g => {
+    const [x0, x1, y, n] = nums(g.dataset.ticks);
+    let d = '';
+    for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n; d += `M${x} ${y - (i % 5 ? 3 : 6)}V${y}`; }
+    add('path', { d, class: 'ls' }, g);
+  });
+  document.querySelectorAll('[data-win]').forEach(g => {
+    const [x, y] = nums(g.dataset.win);
+    add('rect', { x, y, width: 190, height: 112, rx: 6, class: 'pn' }, g);
+    add('rect', { x: x + .5, y: y + .5, width: 189, height: 111, rx: 6, class: 'ln' }, g);
+    add('path', { d: `M${x} ${y + 18.5}h190`, class: 'ln' }, g);
+    add('path', { d: `M${x + 152} ${y + 9.5}h7M${x + 166} ${y + 6}h6v6h-6zM${x + 179} ${y + 6}l6 6M${x + 185} ${y + 6}l-6 6`, class: 'ld' }, g);
+  });
+  const sheet = document.querySelector('[data-sheet]');
+  if (sheet) {
+    const r = rng(+sheet.dataset.sheet), marks = new Set([3, 12, 21, 30, 37]);
+    for (let i = 0; i < 40; i++) {
+      const x = 27 + (i % 8) * 54, y = 40 + (i / 8 | 0) * 36;
+      // The sweep shoots both themes, so some thumbnails are light screenshots.
+      const light = r() < .25;
+      const bg = light ? '#F2F2F2' : '#141414', pn = light ? '#FFFFFF' : '#1E1E1E', ln = light ? '#CFCFCF' : '#333333', vd = light ? '#BDBDBD' : '#2A2A2A';
+      add('rect', { x, y, width: 48, height: 30, rx: 2, fill: bg }, sheet);
+      const kind = r();
+      if (kind < .45) {
+        add('rect', { x: x + 2, y: y + 2, width: 9, height: 26, rx: 1, fill: pn }, sheet);
+        for (let k = 0; k < 6; k++) add('rect', { x: x + 14 + (k % 3) * 11, y: y + 5 + (k / 3 | 0) * 12, width: 9, height: 9, rx: 1, fill: ln }, sheet);
+      } else if (kind < .75) {
+        add('rect', { x: x + 2, y: y + 2, width: 44, height: 19, rx: 1, fill: vd }, sheet);
+        add('rect', { x: x + 4, y: y + 23, width: 40, height: 5, rx: 1.5, fill: pn }, sheet);
+      } else {
+        add('rect', { x: x + 2, y: y + 2, width: 12, height: 26, rx: 1, fill: pn }, sheet);
+        for (let k = 0; k < 4; k++) add('rect', { x: x + 17, y: y + 5 + k * 6, width: 12 + r() * 16, height: 2, fill: ln }, sheet);
+      }
+      if (marks.has(i)) add('rect', { x: x - 3, y: y - 3, width: 54, height: 36, rx: 4, class: 'mk' }, sheet);
+    }
+  }
+  const tally = document.querySelector('[data-tally]');
+  if (tally) {
+    const [x0, y0, n, ok] = nums(tally.dataset.tally);
+    for (let i = 0; i < n; i++) {
+      const x = x0 + (i % 12) * 28, y = y0 + (i / 12 | 0) * 18;
+      if (i < ok) add('rect', { x, y, width: 22, height: 12, rx: 2, class: 'ac' }, tally);
+      else { add('rect', { x: x + .5, y: y + .5, width: 21, height: 11, rx: 2, class: 'ls' }, tally); add('path', { d: `M${x + 4} ${y + 9}L${x + 18} ${y + 3}`, class: 'ld' }, tally); }
+    }
+  }
+
+  document.querySelectorAll('[data-rows]').forEach(g => {
+    const [x, y, h, n, s0, s1] = nums(g.dataset.rows), w = [180, 230, 150, 210, 170, 240], d = ['3:41', '4:12', '2:58', '5:03', '3:27', '4:45'];
+    for (let i = 0; i < n; i++) {
+      const yy = y + i * h, sel = i >= s0 && i <= s1;
+      add('text', { x: x + 12, y: yy + 15, class: 't' }, g).textContent = i + 1;
+      add('rect', { x: x + 34, y: yy + 9, width: w[i % 6], height: 4, rx: 2, class: sel ? 'ik' : 'ms' }, g);
+      add('text', { x: x + 392, y: yy + 15, class: 't', 'text-anchor': 'end' }, g).textContent = d[i % 6];
+    }
+  });
+  document.querySelectorAll('[data-queue]').forEach(g => {
+    const [x, y, n, sel] = nums(g.dataset.queue), d = ['3:41', '4:12', '2:58', '5:03', '3:27', '4:45'];
+    for (let i = 0; i < n; i++) {
+      const yy = y + i * 32;
+      add('rect', { x, y: yy, width: 22, height: 22, rx: 3, class: 'cd' }, g);
+      const t = add('text', { x: x + 30, y: yy + 15, class: i === sel ? 'tm' : 't' }, g);
+      t.textContent = `Песня ${i + 1}`;
+      if (i === sel) t.style.fill = 'var(--ink)';
+      add('text', { x: x + 148, y: yy + 15, class: 't', 'text-anchor': 'end' }, g).textContent = d[i];
+    }
+  });
+  document.querySelectorAll('[data-folder]').forEach(g => {
+    const m = g.dataset.folder.match(/^(\S+) (\S+) (.*)$/), x = +m[1], y = +m[2], [path, status, bad] = m[3].split('|');
+    if (bad === '1') add('rect', { x, y: y + 2, width: 400, height: 40, rx: 4, class: 'ad' }, g);
+    add('path', { d: `M${x + 12} ${y + 15}h7l2 3h11v11H${x + 12}z`, class: 'ld' }, g);
+    const t = add('text', { x: x + 44, y: y + 20, class: 'tm' }, g); t.textContent = path; t.style.fill = 'var(--ink)';
+    add('text', { x: x + 44, y: y + 36, class: 't' }, g).textContent = status;
+    const btn = (bx, w, label) => { add('rect', { x: bx + .5, y: y + 11.5, width: w, height: 21, rx: 4, class: 'ls' }, g); add('text', { x: bx + w / 2, y: y + 26, class: 't', 'text-anchor': 'middle' }, g).textContent = label; };
+    btn(x + 340, 52, 'Убрать');
+    if (bad === '1') btn(x + 262, 70, 'Повторить');
+    add('path', { d: `M${x} ${y + 44.5}H${x + 400}`, class: 'ln' }, g);
+  });
+  document.querySelectorAll('[data-stops]').forEach(g => {
+    nums(g.dataset.stops).forEach((cx, i) => {
+      add('circle', { cx, cy: 166, r: 8, class: 'cd' }, g);
+      add('circle', { cx, cy: 166, r: 8, class: 'ld' }, g);
+      const t = add('text', { x: cx, y: 169.5, class: 't', 'text-anchor': 'middle' }, g); t.textContent = i + 1; t.style.fontSize = '10px';
+    });
+  });
+  document.querySelectorAll('[data-lanes]').forEach(g => {
+    const lines = add('g', { class: 'ls' }, g), mx = 720, my = 150;
+    JSON.parse(g.dataset.lanes).forEach(([name, kind, x0, x1, y]) => {
+      add('path', { d: `M${x1} ${y}C${x1 + 110} ${y} ${mx - 100} ${my} ${mx} ${my}` }, lines);
+      add('text', { x: 150, y: y + 4, class: 't', 'text-anchor': 'end' }, g).textContent = name;
+      if (kind === 'done') add('rect', { x: x0, y: y - 4, width: x1 - x0, height: 8, rx: 2, class: 'ac' }, g);
+      else if (kind === 'next') add('rect', { x: x0, y: y - 4, width: x1 - x0, height: 8, rx: 2, class: 'dm' }, g);
+      else {
+        add('rect', { x: x0 + .5, y: y - 3.5, width: x1 - x0 - 14, height: 7, rx: 2, class: 'ls' }, g);
+        add('rect', { x: x1 - 8, y: y - 4, width: 3, height: 8, class: 'ik' }, g);
+        add('rect', { x: x1 - 3, y: y - 4, width: 3, height: 8, class: 'ik' }, g);
+      }
+    });
+  });
+
+  // Plates decode in once, and their idle motion runs only while on screen
+  const pio = new IntersectionObserver(es => es.forEach(e => {
+    e.target.classList.toggle('live', e.isIntersecting);
+    if (e.isIntersecting) e.target.classList.add('on');
+  }), { threshold: .2 });
+  document.querySelectorAll('.plate').forEach(p => pio.observe(p));
+
+  // Seek bar: one chapter per tick, oldest on the left
+  const chs = [...document.querySelectorAll('.ch')].sort((a, b) => a.dataset.n - b.dataset.n);
+  const N = chs.length;
+  const bar = document.querySelector('.bar'), seek = bar.querySelector('.seek'), input = seek.querySelector('input');
+  const ticks = seek.querySelector('.ticks'), pill = bar.querySelector('.pill'), cur = bar.querySelector('.cur');
+  const prev = bar.querySelector('.prev'), next = bar.querySelector('.next');
+  const pv = bar.querySelector('.pv'), pvImg = pv.querySelector('.pv-img'), pvT = pv.querySelector('.pv-t');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const pad = v => String(v).padStart(2, '0');
+  const pos = v => (v - 1) / (N - 1) * 100;
+  const title = v => chs[v - 1].querySelector('h2').textContent;
+  input.max = N;
+  chs.forEach((c, i) => {
+    const t = document.createElement('i');
+    t.style.left = pos(i + 1) + '%';
+    if (i && c.dataset.date !== chs[i - 1].dataset.date) t.className = 'day';
+    ticks.appendChild(t);
+  });
+
+  let at = N, atTop = true, target = 0, scrubbing = false, hideT;
+  function show(v) {
+    at = v;
+    seek.style.setProperty('--p', pos(v) + '%');
+    input.value = v;
+    input.setAttribute('aria-valuetext', `Глава ${v} из ${N}: ${title(v)}`);
+    pill.textContent = pad(v);
+    cur.firstChild.textContent = atTop ? 'Сейчас' : title(v);
+    cur.lastChild.textContent = chs[v - 1].querySelector('.date').textContent;
+    prev.disabled = v <= 1;
+    next.disabled = v >= N && atTop;
+    [...ticks.children].forEach((t, i) => t.classList.toggle('past', i < v - 1));
+  }
+  function go(v) {
+    v = Math.min(N, Math.max(1, v));
+    target = v;
+    clearTimeout(go.t); go.t = setTimeout(() => { target = 0; }, 1500);
+    atTop = false;
+    show(v);
+    const h = chs[v - 1].querySelector('h2');
+    chs[v - 1].scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'start' });
+    h.focus({ preventScroll: true });
+  }
+
+  const watched = [document.getElementById('now'), ...chs];
+  const io = new IntersectionObserver(es => {
+    for (const e of es) {
+      if (!e.isIntersecting || scrubbing) continue;
+      const top = e.target.id === 'now', v = top ? N : +e.target.dataset.n;
+      if (target && v !== target) continue;
+      if (v === target) target = 0;
+      atTop = top;
+      show(v);
+    }
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  watched.forEach(el => io.observe(el));
+
+  prev.addEventListener('click', () => go(atTop ? N : at - 1));
+  next.addEventListener('click', () => (at >= N ? document.getElementById('now').scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth' }) : go(at + 1)));
+
+  // Preview above the bar, like Lumen's frame previews on its seek bar
+  let pvFor = 0;
+  function preview(v) {
+    clearTimeout(hideT);
+    if (pvFor !== v) {
+      pvFor = v;
+      const svg = chs[v - 1].querySelector('svg.ill').cloneNode(true);
+      svg.removeAttribute('role'); svg.removeAttribute('aria-label');
+      pvImg.replaceChildren(svg);
+      pvT.innerHTML = '';
+      const b = document.createElement('b'); b.textContent = `Глава ${pad(v)} · ${chs[v - 1].dataset.date}`;
+      pvT.append(b, title(v));
+    }
+    const br = bar.getBoundingClientRect(), sr = seek.getBoundingClientRect(), half = pv.offsetWidth / 2 + 8;
+    const x = sr.left - br.left + sr.width * pos(v) / 100;
+    pv.style.setProperty('--x', Math.min(Math.max(x, half), br.width - half) + 'px');
+    pv.classList.add('on');
+  }
+  const hide = (ms = 0) => { clearTimeout(hideT); hideT = setTimeout(() => pv.classList.remove('on'), ms); };
+  const valueAt = clientX => {
+    const r = seek.getBoundingClientRect();
+    return Math.min(N, Math.max(1, Math.round((clientX - r.left) / r.width * (N - 1)) + 1));
+  };
+  seek.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || scrubbing) preview(valueAt(e.clientX)); });
+  seek.addEventListener('pointerleave', () => { if (!scrubbing) hide(); });
+  input.addEventListener('input', () => {
+    scrubbing = true;
+    const v = +input.value;
+    seek.style.setProperty('--p', pos(v) + '%');
+    pill.textContent = pad(v);
+    preview(v);
+  });
+  input.addEventListener('change', () => { scrubbing = false; go(+input.value); hide(700); });
+  input.addEventListener('blur', () => { scrubbing = false; hide(); });
+
+  show(N);
+
+  // Level of detail: numbered keys drawn into each figure, linked to its legend
+  document.querySelectorAll('svg.ill[data-keys]').forEach(svg => {
+    const g = add('g', { 'aria-hidden': 'true' }, svg);
+    svg.dataset.keys.split(';').forEach((xy, i) => {
+      const [x, y] = xy.split(',').map(Number), k = add('g', { class: 'key', 'data-k': i + 1 }, g);
+      add('circle', { cx: x, cy: y, r: 9 }, k);
+      add('text', { x, y: y + 4, 'text-anchor': 'middle' }, k).textContent = i + 1;
+    });
+  });
+  const linkKeys = box => {
+    const mark = k => box.querySelectorAll('.key, .keys li').forEach(el => el.classList.toggle('hl', el.dataset.k === k));
+    box.addEventListener('pointerover', e => { const el = e.target.closest('.key, .keys li'); mark(el ? el.dataset.k : ''); });
+    box.addEventListener('pointerleave', () => mark(''));
+  };
+
+  // Zoom view: the same figure large, with its legend
+  const zd = document.querySelector('.zd'), zdFig = zd.querySelector('.zd-fig'), zdKeys = zd.querySelector('.keys');
+  linkKeys(zd);
+  function zoom(ch) {
+    const svg = ch.querySelector('.plate svg.ill').cloneNode(true);
+    svg.style.setProperty('--min', svg.viewBox.baseVal.width + 'px');
+    zdFig.replaceChildren(svg);
+    zdKeys.replaceChildren(...[...ch.querySelectorAll('.plate .keys li')].map(li => li.cloneNode(true)));
+    zd.querySelector('.zd-c').textContent = `Глава ${pad(+ch.dataset.n)} · ${ch.querySelector('.date').textContent}`;
+    zd.querySelector('#zd-t').textContent = title(+ch.dataset.n);
+    zd.querySelector('.zd-cap').textContent = ch.querySelector('figcaption').firstChild.textContent;
+    zd.showModal();
+  }
+  chs.forEach(ch => {
+    const plate = ch.querySelector('.plate'), b = document.createElement('button');
+    b.type = 'button'; b.className = 'zoom';
+    b.setAttribute('aria-label', `Увеличить рисунок ${pad(+ch.dataset.n)}`);
+    b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/></svg>Увеличить';
+    b.addEventListener('click', () => zoom(ch));
+    plate.querySelector('figcaption').append(b);
+    plate.querySelector('.frame').addEventListener('click', () => zoom(ch));
+    linkKeys(plate);
+  });
+  zd.querySelector('.zd-x').addEventListener('click', () => zd.close());
+  zd.addEventListener('click', e => { if (e.target === zd) zd.close(); });
+
+  // Index of all chapters, newest day first
+  const toc = document.querySelector('.toc-g'), days = new Map();
+  [...chs].reverse().forEach(c => { if (!days.has(c.dataset.date)) days.set(c.dataset.date, []); days.get(c.dataset.date).push(c); });
+  const word = n => (n % 10 === 1 && n % 100 !== 11 ? 'глава' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'главы' : 'глав');
+  days.forEach((list, d) => {
+    const sec = document.createElement('section'), h = document.createElement('h3'), ol = document.createElement('ol');
+    if (list.length > 6) sec.className = 'big';
+    h.textContent = `${d} · ${list.length} ${word(list.length)}`;
+    list.forEach(c => {
+      const li = document.createElement('li'), a = document.createElement('a'), n = document.createElement('span');
+      a.href = '#' + c.id; n.textContent = pad(+c.dataset.n);
+      a.append(n, title(+c.dataset.n)); li.append(a); ol.append(li);
+    });
+    sec.append(h, ol); toc.append(sec);
+  });
+})();
+</script>
+</body>
+</html>
