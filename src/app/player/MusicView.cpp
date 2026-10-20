@@ -1287,6 +1287,13 @@ bool MusicCoverReady() {
     return !g_musicView || g_musicView->CoverReady();
 }
 
+Rect MusicToastSlot() {
+    if (!g_musicView || !g_musicView->visible) return {};
+    const auto g = g_musicView->Place();
+    // The title is 70 DIP under the cover (Paint): a 40 DIP toast sits in the middle of the gap.
+    return {g.left.x, g.cover.Bottom() + 15, g.left.w, 40};
+}
+
 std::vector<MenuItem> LyricsStyleItems() {
     std::vector<MenuItem> items;
     const std::string cur = TheApp().config().GetString("audio.lyricsStyle");

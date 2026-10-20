@@ -34,8 +34,9 @@ public:
 
     // Rect where the video is shown (window DIPs); empty when not visible.
     ui::Rect VideoRect() const;
-    // Where a toast centres: the video or music area left of an open popover.
-    ui::Rect ToastBand() const;
+    // Where a toast centres: the video area left of an open popover, clear of it; in the music view
+    // the gap under the cover, and then `top` (else -1) is where the toast's top goes.
+    ui::Rect ToastBand(float* top = nullptr) const;
 
     void OnLayout() override;
     float SubtitleBand(float h) const;
@@ -94,6 +95,8 @@ void SetQueueDockSide(const std::string& side);
 void ShowMusicLyrics();
 // The music view's cover is decoded (or the file has none); asks for it as a paint would.
 bool MusicCoverReady();
+// Where a toast goes in the music view: the gap between the cover and the title; empty when hidden.
+ui::Rect MusicToastSlot();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
 

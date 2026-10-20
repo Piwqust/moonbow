@@ -751,11 +751,20 @@ void PlayerView::OnLayout() {
     UpdateStats();
 }
 
-Rect PlayerView::ToastBand() const {
+Rect PlayerView::ToastBand(float* top) const {
+    if (top) *top = -1;
+    // Not on the cover (VIS-13).
+    if (const Rect slot = music_->visible ? MusicToastSlot() : Rect{}; !slot.Empty()) {
+        if (top) *top = slot.y;
+        return slot;
+    }
     Rect a = video_->rect;
-    const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
-                       PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
-    if (panel && a.w - (panel::kPanelW + panel::kGap) >= 320) a.w -= panel::kPanelW + panel::kGap;
+    bool panel = false;
+    for (int k = 0; k <= static_cast<int>(PanelKind::Speed); ++k) panel |= PlayerPanelOpen(static_cast<PanelKind>(k));
+    // The popover's left edge (Panels.cpp, PlaceAboveBar): the toast, at most band.w - 32 wide and
+    // centred, keeps 16 DIP from it.
+    const float panelX = bar_->rect.Right() - panel::kGap - panel::kPanelW;
+    if (panel && panelX - a.x >= 320) a.w = std::min(a.w, panelX - a.x);
     return a;
 }
 

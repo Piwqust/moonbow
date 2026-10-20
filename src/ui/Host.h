@@ -33,6 +33,9 @@ enum class Place : uint8_t { Below, Above, Right, Left, Center, At, BelowRight, 
 
 struct PopupOptions {
     Rect anchor;  // window DIPs; for Place::At only x/y are used
+    // Place::At: where the popup of this size goes, asked again at every layout (a toast moves
+    // beside a panel opened after it). Unset: anchor's x/y.
+    std::function<Point(Size)> at;
     Place place = Place::Below;
     float offset = 4;
     bool modal = false;              // blocks input to the window underneath

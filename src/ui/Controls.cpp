@@ -1679,6 +1679,11 @@ Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog) {
 
 namespace {
 
+// The part of the window a toast centres in (Host::toastBand).
+Rect ToastBandOf(Host* host) {
+    return host->toastBand ? host->toastBand() : Rect{0, 0, host->ClientSize().w, 0};
+}
+
 class ToastBubble : public Widget {
 public:
     ToastBubble(std::wstring text, std::string icon, std::wstring actionLabel, std::function<void()> action)
@@ -1697,6 +1702,8 @@ public:
     Size MeasureContent(float availW, float) override {
         // Capped here, not only by the caller: placement measures again with the window width,
         // and a long title (CJK file names) then came out wider than the box it was centred for.
+        // 16 DIP inside the band on each side, so it keeps clear of the panel beside it.
+        if (Host* h = GetHost()) availW = std::min(availW, std::max(240.0f, ToastBandOf(h).w - 32));
         float w = gfx::Text::Get().Measure(text_, TextStyle::Body).width + 32 + (icon_.empty() ? 0 : 28);
         if (action_) w += action_->Measure(availW, 32).w + 4;
         return {std::min({w, availW, kToastMaxW}), 40};
@@ -1767,13 +1774,13 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         };
     }
     auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon), std::move(actionLabel), std::move(action));
-    const Rect band = host->toastBand ? host->toastBand() : Rect{0, 0, host->ClientSize().w, 0};
-    bubble->maxW = std::max(240.0f, band.w - 32);  // the popup measures again with the window's width
-    const Size s = bubble->Measure(600, 40);
     PopupOptions o;
     o.place = Place::At;
-    const float y = host->toastTop ? host->toastTop(s.h) : 56.0f;
-    o.anchor = {std::round(band.x + (band.w - s.w) / 2), y, 0, 0};
+    // Placed again at every layout: a panel opened (or the bar shown) after the toast moves it.
+    o.at = [host](Size s) {
+        const Rect band = ToastBandOf(host);
+        return Point{std::round(band.x + (band.w - s.w) / 2), host->toastTop ? host->toastTop(s.h) : 56.0f};
+    };
     o.passthrough = !clickable;
     o.focusContent = false;
     o.dismissOnOutside = false;

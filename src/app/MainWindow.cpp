@@ -128,6 +128,9 @@ bool MainWindow::Create() {
             if (mini_ && mini_->visible && mini_->rect.x < (ClientSize().w + 600) / 2) bottom = mini_->rect.y - 12;
             return bottom - h;
         }
+        float top = -1;
+        player_->ToastBand(&top);  // the music view puts it under the cover
+        if (top >= 0) return top;
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
     toastBand = [this] { return TheApp().PlayerShown() ? player_->ToastBand() : Rect{0, 0, ClientSize().w, 0}; };
