@@ -1960,6 +1960,11 @@ void BuildMedia(Builder& b) {
     // ===== Library =====
     b.Cat("library", "media", "folder", L"Library", L"Медиатека");
 
+    b.Sec("folders", L"Library Folders", L"Папки медиатеки");
+    b.Info("library.folders", L"Folders", L"Папки", "library-folders")
+        .Desc(L"The folders Lumen looks for videos and music in. Removing one leaves its files on disk.",
+              L"Папки, в которых Lumen ищет видео и музыку. Если убрать папку, файлы останутся на диске.");
+
     b.Sec("opening", L"Opening Files", L"Открытие файлов");
     b.Pick("library.openFolder", L"When opening a folder", L"При открытии папки",
            {{"subfolders", L"Include subfolders", L"Вместе с вложенными папками"},

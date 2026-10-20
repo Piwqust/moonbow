@@ -174,6 +174,9 @@ public:
     const std::vector<std::wstring>& Roots() const { return roots_; }
     bool AddRoot(const std::wstring& folder);     // false if missing or already covered
     bool RemoveRoot(const std::wstring& folder);  // false if not a root
+    // Undo of RemoveRoot: back at `index`, also when the folder is unreachable now (an unplugged
+    // drive removed by mistake). False if it is a root already.
+    bool RestoreRoot(const std::wstring& folder, size_t index);
     void SetRoots(std::vector<std::wstring> folders);
 
     void SetOptions(const ScanOptions& options) { options_ = options; }

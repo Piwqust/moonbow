@@ -666,6 +666,15 @@ bool MediaLibrary::RemoveRoot(const std::wstring& folder) {
     return true;
 }
 
+bool MediaLibrary::RestoreRoot(const std::wstring& folder, size_t index) {
+    const std::wstring key = PathKey(folder);
+    for (const std::wstring& r : roots_)
+        if (PathKey(r) == key) return false;
+    roots_.insert(roots_.begin() + static_cast<ptrdiff_t>(std::min(index, roots_.size())), NormalizePath(folder));
+    Save();
+    return true;
+}
+
 void MediaLibrary::SetRoots(std::vector<std::wstring> folders) {
     roots_.clear();
     for (const std::wstring& f : folders) AddRoot(f);

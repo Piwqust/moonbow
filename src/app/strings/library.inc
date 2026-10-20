@@ -54,6 +54,13 @@
 {L"“{0}” will no longer appear in Lumen. The files stay on your disk.",
  L"«{0}» больше не будет показываться в Lumen. Файлы останутся на диске."},
 {L"Remove from Library", L"Убрать из медиатеки"},
+// Settings › Library › Library Folders
+{L"Library Folders…", L"Папки медиатеки…"},
+{L"Add folder…", L"Добавить папку…"},
+{L"No folders yet", L"Папок пока нет"},
+{L"Available · {0}", L"Доступна · {0}"},
+{L"Unavailable: connect the drive or remove the folder", L"Недоступна: подключите диск или уберите папку"},
+{L"Scanning…", L"Сканирование…"},
 // Scan banner (Home and the library pages, while a scan runs)
 {L"Indexing your library… {0} of {1}", L"Индексируем медиатеку… {0} из {1}"},
 {L"Indexing your library… files found: {0}", L"Индексируем медиатеку… найдено файлов: {0}"},

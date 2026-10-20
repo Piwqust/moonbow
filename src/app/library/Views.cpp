@@ -873,6 +873,7 @@ public:
             m.push_back(MenuItem::Separator());
         }
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         MenuItem hidden = Item(L"Show Hidden Files", "view", [] {
             Config& cfg = TheApp().config();
             cfg.SetBool("library.showHidden", !cfg.GetBool("library.showHidden"));

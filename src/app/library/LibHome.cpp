@@ -223,6 +223,7 @@ public:
         std::vector<MenuItem> m;
         // Adding and opening live in "+ Add" and the app menu; the page menu keeps what is about the page.
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         return m;
     }
     Widget* InitialFocus() override {

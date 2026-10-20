@@ -123,6 +123,10 @@ std::wstring CountSongs(long long n) {
     return CountWith(n, L"song", L"songs", L"песня", L"песни", L"песен");
 }
 
+std::wstring CountFiles(long long n) {
+    return CountWith(n, L"file", L"files", L"файл", L"файла", L"файлов");
+}
+
 std::wstring CountPlays(long long n) {
     return CountWith(n, L"play", L"plays", L"прослушивание", L"прослушивания", L"прослушиваний");
 }
@@ -457,12 +461,23 @@ void ShowFolderInLibrary(const std::wstring& folder) {
     app.ShowPlayer(false);
 }
 
-void RemoveLibraryRoot(const std::wstring& folder) {
+void RemoveLibraryRoot(const std::wstring& folder, ui::Host* toastHost) {
     library::MediaLibrary& lib = TheApp().library();
-    if (!lib.RemoveRoot(folder)) return;
+    const std::wstring key = library::PathKey(folder);
+    const auto& roots = lib.Roots();
+    const auto at = std::find_if(roots.begin(), roots.end(), [&](const std::wstring& r) { return library::PathKey(r) == key; });
+    if (at == roots.end()) return;
+    const std::wstring root = *at;
+    const size_t index = static_cast<size_t>(at - roots.begin());
+    if (!lib.RemoveRoot(root)) return;
     lib.Save();
     RescanLibrary();
-    Toast(Tr(L"Folder removed from the library. Files stay on disk."), "folder");
+    if (!toastHost) toastHost = TheApp().main();
+    if (!toastHost) return;
+    ShowToast(toastHost, Tr(L"Folder removed from the library. Files stay on disk."), "folder", 5000, Tr(L"Undo"),
+              [root, index] {
+                  if (TheApp().library().RestoreRoot(root, index)) RescanLibrary();
+              });
 }
 
 // --- shell ------------------------------------------------------------------------------
@@ -479,6 +494,10 @@ void ShowInExplorer(const std::wstring& path) {
 }
 
 // --- menus ------------------------------------------------------------------------------
+
+MenuItem LibraryFoldersItem() {
+    return Item(L"Library Folders…", "folder", [] { TheApp().OpenSettings("library"); });
+}
 
 MenuItem Item(const wchar_t* label, const char* icon, std::function<void()> action, bool enabled) {
     MenuItem m;
