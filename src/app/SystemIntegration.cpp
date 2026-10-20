@@ -35,8 +35,16 @@ constexpr UINT kBtnPrev = 1, kBtnPlay = 2, kBtnNext = 3;
 
 namespace wm = winrt::Windows::Media;
 
-// Renders a design icon into an HICON (white, for the dark taskbar flyout).
-HICON MakeIcon(const char* name, int px) {
+// The taskbar's own mode (not the apps' one): the thumbnail buttons sit on its preview flyout.
+bool SystemUsesLightTheme() {
+    DWORD light = 0, size = sizeof(light);
+    return RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS &&
+           light != 0;
+}
+
+// Renders a design icon into an HICON.
+HICON MakeIcon(const char* name, int px, ui::Color glyph) {
     gfx::Gpu& gpu = gfx::Gpu::Get();
     if (!gpu.Ready()) return nullptr;
     ID2D1DeviceContext5* ctx = gpu.Ctx();
@@ -55,8 +63,7 @@ HICON MakeIcon(const char* name, int px) {
     ctx->SetDpi(96, 96);
     ctx->BeginDraw();
     ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
-    const ui::Color white = ui::Color::Hex(0xFFFFFF);
-    gfx::Icons::Draw(ctx, name, {0, 0, static_cast<float>(px), static_cast<float>(px)}, white, white);
+    gfx::Icons::Draw(ctx, name, {0, 0, static_cast<float>(px), static_cast<float>(px)}, glyph, glyph);
     const HRESULT hr = ctx->EndDraw();
     ctx->SetTarget(old.Get());
     ctx->SetDpi(dx, dy);
@@ -100,7 +107,9 @@ struct SystemIntegration::Impl {
     gfx::ComPtr<ITaskbarList3> taskbar;
     bool buttonsAdded = false;
     HICON prev = nullptr, play = nullptr, pause = nullptr, next = nullptr;
-    bool shownPlaying = false;
+    UINT iconDpi = 0;
+    bool lightIcons = false;
+    bool shownPlaying = false, shownPrev = true, shownNext = true;
     wm::SystemMediaTransportControls smtc{nullptr};
     winrt::event_token buttonToken{};
     double lastProgress = -1;
@@ -122,13 +131,23 @@ struct SystemIntegration::Impl {
         }
     }
 
+    // Glyphs for the taskbar's mode at the window's DPI, made again when either changes.
     bool EnsureIcons() {
-        if (play) return true;
-        const int px = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(hwnd));
-        prev = MakeIcon("previous", px);
-        play = MakeIcon("play", px);
-        pause = MakeIcon("pause", px);
-        next = MakeIcon("next", px);
+        const UINT dpi = GetDpiForWindow(hwnd);
+        const bool light = SystemUsesLightTheme();
+        if (play && dpi == iconDpi && light == lightIcons) return true;
+        const HICON old[] = {prev, play, pause, next};
+        iconDpi = dpi;
+        lightIcons = light;
+        const int px = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+        const ui::Color color = ui::Color::Hex(light ? 0x000000 : 0xFFFFFF);
+        prev = MakeIcon("previous", px, color);
+        play = MakeIcon("play", px, color);
+        pause = MakeIcon("pause", px, color);
+        next = MakeIcon("next", px, color);
+        UpdateButtons();  // the taskbar shows the old handles until then
+        for (HICON i : old)
+            if (i) DestroyIcon(i);
         return play != nullptr;
     }
 
@@ -138,16 +157,17 @@ struct SystemIntegration::Impl {
             UINT id;
             HICON icon;
             const wchar_t* tip;
-        } defs[] = {{kBtnPrev, prev, Tr(L"Previous")},
-                    {kBtnPlay, shownPlaying ? pause : play, shownPlaying ? Tr(L"Pause") : Tr(L"Play")},
-                    {kBtnNext, next, Tr(L"Next")}};
+            bool enabled;
+        } defs[] = {{kBtnPrev, prev, Tr(L"Previous"), shownPrev},
+                    {kBtnPlay, shownPlaying ? pause : play, shownPlaying ? Tr(L"Pause") : Tr(L"Play"), true},
+                    {kBtnNext, next, Tr(L"Next"), shownNext}};
         for (int i = 0; i < 3; ++i) {
             b[i] = {};
             b[i].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
             b[i].iId = defs[i].id;
             b[i].hIcon = defs[i].icon;
             wcsncpy_s(b[i].szTip, defs[i].tip, _TRUNCATE);
-            b[i].dwFlags = THBF_ENABLED;
+            b[i].dwFlags = defs[i].enabled ? THBF_ENABLED : THBF_DISABLED;
         }
     }
 
@@ -165,9 +185,13 @@ struct SystemIntegration::Impl {
         taskbar->ThumbBarUpdateButtons(hwnd, 3, b);
     }
 
-    void UpdatePlayButton(bool playing) {
-        if (playing == shownPlaying) return;
+    // Previous / Next as the player's own buttons: disabled with nothing before / after.
+    void SyncButtons(bool playing) {
+        const bool prevOn = Enabled(Action::Previous), nextOn = Enabled(Action::Next);
+        if (playing == shownPlaying && prevOn == shownPrev && nextOn == shownNext) return;
         shownPlaying = playing;
+        shownPrev = prevOn;
+        shownNext = nextOn;
         UpdateButtons();
     }
 
@@ -305,6 +329,8 @@ void SystemIntegration::Attach(HWND window) {
     ChangeWindowMessageFilterEx(window, WM_COMMAND, MSGFLT_ALLOW, nullptr);
     impl_->InitSmtc();
     impl_->SyncTray();
+    // Items added to or removed from the queue enable Previous / Next. Both live as long as the app.
+    TheApp().queue().changed.Connect([this] { Update(0); });
 }
 
 void SystemIntegration::LanguageChanged() {
@@ -372,6 +398,11 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
         *result = 0;
         return true;
     }
+    if ((msg == WM_SETTINGCHANGE && lp && wcscmp(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0) ||
+        msg == WM_DPICHANGED) {
+        if (d.buttonsAdded) d.EnsureIcons();
+        return false;
+    }
     if (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED) {
         switch (LOWORD(wp)) {
             case kBtnPrev: Run(Action::Previous); break;
@@ -404,7 +435,7 @@ void SystemIntegration::Update(unsigned changes) {
     App& app = TheApp();
     const PlayerState& s = app.player().State();
     if (d.taskbar && !d.buttonsAdded) d.AddButtons();
-    d.UpdatePlayButton(s.fileLoaded && !s.paused);
+    d.SyncButtons(s.fileLoaded && !s.paused);
 
     // Taskbar progress.
     if (d.taskbar && app.config().GetBool("interface.taskbarProgress")) {
