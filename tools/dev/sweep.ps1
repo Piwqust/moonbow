@@ -376,6 +376,15 @@ function Capture-Png([IntPtr]$h, [string]$path, [string]$thumb) {
   $dc = $g.GetHdc()
   [LumenSweep]::PrintWindow($h, $dc, 2) | Out-Null   # PW_RENDERFULLCONTENT: includes the DComp layer
   $g.ReleaseHdc($dc); $g.Dispose()
+  # The client area only, without the window's invisible resize band (as capture.ps1).
+  $cr = New-Object LumenSweep+RECT; [LumenSweep]::GetClientRect($h, [ref]$cr) | Out-Null
+  $o = New-Object LumenSweep+POINT; [LumenSweep]::ClientToScreen($h, [ref]$o) | Out-Null
+  $cx = [math]::Max(0, $o.X - $r.L); $cy = [math]::Max(0, $o.Y - $r.T)
+  $cw = [math]::Min($cr.R, $w - $cx); $ch = [math]::Min($cr.B, $hh - $cy)
+  if ($cw -gt 0 -and $ch -gt 0 -and ($cw -ne $w -or $ch -ne $hh)) {
+    $c = $bmp.Clone((New-Object System.Drawing.Rectangle $cx, $cy, $cw, $ch), $bmp.PixelFormat)
+    $bmp.Dispose(); $bmp = $c; $w = $cw; $hh = $ch
+  }
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
   $tw = [math]::Min(560, $w); $th = [int]($hh * $tw / $w)
   $t = New-Object System.Drawing.Bitmap $tw, $th

@@ -97,16 +97,23 @@ std::wstring FormatValue(const Item& item, double v, bool withUnit) {
 
 namespace {
 
+// The description of a setting: its tooltip on hover, and for the keyboard a Tab stop that shows
+// it on focus, Enter or Space.
 class InfoIcon : public Widget {
 public:
     explicit InfoIcon(std::wstring text) {
         tooltip = std::move(text);
         interactive = true;
+        focusable = true;
         width = Length::Px(18);
         height = Length::Px(18);
     }
     void Paint(Painter& p) override {
-        p.Icon("info", rect, IsHot() ? P().textSecondary : P().textTertiary);
+        PaintFocusRing(p, rect, 9);
+        p.Icon("info", rect, IsHot() || ShowFocusRing() ? P().textSecondary : P().textTertiary);
+    }
+    void OnClick() override {
+        if (Host* h = GetHost()) h->ShowTooltip(this);
     }
 };
 
@@ -877,7 +884,7 @@ void TickSlider::Paint(Painter& p) {
     if (cx - t.x - 2 > 0) p.Fill({t.x + 2, t.y + 2, cx - t.x - 2, 12}, c.accentDim, 4);
     const Rect thumb{cx - 4, rect.y, 8, 24};
     p.Fill(thumb, !on ? c.textDisabled : (dragging_ || IsHot()) ? c.accent : c.accentMid, 4);
-    if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.accentMid, 6, 1.5f);
+    if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.focusRing, 6, 2.0f);
 }
 
 void TickSlider::PaintOver(Painter& p) {
@@ -1159,6 +1166,14 @@ void SettingRow::Build(std::wstring label, std::wstring description, std::unique
     gap = 16;
     minH = minHeight;
     id = item.key;
+    // Screen readers read the description with the control (UI Automation HelpText).
+    if (control && !description.empty()) {
+        std::function<void(Widget*)> help = [&](Widget* w) {
+            if (w->focusable && w->helpText.empty()) w->helpText = description;
+            for (auto& c : w->Children()) help(c.get());
+        };
+        help(control.get());
+    }
     Add<RowLabel>(std::move(label), std::move(description));
     if (control) {
         control_ = AddChild(std::move(control));

@@ -12,11 +12,12 @@
 #     (then -CaptureLost, -Key Escape, -Leave, or -Up 400,100 to release it there)
 #   tools\dev\input.ps1 -ProcessId 1234 -Leave        WM_MOUSELEAVE: the pointer left the window
 #   tools\dev\input.ps1 -ProcessId 1234 -CaptureLost  WM_CAPTURECHANGED: another window took capture
-#   add -Ctrl / -Shift to any of these to hold the modifier (e.g. -Key P -Ctrl)
+#   add -Ctrl / -Shift / -Alt to any of these to hold the modifier (e.g. -Key P -Ctrl, -Key Left -Alt)
+#   tools\dev\input.ps1 -ProcessId 1234 -Click 300,200 -XButton 1   mouse Back (2 = Forward) instead of a left click
 param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Title = "",
       [string]$Click = "", [string]$Move = "", [string]$Wheel = "", [int]$Delta = 1, [string]$Drag = "",
       [switch]$Right, [switch]$Double, [string]$Key = "", [string]$Type = "", [switch]$Ctrl, [switch]$Shift,
-      [switch]$Leave, [switch]$CaptureLost, [switch]$Hold, [string]$Up = "")
+      [switch]$Alt, [int]$XButton = 0, [switch]$Leave, [switch]$CaptureLost, [switch]$Hold, [string]$Up = "")
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
@@ -56,13 +57,14 @@ $mk = 0; if ($Ctrl) { $mk = $mk -bor 0x8 }; if ($Shift) { $mk = $mk -bor 0x4 }
 function XY($s) { $p = $s -split ','; return [int]$p[0], [int]$p[1] }
 
 # Held modifiers for this call, posted before any mouse or key message (Lumen reads them only with --automation).
-$mods = ([int][bool]$Ctrl) -bor (2 * [int][bool]$Shift)
+$mods = ([int][bool]$Ctrl) -bor (2 * [int][bool]$Shift) -bor (4 * [int][bool]$Alt)
 if ($mods) { Post 0x802D $mods ([IntPtr]0) }
 if ($Move) { $x, $y = XY $Move; Post 0x200 $mk (MakeLParam $x $y) }
 if ($Click) {
   $x, $y = XY $Click
   Post 0x200 $mk (MakeLParam $x $y); Start-Sleep -Milliseconds 30
-  if ($Right) { Post 0x204 (0x2 -bor $mk) (MakeLParam $x $y); Post 0x205 $mk (MakeLParam $x $y) }
+  if ($XButton) { Post 0x20B ([int64]($XButton -shl 16)) (MakeLParam $x $y); Post 0x20C ([int64]($XButton -shl 16)) (MakeLParam $x $y) }
+  elseif ($Right) { Post 0x204 (0x2 -bor $mk) (MakeLParam $x $y); Post 0x205 $mk (MakeLParam $x $y) }
   else {
     Post 0x201 (0x1 -bor $mk) (MakeLParam $x $y); Post 0x202 $mk (MakeLParam $x $y)
     if ($Double) { Start-Sleep -Milliseconds 40; Post 0x203 (0x1 -bor $mk) (MakeLParam $x $y); Post 0x202 $mk (MakeLParam $x $y) }
@@ -83,7 +85,9 @@ if ($Wheel) {
 }
 if ($Key) {
   $vk = [int][System.Windows.Forms.Keys]::$Key
-  Post 0x100 $vk ([IntPtr]1); Post 0x101 $vk ([IntPtr]0xC0000001)
+  # With Alt, as Windows sends it: WM_SYSKEYDOWN / WM_SYSKEYUP with the context bit (29) set.
+  if ($Alt) { Post 0x104 $vk ([IntPtr]0x20000001); Post 0x105 $vk ([IntPtr]0xE0000001) }
+  else { Post 0x100 $vk ([IntPtr]1); Post 0x101 $vk ([IntPtr]0xC0000001) }
 }
 if ($Type) { foreach ($ch in $Type.ToCharArray()) { Post 0x102 ([int]$ch) ([IntPtr]1) } }
 if ($mods) { Start-Sleep -Milliseconds 30; Post 0x802D 0 ([IntPtr]0) }

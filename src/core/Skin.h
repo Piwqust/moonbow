@@ -85,6 +85,11 @@ Colors Resolve(bool dark, int accentTone, const Skin* skin);
 // WCAG 2.x contrast ratio of two opaque colours (alpha ignored), 1..21.
 double Contrast(const Rgba& a, const Rgba& b);
 
+// The keyboard focus ring: the accent where it stands out 3:1 on every background, else
+// text.primary (the darker accents and accent.mid did not, WCAG 1.4.11).
+Rgba FocusRing(const Colors& c);
+inline constexpr int kFocusRingFg = kTokenCount;  // ContrastIssue::fg of the focus ring
+
 struct ContrastIssue {
     bool dark = true;
     int fg = 0, bg = 0;  // tokens

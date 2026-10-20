@@ -255,10 +255,18 @@ void Toggle::OnClick() {
 namespace {
 std::wstring g_toggleOn = L"ON", g_toggleOff = L"OFF";
 std::wstring g_menuNoMatch = L"Nothing found";
+std::wstring g_textMenu[4] = {L"Cut", L"Copy", L"Paste", L"Select all"};
 }  // namespace
 
 void SetMenuNoMatchCaption(std::wstring text) {
     g_menuNoMatch = std::move(text);
+}
+
+void SetTextMenuCaptions(std::wstring cut, std::wstring copy, std::wstring paste, std::wstring selectAll) {
+    g_textMenu[0] = std::move(cut);
+    g_textMenu[1] = std::move(copy);
+    g_textMenu[2] = std::move(paste);
+    g_textMenu[3] = std::move(selectAll);
 }
 
 void SetToggleCaptions(std::wstring on, std::wstring off) {
@@ -616,7 +624,7 @@ void Slider::Paint(Painter& p) {
     }
     const float r = dragging_ || IsHot() ? 7.0f : 6.0f;
     p.FillCircle({x, rect.Cy()}, r, IsEnabled() ? c.accent : c.textDisabled);
-    if (ShowFocusRing()) p.Stroke({x - r - 3, rect.Cy() - r - 3, (r + 3) * 2, (r + 3) * 2}, c.accentMid, r + 3, 1.5f);
+    if (ShowFocusRing()) p.Stroke({x - r - 3, rect.Cy() - r - 3, (r + 3) * 2, (r + 3) * 2}, c.focusRing, r + 3, 2.0f);
 }
 
 // --- TextBox --------------------------------------------------------------------------------
@@ -626,6 +634,24 @@ TextBox::TextBox(std::wstring ph, std::string icon) : placeholder(std::move(ph))
     focusable = true;
     cursor = IDC_IBEAM;
     height = Length::Px(34);
+    // Cut, Copy, Paste and Select all, as in every Windows edit field: the same as their keys.
+    onContextMenu = [this](const MouseEvent& e) {
+        const bool sel = caret_ != anchor_ && !password;
+        auto key = [this](UINT vk) {
+            return [this, vk] {
+                OnKeyDown({vk, {true, false, false}});
+                Invalidate();
+            };
+        };
+        std::vector<MenuItem> items;
+        items.push_back({g_textMenu[0], L"Ctrl+X", "", false, sel && !readOnly, false, false, key('X')});
+        items.push_back({g_textMenu[1], L"Ctrl+C", "", false, sel, false, false, key('C')});
+        items.push_back({g_textMenu[2], L"Ctrl+V", "", false, !readOnly && IsClipboardFormatAvailable(CF_UNICODETEXT),
+                         false, false, key('V')});
+        items.push_back(MenuItem::Separator());
+        items.push_back({g_textMenu[3], L"Ctrl+A", "", false, !text_.empty(), false, false, key('A')});
+        ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
+    };
 }
 
 void TextBox::SetText(std::wstring text, bool notify) {
@@ -678,6 +704,11 @@ size_t TextBox::IndexAt(float x) const {
 Rect TextBox::CaretRect() const {
     const Rect tr = TextRect();
     return {tr.x + XOf(caret_) - scroll_, rect.Cy() - 9, 1, 18};
+}
+
+bool TextBox::MenuPoint(Point& at) const {
+    at = {std::clamp(CaretRect().x, rect.x, rect.Right()), rect.Bottom() - 4};
+    return true;
 }
 
 TextBox::~TextBox() {
@@ -867,7 +898,7 @@ bool TextBox::OnKeyDown(const KeyEvent& e) {
     }
     // Printable keys arrive as WM_CHAR; claim them so window shortcuts don't fire.
     return !ctrl && !e.mods.alt && e.key >= 0x20 && e.key < VK_F1 && e.key != VK_TAB && e.key != VK_UP &&
-           e.key != VK_DOWN && e.key != VK_PRIOR && e.key != VK_NEXT;
+           e.key != VK_DOWN && e.key != VK_PRIOR && e.key != VK_NEXT && e.key != VK_APPS;
 }
 
 bool TextBox::OnMouseDown(const MouseEvent& e) {
@@ -906,6 +937,7 @@ void TextBox::Paint(Painter& p) {
         p.Stroke(rect, c.lineStrong, 4);
     else if (live && IsHot())
         p.Stroke(rect, c.line, 4);
+    PaintFocusRing(p, rect, 4);  // reached with Tab: the ring of every other control, not just the caret
     if (!leadingIcon.empty())
         p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, live ? c.textTertiary : c.textDisabled);
 

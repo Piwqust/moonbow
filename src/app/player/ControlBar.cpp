@@ -280,7 +280,6 @@ public:
         width = Length::Px(126);
         height = Length::Px(32);
         Bind(this, kChangeVolume);
-        onContextMenu = [](const MouseEvent&) { Run(Action::Mute); };
     }
     ~VolumeControl() override {
         if (Host* h = GetHost()) {
@@ -366,6 +365,10 @@ public:
         if (PopupOpen()) popup_->CloseWhenLeft();
     }
     bool OnMouseDown(const MouseEvent& e) override {
+        if (e.button == MouseButton::Right) {  // not onContextMenu: the Menu key must not mute
+            Run(Action::Mute);
+            return true;
+        }
         if (collapsed_) {
             // A click while it is open closes it (the click outside the popup does that).
             if (!PopupOpen()) OpenPopup();
@@ -552,8 +555,12 @@ public:
 class SpeedButton : public PanelButton, PlayerBound {
 public:
     SpeedButton() : PanelButton("speed", L"Playback speed", PanelKind::Speed) {
-        onContextMenu = [](const MouseEvent&) { Run(Action::SpeedReset); };
         Bind(this, kChangeState);
+    }
+    bool OnMouseDown(const MouseEvent& e) override {
+        if (e.button != MouseButton::Right) return false;
+        Run(Action::SpeedReset);  // not onContextMenu: the Menu key must not reset the speed
+        return true;
     }
     bool OnWheel(const WheelEvent& e) override {
         if (!PS().fileLoaded || e.delta == 0) return false;

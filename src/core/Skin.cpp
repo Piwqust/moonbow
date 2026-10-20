@@ -301,6 +301,16 @@ double Contrast(const Rgba& a, const Rgba& b) {
     return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
 }
 
+namespace {
+constexpr int kBackgrounds[] = {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu};
+}  // namespace
+
+Rgba FocusRing(const Colors& c) {
+    for (int bg : kBackgrounds)
+        if (Contrast(c[kAccent], c[bg]) < 3.0) return c[kTextPrimary];
+    return c[kAccent];
+}
+
 std::vector<ContrastIssue> CheckContrast(const Skin* skin, int accentTone) {
     struct Pair {
         int fg;
@@ -326,6 +336,12 @@ std::vector<ContrastIssue> CheckContrast(const Skin* skin, int accentTone) {
                 const double r = Contrast(c[p.fg], c[bg]);
                 if (r < p.need) out.push_back({dark, p.fg, bg, r, p.need, p.need < 4.5});
             }
+        // The ring is drawn around controls on any of them.
+        const Rgba ring = FocusRing(c);
+        for (int bg : kBackgrounds) {
+            const double r = Contrast(ring, c[bg]);
+            if (r < 3.0) out.push_back({dark, kFocusRingFg, bg, r, 3.0, true});
+        }
     }
     return out;
 }
@@ -334,7 +350,8 @@ std::string Describe(const ContrastIssue& issue) {
     char buf[160];
     // Rounded down, so 4.497 reads "4.4:1" next to "needs 4.5:1" rather than "4.5:1".
     std::snprintf(buf, sizeof(buf), "%s: %s on %s %.1f:1 (needs %.1f:1)", issue.dark ? "dark" : "light",
-                  TokenName(issue.fg), TokenName(issue.bg), std::floor(issue.ratio * 10) / 10, issue.need);
+                  issue.fg == kFocusRingFg ? "focus ring" : TokenName(issue.fg), TokenName(issue.bg),
+                  std::floor(issue.ratio * 10) / 10, issue.need);
     return buf;
 }
 

@@ -17,6 +17,7 @@ struct Palette {
     Color accent, accentMid, accentDim, accentFaint, onAccent;
     Color scrim, shadow, danger;
     Color videoBg;  // around the video and behind letterboxing; mpv paints black, so never skinned
+    Color focusRing;  // skin::FocusRing: 3:1 on every background
 };
 
 enum class ThemeMode : uint8_t { Dark, Light };

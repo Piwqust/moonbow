@@ -5,7 +5,7 @@
 #                   [-Settings '{"general.theme":"light"}'] [-Open <file> [-OpenAfterMs 2000]] [files...]
 #   -Open    sends "open <file>" (automation command, no quotes) after -OpenAfterMs
 # frames.txt: "<ms> f<NNN> <w>x<h> at <x>,<y> [revealed] [video=x,y,w,h]" per frame, "<ms> OPEN" for -Open
-# (video = the shown mpv video window, in window pixels).
+# (the client area: size, screen position; video = the shown mpv video window, in client pixels).
 # "revealed" = the window is on screen, i.e. a user would see it now: from its first GPU frame (the
 # plain background; its content fades in after it) on (the LumenRevealed window property;
 # --automation windows themselves stay cloaked). Builds without that property show their window at
@@ -20,6 +20,9 @@ Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class FCap {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
@@ -66,21 +69,27 @@ try {
     $h = [FCap]::FindMain([uint32]$id)
     if ($h -ne [IntPtr]::Zero) {
       $r = New-Object FCap+RECT; [FCap]::GetWindowRect($h, [ref]$r) | Out-Null
-      $w = $r.R - $r.L; $hh = $r.B - $r.T
+      # The client area: the window's invisible resize band (left, right, bottom) is never seen.
+      $cr = New-Object FCap+RECT; [FCap]::GetClientRect($h, [ref]$cr) | Out-Null
+      $co = New-Object FCap+POINT; [FCap]::ClientToScreen($h, [ref]$co) | Out-Null
+      $w = $cr.R; $hh = $cr.B
       if ($w -gt 0 -and $hh -gt 0) {
         $revealed = [FCap]::GetProp($h, "LumenRevealed") -ne [IntPtr]::Zero
         $video = ""
         $vh = [FCap]::FindWindowEx($h, [IntPtr]::Zero, "LumenVideo", $null)
         if ($vh -ne [IntPtr]::Zero -and [FCap]::IsWindowVisible($vh)) {
           $vr = New-Object FCap+RECT; [FCap]::GetWindowRect($vh, [ref]$vr) | Out-Null
-          if ($vr.R - $vr.L -gt 4) { $video = " video={0},{1},{2},{3}" -f ($vr.L - $r.L), ($vr.T - $r.T), ($vr.R - $vr.L), ($vr.B - $vr.T) }
+          if ($vr.R - $vr.L -gt 4) { $video = " video={0},{1},{2},{3}" -f ($vr.L - $co.X), ($vr.T - $co.Y), ($vr.R - $vr.L), ($vr.B - $vr.T) }
         }
-        $bmp = New-Object System.Drawing.Bitmap $w, $hh
-        $g = [System.Drawing.Graphics]::FromImage($bmp); $dc = $g.GetHdc()
+        $full = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
+        $g = [System.Drawing.Graphics]::FromImage($full); $dc = $g.GetHdc()
         [FCap]::PrintWindow($h, $dc, 2) | Out-Null; $g.ReleaseHdc($dc); $g.Dispose()
+        $cx = [math]::Max(0, $co.X - $r.L); $cy = [math]::Max(0, $co.Y - $r.T)
+        $w = [math]::Min($w, $full.Width - $cx); $hh = [math]::Min($hh, $full.Height - $cy)
+        $bmp = $full.Clone((New-Object System.Drawing.Rectangle $cx, $cy, $w, $hh), $full.PixelFormat); $full.Dispose()
         $t = $sw.ElapsedMilliseconds
         $bmp.Save(("{0}\f{1:D3}_{2:D5}.png" -f $Out, $n, $t)); $bmp.Dispose()
-        $log.Add(("{0,6} f{1:D3} {2}x{3} at {4},{5}{6}" -f $t, $n, $w, $hh, $r.L, $r.T, ($(if ($revealed) { " revealed" } else { "" }) + $video))); $n++
+        $log.Add(("{0,6} f{1:D3} {2}x{3} at {4},{5}{6}" -f $t, $n, $w, $hh, $co.X, $co.Y, ($(if ($revealed) { " revealed" } else { "" }) + $video))); $n++
       }
     } else { $log.Add(("{0,6} no window" -f $sw.ElapsedMilliseconds)) }
   }

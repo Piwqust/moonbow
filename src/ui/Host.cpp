@@ -3,6 +3,7 @@
 #include "Trace.h"
 #include "gfx/Text.h"
 #include "ui/Accessibility.h"
+#include "ui/Controls.h"
 #include "ui/Theme.h"
 
 #include <dwmapi.h>
@@ -24,7 +25,10 @@ namespace {
 
 constexpr wchar_t kHostClass[] = L"LumenHost";
 constexpr UINT WM_APP_POST = WM_APP + 41;
-constexpr float kResizeBorder = 6.0f;
+// The resize band along the top, inside the title bar (the frame Windows keeps is on the other
+// sides, outside the visible edge); over a button only its top pixel.
+constexpr float kResizeTop = 4.0f;
+constexpr float kResizeCorner = 16.0f;  // the corner zones' length along each edge
 constexpr UINT kTooltipDelayMs = 550;
 // Moving on from a shown tooltip within this time shows the next one at once, without the fade.
 constexpr double kTooltipWarmMs = 400;
@@ -111,7 +115,7 @@ constexpr wchar_t kRevealedProp[] = L"LumenRevealed";
 // Keeps a window's normal rect inside its monitor's work area (minus `margin` px), centred when
 // it had to shrink or stood off the screen; never below the minimum size. A first run at 200 %
 // on a 1440p screen asks for 2560x1560 px, a saved rect may come from a larger screen.
-void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
+void FitToWorkArea(HWND hwnd, int minW, int minH, int margin, SIZE band) {
     WINDOWPLACEMENT wp{sizeof(wp)};
     if (!GetWindowPlacement(hwnd, &wp)) return;
     MONITORINFO mi{sizeof(mi)};
@@ -121,7 +125,8 @@ void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
     const LONG dx = tool ? 0 : mi.rcWork.left - mi.rcMonitor.left, dy = tool ? 0 : mi.rcWork.top - mi.rcMonitor.top;
     RECT r = wp.rcNormalPosition;
     OffsetRect(&r, dx, dy);
-    const RECT& work = mi.rcWork;
+    // The invisible resize band may stand off the work area, as on any window snapped to its edge.
+    const RECT work{mi.rcWork.left - band.cx, mi.rcWork.top, mi.rcWork.right + band.cx, mi.rcWork.bottom + band.cy};
     const int workW = work.right - work.left, workH = work.bottom - work.top;
     const int w = std::max(minW, std::min<int>(r.right - r.left, workW - margin));
     const int h = std::max(minH, std::min<int>(r.bottom - r.top, workH - margin));
@@ -357,6 +362,9 @@ bool Host::Create(const HostOptions& options) {
         h = std::max(static_cast<int>(std::lround(options.minHeight * Scale())),
                      std::min(static_cast<int>(std::lround(options.height * Scale())),
                               static_cast<int>(work.bottom - work.top) - margin));
+        const SIZE band = FrameBand();  // the size asked for is the client area's
+        w += 2 * band.cx;
+        h += band.cy;
         if (!options.center) return;
         RECT ref = work;
         if (options.owner) GetWindowRect(options.owner, &ref);
@@ -472,6 +480,12 @@ void Host::SetRoot(std::unique_ptr<Widget> root) {
     root_ = std::move(root);
     if (root_) root_->SetHost(this);
     RequestLayout();
+}
+
+SIZE Host::FrameBand() const {
+    if (!options_.customFrame || !options_.resizable || fullscreen_) return {0, 0};
+    const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
+    return {GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad, GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad};
 }
 
 Size Host::ClientSize() const {
@@ -657,6 +671,21 @@ void Host::SetFocus(Widget* w, bool fromKeyboard) {
     focus_ = w;
     if (old) old->OnFocusChanged(false);
     if (focus_) focus_->OnFocusChanged(true);
+    if (fromKeyboard && w) {
+        // Tab onto a control below the fold scrolls to it, or the ring is nowhere on screen. A
+        // list taller than the view that is partly on screen keeps its place (it scrolls its rows).
+        for (Widget* a = w->Parent(); a; a = a->Parent())
+            if (auto* sv = dynamic_cast<ScrollView*>(a)) {
+                if (w->rect.h <= sv->rect.h || !w->rect.Intersects(sv->rect)) sv->ScrollIntoView(w->rect);
+                break;
+            }
+        // Icon buttons name themselves only in a tooltip: the keyboard gets it too. Not lists and
+        // grids, whose tooltip belongs to the item under the pointer.
+        if (!w->tooltip.empty() && w->rect.w < 80) {
+            HideTooltip();
+            ArmTooltip(w, true, false);
+        }
+    }
     RequestRender();
     a11y::FocusChanged(this);
 }
@@ -882,19 +911,26 @@ LRESULT Host::NcHitTest(LPARAM lp) {
     ScreenToClient(hwnd_, &pt);
     RECT rc;
     GetClientRect(hwnd_, &rc);
-    if (options_.resizable && !fullscreen_ && !IsWindowMaximized()) {
-        const int b = static_cast<int>(std::lround(kResizeBorder * Scale()));
-        const bool left = pt.x < b, right = pt.x >= rc.right - b, top = pt.y < b, bottom = pt.y >= rc.bottom - b;
-        if (top && left) return HTTOPLEFT;
-        if (top && right) return HTTOPRIGHT;
-        if (bottom && left) return HTBOTTOMLEFT;
-        if (bottom && right) return HTBOTTOMRIGHT;
-        if (left) return HTLEFT;
-        if (right) return HTRIGHT;
-        if (bottom) return HTBOTTOM;
-        if (top) return HTTOP;
-    }
     const float x = pt.x / Scale(), y = pt.y / Scale();
+    if (options_.resizable && !fullscreen_ && !IsWindowMaximized()) {
+        // Left, right and bottom: the frame outside the client area (WM_NCCALCSIZE), so the scroll
+        // bar, the sidebar's edge and the control bar stay what they look like.
+        const bool left = pt.x < 0, right = pt.x >= rc.right, bottom = pt.y >= rc.bottom;
+        bool top = pt.y < 1;
+        if (!top && pt.y < std::lround(kResizeTop * Scale())) {
+            top = true;
+            for (Widget* w = root_ ? root_->HitTest(x, y) : nullptr; w && top; w = w->Parent()) top = !w->interactive;
+        }
+        if (left || right || top || bottom) {
+            const int c = static_cast<int>(std::lround(kResizeCorner * Scale()));
+            const bool nearL = pt.x < c, nearR = pt.x >= rc.right - c, nearT = pt.y < c, nearB = pt.y >= rc.bottom - c;
+            if ((top && nearL) || (left && nearT)) return HTTOPLEFT;
+            if ((top && nearR) || (right && nearT)) return HTTOPRIGHT;
+            if ((bottom && nearL) || (left && nearB)) return HTBOTTOMLEFT;
+            if ((bottom && nearR) || (right && nearB)) return HTBOTTOMRIGHT;
+            return left ? HTLEFT : right ? HTRIGHT : bottom ? HTBOTTOM : HTTOP;
+        }
+    }
     for (const Popup& p : popups_)
         if (p.options.modal || (!p.options.passthrough && p.content->rect.Contains(x, y))) return HTCLIENT;
     Widget* hit = root_ ? root_->HitTest(x, y) : nullptr;
@@ -1004,8 +1040,12 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
                 if (w->interactive && w->IsEnabled() && w->OnMouseDown(e)) break;
             }
         } else {
-            for (Widget* w = target; w; w = w->Parent())
-                if (w->interactive && w->OnMouseDown(e)) break;
+            bool used = false;
+            for (Widget* w = target; w && !used; w = w->Parent()) used = w->interactive && w->OnMouseDown(e);
+            // The mouse's Back and Forward buttons, where nothing under the pointer uses them (the
+            // video: previous / next file), are the keys of the same name: library history.
+            if (!used && (e.button == MouseButton::X1 || e.button == MouseButton::X2))
+                OnKey(e.button == MouseButton::X1 ? VK_BROWSER_BACK : VK_BROWSER_FORWARD, true, false);
         }
     } else if (e.button == MouseButton::Left) {
         Widget* t = capture_ ? capture_ : pressed_;
@@ -1109,70 +1149,109 @@ void Host::MoveFocus(bool backwards) {
     SetFocus(list[i], true);
 }
 
-void Host::OnKey(UINT vk, bool down, bool repeat) {
-    if (!down) return;
+bool Host::OnKey(UINT vk, bool down, bool repeat) {
+    if (!down) return false;
     KeyEvent e{vk, CurrentMods(), repeat};
+    // Shift+F10 is the Menu key: widgets see only VK_APPS.
+    if (vk == VK_F10 && e.mods.shift && !e.mods.ctrl && !e.mods.alt) e.key = vk = VK_APPS;
     HideTooltip();
     if (vk == VK_ESCAPE && capture_) {  // Esc drops a drag, as in Windows: a second one does the rest
         CancelPress();
-        return;
+        return true;
     }
 
-    for (Widget* w = focus_; w; w = w->Parent())
+    // The focus can stay on a hidden widget (the library's grid behind the player): it opens no
+    // menu, the window's own does (the video's).
+    bool hiddenFocus = false;
+    for (Widget* w = vk == VK_APPS ? focus_ : nullptr; w && !hiddenFocus; w = w->Parent()) hiddenFocus = !w->visible;
+    for (Widget* w = hiddenFocus ? nullptr : focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
             RequestRender();
-            return;
+            return true;
         }
 
     if (vk == VK_TAB && !e.mods.ctrl && !e.mods.alt) {
         MoveFocus(e.mods.shift);
-        return;
+        return true;
     }
     if (vk == VK_ESCAPE && !popups_.empty()) {
         for (size_t i = popups_.size(); i-- > 0;)
             if (!popups_[i].options.passthrough && popups_[i].options.dismissOnEscape) {
                 ClosePopupAt(i);
-                return;
+                return true;
             }
     }
+    if (vk == VK_APPS && !hiddenFocus && OpenContextMenu()) return true;
     // Space/Enter press the focused control only when it was reached with the
     // keyboard: after a mouse click Space stays the window's shortcut (play/pause).
-    if ((vk == VK_RETURN || vk == VK_SPACE) && focusVisible_ && focus_ && focus_->interactive &&
+    if ((vk == VK_RETURN || vk == VK_SPACE) && !e.mods.alt && focusVisible_ && focus_ && focus_->interactive &&
         focus_->IsEnabled() && !focus_->WantsTextInput()) {
         focus_->OnClick();
         RequestRender();
-        return;
+        return true;
     }
     // Keyboard shortcuts of the window are suspended while a modal popup is open.
     for (const Popup& p : popups_)
-        if (p.options.modal) return;
-    if (onKey) onKey(e);
+        if (p.options.modal) return true;
+    return onKey && onKey(e);
+}
+
+// The Menu key: the context menu of the focused widget, or of the nearest one around it that has
+// one (a row's list), at the entry the keyboard is on.
+bool Host::OpenContextMenu() {
+    for (Widget* w = focus_; w; w = w->Parent())
+        if (w->onContextMenu && w->IsEnabled()) {
+            Point at;
+            if (focus_->MenuPoint(at)) w->onContextMenu({at.x, at.y, MouseButton::Right, CurrentMods()});
+            RequestRender();
+            return true;
+        }
+    return false;
 }
 
 // --- tooltip -----------------------------------------------------------------------------
 
 void Host::UpdateTooltip() {
     Widget* target = hot_ && !hot_->tooltip.empty() ? hot_ : nullptr;
+    // The keyboard focus's bubble stays while the pointer is on nothing with a tooltip of its own.
+    if (!target && tooltipForFocus_ && tooltipFor_ && tooltipFor_ == focus_ && !focus_->tooltip.empty())
+        target = focus_;
     // A widget that paints many items (a grid) changes its tooltip as the pointer moves between
     // them, and one whose tooltip was cleared (the expanded rail) or that moved loses the bubble.
     const bool moved = tooltipFor_ && (tooltipFor_->rect.x != tooltipRect_.x || tooltipFor_->rect.y != tooltipRect_.y ||
                                        tooltipFor_->rect.w != tooltipRect_.w || tooltipFor_->rect.h != tooltipRect_.h);
     if (target == tooltipFor_ && !moved && (!target || target->tooltip == tooltipText_) && (target || !tooltipWidget_))
         return;
+    const bool forFocus = tooltipForFocus_ && target == tooltipFor_;
     HideTooltip();
     if (!target || pressed_) return;
+    ArmTooltip(target, forFocus, false);
+}
+
+void Host::ShowTooltip(Widget* w) {
+    HideTooltip();
+    if (w && !w->tooltip.empty()) ArmTooltip(w, true, true);
+}
+
+// forFocus: the bubble belongs to the keyboard focus (under it, until the focus moves), not to
+// the widget under the pointer.
+void Host::ArmTooltip(Widget* target, bool forFocus, bool now) {
     tooltipFor_ = target;
+    tooltipForFocus_ = forFocus;
     tooltipText_ = target->tooltip;
     tooltipRect_ = target->rect;
-    const bool warm = AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
+    const bool warm = now || AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
     tooltipTimer_ = StartTimer(warm ? USER_TIMER_MINIMUM : kTooltipDelayMs, [this, warm] {
         tooltipTimer_ = 0;
-        if (!tooltipFor_ || hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
+        if (!tooltipFor_) return;
+        if (tooltipForFocus_ ? tooltipFor_ != focus_ : hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
         PopupOptions o;
         o.anchor = {mouse_.x, mouse_.y + 18, 0, 0};
         const Rect& r = tooltipFor_->rect;
-        // Prefer centering under small controls (icon buttons), like native tooltips.
-        if (r.w < 80) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
+        // Prefer centering under small controls (icon buttons), like native tooltips; the
+        // keyboard's bubble always goes under its control.
+        const bool under = r.w < 80 || tooltipForFocus_;
+        if (under) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
         o.place = Place::At;
         if (tooltipFor_->tooltipBeside) {
             o.anchor = {r.x, r.Cy() - 14, r.w, 28};
@@ -1185,15 +1264,17 @@ void Host::UpdateTooltip() {
         o.animate = !warm;
         auto bubble = std::make_unique<TooltipBubble>(tooltipText_);
         Size s = bubble->Measure(400, 200);
-        if (r.w < 80 && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
+        if (under && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
             o.anchor.x -= s.w / 2;
             // Controls along the bottom edge (the player bar): above them, not over the buttons.
             if (r.Bottom() + 6 + s.h > ClientSize().h - 8) o.anchor.y = r.y - 6 - s.h;
         }
         Widget* target = tooltipFor_;
         std::wstring text = tooltipText_;
+        const bool forFocus = tooltipForFocus_;
         tooltipWidget_ = ShowPopup(std::move(bubble), o);  // (ShowPopup hides any tooltip first)
         tooltipFor_ = target;
+        tooltipForFocus_ = forFocus;
         tooltipText_ = std::move(text);
         tooltipRect_ = target->rect;
     });
@@ -1205,6 +1286,7 @@ void Host::HideTooltip() {
         tooltipTimer_ = 0;
     }
     tooltipFor_ = nullptr;
+    tooltipForFocus_ = false;
     tooltipText_.clear();
     if (tooltipWidget_) {
         Widget* w = tooltipWidget_;
@@ -1446,26 +1528,28 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 SetPropW(hwnd_, kFittedProp, reinterpret_cast<HANDLE>(1));
                 Post([this] {
                     if (!hwnd_ || fullscreen_) return;
-                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())),
-                                  static_cast<int>(std::lround(options_.minHeight * Scale())),
-                                  static_cast<int>(std::lround(24 * Scale())));
+                    const SIZE band = FrameBand();
+                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())) + 2 * band.cx,
+                                  static_cast<int>(std::lround(options_.minHeight * Scale())) + band.cy,
+                                  static_cast<int>(std::lround(24 * Scale())), band);
                 });
             }
             break;
 
         case WM_NCCALCSIZE:
-            // Also the wp == FALSE call during CreateWindowExW: the whole window is client area
-            // from the start, without a SWP_FRAMECHANGED round trip afterwards.
+            // No caption: the client area runs to the top edge. Windows keeps its frame on the
+            // other sides, invisible outside the visible edge: the resize band of a Windows 11
+            // window (Windows Terminal does the same). Maximized, the frame is off screen on every
+            // side. Also the wp == FALSE call during CreateWindowExW, so no SWP_FRAMECHANGED round
+            // trip follows. Fullscreen and fixed-size windows are client area throughout.
             if (options_.customFrame) {
-                if (wp == TRUE && !fullscreen_ && IsZoomed(hwnd_)) {
-                    auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
-                    const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
-                    const int fx = GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad;
-                    const int fy = GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad;
-                    params->rgrc[0].left += fx;
-                    params->rgrc[0].right -= fx;
-                    params->rgrc[0].top += fy;
-                    params->rgrc[0].bottom -= fy;
+                if (!fullscreen_ && (options_.resizable || IsZoomed(hwnd_))) {
+                    RECT* r = reinterpret_cast<RECT*>(lp);  // NCCALCSIZE_PARAMS::rgrc[0] when wp is TRUE
+                    const LONG top = r->top;
+                    DefWindowProcW(hwnd_, msg, wp, lp);
+                    r->top = top;
+                    if (IsZoomed(hwnd_))
+                        r->top += GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
                 }
                 return 0;
             }
@@ -1643,16 +1727,27 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
+        case WM_SYSKEYDOWN: {
             if (msg == WM_SYSKEYDOWN && wp == VK_F4) break;
             g_inKey = true;
-            OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
+            const bool used = OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
             g_inKey = false;
+            if (msg == WM_SYSKEYDOWN && wp == VK_SPACE) altSpaceMenu_ = !used;
             if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
             return 0;
+        }
 
         case WM_SYSCHAR:
-            if (wp == VK_RETURN || wp == VK_SPACE) return 0;
+            // Alt+Enter is a shortcut, not a beep. Alt+Space opens the window menu (Move, Size,
+            // Minimize) unless a shortcut took it.
+            if (wp == VK_RETURN || (wp == VK_SPACE && !altSpaceMenu_)) return 0;
+            break;
+
+        case WM_SYSCOMMAND:
+            // Keyboard menu mode only for Alt+Space. A lone Alt or F10 tap (lParam 0) would enter it
+            // on the hidden window menu and eat the next key (Space = play), Alt+letter would beep.
+            // Test runs never open the native menu.
+            if ((wp & 0xFFF0) == SC_KEYMENU && (lp != VK_SPACE || g_automation)) return 0;
             break;
 
         case WM_CHAR:
@@ -1691,8 +1786,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_GETMINMAXINFO: {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
-            mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale());
-            mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale());
+            const SIZE band = FrameBand();
+            mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale()) + 2 * band.cx;
+            mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale()) + band.cy;
             // Maximized = the monitor's work area (plus the frame WM_NCCALCSIZE takes off), so the
             // window never covers the taskbar, whatever the style (tool windows, custom frame).
             MONITORINFO mi{sizeof(mi)};

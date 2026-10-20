@@ -537,7 +537,7 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
     if (sel) {
         const bool focused = IsFocused();
-        p.Stroke(t.Inset(-3), focused ? c.accentMid : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
+        p.Stroke(t.Inset(-3), focused ? c.focusRing : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
     }
 
     const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : (e.watched || e.damaged) ? c.textTertiary : c.textSecondary;
@@ -573,7 +573,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Fill(bg, c.bgSelected, 6);
     else if (hot || Opening(e))
         p.Fill(bg, IsPressed() || Opening(e) ? c.press : c.hover, 6);
-    if (sel && ShowFocusRing()) p.Stroke(bg, c.accentMid, 6, 1.5f);
+    if (sel && ShowFocusRing()) p.Stroke(bg, c.focusRing, 6, 2.0f);
 
     const bool dragSource = dragging_ && i == press_;
     if (dragSource) p.PushOpacity(0.35f);
@@ -1101,11 +1101,11 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
         case VK_UP: target = Navigate(selected_, 0, -1); break;
         case VK_DOWN: target = Navigate(selected_, 0, 1); break;
         case VK_LEFT:
-            if (!cards) return false;
+            if (!cards || e.mods.alt) return false;  // Alt+Left is Back
             target = Navigate(selected_, -1, 0);
             break;
         case VK_RIGHT:
-            if (!cards) return false;
+            if (!cards || e.mods.alt) return false;
             target = Navigate(selected_, 1, 0);
             break;
         case VK_HOME:
@@ -1153,9 +1153,7 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
                 return true;
             }
             return false;
-        case VK_APPS:
-        case VK_F10:
-            if (e.key == VK_F10 && !e.mods.shift) return false;
+        case VK_APPS:  // also Shift+F10 (ui::Host)
             if (selected_ >= 0 && onMenu) {
                 const Rect r = ItemRect(selected_);
                 onMenu(selected_, {r.x + std::min(r.w / 2, 120.0f), cards ? r.y + geo_.thumbH / 2 : r.Bottom()});

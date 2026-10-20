@@ -424,8 +424,10 @@ public:
                 return S_OK;
             case UIA_NamePropertyId:
                 return Str(out, name);
-            case UIA_HelpTextPropertyId:
-                return c.item < 0 && !c.w->tooltip.empty() && c.w->tooltip != name ? Str(out, c.w->tooltip) : S_OK;
+            case UIA_HelpTextPropertyId: {
+                const std::wstring& help = c.w->helpText.empty() ? c.w->tooltip : c.w->helpText;
+                return c.item < 0 && !help.empty() && help != name ? Str(out, help) : S_OK;
+            }
             case UIA_AutomationIdPropertyId: {
                 std::wstring id16 = Widen(c.w->id);
                 if (c.item >= 0) id16 += L"#" + std::to_wstring(c.item);

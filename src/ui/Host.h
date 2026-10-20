@@ -91,6 +91,8 @@ public:
     Point MousePos() const { return mouse_; }
     bool MouseInside() const { return mouseInside_; }
     void SetCursorHidden(bool hidden);
+    // Shows w's tooltip under it at once, until the focus moves (Enter on an "i" icon).
+    void ShowTooltip(Widget* w);
 
     // --- rendering -------------------------------------------------------------------
     void RequestRender();
@@ -99,6 +101,9 @@ public:
     float Scale() const { return static_cast<float>(dpi_) / 96.0f * ScaleOverride(); }
     UINT Dpi() const { return dpi_; }  // the monitor's real DPI (window frame metrics)
     Size ClientSize() const;
+    // Pixels the window is larger than its client area: the invisible resize band Windows keeps
+    // on the left and right (cx each) and at the bottom (cy) of a resizable window.
+    SIZE FrameBand() const;
     // Called when the shared GPU device becomes available.
     void OnDeviceReady();
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the
@@ -242,10 +247,12 @@ private:
     void OnMouseButton(UINT msg, WPARAM wp, LPARAM lp);
     void CancelPress();
     void AfterPress(float x, float y);
-    void OnKey(UINT vk, bool down, bool repeat);
+    bool OnKey(UINT vk, bool down, bool repeat);  // true: something used the key
+    bool OpenContextMenu();
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();
+    void ArmTooltip(Widget* target, bool forFocus, bool now);
     void HideTooltip();
     bool ClicksThrough(const Popup& popup, float x, float y) const;
     Mods CurrentMods() const;
@@ -273,6 +280,7 @@ private:
     // is that widget, and mouse_ follows WM_NCMOUSEMOVE until it leaves.
     bool ncHover_ = false;
     bool cursorHidden_ = false;
+    bool altSpaceMenu_ = false;  // the last Alt+Space was no shortcut: its WM_SYSCHAR opens the window menu
     bool active_ = true;
     Widget* wheeled_ = nullptr;  // took the last wheel notch; hover is re-hit while it scrolls
 
@@ -290,6 +298,7 @@ private:
 
     // Tooltip state.
     Widget* tooltipFor_ = nullptr;
+    bool tooltipForFocus_ = false;  // tooltipFor_ is the keyboard focus, not the widget under the pointer
     Widget* tooltipWidget_ = nullptr;
     UINT_PTR tooltipTimer_ = 0;
     std::wstring tooltipText_;  // what the bubble (or its timer) shows: a change re-arms it

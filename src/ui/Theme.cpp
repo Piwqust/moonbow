@@ -67,6 +67,7 @@ void Theme::Rebuild() {
     };
     for (int i = 0; i < skin::kTokenCount; ++i) *fields[i] = ToColor(c[i]);
     p.videoBg = Color::Hex(0x000000);
+    p.focusRing = ToColor(skin::FocusRing(c));
 
     radii_ = false;
     barOpacity_ = 1.0f;

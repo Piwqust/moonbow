@@ -43,6 +43,7 @@ void SetLanguage(Language lang) {
     g_language = lang;
     ui::SetToggleCaptions(Tr(L"ON"), Tr(L"OFF"));
     ui::SetMenuNoMatchCaption(Tr(L"Nothing found"));
+    ui::SetTextMenuCaptions(Tr(L"Cut"), Tr(L"Copy"), Tr(L"Paste"), Tr(L"Select all"));
 }
 
 Language CurrentLanguage() {

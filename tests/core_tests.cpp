@@ -3324,6 +3324,19 @@ void TestSkinContrast() {
     }
     CHECK(secondary && accent && onAccent);
     CHECK(!anyLight);  // a dark-only skin is not checked in light
+    // The focus ring is the accent where it is 3:1 on every background, else text.primary:
+    // Graphite (#6B6B6B) is 2.9:1 on bg.selected in dark, #808080 2.9:1 on it in light.
+    for (const bool dark : {true, false}) {
+        CHECK(FocusRing(Resolve(dark, 0, nullptr)) == AccentTone(dark, 0));
+        const Colors graphite = Resolve(dark, 4, nullptr);
+        CHECK(FocusRing(graphite) == graphite[kTextPrimary]);
+    }
+    // A ring that fails 3:1 is reported (here text.primary is as dim as the accent).
+    ParseResult dim = Parse(R"({"mode": "dark", "dark": {"text.primary": "#3A3A3A", "accent": "#3A3A3A"}})");
+    bool ring = false;
+    for (const ContrastIssue& i : CheckContrast(&dim.skin, 0)) ring |= i.fg == kFocusRingFg && i.need == 3.0;
+    CHECK(ring);
+    CHECK(Describe({true, kFocusRingFg, kBgCard, 1.45, 3.0, true}) == "dark: focus ring on bg.card 1.4:1 (needs 3.0:1)");
     ContrastIssue sample{true, kTextSecondary, kBgPanel, 3.97, 4.5, false};
     CHECK(Describe(sample) == "dark: text.secondary on bg.panel 3.9:1 (needs 4.5:1)");
     // #8A8A8A on bg.selected #242424 is 4.497:1: reported, and shown as 4.4, not a rounded 4.5.
