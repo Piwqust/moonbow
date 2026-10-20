@@ -126,8 +126,8 @@ public:
     }
 };
 
-// Read-only key field: dark pill, the keys centred as in the Settings editor, "—" for an empty
-// slot, and an "open" arrow: a click opens the editor in Settings.
+// Read-only key field: each binding as a keycap centred as in the Settings editor, "—" for an
+// empty slot, and an "open" arrow on hover: a click opens the editor in Settings.
 class KeyField : public Widget {
 public:
     KeyField(std::wstring text, std::function<void()> edit) : text_(std::move(text)) {
@@ -135,16 +135,43 @@ public:
         height = Length::Px(33);
         tooltip = text_.empty() ? std::wstring(Tr(L"Edit in Settings")) : text_ + L"\n" + Tr(L"Edit in Settings");
         onClick = std::move(edit);
+        for (size_t at = 0; !text_.empty();) {
+            const size_t comma = text_.find(L", ", at);
+            keys_.push_back(text_.substr(at, comma == std::wstring::npos ? std::wstring::npos : comma - at));
+            if (comma == std::wstring::npos) break;
+            at = comma + 2;
+        }
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
-        p.Fill(rect, IsHot() ? Color::Mix(c.bgDeep, c.bgSelected, 0.35f) : c.bgDeep, 6);
+        const bool hot = IsHot();
+        if (hot) p.Fill(rect, c.hover, kRadiusControl);
         const Rect box{rect.x + kKeyInset, rect.y, rect.w - kKeyInset - kKeyIconRoom, rect.h};
-        if (text_.empty())
+        if (text_.empty()) {
             p.Text(L"—", box, TextStyle::Body, c.textDisabled, HAlign::Center);
-        else
-            p.Text(text_, box, TextStyle::Mono, SoftText(), HAlign::Center);
-        p.Icon("open", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, IsHot() ? c.textPrimary : c.textTertiary);
+        } else {
+            constexpr float kPad = 10, kGap = 6, kCapH = 26;
+            std::vector<float> widths;
+            float total = -kGap;
+            for (const std::wstring& k : keys_) {
+                widths.push_back(p.Measure(k, TextStyle::Mono).width + 2 * kPad);
+                total += widths.back() + kGap;
+            }
+            // Too many keys for the column: one cap with the whole list, cut with an ellipsis.
+            const bool one = total > box.w;
+            float x = std::round(box.Cx() - std::min(total, box.w) / 2);
+            for (size_t i = 0; i < (one ? 1 : keys_.size()); ++i) {
+                const Rect cap{x, std::round(rect.Cy() - kCapH / 2), one ? box.w : widths[i], kCapH};
+                p.Fill(cap.Offset(0, 1), c.lineControl.Fade(0.5f), kRadiusControl);  // key depth
+                p.Fill(cap, c.bgDeep, kRadiusControl);
+                p.Stroke(cap, c.line, kRadiusControl);
+                p.Text(one ? text_ : keys_[i], cap.Inset(Insets{kPad, 0, kPad, 0}), TextStyle::Mono, SoftText(),
+                       HAlign::Center, VAlign::Center, gfx::kTextEllipsis);
+                x += cap.w + kGap;
+            }
+        }
+        // The arrow only on the hovered field: on every row it was ~40 identical icons of noise.
+        if (hot) p.Icon("open", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, c.textPrimary);
     }
     // "Stop: S", not a bare "S": the action is in another column.
     void Describe(A11y& a) override { a.name = action + L": " + (text_.empty() ? L"—" : text_); }
@@ -152,6 +179,7 @@ public:
 
 private:
     std::wstring text_;
+    std::vector<std::wstring> keys_;
 };
 
 class ShortcutsList : public Widget {
@@ -350,7 +378,7 @@ public:
             p.Image(bmp, rect.Inset(2), 5, true);
         } else {
             const Rect plus = rect.Center(30, 30);
-            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, 5);
+            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, kRadiusCard);
             p.Icon("add", plus.Inset(3), IsHot() ? c.textPrimary : c.textSecondary);
         }
         p.Stroke(rect, IsHot() ? c.line : c.bgPanel, 6, 2);
@@ -437,7 +465,7 @@ public:
             p.Text(Tr(L"Drag files into the box or click here to select files."), {rect.x, rect.y + 52, rect.w, 24},
                    TextStyle::Body, IsHot() ? c.textTertiary : c.textDisabled, HAlign::Center);
             const Rect plus{rect.Cx() - 42, rect.y + 96, 84, 30};
-            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, 5);
+            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, kRadiusCard);
             p.Icon("add", plus.Center(24, 24), IsHot() ? c.textPrimary : c.textSecondary);
             return;
         }

@@ -7,6 +7,9 @@
 #include "ui/Host.h"
 #include "ui/Theme.h"
 
+#include <cstdio>
+#include <cwchar>
+
 namespace app {
 
 namespace {
@@ -25,6 +28,32 @@ constexpr BuiltinDef kBuiltins[] = {
     {"contrast", L"LUMEN_SKIN_CONTRAST"},
     {"sepia", L"LUMEN_SKIN_SEPIA"},
 };
+
+// The contrast theme's colours. --automation runs can't switch the theme (a system setting):
+// LUMEN_TEST_SYSTEM_COLORS="#window,#text,#highlight,#highlightText,#hotlight,#grayText,#buttonFace" stands in.
+skin::SystemColors ReadSystemColors() {
+    const int ids[] = {COLOR_WINDOW, COLOR_WINDOWTEXT, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT,
+                       COLOR_HOTLIGHT, COLOR_GRAYTEXT, COLOR_BTNFACE};
+    skin::Rgba c[7];
+    for (int i = 0; i < 7; ++i) {
+        const COLORREF v = GetSysColor(ids[i]);
+        c[i] = skin::Rgba::Hex((GetRValue(v) << 16) | (GetGValue(v) << 8) | GetBValue(v));
+    }
+    wchar_t test[128] = {};
+    if (ui::Host::Automation() && GetEnvironmentVariableW(L"LUMEN_TEST_SYSTEM_COLORS", test, 128)) {
+        const wchar_t* p = test;
+        for (int i = 0; i < 7 && (p = wcschr(p, L'#')) != nullptr; ++i, ++p)
+            c[i] = skin::Rgba::Hex(static_cast<uint32_t>(wcstoul(p + 1, nullptr, 16)));
+    }
+    return {c[0], c[1], c[2], c[3], c[4], c[5], c[6]};
+}
+
+std::string Describe(const skin::SystemColors& s) {
+    char buf[80];
+    snprintf(buf, sizeof buf, "%06X%06X%06X%06X%06X%06X%06X", s.window.Rgb(), s.windowText.Rgb(), s.highlight.Rgb(),
+             s.highlightText.Rgb(), s.hotlight.Rgb(), s.grayText.Rgb(), s.buttonFace.Rgb());
+    return buf;
+}
 
 std::string Resource(const wchar_t* name) {
     HRSRC res = FindResourceW(nullptr, name, RT_RCDATA);
@@ -113,9 +142,7 @@ const std::vector<BuiltinSkin>& Skins::Builtins() {
 void Skins::Start(Config& config) {
     config_ = &config;
     config.Subscribe("interface.", [this](const std::string& key) {
-        if (key == "interface.skin" || key == "interface.customSkin" || key == "interface.skinFile" ||
-            key == "interface.skinPicked")
-            Apply(false);
+        if (key == "interface.skin" || key == "interface.customSkin" || key == "interface.skinFile") Apply(false);
     });
     ui::Host::onHighContrastChanged = [this] { Apply(false); };
     Apply(false);
@@ -128,11 +155,12 @@ void Skins::Stop() {
 void Skins::Apply(bool reload) {
     if (!config_) return;
     const std::wstring file = config_->GetWString("interface.skinFile");
-    const bool custom = config_->GetBool("interface.customSkin") && !file.empty();
-    std::string id = config_->GetString("interface.skin");
-    // Windows high contrast replaces the default look; a skin the user picked stays, "Lumen" too.
-    if (id == "lumen" && ui::Host::HighContrast() && !config_->GetBool("interface.skinPicked")) id = "contrast";
-    const std::string source = custom ? "file:" + json::ToUtf8(file) : "builtin:" + id;
+    // Windows high contrast replaces every skin with the user's contrast theme, as Windows apps do.
+    const bool system = ui::Host::HighContrast();
+    const bool custom = !system && config_->GetBool("interface.customSkin") && !file.empty();
+    const std::string id = config_->GetString("interface.skin");
+    const skin::SystemColors sys = system ? ReadSystemColors() : skin::SystemColors{};
+    const std::string source = system ? "system:" + Describe(sys) : custom ? "file:" + json::ToUtf8(file) : "builtin:" + id;
     if (source == source_ && !reload) return;
     const bool first = source_.empty();
     source_ = source;
@@ -141,7 +169,10 @@ void Skins::Apply(bool reload) {
     warnings_.clear();
 
     std::shared_ptr<const skin::Skin> s;
-    if (custom) {
+    if (system) {
+        StopWatch();
+        s = std::make_shared<const skin::Skin>(skin::FromSystemColors(sys));
+    } else if (custom) {
         std::string text;
         if (!json::ReadFileUtf8(file, &text)) {
             failed_ = true;
@@ -163,7 +194,7 @@ void Skins::Apply(bool reload) {
     ui::Theme::Get().SetSkin(std::move(s));
     for (ui::Host* h : ui::Host::All()) h->OnThemeChanged();
     if (custom) WriteLog(file);
-    Trace(custom ? "skin applied (file)" : "skin applied (built-in)");
+    Trace(system ? "skin applied (contrast theme)" : custom ? "skin applied (file)" : "skin applied (built-in)");
     changed.Emit();
 }
 

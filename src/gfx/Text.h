@@ -49,6 +49,10 @@ public:
     // Loads the fonts on a worker thread (~10 ms) while the window is created; the first
     // layout waits for it. DirectWrite objects are free-threaded.
     void InitAsync(HINSTANCE instance);
+    // Windows "Text size" (1 to 2.25): every style and line height grows by it. Before InitAsync
+    // it only sets the factor; later it rebuilds the formats (the caller lays the windows out again).
+    void SetScale(float scale);
+    float Scale() const { return scale_; }
     float LineHeight(TextStyle s) const;
 
     // Cached layout for one string. Valid until the next Trim() pass drops it.
@@ -66,6 +70,7 @@ private:
     IDWriteTextFormat* Format(TextStyle style);
     void WaitReady();
     bool LoadFonts(HINSTANCE instance);
+    bool CreateFormats();
 
     ComPtr<IDWriteFontCollection1> fonts_;
     ComPtr<IDWriteInMemoryFontFileLoader> loader_;
@@ -73,6 +78,7 @@ private:
     ComPtr<IDWriteTypography> tabular_;
     ComPtr<IDWriteInlineObject> ellipsis_[static_cast<int>(TextStyle::Count)];
     const wchar_t* family_ = L"Inter";
+    float scale_ = 1;
     struct Impl;
     Impl* impl_ = nullptr;
     std::thread fontThread_;

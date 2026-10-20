@@ -15,6 +15,7 @@
     "line.subtle": "#101010",
     "line": "#1F1F1F",
     "line.strong": "#3A3A3A",
+    "line.control": "#6E6E6E",
     "text.disabled": "#5E5E5E"
   }
 }

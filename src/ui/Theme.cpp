@@ -60,7 +60,7 @@ void Theme::Rebuild() {
     Color* const fields[skin::kTokenCount] = {
         &p.bgDeep, &p.bgBase, &p.bgRaised, &p.bgPanel, &p.bgChrome, &p.bgCard, &p.bgSelected, &p.bgMenu,
         &p.hover, &p.press,
-        &p.lineSubtle, &p.line, &p.lineStrong,
+        &p.lineSubtle, &p.line, &p.lineStrong, &p.lineControl,
         &p.textPrimary, &p.textSecondary, &p.textTertiary, &p.textDisabled,
         &p.accent, &p.accentMid, &p.accentDim, &p.accentFaint, &p.onAccent,
         &p.scrim, &p.shadow, &p.danger,

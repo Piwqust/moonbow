@@ -11,7 +11,16 @@ namespace ui {
 
 namespace {
 
-constexpr float kMenuItemH = 40;
+// A row holding one line of `style`: the design height, or the text plus the same air once Windows
+// "Text size" makes the text taller.
+float FitRow(float design, TextStyle style, float air) {
+    return std::max(design, gfx::Text::Get().LineHeight(style) + air);
+}
+
+// Windows 11 menus use 32 to 36 DIP rows; 17 items stay under 650 DIP.
+float MenuItemH() {
+    return FitRow(36, TextStyle::Body, 16);
+}
 constexpr float kMenuSepH = 9;
 constexpr float kMenuPad = 6;
 
@@ -52,6 +61,12 @@ void SetClipboardText(HWND owner, const std::wstring& text) {
         }
     }
     CloseClipboard();
+}
+
+// The transport glyphs fill only 10 of the icon grid's 24 DIP; the outline icons fill about 17.
+// In a column of menu icons they are drawn larger so both read at one size.
+bool SmallGlyph(const std::string& icon) {
+    return icon == "play" || icon == "pause" || icon == "stop" || icon == "previous" || icon == "next";
 }
 
 bool IsWordChar(wchar_t c) {
@@ -158,7 +173,7 @@ void Button::SetText(std::wstring text) {
 Size Button::MeasureContent(float, float) {
     float w = gfx::Text::Get().Measure(text_, style).width + 32;
     if (!icon.empty()) w += text_.empty() ? 20 - 32 + 12 : 28;
-    return {w, 32};
+    return {w, FitRow(32, style, 12)};
 }
 
 void Button::Paint(Painter& p) {
@@ -173,7 +188,9 @@ void Button::Paint(Painter& p) {
             fg = on ? c.onAccent : c.textDisabled;
             break;
         case ButtonKind::Secondary:
-            bg = !on ? DisabledFill() : down ? c.bgSelected : hot ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel;
+            // Hover and press step towards the text colour: a visible change in both themes.
+            bg = !on ? DisabledFill() : down ? Color::Mix(c.bgPanel, c.textPrimary, 0.18f)
+                 : hot ? Color::Mix(c.bgPanel, c.textPrimary, 0.08f) : c.bgPanel;
             fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
             break;
         case ButtonKind::Ghost:
@@ -289,36 +306,48 @@ void SetToggleCaptions(std::wstring on, std::wstring off) {
     g_toggleOff = std::move(off);
 }
 
+Size Toggle::MeasureContent(float, float) {
+    const float s = gfx::Text::Get().Scale();
+    return {66 * s, 30 * s};
+}
+
 void Toggle::Paint(Painter& p) {
     const Palette& c = P();
     const float k = knob_.Get();
-    const Rect box = rect.Center(66, 30);
-    const Color bg = Color::Mix(c.bgCard, c.accentDim, k);
+    const float s = gfx::Text::Get().Scale();  // the captions grow with Windows "Text size"
+    const Rect box = rect.Center(66 * s, 30 * s);
     const bool live = IsEnabled();
-    p.Fill(box, live ? bg : DisabledFill(), 4);  // flatter than a live track, no border
-    if (live) p.Stroke(box, Color::Mix(c.bgDeep, c.accentFaint, k), 4, 2);
-    if (IsHot() && live) p.Fill(box, c.hover, 4);
+    const bool hot = live && IsHot(), down = live && IsPressed();
+    // ON is a filled accent track, OFF an outlined neutral one (iOS, Fluent): the state reads from
+    // the fill in both themes, not from the knob position or the caption.
+    if (live) {
+        const Color onFill = down ? Color::Mix(c.accent, c.bgBase, 0.22f) : hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent;
+        const Color offFill = down ? c.bgSelected : c.bgCard;
+        p.Fill(box, Color::Mix(offFill, onFill, k), 4);
+        if (k < 1) p.Stroke(box, (hot ? c.textSecondary : c.lineControl).Fade(1 - k), 4);
+    } else {
+        p.Fill(box, DisabledFill(), 4);  // flatter than a live track, no border
+    }
     PaintFocusRing(p, box, 4);
 
     // An 18 DIP knob leaves each caption 40 DIP, so "выкл" keeps air on both sides.
-    const float knobW = 18, knobH = 22;
-    const float x = box.x + 4 + (box.w - 8 - knobW) * k;
+    const float knobW = 18 * s, knobH = 22 * s, inset = 4 * s;
+    const float x = box.x + inset + (box.w - 2 * inset - knobW) * k;
     // Disabled: an outlined knob in the disabled tone, so it reads as unusable rather than off.
     // Live off: knob and caption at >= 3:1 on the track in both themes (lineStrong was ~1.5:1).
     const Color knobOff = Color::Mix(c.textTertiary, c.textSecondary, 0.4f);
-    const Color knobOn = live ? c.accent : c.textDisabled, textOn = live ? c.accent : c.textDisabled;
-    const Rect knob{x, box.y + 4, knobW, knobH};
+    const Rect knob{x, box.y + inset, knobW, knobH};
     if (live)
-        p.Fill(knob, Color::Mix(knobOff, knobOn, k), 3);
+        p.Fill(knob, Color::Mix(knobOff, c.onAccent, k), kRadiusSmall);
     else
-        p.Stroke(knob.Inset(0.75f), c.textDisabled, 3, 1.5f);
+        p.Stroke(knob.Inset(0.75f), c.textDisabled, kRadiusSmall, 1.5f);
     // Centred in the free part of the track, between the knob and the inner edge.
-    const Rect textOffRect{box.x + 4 + knobW, box.y, box.w - 8 - knobW, box.h};
-    const Rect textOnRect{box.x + 4, box.y, box.w - 8 - knobW, box.h};
+    const Rect textOffRect{box.x + inset + knobW, box.y, box.w - 2 * inset - knobW, box.h};
+    const Rect textOnRect{box.x + inset, box.y, box.w - 2 * inset - knobW, box.h};
     if (k < 0.99f)
         p.Text(g_toggleOff, textOffRect, TextStyle::Micro, (live ? c.textSecondary : c.textDisabled).Fade(1 - k),
                HAlign::Center);
-    if (k > 0.01f) p.Text(g_toggleOn, textOnRect, TextStyle::Micro, textOn.Fade(k), HAlign::Center);
+    if (k > 0.01f) p.Text(g_toggleOn, textOnRect, TextStyle::Micro, (live ? c.onAccent : c.textDisabled).Fade(k), HAlign::Center);
 }
 
 // --- Checkbox -------------------------------------------------------------------------------
@@ -330,7 +359,7 @@ Checkbox::Checkbox(std::wstring text, bool checked) : text_(std::move(text)), ch
 
 Size Checkbox::MeasureContent(float availW, float) {
     float w = 20 + (text_.empty() ? 0 : 10 + gfx::Text::Get().Measure(text_, TextStyle::Body).width);
-    return {std::min(w, availW), 24};
+    return {std::min(w, availW), FitRow(24, TextStyle::Body, 4)};
 }
 
 void Checkbox::OnClick() {
@@ -343,13 +372,13 @@ void Checkbox::Paint(Painter& p) {
     const Palette& c = P();
     const Rect box{rect.x + 1, rect.Cy() - 9, 18, 18};
     if (checked_) {
-        p.Fill(box, c.accent, 3);
+        p.Fill(box, c.accent, kRadiusControl);
         p.Icon("check_selected", box.Inset(1), c.onAccent);
     } else {
-        p.Fill(box, c.bgDeep, 3);
-        p.Stroke(box, IsHot() ? c.textTertiary : c.lineStrong, 3);
+        p.Fill(box, c.bgDeep, kRadiusControl);
+        p.Stroke(box, IsHot() ? c.textSecondary : c.lineControl, kRadiusControl);
     }
-    PaintFocusRing(p, box, 3);
+    PaintFocusRing(p, box, kRadiusControl);
     if (!text_.empty())
         p.Text(text_, {box.Right() + 10, rect.y, rect.Right() - box.Right() - 10, rect.h}, TextStyle::Body,
                IsEnabled() ? (IsHot() ? c.textPrimary : c.textSecondary) : c.textDisabled);
@@ -370,7 +399,7 @@ void Segmented::SetSelected(int i) {
 Size Segmented::MeasureContent(float availW, float) {
     float w = 4;
     for (auto& ch : choices_) w += std::max(segmentWidth, gfx::Text::Get().Measure(ch.label, TextStyle::Body).width + 24) + 2;
-    return {std::min(w, availW), 36};
+    return {std::min(w, availW), FitRow(36, TextStyle::Body, 16)};
 }
 
 int Segmented::IndexAt(float x) const {
@@ -437,8 +466,8 @@ void Segmented::Describe(A11y& a) {
 void Segmented::Paint(Painter& p) {
     const Palette& c = P();
     const bool live = IsEnabled();
-    p.Fill(rect, live ? c.bgDeep : DisabledFill(), 5);
-    PaintFocusRing(p, rect, 5);
+    p.Fill(rect, live ? c.bgDeep : DisabledFill(), kRadiusControl);
+    PaintFocusRing(p, rect, kRadiusControl);
     if (choices_.empty()) return;
     for (size_t i = 0; i < choices_.size(); ++i) {
         const Rect seg = SegmentRect(static_cast<int>(i));
@@ -446,12 +475,12 @@ void Segmented::Paint(Painter& p) {
         const bool hot = live && IsHot() && static_cast<int>(i) == hoverIndex_;
         const bool dark = Theme::Get().Mode() == ThemeMode::Dark;
         if (sel && !live) {
-            p.Stroke(seg, c.lineStrong, 4);  // which value is set, without the live highlight
+            p.Stroke(seg, c.lineStrong, kRadiusSmall);  // which value is set, without the live highlight
         } else if (sel) {
-            p.Fill(seg, dark ? Color::Mix(c.bgPanel, c.accent, 0.14f) : c.bgPanel, 4);
-            if (!dark) p.Stroke(seg, c.line, 4);
+            p.Fill(seg, dark ? Color::Mix(c.bgPanel, c.accent, 0.14f) : c.bgPanel, kRadiusSmall);
+            if (!dark) p.Stroke(seg, c.line, kRadiusSmall);
         } else if (hot) {
-            p.Fill(seg, c.hover, 4);
+            p.Fill(seg, c.hover, kRadiusSmall);
         }
         const Color fg = !live ? c.textDisabled : sel ? c.textPrimary : hot ? c.textPrimary : c.textSecondary;
         float tx = seg.x;
@@ -487,7 +516,7 @@ void Dropdown::SetChoices(std::vector<Choice> choices, int selected) {
 Size Dropdown::MeasureContent(float availW, float) {
     float w = 0;
     for (auto& ch : choices_) w = std::max(w, gfx::Text::Get().Measure(ch.label, TextStyle::Body).width);
-    return {std::min(availW, std::max(160.0f, w + 56)), 36};
+    return {std::min(availW, std::max(160.0f, w + 56)), FitRow(36, TextStyle::Body, 16)};
 }
 
 void Dropdown::Paint(Painter& p) {
@@ -495,12 +524,12 @@ void Dropdown::Paint(Painter& p) {
     const bool open = menu_ && GetHost() && GetHost()->IsPopupOpen(menu_);
     const bool live = IsEnabled();
     if (live) {
-        p.Fill(rect, c.bgDeep, 5);
-        p.Fill(rect.Inset(2), IsHot() || open ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel, 4);
+        p.Fill(rect, IsHot() || open ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel, kRadiusControl);
+        p.Stroke(rect, IsHot() || open ? c.textTertiary : c.lineControl, kRadiusControl);
     } else {
-        p.Fill(rect, DisabledFill(), 5);
+        p.Fill(rect, DisabledFill(), kRadiusControl);
     }
-    PaintFocusRing(p, rect, 5);
+    PaintFocusRing(p, rect, kRadiusControl);
     const bool has = selected_ >= 0 && selected_ < static_cast<int>(choices_.size());
     const std::wstring& label = has ? choices_[static_cast<size_t>(selected_)].label : placeholder;
     const Color fg = !live ? c.textDisabled : has ? (IsHot() ? c.textPrimary : c.textSecondary) : c.textTertiary;
@@ -626,7 +655,7 @@ void Slider::Paint(Painter& p) {
     const Palette& c = P();
     const Rect track{rect.x + 6, rect.Cy() - 2, rect.w - 12, 4};
     p.Fill(track, c.bgDeep, 2);
-    p.Stroke(track.Inset(-1), c.line, 3);
+    p.Stroke(track.Inset(-1), c.lineControl, 3);
     const float t = (max > min) ? (value_ - min) / (max - min) : 0;
     const float x = track.x + track.w * t;
     if (showFill) {
@@ -648,7 +677,7 @@ TextBox::TextBox(std::wstring ph, std::string icon) : placeholder(std::move(ph))
     interactive = true;
     focusable = true;
     cursor = IDC_IBEAM;
-    height = Length::Px(34);
+    height = Length::Px(FitRow(34, TextStyle::Body, 14));
     // Cut, Copy, Paste and Select all, as in every Windows edit field: the same as their keys.
     onContextMenu = [this](const MouseEvent& e) {
         const bool sel = caret_ != anchor_ && !password;
@@ -965,8 +994,8 @@ void TextBox::Paint(Painter& p) {
     p.Fill(rect, live ? bg : DisabledFill(), 4);
     if (live && IsFocused())
         p.Stroke(rect, c.lineStrong, 4);
-    else if (live && IsHot())
-        p.Stroke(rect, c.line, 4);
+    else if (live)
+        p.Stroke(rect, IsHot() ? c.textTertiary : c.lineControl, 4);
     PaintFocusRing(p, rect, 4);  // reached with Tab: the ring of every other control, not just the caret
     if (!leadingIcon.empty())
         p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, live ? c.textTertiary : c.textDisabled);
@@ -1001,8 +1030,8 @@ Size AccentPicker::MeasureContent(float, float) {
 }
 
 bool AccentPicker::OnMouseDown(const MouseEvent& e) {
-    const int i = static_cast<int>((e.x - rect.x - 4) / 36);
-    if (i >= 0 && i < kAccentCount && i != selected_) {
+    const int i = IndexAt(e.x);
+    if (i >= 0 && i != selected_) {
         selected_ = i;
         if (onChange) onChange(i);
         Invalidate();
@@ -1010,15 +1039,32 @@ bool AccentPicker::OnMouseDown(const MouseEvent& e) {
     return true;
 }
 
+int AccentPicker::IndexAt(float x) const {
+    const int i = static_cast<int>(std::floor((x - rect.x - 4) / 36));
+    return i >= 0 && i < kAccentCount ? i : -1;
+}
+
+bool AccentPicker::OnMouseMove(const MouseEvent& e) {
+    const int i = IndexAt(e.x);
+    if (i != hover_) {
+        hover_ = i;
+        Invalidate();
+    }
+    return true;
+}
+
 void AccentPicker::Paint(Painter& p) {
-    p.Fill(rect, P().bgDeep, 5);
+    p.Fill(rect, P().bgDeep, kRadiusControl);
     for (int i = 0; i < kAccentCount; ++i) {
         const Rect cell{rect.x + 4 + i * 36.0f, rect.y + 4, 32, rect.h - 8};
         if (i == selected_) p.Fill(cell, P().bgSelected, 4);
         p.Fill(cell.Center(18, 18), Theme::Get().AccentSwatch(i), 3);
-        if (i == selected_) p.Stroke(cell, P().accentMid, 4);
+        if (i == selected_)
+            p.Stroke(cell, P().accentMid, 4);
+        else if (i == hover_ && IsHot())
+            p.Stroke(cell, P().lineControl, 4);
     }
-    PaintFocusRing(p, rect, 5);
+    PaintFocusRing(p, rect, kRadiusControl);
 }
 
 // --- ScrollView -----------------------------------------------------------------------------
@@ -1262,7 +1308,7 @@ public:
         for (const MenuItem& m : items_) fit(m);
         if (!filter_.empty())
             for (int i : visible_) fit(At(i));
-        float h = kMenuPad * 2 + HeaderH() + (visible_.empty() ? kMenuItemH : ContentH());
+        float h = kMenuPad * 2 + HeaderH() + (visible_.empty() ? MenuItemH() : ContentH());
         return {std::min(w, 560.0f), std::min(h, availH)};
     }
 
@@ -1283,22 +1329,22 @@ public:
             if (i == index) break;
             cy += RowH(i);
         }
-        return {rect.x + 4, cy, rect.w - 8, kMenuItemH};
+        return {rect.x + 4, cy, rect.w - 8, MenuItemH()};
     }
 
     void Paint(Painter& p) override {
         const Palette& c = P();
-        p.Shadow(rect, 6);
-        p.Fill(rect, c.bgMenu, 6);
-        p.Stroke(rect, c.line, 6);
+        p.Shadow(rect, kRadiusPopup);
+        p.Fill(rect, c.bgMenu, kRadiusPopup);
+        p.Stroke(rect, c.line, kRadiusPopup);
         if (!filter_.empty()) {
-            const Rect row{rect.x + 4, rect.y + kMenuPad, rect.w - 8, kMenuItemH};
+            const Rect row{rect.x + 4, rect.y + kMenuPad, rect.w - 8, MenuItemH()};
             p.Icon("search", {row.x + 12, row.Cy() - 10, 20, 20}, c.textTertiary);
             p.Text(filter_, {row.x + 48, row.y, row.w - 60, row.h}, TextStyle::Body, c.textPrimary, HAlign::Leading,
                    VAlign::Center, gfx::kTextEllipsis);
             p.Fill({rect.x + 12, row.Bottom() + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
             if (visible_.empty())
-                p.Text(g_menuNoMatch, {row.x + 12, row.Bottom() + kMenuSepH, row.w - 24, kMenuItemH}, TextStyle::Body,
+                p.Text(g_menuNoMatch, {row.x + 12, row.Bottom() + kMenuSepH, row.w - 24, MenuItemH()}, TextStyle::Body,
                        c.textTertiary, HAlign::Leading, VAlign::Center, gfx::kTextEllipsis);
         }
         p.PushClip({rect.x, rect.y + kMenuPad + HeaderH(), rect.w, rect.h - kMenuPad * 2 - HeaderH()});
@@ -1311,18 +1357,19 @@ public:
                 cy += kMenuSepH;
                 continue;
             }
-            if (cy > rect.Bottom() || cy + kMenuItemH < rect.y) {
-                cy += kMenuItemH;
+            if (cy > rect.Bottom() || cy + MenuItemH() < rect.y) {
+                cy += MenuItemH();
                 continue;
             }
-            const Rect row{rect.x + 4, cy, rect.w - 8, kMenuItemH};
+            const Rect row{rect.x + 4, cy, rect.w - 8, MenuItemH()};
             const bool hot = i == highlight_ && m.enabled;
             if (hot) p.Fill(row, c.hover, 4);
             // A note is information, so it keeps text contrast; a disabled command may fade.
             const Color fg = m.note ? c.textSecondary : !m.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
             float x = row.x + 12;
             if (hasIcons_) {
-                if (!m.icon.empty()) p.Icon(m.icon, {x, row.Cy() - 10, 20, 20}, fg, m.enabled ? c.accentMid : fg);
+                const float s = SmallGlyph(m.icon) ? 28.0f : 20.0f;
+                if (!m.icon.empty()) p.Icon(m.icon, {x + 10 - s / 2, row.Cy() - s / 2, s, s}, fg, m.enabled ? c.accentMid : fg);
                 x += 36;
             }
             float right = row.Right() - 12;
@@ -1338,7 +1385,7 @@ public:
             }
             if (!m.shortcut.empty()) {
                 const float sw = gfx::Text::Get().Measure(m.shortcut, TextStyle::Body).width;
-                p.Text(m.shortcut, {right - sw, row.y, sw + 1, row.h}, TextStyle::Body, c.textTertiary,
+                p.Text(m.shortcut, {right - sw, row.y, sw + 1, row.h}, TextStyle::Body, m.enabled ? c.textTertiary : fg,
                        HAlign::Leading, VAlign::Center, 0);
                 right -= sw + 16;
             }
@@ -1349,7 +1396,7 @@ public:
                 const float mx = x + marks_[k].first;
                 p.Fill({mx, row.Cy() + 9, std::min(marks_[k].second, right - mx), 2}, m.enabled ? c.accent : fg, 1);
             }
-            cy += kMenuItemH;
+            cy += MenuItemH();
         }
         // A menu taller than a small window scrolls: fade the cut edge so the last row reads as
         // "more below" (or above), not as the end of the menu.
@@ -1379,7 +1426,7 @@ public:
 
     bool OnWheel(const WheelEvent& e) override {
         if (MaxScroll() <= 0) return true;
-        scroll_ = std::clamp(scroll_ - e.delta * kMenuItemH * 2, 0.0f, MaxScroll());
+        scroll_ = std::clamp(scroll_ - e.delta * MenuItemH() * 2, 0.0f, MaxScroll());
         SetHighlight(IndexAt(GetHost()->MousePos().y), false);
         Invalidate();
         return true;
@@ -1498,8 +1545,8 @@ private:
         }
     }
 
-    float HeaderH() const { return filter_.empty() ? 0.0f : kMenuItemH + kMenuSepH; }
-    float RowH(int i) const { return At(i).separator ? kMenuSepH : kMenuItemH; }
+    float HeaderH() const { return filter_.empty() ? 0.0f : MenuItemH() + kMenuSepH; }
+    float RowH(int i) const { return At(i).separator ? kMenuSepH : MenuItemH(); }
     float Top() const { return rect.y + kMenuPad + HeaderH() - scroll_; }
     float ContentH() const {
         float h = 0;
@@ -1718,13 +1765,14 @@ bool Dialog::OnKeyDown(const KeyEvent& e) {
 
 void Dialog::Paint(Painter& p) {
     const Palette& c = P();
-    p.Shadow(rect, 10, 24, 10);
-    p.Fill(rect, c.bgRaised, 10);
+    // The look of the app's dialogs (dlg::Frame).
+    p.Shadow(rect, kRadiusWindow, 15, 8);
+    p.Fill(rect, c.bgPanel, kRadiusWindow);
     // Header band, as in the design (darker strip with the title).
-    p.PushRoundClip(rect, 10);
+    p.PushRoundClip(rect, kRadiusWindow);
     p.Fill({rect.x, rect.y, rect.w, 52}, c.bgDeep);
     p.PopClip();
-    p.Stroke(rect, c.line, 10);
+    p.Stroke(rect, c.lineSubtle, kRadiusWindow);
 }
 
 Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog) {
@@ -1771,7 +1819,7 @@ public:
         if (Host* h = GetHost()) availW = std::min(availW, std::max(240.0f, ToastBandOf(h).w - 32));
         float w = gfx::Text::Get().Measure(text_, TextStyle::Body).width + 32 + (icon_.empty() ? 0 : 28);
         if (action_) w += action_->Measure(availW, 32).w + 4;
-        return {std::min({w, availW, kToastMaxW}), 40};
+        return {std::min({w, availW, kToastMaxW}), FitRow(40, TextStyle::Body, 20)};
     }
     void OnLayout() override {
         if (!action_) return;
@@ -1779,9 +1827,9 @@ public:
         action_->Arrange({rect.Right() - 4 - bw, rect.y + 4, bw, 32});
     }
     void Paint(Painter& p) override {
-        p.Shadow(rect, 8, 14, 6);
-        p.Fill(rect, P().bgMenu, 8);
-        p.Stroke(rect, P().line, 8);
+        p.Shadow(rect, kRadiusPopup, 14, 6);
+        p.Fill(rect, P().bgMenu, kRadiusPopup);
+        p.Stroke(rect, P().line, kRadiusPopup);
         float x = rect.x + 16;
         if (!icon_.empty()) {
             p.Icon(icon_, {x, rect.Cy() - 10, 20, 20}, P().textPrimary);

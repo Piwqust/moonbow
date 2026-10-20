@@ -125,7 +125,7 @@ public:
         for (int row = 0; row < 2; ++row)
             for (int col = 0; col < 3; ++col) {
                 const Rect card{x0 + col * (cw + space), side.y + 24 + row * (ch + 26), cw, ch};
-                p.Fill(card, c.bgCard, 5);
+                p.Fill(card, c.bgCard, kRadiusCard);
                 p.Fill({card.x, card.Bottom() + 7, cw * (col == 1 ? 0.45f : 0.6f), 4}, c.textTertiary, 2);
             }
 
@@ -303,10 +303,14 @@ private:
     void LayoutChrome() {
         const Rect r = root_->rect;
         if (page_) page_->Arrange(r);
-        next_->Arrange({r.x + 928, r.y + 671, 100, 32});
-        back_->Arrange({r.x + 820, r.y + 671, 100, 32});
+        // Buttons grow with the text (Windows "Text size"), keeping the right edge and the 8 DIP gap.
+        const Size ns = next_->Measure(300, 64), bs = back_->Measure(300, 64);
+        const float nw = std::max(100.0f, ns.w), bw = std::max(100.0f, bs.w), bh = std::max(32.0f, ns.h);
+        const float nx = r.x + 1028 - nw, bx = nx - 8 - bw;
+        next_->Arrange({nx, r.y + 671, nw, bh});
+        back_->Arrange({bx, r.y + 671, bw, bh});
         const Size s = skip_->Measure(200, 32);
-        skip_->Arrange({(step_ == 0 ? r.x + 928 : r.x + 820) - 24 - s.w, r.y + 671 + (32 - s.h) / 2, s.w, s.h});
+        skip_->Arrange({(step_ == 0 ? nx : bx) - 24 - s.w, r.y + 671 + (bh - s.h) / 2, s.w, s.h});
         dots_->Arrange({r.x, r.y + 727, kW, 16});
     }
 
@@ -520,7 +524,7 @@ private:
         auto card = [pg](float y, float h) {
             auto* c = pg->Centered<Panel>(y, 680, h);
             c->fill = [] { return P().bgPanel; };
-            c->radius = 12;
+            c->radius = kRadiusCard;
             c->dir = Dir::Column;
             c->pad = {20, 8, 12, 8};
             return c;

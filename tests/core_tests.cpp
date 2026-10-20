@@ -3313,8 +3313,8 @@ void TestSkinResolve() {
     CHECK(dark[kOnAccent] == dark[kBgBase]);
     CHECK(dark[kAccentMid] == Mix(dark[kAccent], dark[kBgBase], 0.25f));
     Colors light = Resolve(false, 4, nullptr);
-    CHECK(light[kBgBase].Rgb() == 0xF2F2F2 && light[kAccent].Rgb() == 0x808080);
-    CHECK(Resolve(true, 99, nullptr)[kAccent].Rgb() == 0x6B6B6B);  // tone clamped
+    CHECK(light[kBgBase].Rgb() == 0xF2F2F2 && light[kAccent].Rgb() == 0x6C6C6C);
+    CHECK(Resolve(true, 99, nullptr)[kAccent].Rgb() == 0x828282);  // tone clamped
     Skin empty;
     CHECK(Resolve(true, 2, &empty) == Resolve(true, 2, nullptr));
 
@@ -3352,12 +3352,14 @@ void TestSkinContrast() {
     CHECK(secondary && accent && onAccent);
     CHECK(!anyLight);  // a dark-only skin is not checked in light
     // The focus ring is the accent where it is 3:1 on every background, else text.primary:
-    // Graphite (#6B6B6B) is 2.9:1 on bg.selected in dark, #808080 2.9:1 on it in light.
+    // The last tone is kept at 4.5:1 (accent as text), so it also passes as a ring. A dim accent falls back.
     for (const bool dark : {true, false}) {
         CHECK(FocusRing(Resolve(dark, 0, nullptr)) == AccentTone(dark, 0));
-        const Colors graphite = Resolve(dark, 4, nullptr);
-        CHECK(FocusRing(graphite) == graphite[kTextPrimary]);
+        CHECK(FocusRing(Resolve(dark, 4, nullptr)) == AccentTone(dark, 4));
     }
+    Skin dimAccent = Parse(R"({"mode": "dark", "dark": {"accent": "#4A4A4A"}})").skin;
+    const Colors dimC = Resolve(true, 0, &dimAccent);
+    CHECK(FocusRing(dimC) == dimC[kTextPrimary]);
     // A ring that fails 3:1 is reported (here text.primary is as dim as the accent).
     ParseResult dim = Parse(R"({"mode": "dark", "dark": {"text.primary": "#3A3A3A", "accent": "#3A3A3A"}})");
     bool ring = false;
@@ -3372,6 +3374,28 @@ void TestSkinContrast() {
     for (const ContrastIssue& i : CheckContrast(&edge.skin, 0)) edgeLines.push_back(Describe(i));
     CHECK_MSG(edgeLines.size() == 1 && edgeLines[0] == "dark: text.secondary on bg.selected 4.4:1 (needs 4.5:1)", "%zu %s",
               edgeLines.size(), edgeLines.empty() ? "" : edgeLines[0].c_str());
+}
+
+void TestSystemColorsSkin() {
+    using namespace skin;
+    // Windows 11 "Aquatic" (dark) and "Desert" (light): the palette is the theme's colours only.
+    SystemColors aquatic{Rgba::Hex(0x202020), Rgba::Hex(0xFFFFFF), Rgba::Hex(0x8EE3F0), Rgba::Hex(0x263B50),
+                         Rgba::Hex(0x75E9FC), Rgba::Hex(0xA6A6A6), Rgba::Hex(0x202020)};
+    Skin s = FromSystemColors(aquatic);
+    CHECK(s.mode == Mode::Dark && !s.Empty());
+    Colors c = Resolve(true, 0, &s);
+    CHECK(c[kBgBase].Rgb() == 0x202020 && c[kBgPanel].Rgb() == 0x202020 && c[kTextPrimary].Rgb() == 0xFFFFFF);
+    CHECK(c[kTextTertiary].Rgb() == 0xFFFFFF && c[kTextDisabled].Rgb() == 0xA6A6A6);
+    CHECK(c[kAccent].Rgb() == 0x8EE3F0 && c[kOnAccent].Rgb() == 0x263B50 && c[kAccentMid].Rgb() == 0x75E9FC);
+    CHECK(c[kLineControl].Rgb() == 0xFFFFFF);
+    CHECK(Resolve(true, 4, &s)[kAccent] == c[kAccent]);  // the accent tone setting doesn't apply
+    CHECK_MSG(CheckContrast(&s, 0).empty(), "%s", Describe(CheckContrast(&s, 0)[0]).c_str());
+    SystemColors desert{Rgba::Hex(0xFFFAEF), Rgba::Hex(0x3D3D3D), Rgba::Hex(0x903909), Rgba::Hex(0xFFF5E3),
+                        Rgba::Hex(0x1C5E75), Rgba::Hex(0x676767), Rgba::Hex(0xFFFAEF)};
+    s = FromSystemColors(desert);
+    CHECK(s.mode == Mode::Light && s.light[kBgBase] && !s.dark[kBgBase]);
+    CHECK(Resolve(false, 0, &s)[kTextSecondary].Rgb() == 0x3D3D3D);
+    CHECK_MSG(CheckContrast(&s, 0).empty(), "%s", Describe(CheckContrast(&s, 0)[0]).c_str());
 }
 
 void TestBuiltinSkins() {
@@ -3868,6 +3892,7 @@ const TestCase kTests[] = {
     {"skin_fallback", TestSkinFallback},
     {"skin_resolve", TestSkinResolve},
     {"skin_contrast", TestSkinContrast},
+    {"system_colors_skin", TestSystemColorsSkin},
     {"builtin_skins", TestBuiltinSkins},
     {"movie_hash", TestMovieHash},
     {"guess_video", TestGuessVideo},

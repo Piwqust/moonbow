@@ -174,8 +174,6 @@ private:
 class BoolToggle : public Toggle, public Syncable {
 public:
     explicit BoolToggle(const Item& it) : Toggle(Cfg().GetBool(it.key)), item(it) {
-        width = Length::Px(68);
-        height = Length::Px(32);
         onChange = [this](bool on) { Cfg().SetBool(item.key, on); };
     }
     void Sync() override { SetValue(Cfg().GetBool(item.key)); }
@@ -466,9 +464,9 @@ public:
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
-        p.Shadow(rect, 8);
-        p.Fill(rect, c.bgMenu, 8);
-        p.Stroke(rect, c.line, 8);
+        p.Shadow(rect, kRadiusPopup);
+        p.Fill(rect, c.bgMenu, kRadiusPopup);
+        p.Stroke(rect, c.line, kRadiusPopup);
         uint32_t cur = 0;
         const bool has = ParseHex(Cfg().GetString(item.key), &cur);
         for (int i = 0; i < 16; ++i) {

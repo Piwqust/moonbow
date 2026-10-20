@@ -215,9 +215,9 @@ public:
     static constexpr float kW = 44, kH = 176;
     void Paint(Painter& p) override {
         const PlayerState& s = PS();
-        p.Shadow(rect, 8, 12, 4, 0.35f);
-        p.Fill(rect, P().bgMenu, 8);
-        p.Stroke(rect, P().line, 8);
+        p.Shadow(rect, kRadiusPopup, 12, 4, 0.35f);
+        p.Fill(rect, P().bgMenu, kRadiusPopup);
+        p.Stroke(rect, P().line, kRadiusPopup);
         p.Text(std::to_wstring(static_cast<int>(std::lround(s.volume))) + L"%", {rect.x, rect.y + 6, rect.w, 22},
                TextStyle::Small, P().textPrimary, HAlign::Center);
         const Rect t = Track();
