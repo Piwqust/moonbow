@@ -174,8 +174,6 @@ private:
 class BoolToggle : public Toggle, public Syncable {
 public:
     explicit BoolToggle(const Item& it) : Toggle(Cfg().GetBool(it.key)), item(it) {
-        width = Length::Px(68);
-        height = Length::Px(32);
         onChange = [this](bool on) { Cfg().SetBool(item.key, on); };
     }
     void Sync() override { SetValue(Cfg().GetBool(item.key)); }

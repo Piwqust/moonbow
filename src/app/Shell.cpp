@@ -434,7 +434,7 @@ public:
     Size MeasureContent(float availW, float) override {
         float w = pad.H();
         for (size_t i = 0; i < natural_.size(); ++i) w += natural_[i] + (i > 0 ? kChevron + 2 * kGap : 0);
-        return {std::min(w, availW), 28};
+        return {std::min(w, availW), std::max(28.0f, gfx::Text::Get().LineHeight(TextStyle::Large) + 4)};
     }
 
     void OnLayout() override {

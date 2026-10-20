@@ -67,7 +67,7 @@ void DButton::SetText(std::wstring text) {
 Size DButton::MeasureContent(float, float) {
     float w = gfx::Text::Get().Measure(text_, textStyle).width + 32;
     if (!icon.empty()) w += 28;
-    return {std::max(minWidth, std::ceil(w)), 32};
+    return {std::max(minWidth, std::ceil(w)), std::max(32.0f, gfx::Text::Get().LineHeight(textStyle) + 12)};
 }
 
 void DButton::Paint(Painter& p) {

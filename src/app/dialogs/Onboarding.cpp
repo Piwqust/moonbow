@@ -298,10 +298,14 @@ private:
     void LayoutChrome() {
         const Rect r = root_->rect;
         if (page_) page_->Arrange(r);
-        next_->Arrange({r.x + 928, r.y + 671, 100, 32});
-        back_->Arrange({r.x + 820, r.y + 671, 100, 32});
+        // Buttons grow with the text (Windows "Text size"), keeping the right edge and the 8 DIP gap.
+        const Size ns = next_->Measure(300, 64), bs = back_->Measure(300, 64);
+        const float nw = std::max(100.0f, ns.w), bw = std::max(100.0f, bs.w), bh = std::max(32.0f, ns.h);
+        const float nx = r.x + 1028 - nw, bx = nx - 8 - bw;
+        next_->Arrange({nx, r.y + 671, nw, bh});
+        back_->Arrange({bx, r.y + 671, bw, bh});
         const Size s = skip_->Measure(200, 32);
-        skip_->Arrange({(step_ == 0 ? r.x + 928 : r.x + 820) - 24 - s.w, r.y + 671 + (32 - s.h) / 2, s.w, s.h});
+        skip_->Arrange({(step_ == 0 ? nx : bx) - 24 - s.w, r.y + 671 + (bh - s.h) / 2, s.w, s.h});
         dots_->Arrange({r.x, r.y + 727, kW, 16});
     }
 
