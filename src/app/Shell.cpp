@@ -39,6 +39,11 @@ public:
         return (owner_->InPlayer() || !TheApp().PlayerShown()) && TheApp().route().section == section_;
     }
     const wchar_t* Name() const { return SectionName(section_); }
+    void Describe(A11y& a) override {  // the collapsed rail paints no text
+        a.role = Role::ListItem;
+        a.name = Tr(SectionName(section_));
+        a.selected = Selected() ? 1 : 0;
+    }
     void Paint(Painter& p) override {
         const bool sel = Selected();
         if (sel)

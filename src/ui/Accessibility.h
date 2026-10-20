@@ -34,6 +34,7 @@ struct A11y {
     int heading = 0;     // 1-9: a section title of that level
     bool password = false;
     int toggle = -1;  // CheckBox: 0 off, 1 on
+    int selected = -1;  // a ListItem / TabItem widget that is one of several: 0 no, 1 the current one
     double min = 0, max = 0, now = 0, step = 0;  // Slider
     std::function<void(double)> setRange;            // Slider; unset = read-only
     std::function<void(const std::wstring&)> setValue;  // Edit; unset = read-only

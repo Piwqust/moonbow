@@ -153,6 +153,11 @@ public:
     }
     bool selected = false;
     std::wstring caption;
+    void Describe(A11y& a) override {
+        a.role = Role::ListItem;
+        a.name = caption;
+        a.selected = selected ? 1 : 0;
+    }
     void Paint(Painter& p) override {
         const Palette& c = P();
         const Rect frame{rect.x, rect.y, rect.w, rect.h - 41};
@@ -482,7 +487,7 @@ private:
     }
 
     void BuildAppearance(AbsPage* pg) {
-        pg->Centered<Label>(56, 800, 42, Tr(L"Choose a theme."), TextStyle::Title, Tone::Secondary)->halign =
+        pg->Centered<Label>(72, 700, 39, Tr(L"Choose a theme."), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         pg->Centered<PreviewWindow>(124, 480, 270);
         const std::string theme = Cfg().GetString("general.theme");
@@ -507,7 +512,7 @@ private:
     }
 
     void BuildSummary(AbsPage* pg) {
-        pg->Centered<Label>(80, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<Label>(72, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         pg->Centered<Label>(132, 700, 22, Tr(L"Here is how Lumen is set up. Everything can be changed later in Settings."),
                             TextStyle::Large, Tone::Tertiary)
