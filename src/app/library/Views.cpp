@@ -4,6 +4,8 @@
 #include "Util.h"
 #include "app/Dialogs.h"
 #include "app/I18n.h"
+#include "app/MainWindow.h"
+#include "app/Shell.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
 
@@ -644,13 +646,48 @@ void Page::Refresh() {
     empty_->visible = showEmpty;
     if (showEmpty) {
         if (!filter_.empty())
-            empty_->Set("search", Tr(L"Nothing found"),
-                        Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {ShortQuery(filter_)}));
+            FillNoMatch(*empty_);
         else
             FillEmpty(*empty_);
     }
     InvalidateLayout();
     headerChanged.Emit();
+}
+
+// A tab or folder that has no match is often not where the file is: Music opens on Albums, and
+// "track" names songs. Say what the rest of the library has and go there with the same query (UX-3).
+void Page::FillNoMatch(EmptyState& e) {
+    const std::wstring q = ShortQuery(filter_);
+    const library::MediaKind kind = route_.section == Section::Music    ? library::MediaKind::Audio
+                                    : route_.section == Section::Videos ? library::MediaKind::Video
+                                                                        : library::MediaKind::Other;
+    const size_t all = snap_ && kind != library::MediaKind::Other ? snap_->Search(filter_).size() : 0;
+    if (all == 0) {
+        e.Set("search", Tr(L"Nothing found"),
+              Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {q}));
+        return;
+    }
+    // Posted: the new page replaces this one, and with it the button whose click runs.
+    auto searchIn = [text = filter_](Route r) {
+        return [text, r] {
+            MainWindow* w = TheApp().main();
+            if (!w) return;
+            w->Post([w, text, r] {
+                TheApp().Navigate(r);
+                if (w->library()) w->library()->Search(text);
+            });
+        };
+    };
+    std::vector<EmptyState::Btn> buttons;
+    const size_t songs = kind == library::MediaKind::Audio ? snap_->Search(filter_, kind).size() : 0;
+    const bool toSongs = songs > 0 && route_.path != L"songs";
+    if (toSongs)
+        buttons.push_back({Tr(L"Show in “Songs”"), ButtonKind::Primary, "songs", searchIn(Route{Section::Music, L"songs"})});
+    buttons.push_back({Tr(L"Search the whole library"), toSongs ? ButtonKind::Secondary : ButtonKind::Primary, "search",
+                       searchIn(Route{Section::Home, {}})});
+    const std::wstring found = toSongs ? CountSongs(static_cast<long long>(songs)) : CountFiles(static_cast<long long>(all));
+    e.Set("search", Tr(L"Nothing found here"),
+          Fmt(Tr(L"No matches for “{0}” on this page. In the library: {1}."), {q, found}), std::move(buttons));
 }
 
 void Page::FillEmpty(EmptyState& e) {

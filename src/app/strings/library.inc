@@ -20,6 +20,10 @@
  L"Видео и музыка вернутся сюда, когда папка снова будет доступна."},
 {L"Scanning your library…", L"Сканируем медиатеку…"},
 {L"Your videos and music will appear here in a moment.", L"Видео и музыка появятся здесь через мгновение."},
+{L"Nothing found here", L"Здесь ничего не нашлось"},
+{L"No matches for “{0}” on this page. In the library: {1}.", L"На этой странице нет «{0}». В медиатеке: {1}."},
+{L"Show in “Songs”", L"Показать в «Песни»"},
+{L"Search the whole library", L"Искать во всей медиатеке"},
 {L"No videos or music match “{0}”. Try a shorter or different\u00A0word.",
  L"По запросу «{0}» ничего не нашлось. Попробуйте другое или более короткое\u00A0слово."},
 

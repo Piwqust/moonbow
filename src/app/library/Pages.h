@@ -150,6 +150,7 @@ protected:
     virtual GridStyle CardStyle() const { return GridStyle::VideoCards; }
     virtual unsigned RowColumns() const { return kColDuration | kColSize | kColDate; }
     virtual void FillEmpty(EmptyState& e);
+    void FillNoMatch(EmptyState& e);  // the search found nothing on this page
     virtual void Activate(int index);
     virtual void ShowMenu(int index, ui::Point at);
     virtual void ExtraMenu(int, std::vector<ui::MenuItem>&) {}
