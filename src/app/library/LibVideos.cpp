@@ -60,6 +60,10 @@ public:
         return c;
     }
 
+    std::wstring CountText(long long n) const override {
+        return tab_ == L"movies" ? CountMovies(n) : tab_ == L"shows" ? CountShows(n) : CountEpisodes(n);
+    }
+
     std::vector<MenuItem> SortMenu() override {
         if (tab_ != L"movies") return {};
         std::vector<MenuItem> m;

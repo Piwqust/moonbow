@@ -139,6 +139,26 @@ std::wstring CountEpisodes(long long n) {
     return CountWith(n, L"episode", L"episodes", L"выпуск", L"выпуска", L"выпусков");
 }
 
+std::wstring CountArtists(long long n) {
+    return CountWith(n, L"artist", L"artists", L"исполнитель", L"исполнителя", L"исполнителей");
+}
+
+std::wstring CountGenres(long long n) {
+    return CountWith(n, L"genre", L"genres", L"жанр", L"жанра", L"жанров");
+}
+
+std::wstring CountMovies(long long n) {
+    return CountWith(n, L"movie", L"movies", L"фильм", L"фильма", L"фильмов");
+}
+
+std::wstring CountShows(long long n) {
+    return CountWith(n, L"show", L"shows", L"сериал", L"сериала", L"сериалов");
+}
+
+std::wstring CountPlaylists(long long n) {
+    return CountWith(n, L"playlist", L"playlists", L"плейлист", L"плейлиста", L"плейлистов");
+}
+
 std::wstring ArtistLabel(const std::wstring& artist) {
     return artist.empty() ? std::wstring(Tr(L"Unknown artist")) : artist;
 }

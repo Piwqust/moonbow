@@ -245,6 +245,14 @@ public:
     }
     // Song lists say "8 songs · 6:15" beside their buttons; the header doesn't repeat the count.
     long long ItemCount() const override { return countShown_ ? -1 : count_; }
+    std::wstring CountText(long long n) const override {
+        switch (mode_) {
+            case MusicMode::Albums: return CountAlbums(n);
+            case MusicMode::Artists: return CountArtists(n);
+            case MusicMode::Genres: return CountGenres(n);
+            default: return CountSongs(n);
+        }
+    }
 
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;

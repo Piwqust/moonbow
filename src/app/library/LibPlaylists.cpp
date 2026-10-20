@@ -136,6 +136,8 @@ public:
         Refresh();
     }
 
+    std::wstring CountText(long long n) const override { return CountPlaylists(n); }
+
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;
         SortMenuItems(m, {{L"Title A-Z", "name"},
@@ -240,6 +242,7 @@ public:
 
     // "2 items · 1:30" beside the buttons says it; the header doesn't repeat it (UX-15).
     long long ItemCount() const override { return summary_->visible && toolbar_->visible && filter_.empty() ? -1 : count_; }
+    std::wstring CountText(long long n) const override { return songs_ ? CountSongs(n) : CountItems(n); }
 
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;
@@ -277,7 +280,7 @@ protected:
             double duration;
         };
         std::vector<Row> rows;
-        size_t videos = 0;
+        size_t videos = 0, songs = 0;
         double total = 0;
         for (size_t i = 0; i < p->items.size(); ++i) {
             const library::PlaylistItem& it = p->items[i];
@@ -288,9 +291,11 @@ protected:
             const double dur = it.duration > 0 ? it.duration : (m ? m->duration : 0);
             total += dur;
             if (library::KindOf(it.path) == library::MediaKind::Video) ++videos;
+            if (library::KindOf(it.path) == library::MediaKind::Audio) ++songs;
             if (Matches(title + L" " + it.path)) rows.push_back({i, std::move(title), dur});
         }
         videos_ = videos * 2 >= p->items.size() && !p->items.empty();
+        songs_ = songs == p->items.size();
         const std::string sort = SortValue("manual");
         AddColumns(sort, {{kHeadTitle, L"Title", "title"}, {kHeadSubtitle, L"Details", ""}, {kHeadDuration, L"Length", "duration"}});
         if (sort != "manual") {
@@ -330,7 +335,7 @@ protected:
             plIndex_.resize(static_cast<size_t>(at), kNoItem);  // the column titles' row
             plIndex_.push_back(r.index);
         }
-        std::wstring s = CountItems(static_cast<long long>(p->items.size()));
+        std::wstring s = CountText(static_cast<long long>(p->items.size()));
         if (total > 0) s += L" · " + FormatDuration(total);
         summary_->SetText(s);
     }
@@ -390,6 +395,7 @@ private:
 
     std::string id_;
     bool videos_ = false;
+    bool songs_ = false;  // only songs: counted as songs, not items
     Label* summary_ = nullptr;
     std::vector<size_t> plIndex_;  // grid entry -> playlist position
 };
