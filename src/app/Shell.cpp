@@ -95,10 +95,11 @@ private:
     NavSidebar* owner_;
 };
 
-// Window button in the title bar (36×40, close turns red on hover).
+// Window button in the title bar (46×40 as in Windows 11, close turns red on hover). Dimmed while
+// the window is inactive, like the title, so Settings and the main window tell which one has the keys.
 class CaptionButton : public IconButton {
 public:
-    CaptionButton(std::string icon, std::wstring tip, bool danger) : IconButton(std::move(icon), std::move(tip), 36, 20),
+    CaptionButton(std::string icon, std::wstring tip, bool danger) : IconButton(std::move(icon), std::move(tip), 46, 20),
                                                                     danger_(danger) {
         height = Length::Px(kTitleH);
         focusable = false;
@@ -106,7 +107,8 @@ public:
     void Paint(Painter& p) override {
         const bool hot = IsHot(), down = IsPressed();
         if (hot) p.Fill(rect, danger_ ? P().danger : (down ? P().press : P().hover));
-        const Color c = hot && danger_ ? Color::Hex(0xFFFFFF) : hot ? P().textPrimary : P().textSecondary;
+        const Color rest = GetHost()->IsActive() ? P().textSecondary : P().textTertiary;
+        const Color c = hot && danger_ ? Color::Hex(0xFFFFFF) : hot ? P().textPrimary : rest;
         p.Icon(icon, rect.Center(20, 20), c);
     }
 
@@ -184,6 +186,7 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     title_ = Add<Label>(L"", TextStyle::Body, Tone::Secondary);
     title_->width = Length::Grow();
     title_->halign = HAlign::Center;
+    title_->color = [this] { return GetHost() && !GetHost()->IsActive() ? P().textTertiary : P().textSecondary; };
 
     auto* min = Add<CaptionButton>("minimize", Tr(L"Minimize"), false);
     min->onClick = [window] { window->Minimize(); };
