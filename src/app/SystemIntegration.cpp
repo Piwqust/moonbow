@@ -21,6 +21,8 @@
 #include <wincodec.h>
 #include <windowsx.h>
 #include <shobjidl.h>
+#include <propkey.h>
+#include <propvarutil.h>
 #include <systemmediatransportcontrolsinterop.h>
 
 #pragma warning(push)
@@ -32,6 +34,7 @@
 
 #include <chrono>
 #include <functional>
+#include <mutex>
 #include <vector>
 
 namespace app {
@@ -95,6 +98,65 @@ std::wstring ResumePath() {
         if (e.path.find(L"://") == std::wstring::npos && e.Progress() < 0.95) return e.path;
     return {};
 }
+
+// The taskbar jump list's "Recent": links to Lumen with the newest local files of the history,
+// written off the UI thread (the shell's COM objects take a while to load). A list of our own:
+// the shell's automatic one shows only file types registered to the app, and SHAddToRecentDocs
+// also fills Windows' Recent items, which "Clear history" could only take back by wiping every
+// app's (SHAddToRecentDocs(0, nullptr)).
+struct JumpList {
+    std::wstring exe, category;
+    std::vector<std::pair<std::wstring, std::wstring>> items;  // path, title
+
+    static void CALLBACK Write(PTP_CALLBACK_INSTANCE, void* context) {
+        const std::unique_ptr<JumpList> job(static_cast<JumpList*>(context));
+        static std::mutex one;  // CommitList calls must not interleave
+        const std::lock_guard<std::mutex> lock(one);
+        if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
+        job->Commit();
+        CoUninitialize();
+    }
+
+    void Commit() const {
+        gfx::ComPtr<ICustomDestinationList> list;
+        gfx::ComPtr<IObjectArray> removed;
+        gfx::ComPtr<IObjectCollection> links;
+        UINT slots = 0;
+        if (FAILED(CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&list))) ||
+            FAILED(CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&links))) ||
+            FAILED(list->BeginList(&slots, IID_PPV_ARGS(&removed))))
+            return;
+        // Links the user removed from the list must not come back (AppendCategory refuses them).
+        std::vector<std::wstring> gone;
+        UINT n = 0;
+        removed->GetCount(&n);
+        for (UINT i = 0; i < n; ++i) {
+            gfx::ComPtr<IShellLinkW> link;
+            wchar_t args[MAX_PATH * 2] = {};
+            if (SUCCEEDED(removed->GetAt(i, IID_PPV_ARGS(&link))) && SUCCEEDED(link->GetArguments(args, MAX_PATH * 2)))
+                gone.push_back(args);
+        }
+        UINT added = 0;
+        for (const auto& [path, title] : items) {
+            const std::wstring args = L"\"" + path + L"\"";
+            if (added >= slots || std::find(gone.begin(), gone.end(), args) != gone.end()) continue;
+            gfx::ComPtr<IShellLinkW> link;
+            gfx::ComPtr<IPropertyStore> props;
+            PROPVARIANT name;
+            if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) ||
+                FAILED(link->SetPath(exe.c_str())) || FAILED(link->SetArguments(args.c_str())) ||
+                FAILED(link.As(&props)) || FAILED(InitPropVariantFromString(title.c_str(), &name)))
+                continue;
+            link->SetDescription(path.c_str());  // the tooltip
+            const bool named = SUCCEEDED(props->SetValue(PKEY_Title, name)) && SUCCEEDED(props->Commit());
+            PropVariantClear(&name);
+            if (named && SUCCEEDED(links->AddObject(link.Get()))) ++added;
+        }
+        gfx::ComPtr<IObjectArray> array;
+        if (added && SUCCEEDED(links.As(&array))) list->AppendCategory(category.c_str(), array.Get());
+        list->CommitList();
+    }
+};
 
 winrt::Windows::Foundation::TimeSpan Ticks(double seconds) {
     return std::chrono::duration_cast<winrt::Windows::Foundation::TimeSpan>(
@@ -200,7 +262,7 @@ struct SystemIntegration::Impl {
     bool shownPlaying = false, shownPrev = true, shownNext = true;
     wm::SystemMediaTransportControls smtc{nullptr};
     winrt::event_token buttonToken{}, seekToken{};
-    bool traceSmtc = false;  // --automation with LUMEN_TRACE: no media controls, trace what they would get
+    bool trace = false;      // --automation with LUMEN_TRACE: no shell integration, traces what it would send
     std::wstring smtcPath;   // the item the media flyout shows (empty: disabled)
     bool smtcCover = false;  // ...with its picture
     int smtcFlags = -1;      // previous | next << 1 | shuffle << 2 | repeat << 3, as last sent
@@ -509,7 +571,7 @@ void SystemIntegration::Attach(HWND window) {
         if (!impl_->notifyText.empty() && CachedCover(impl_->notifyPath)) impl_->SendNotification();
     });
     if (ui::Host::Automation()) {
-        impl_->traceSmtc = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+        impl_->trace = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
         return;
     }
     impl_->taskbarCreated = RegisterWindowMessageW(L"TaskbarButtonCreated");
@@ -523,6 +585,25 @@ void SystemIntegration::Attach(HWND window) {
     impl_->SyncTray();
     // Items added to or removed from the queue enable Previous / Next. Both live as long as the app.
     TheApp().queue().changed.Connect([this] { Update(0); });
+}
+
+void SystemIntegration::HistoryChanged() {
+    auto job = std::make_unique<JumpList>();
+    for (const library::HistoryEntry& e : TheApp().history().Entries()) {
+        if (job->items.size() >= 10) break;
+        if (e.path.find(L"://") == std::wstring::npos) job->items.push_back({e.path, e.title.empty() ? FileNameOf(e.path) : e.title});
+    }
+    Update(kChangeState);
+    if (ui::Host::Automation()) {
+        // Never in a test instance: the list is the owner's.
+        if (impl_->trace) Trace(("jump list: " + std::to_string(job->items.size()) + " recent").c_str());
+        return;
+    }
+    wchar_t exe[MAX_PATH * 2];
+    const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH * 2);
+    job->exe.assign(exe, n);
+    job->category = Tr(L"Recent");
+    if (TrySubmitThreadpoolCallback(JumpList::Write, job.get(), nullptr)) job.release();
 }
 
 void SystemIntegration::LanguageChanged() {
@@ -679,7 +760,7 @@ void SystemIntegration::Update(unsigned changes) {
 
     // Media transport controls. With nothing loaded they offer the item media Play resumes, so
     // the media keys work from the start.
-    if (!d.smtc && !d.traceSmtc) return;
+    if (!d.smtc && !d.trace) return;
     try {
         const std::wstring path = s.fileLoaded ? (item ? item->path : s.path) : ResumePath();
         const bool enabled = !path.empty() && app.config().GetBool("interface.mediaControls");

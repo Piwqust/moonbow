@@ -550,7 +550,7 @@ void App::OnPlayerEvents() {
     if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && s.loadSerial != recordedSerial_ &&
         config_.GetBool("privacy.saveHistory")) {
         recordedSerial_ = s.loadSerial;
-        history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
+        if (history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration)) system_.HistoryChanged();
     }
     if ((changes & kChangeTime) && s.fileLoaded) {
         const double now = ui::AnimFloat::Now();
