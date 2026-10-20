@@ -292,7 +292,7 @@ void SubtitleWords::StartKeyboard() {
     const PlayerState& s = PS();
     if (!s.fileLoaded) return;
     if (!enabled_) {
-        ShowToast(window_, Tr(L"Picking words is off in Settings > Subtitles"), "subtitles");
+        ShowToast(window_, Tr(L"Picking words is off in Settings › Subtitles"), "subtitles");
         return;
     }
     const Track* sub = SelectedSub();
@@ -1037,7 +1037,7 @@ void SubtitleWords::Lookup(const char* key, const std::wstring& text) {
     const std::wstring lang = CurrentLanguage() == Language::Russian ? L"ru" : L"en";
     const std::wstring url = subtext::LookupUrl(Cfg().GetWString(key), text, lang);
     if (url.empty()) {
-        ShowToast(window_, Tr(L"The link in Settings > Subtitles must start with http:// or https:// and have no spaces"),
+        ShowToast(window_, Tr(L"The link in Settings › Subtitles must start with http:// or https:// and have no spaces"),
                   "warning", 3000);
         return;
     }

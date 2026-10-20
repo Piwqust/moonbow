@@ -113,7 +113,7 @@
 {L"{0} of {1} videos matched", L"Найдены для {0} из {1} видео"},
 {L"Subtitles added to {0} videos", L"Субтитры добавлены к видео: {0}"},
 // --- audio and subtitles
-{L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network).", L"Для ссылок на видеосайты нужен yt-dlp.exe рядом с Lumen.exe (Настройки > Сеть)."},
+{L"Video site links need yt-dlp.exe next to Lumen.exe (Settings › Network).", L"Для ссылок на видеосайты нужен yt-dlp.exe рядом с Lumen.exe («Настройки › Сеть»)."},
 {L"The video page opens through yt-dlp.", L"Страница с видео откроется через yt-dlp."},
 // --- about
 {L"Version {0}", L"Версия {0}"},

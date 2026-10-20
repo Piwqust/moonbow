@@ -944,7 +944,7 @@ void BuildApp(Builder& b) {
               L"Забыть все недавние файлы, сохранённые позиции, настройки отдельных файлов и данные онлайн-сервисов "
               L"(постеры, описания, тексты песен). Отменить нельзя.");
 
-    b.Sec("network", L"Network", L"Сеть");
+    b.Sec("online", L"Online services", L"Онлайн-сервисы");
     // Online services (src/net/Online.cpp). Each is off until the user turns it on; the services
     // that need a key use the user's own, stored DPAPI-encrypted (Config.cpp, `secret` items).
     b.Toggle("privacy.fetchLyrics", L"Search for song lyrics online (LRCLIB)",

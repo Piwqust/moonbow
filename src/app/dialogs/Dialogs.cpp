@@ -711,8 +711,8 @@ private:
         visible = true;
         if (!net::online::MetadataOn()) {
             auto* l = Add<Label>(net::online::MetadataKeyRejected()
-                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy.")
-                                     : Tr(L"Paste your TMDB API key in Settings › Privacy to see posters and descriptions."),
+                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy › Online services.")
+                                     : Tr(L"Paste your TMDB API key in Settings › Privacy › Online services to see posters and descriptions."),
                                  TextStyle::Body, Tone::Tertiary);
             l->wrap = true;
             l->width = Length::Grow();
@@ -959,7 +959,7 @@ void ShowNetworkStreamDialog() {
             hint->SetText(Fmt(Tr(L"Line {0} is not a link. Links look like https://, rtsp:// or udp://"),
                               {std::to_wstring(bad)}));
         else if (site && !SiteLinksPlayable())
-            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network)."));
+            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings › Network)."));
         else if (site && links.size() == 1)
             hint->SetText(Tr(L"The video page opens through yt-dlp."));
         else if (links.size() > 1)

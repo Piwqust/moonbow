@@ -6,8 +6,8 @@
 {L"{0} sent an unexpectedly large answer.", L"{0} прислал слишком большой ответ."},
 {L"{0} sent an address Lumen does not open.", L"{0} прислал адрес, который Lumen не открывает."},
 {L"Couldn't save the file.", L"Не удалось сохранить файл."},
-{L"{0} rejected the API key. Check it in Settings › Privacy.",
- L"{0} не принял ключ API. Проверьте его в «Настройки › Конфиденциальность»."},
+{L"{0} rejected the API key. Check it in Settings › Privacy › Online services.",
+ L"{0} не принял ключ API. Проверьте его в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 {L"Too many requests to {0}. Try again in {1} s.", L"Слишком много запросов к {0}. Повторите через {1} с."},
 {L"{0} is not available right now (error {1}).", L"{0} сейчас недоступен (ошибка {1})."},
 // --- lyrics
@@ -29,9 +29,9 @@
 {L"Add .lrc file…", L"Добавить .lrc…"},
 {L"Can't search: the song has no title or artist tag", L"Искать не по чему: у песни нет тега с названием или исполнителем"},
 {L"Find lyrics online?", L"Найти текст в интернете?"},
-{L"The song's artist, title, album and length are sent to lrclib.net. “Always search” also looks up the next songs without lyrics; you can turn it off in Settings > Network.",
+{L"The song's artist, title, album and length are sent to lrclib.net. “Always search” also looks up the next songs without lyrics; you can turn it off in Settings › Privacy › Online services.",
  L"Исполнитель, название, альбом и длительность песни отправятся на lrclib.net. С «Всегда искать» Lumen будет сам "
- L"искать текст и для следующих песен, выключить это можно в «Настройки › Сеть»."},
+ L"искать текст и для следующих песен, выключить это можно в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 {L"Find now", L"Найти сейчас"},
 {L"Always search", L"Всегда искать"},
 {L"LRCLIB has no lyrics for this song", L"В LRCLIB нет текста этой песни"},
@@ -39,16 +39,16 @@
 // --- subtitles
 {L"OpenSubtitles did not accept the user name or password; downloading without an account.",
  L"OpenSubtitles не принял имя или пароль, загрузка идёт без учётной записи."},
-{L"Turn on subtitle search and paste your OpenSubtitles API key in Settings › Privacy.",
- L"Включите поиск субтитров и вставьте свой ключ API OpenSubtitles в «Настройки › Конфиденциальность»."},
+{L"Turn on subtitle search and paste your OpenSubtitles API key in Settings › Privacy › Online services.",
+ L"Включите поиск субтитров и вставьте свой ключ API OpenSubtitles в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 {L"OpenSubtitles sent an answer Lumen couldn't read.", L"OpenSubtitles прислал ответ, который Lumen не смог прочитать."},
 {L"The OpenSubtitles download limit for today is used up.", L"Дневной лимит загрузок OpenSubtitles исчерпан."},
 {L"{0} h {1} min", L"{0} ч {1} мин"},
 {L"The OpenSubtitles download limit for today is used up. It resets in {0}.",
  L"Дневной лимит загрузок OpenSubtitles исчерпан. Он обновится через {0}."},
 // --- metadata
-{L"Turn on posters and descriptions and paste your TMDB API key in Settings › Privacy.",
- L"Включите постеры и описания и вставьте свой ключ API TMDB в «Настройки › Конфиденциальность»."},
+{L"Turn on posters and descriptions and paste your TMDB API key in Settings › Privacy › Online services.",
+ L"Включите постеры и описания и вставьте свой ключ API TMDB в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 // --- settings actions
 {L"Online data cleared", L"Данные онлайн-сервисов удалены"},
 // --- subtitle search dialog
@@ -67,9 +67,9 @@
 {L"Find", L"Найти"},
 {L"Open Settings", L"Открыть настройки"},
 {L"Subtitle search is off", L"Поиск субтитров выключен"},
-{L"Turn on \"Search for subtitles online\" in Settings › Privacy and paste your own OpenSubtitles API key there. "
+{L"Turn on \"Search for subtitles online\" in Settings › Privacy › Online services and paste your own OpenSubtitles API key there. "
  L"The key is free: sign in at opensubtitles.com, open your profile, then API Consumers, and create one.",
- L"Включите «Искать субтитры в интернете» в «Настройки › Конфиденциальность» и вставьте туда свой ключ API "
+ L"Включите «Искать субтитры в интернете» в «Настройки › Конфиденциальность › Онлайн-сервисы» и вставьте туда свой ключ API "
  L"OpenSubtitles. Ключ бесплатный: войдите на opensubtitles.com, откройте профиль, затем API Consumers, и создайте его."},
 {L"Downloads left today: {0}", L"Осталось загрузок сегодня: {0}"},
 {L"Searching…", L"Поиск…"},
@@ -91,10 +91,10 @@
 {L"Find another match", L"Найти другое совпадение"},
 {L"Find a match", L"Найти совпадение"},
 {L"Forget this match and show the file's own thumbnail", L"Забыть это совпадение и показывать миниатюру файла"},
-{L"TMDB rejected the API key. Check it in Settings › Privacy.",
- L"TMDB не принял ключ API. Проверьте его в «Настройки › Конфиденциальность»."},
-{L"Paste your TMDB API key in Settings › Privacy to see posters and descriptions.",
- L"Вставьте свой ключ API TMDB в «Настройки › Конфиденциальность», чтобы видеть постеры и описания."},
+{L"TMDB rejected the API key. Check it in Settings › Privacy › Online services.",
+ L"TMDB не принял ключ API. Проверьте его в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
+{L"Paste your TMDB API key in Settings › Privacy › Online services to see posters and descriptions.",
+ L"Вставьте свой ключ API TMDB в «Настройки › Конфиденциальность › Онлайн-сервисы», чтобы видеть постеры и описания."},
 {L"Looking this video up on TMDB…", L"Поиск видео в TMDB…"},
 {L"TMDB couldn't be reached. Lumen tries again next time.", L"TMDB недоступен. Lumen попробует снова в следующий раз."},
 {L"TMDB has nothing for this file name.", L"В TMDB ничего не нашлось по имени файла."},
