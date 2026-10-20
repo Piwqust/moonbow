@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <cwchar>
+#include <algorithm>
 #include <cwctype>
 #include <initializer_list>
 #include <vector>
@@ -132,6 +133,29 @@ std::wstring SearchFold(std::wstring_view text) {
     for (wchar_t& c : out)
         if (c == L'ё') c = L'е';
     return out;
+}
+
+std::vector<std::pair<size_t, size_t>> MatchRanges(std::wstring_view text, const std::wstring& foldedQuery) {
+    std::vector<std::pair<size_t, size_t>> out;
+    const std::wstring folded = SearchFold(text);
+    if (folded.size() != text.size()) return out;
+    for (size_t i = 0, end = 0; i < foldedQuery.size(); i = end + 1) {
+        end = foldedQuery.find(L' ', i);
+        if (end == std::wstring::npos) end = foldedQuery.size();
+        if (end == i) continue;
+        const std::wstring word = foldedQuery.substr(i, end - i);
+        for (size_t at = folded.find(word); at != std::wstring::npos; at = folded.find(word, at + word.size()))
+            out.emplace_back(at, word.size());
+    }
+    std::sort(out.begin(), out.end());
+    std::vector<std::pair<size_t, size_t>> merged;
+    for (const auto& r : out) {
+        if (!merged.empty() && r.first <= merged.back().first + merged.back().second)
+            merged.back().second = std::max(merged.back().second, r.first + r.second - merged.back().first);
+        else
+            merged.push_back(r);
+    }
+    return merged;
 }
 
 int64_t UnixMsNow() {

@@ -1591,6 +1591,13 @@ void TestMediaTypes() {
     CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"umber 3"));
     CHECK(!library::FoldedContains(L"01 track number 3\nartist a", L"track 4"));
     CHECK(!library::FoldedContains(L"abc", L"abcd"));
+    {
+        using R = std::vector<std::pair<size_t, size_t>>;
+        CHECK((library::MatchRanges(L"Track Number 1", L"number track") == R{{0, 5}, {6, 6}}));
+        CHECK((library::MatchRanges(L"Track Number 1", L"rack ack") == R{{1, 4}}));  // overlaps merge
+        CHECK((library::MatchRanges(L"Ёлка", L"елка") == R{{0, 4}}));
+        CHECK(library::MatchRanges(L"abc", L"").empty());
+    }
     CHECK(library::UnixMsNow() > 1700000000000LL);
 
     // Subtitle matching (Add Subtitles): a prefix whose number goes on is another file.

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace library {
 
@@ -43,6 +45,10 @@ inline bool FoldedContains(const std::wstring& foldedText, const std::wstring& f
     }
     return true;
 }
+
+// Where the words of a folded query occur in `text` (every occurrence, merged and sorted), as
+// {start, length}: what a result list underlines. Empty when folding changes the text length.
+std::vector<std::pair<size_t, size_t>> MatchRanges(std::wstring_view text, const std::wstring& foldedQuery);
 
 // "Show S01E02", "Show.1x02", "s1e2 Title" -> show "Show", season 1, episode 2. The show is the
 // text before the marker with dots/underscores read as spaces (empty when the name starts with it).

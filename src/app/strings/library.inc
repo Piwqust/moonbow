@@ -210,6 +210,7 @@
 {L"Remove from Playlist", L"Убрать из плейлиста"},
 {L"Removed from playlist", L"Убрано из плейлиста"},
 {L"Playlist deleted", L"Плейлист удалён"},
+{L"Removed from playlist: {0}", L"Убрано из плейлиста: {0}"},
 {L"Remove station", L"Убрать станцию"},
 {L"Remove link", L"Убрать ссылку"},
 {L"“{0}” will be removed from the list.", L"«{0}» пропадёт из списка."},

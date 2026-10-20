@@ -155,6 +155,8 @@ protected:
     virtual void Activate(int index);
     virtual void ShowMenu(int index, ui::Point at);
     virtual void ExtraMenu(int, std::vector<ui::MenuItem>&) {}
+    // The menu of several selected items (grid indices, in order) after Play / Queue / Playlist.
+    virtual void ExtraSelectionMenu(const std::vector<int>&, std::vector<ui::MenuItem>&) {}
     virtual void Delete(int) {}
     virtual void Move(int, int) {}
     virtual bool Reorderable() const { return false; }

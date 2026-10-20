@@ -103,6 +103,21 @@ Size Label::MeasureContent(float availW, float) {
 void Label::Paint(Painter& p) {
     const Color c = color ? color() : (IsEnabled() ? ToneColor(tone) : P().textDisabled);
     p.Text(text_, rect, style, c, halign, valign, wrap ? gfx::kTextWrap : gfx::kTextEllipsis);
+    if (!wrap) PaintTextMarks(p, text_, rect, style, halign, marks);
+}
+
+void PaintTextMarks(Painter& p, std::wstring_view text, const Rect& box, TextStyle style, HAlign h, const TextMarks& marks) {
+    if (marks.empty() || text.empty()) return;
+    const gfx::TextMetrics whole = p.Measure(text, style);
+    const float x0 = h == HAlign::Center ? box.x + (box.w - whole.width) / 2 : h == HAlign::Trailing ? box.Right() - whole.width : box.x;
+    const float y = box.Cy() + whole.height / 2 - 1;
+    for (const auto& [at, len] : marks) {
+        if (at >= text.size()) continue;
+        const float a = x0 + (at ? std::round(p.Measure(text.substr(0, at), style).width) : 0.0f);
+        const float b = x0 + std::ceil(p.Measure(text.substr(0, std::min(text.size(), at + len)), style).width);
+        const float w = std::min(b, box.Right()) - a;
+        if (w > 0) p.Fill({a, y, w, 2}, P().accent, 1);
+    }
 }
 
 // --- IconView / Divider -------------------------------------------------------------------
