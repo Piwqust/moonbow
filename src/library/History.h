@@ -69,6 +69,8 @@ public:
     std::vector<FolderStat> FrequentFolders(size_t max = 10) const;
 
     bool Remove(const std::wstring& path);
+    // Undo of Remove: the entry comes back at `index`. False if the file has an entry again.
+    bool Restore(HistoryEntry e, size_t index);
     // Forgets every entry, then runs onCleared (also when the history was already empty): the
     // other per-file memories (FileSettings) are cleared with it.
     void Clear();

@@ -1169,8 +1169,14 @@ void TestHistory() {
         CHECK(!h.RecordPlay(L"C:\\Users\\me\\Private\\x.mkv"));
         CHECK(!h.RecordPlay(L"C:\\clip.SECRET.mkv"));
         CHECK(h.RecordPlay(L"C:\\clip.mkv"));
+        CHECK(h.UpdatePosition(L"C:\\clip.mkv", 30, 100));
+        const library::HistoryEntry removed = *h.Find(L"C:\\clip.mkv");
         CHECK(h.Remove(L"c:\\CLIP.mkv"));
         CHECK(!h.Remove(L"c:\\CLIP.mkv"));
+        // Undo puts the entry (and its resume point) back at its place, once.
+        CHECK(h.Restore(removed, 0) && !h.Restore(removed, 0));
+        CHECK(h.Entries().front().path == L"C:\\clip.mkv" && h.Entries().front().position == 30);
+        CHECK(h.Remove(L"C:\\clip.mkv"));
         CHECK(h.Dirty());
         CHECK(h.Flush());
         CHECK(!h.Dirty());
@@ -1437,8 +1443,12 @@ void TestPlaylists() {
         CHECK(p.RemoveAt(id, 2));
         CHECK(!p.RemoveAt(id, 5));
         CHECK(p.Rename(id, L"Вечер кино"));
+        const library::Playlist deleted = *p.Find(other);
         CHECK(p.Delete(other));
         CHECK(!p.Delete(other));
+        CHECK(p.Restore(deleted, 0) && !p.Restore(deleted, 0));
+        CHECK(p.All().front().id == other && p.All().front().name == deleted.name);
+        CHECK(p.Delete(other));
         CHECK(!p.Rename("nope", L"x"));
         CHECK(p.Flush());
     }

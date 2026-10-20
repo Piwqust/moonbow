@@ -210,10 +210,7 @@ protected:
                 Toast(Tr(L"Saved"), "save");
                 TheApp().libraryChanged.Emit();
             }));
-            m.push_back(Item(L"Remove from History", "remove", [url] {
-                TheApp().history().Remove(url);
-                TheApp().libraryChanged.Emit();
-            }));
+            m.push_back(Item(L"Remove from History", "remove", [url] { RemoveFromHistory(url); }));
         } else {
             m.push_back(Item(L"Rename…", "edit", [url, title, group] {
                 ShowTextPrompt(Tr(L"Rename"), Tr(L"Name"), title, Tr(L"Rename"), [url, group](const std::wstring& name) {
@@ -232,8 +229,7 @@ protected:
         const Entry* e = EntryAt(index);
         if (!e || e->kind != EntryKind::Media) return;
         if (e->key == "history") {
-            TheApp().history().Remove(e->path);
-            TheApp().libraryChanged.Emit();
+            RemoveFromHistory(e->path);
         } else {
             // A saved station or link is gone for good (no undo): ask, as for playlists.
             const std::string group = e->key;

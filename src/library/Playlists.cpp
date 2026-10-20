@@ -244,6 +244,13 @@ bool Playlists::Delete(std::string_view id) {
     return true;
 }
 
+bool Playlists::Restore(Playlist p, size_t index) {
+    if (Find(p.id)) return false;
+    lists_.insert(lists_.begin() + static_cast<ptrdiff_t>(std::min(index, lists_.size())), std::move(p));
+    dirty_ = true;
+    return true;
+}
+
 bool Playlists::Add(std::string_view id, const std::vector<PlaylistItem>& items, int insertAt) {
     Playlist* p = Mutable(id);
     if (!p) return false;

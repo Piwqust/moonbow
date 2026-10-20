@@ -211,6 +211,7 @@ private:
         ViewState state[2];
     };
     std::vector<NavEntry> nav_{NavEntry{}};
+    bool DeadRoute(const Route& r) const;
     int historyPos_ = 0;
     bool playerShown_ = false;
     bool playerPending_ = false;

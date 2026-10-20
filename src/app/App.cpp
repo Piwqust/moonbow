@@ -993,10 +993,17 @@ void App::Navigate(Route r) {
     routeChanged.Emit();
 }
 
+// Back and Forward step over the pages of playlists deleted since: they would only say
+// "Playlist not found" (UX-9). The last page of the history is kept even then.
+bool App::DeadRoute(const Route& r) const {
+    return r.section == Section::Playlists && !r.path.empty() && !playlists_.Find(WideToUtf8(r.path));
+}
+
 void App::GoBack() {
     if (!CanGoBack()) return;
     routeLeaving.Emit();
     --historyPos_;
+    while (historyPos_ > 0 && DeadRoute(route())) --historyPos_;
     routeChanged.Emit();
 }
 
@@ -1004,6 +1011,7 @@ void App::GoForward() {
     if (!CanGoForward()) return;
     routeLeaving.Emit();
     ++historyPos_;
+    while (CanGoForward() && DeadRoute(route())) ++historyPos_;
     routeChanged.Emit();
 }
 

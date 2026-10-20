@@ -87,6 +87,8 @@ void ShowFolderInLibrary(const std::wstring& folder);
 void RescanLibrary();
 // Forgets the history, saved positions, per-file settings and what the online services sent.
 void ClearHistory();
+// One entry (and its resume point), with an Undo toast.
+void RemoveFromHistory(const std::wstring& path);
 
 // --- shell ------------------------------------------------------------------------------
 void ShowInExplorer(const std::wstring& path);

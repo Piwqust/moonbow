@@ -411,6 +411,21 @@ void ClearHistory() {
     app.libraryChanged.Emit();  // Home's Continue Watching and the progress bars
 }
 
+void RemoveFromHistory(const std::wstring& path) {
+    library::History& hist = TheApp().history();
+    const library::HistoryEntry* h = hist.Find(path);
+    if (!h) return;
+    // The entry holds the resume point: Undo brings it back to its place (UX-9).
+    const library::HistoryEntry copy = *h;
+    const size_t index = static_cast<size_t>(h - hist.Entries().data());
+    hist.Remove(path);
+    TheApp().libraryChanged.Emit();
+    Toast(Tr(L"Removed from history"), "remove", Tr(L"Undo"), [copy, index] {
+        if (!TheApp().history().Restore(copy, index)) return;
+        TheApp().libraryChanged.Emit();
+    });
+}
+
 void AddFolderToLibrary() {
     const std::wstring folder = PickFolder();
     if (folder.empty()) return;

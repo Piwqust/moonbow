@@ -100,10 +100,7 @@ private:
             if (more_.section == Section::Recent) {
                 const std::wstring path = e.path;
                 m.push_back(MenuItem::Separator());
-                m.push_back(Item(L"Remove from History", "remove", [path] {
-                    TheApp().history().Remove(path);
-                    TheApp().libraryChanged.Emit();
-                }));
+                m.push_back(Item(L"Remove from History", "remove", [path] { RemoveFromHistory(path); }));
             }
         } else {
             const Route r = i < static_cast<int>(routes_.size()) ? routes_[static_cast<size_t>(i)] : Route{};

@@ -1225,21 +1225,19 @@ protected:
         if (!e || Favorites()) return;  // MediaMenu already offers "Remove from Favorites"
         const std::wstring path = e->path;
         m.push_back(MenuItem::Separator());
-        m.push_back(Item(L"Remove from History", "remove", [path] {
-            TheApp().history().Remove(path);
-            TheApp().libraryChanged.Emit();
-        }));
+        m.push_back(Item(L"Remove from History", "remove", [path] { RemoveFromHistory(path); }));
     }
 
     void Delete(int index) override {
         const Entry* e = EntryAt(index);
         if (!e || e->kind != EntryKind::Media) return;
         const int keep = index;
-        if (Favorites())
+        if (Favorites()) {
             TheApp().favorites().Remove(e->path);
-        else
-            TheApp().history().Remove(e->path);
-        TheApp().libraryChanged.Emit();
+            TheApp().libraryChanged.Emit();
+        } else {
+            RemoveFromHistory(e->path);
+        }
         // Keep the keyboard position on the next row.
         const int n = static_cast<int>(grid_->Entries().size());
         for (int i = std::min(keep, n - 1); i >= 0; --i)
