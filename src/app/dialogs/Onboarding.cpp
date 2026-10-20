@@ -460,11 +460,8 @@ private:
                              : L"This folder doesn't exist. It won't be added.";
             status->SetText(Tr(text));
             // A missing folder is an error and a whole drive a warning, not the grey helper line.
-            status->tone = broad ? Tone::Secondary : Tone::Tertiary;
-            if (!t.empty() && !dir)
-                status->color = [] { return P().danger; };
-            else
-                status->color = nullptr;
+            // Primary, not danger: red text is under 4.5:1 on the dark theme.
+            status->tone = !t.empty() && !dir ? Tone::Primary : broad ? Tone::Secondary : Tone::Tertiary;
             status->Invalidate();
         };
         check(folder_);
