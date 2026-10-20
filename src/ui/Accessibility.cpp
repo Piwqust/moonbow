@@ -647,7 +647,8 @@ public:
                 break;
             case UIA_RangeValuePatternId: yes = c.item < 0 && r == Role::Slider; break;
             case UIA_SelectionItemPatternId:
-                yes = c.item >= 0 && c.a.selectItem && (r == Role::ListItem || r == Role::TabItem);
+                yes = c.item >= 0 ? c.a.selectItem && (r == Role::ListItem || r == Role::TabItem)
+                                  : c.a.selected >= 0 && (r == Role::ListItem || r == Role::TabItem);
                 break;
             case UIA_ExpandCollapsePatternId: yes = c.item >= 0 && c.it.expanded >= 0; break;
             case UIA_TextPatternId: yes = c.item < 0 && r == Role::Edit && c.a.select; break;
@@ -904,6 +905,7 @@ public:
     // ISelectionItemProvider (single selection)
     HRESULT STDMETHODCALLTYPE Select() override {
         Ctx c;
+        if (Load(c) && c.item < 0 && c.w && c.a.selected >= 0) return Later();  // as a click would
         if (!Load(c) || c.item < 0 || !c.a.selectItem) return UIA_E_ELEMENTNOTAVAILABLE;
         Acted();
         c.a.selectItem(c.item);
@@ -914,15 +916,16 @@ public:
     HRESULT STDMETHODCALLTYPE get_IsSelected(BOOL* out) override {
         if (!out) return E_POINTER;
         Ctx c;
-        if (!Load(c) || c.item < 0) return UIA_E_ELEMENTNOTAVAILABLE;
-        *out = c.it.selected;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        *out = c.item >= 0 ? c.it.selected : c.a.selected > 0;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE get_SelectionContainer(IRawElementProviderSimple** out) override {
         if (!out) return E_POINTER;
         *out = nullptr;
         Ctx c;
-        if (!Load(c) || c.item < 0) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (c.item < 0) return S_OK;  // a lone widget: no container to name
         *out = static_cast<IRawElementProviderSimple*>(Make(hwnd_, {c.w, -1}));
         return S_OK;
     }

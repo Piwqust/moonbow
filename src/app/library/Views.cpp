@@ -421,6 +421,7 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
     grid_->onDelete = [this](int i) { Delete(i); };
     grid_->onMove = [this](int from, int to) { Move(from, to); };
     grid_->onSort = [this](const std::string& value) { SetSort(value); };
+    grid_->multiSelect = true;
 
     empty_ = Add<EmptyState>();
     empty_->visible = false;
@@ -589,6 +590,7 @@ void Page::Refresh() {
     App& app = TheApp();
     snap_ = app.library().Current();
     folded_ = filter_.empty() ? std::wstring() : library::SearchFold(filter_);
+    grid_->highlight = folded_;
     history_.clear();
     for (const library::HistoryEntry& h : app.history().Entries()) {
         HistoryInfo info;
@@ -764,14 +766,33 @@ void Page::ShowMenu(int index, Point at) {
     const Entry* e = EntryAt(index);
     if (!e || !GetHost()) return;
     std::vector<MenuItem> items;
-    if (e->kind == EntryKind::Media) {
-        items = MediaMenu(e->path, ShareQueue(queue_), e->ref, queueName_);
-    } else if (e->kind == EntryKind::Folder) {
-        const Route* r = RouteAt(index);
-        const Section sec = r ? r->section : route_.section;
-        items = FolderMenu(e->path, sec == Section::Music ? library::MediaKind::Audio : library::MediaKind::Video, sec);
+    // Several selected files (Ctrl/Shift+click): the menu acts on all of them (UX-11).
+    const std::vector<int> sel = grid_->Selection();
+    std::vector<QueueItem> picked;
+    if (sel.size() > 1)
+        for (int i : sel)
+            if (const Entry* s = EntryAt(i); s && s->kind == EntryKind::Media && s->ref >= 0 && s->ref < static_cast<int>(queue_.size()))
+                picked.push_back(queue_[static_cast<size_t>(s->ref)]);
+    if (picked.size() > 1) {
+        const SharedQueue q = ShareQueue(std::move(picked));
+        const std::wstring name = queueName_;
+        items.push_back(Item(L"Play", "playback", [q, name] { PlayQueue(*q, 0, name); }));
+        items.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(*q); }));
+        items.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(*q); }));
+        MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
+        pl.submenu = AddToPlaylistMenu(q);
+        items.push_back(std::move(pl));
+        ExtraSelectionMenu(sel, items);
+    } else {
+        if (e->kind == EntryKind::Media) {
+            items = MediaMenu(e->path, ShareQueue(queue_), e->ref, queueName_);
+        } else if (e->kind == EntryKind::Folder) {
+            const Route* r = RouteAt(index);
+            const Section sec = r ? r->section : route_.section;
+            items = FolderMenu(e->path, sec == Section::Music ? library::MediaKind::Audio : library::MediaKind::Video, sec);
+        }
+        ExtraMenu(index, items);
     }
-    ExtraMenu(index, items);
     if (!items.empty()) ShowContextMenu(GetHost(), at, std::move(items));
 }
 

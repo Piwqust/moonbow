@@ -312,6 +312,17 @@ public:
         return {rect.x + 2 + i * (w + 4), rect.y + 2, w, rect.h - 4};
     }
     int Count() const { return std::min(static_cast<int>(item.choices.size()), kAccentCount); }
+    void Describe(A11y& a) override {  // five named swatches, as a list
+        a.role = Role::List;
+        a.items = Count();
+        a.item = [this](int i, A11y::Item& it) {
+            it.name = item.choices[static_cast<size_t>(i)].Label(Lang());
+            it.rect = Cell(i);
+            it.selected = i == selected_;
+        };
+        a.selectItem = [this](int i) { Select(i); };
+        a.focusedItem = selected_;
+    }
     int At(float x) const {
         for (int i = 0; i < Count(); ++i)
             if (x >= Cell(i).x - 2 && x < Cell(i).Right() + 2) return i;

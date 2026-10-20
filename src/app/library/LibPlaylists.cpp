@@ -75,15 +75,24 @@ void DeletePlaylist(const std::string& id, bool leavePage) {
                 });
 }
 
-// No question first, and no loss either: the toast brings the item back to its place (UX-17).
-void RemoveFromPlaylist(const std::string& id, size_t index) {
+// No question first, and no loss either: the toast brings the items back to their places (UX-17).
+void RemoveFromPlaylist(const std::string& id, std::vector<size_t> indices) {
     const library::Playlist* p = TheApp().playlists().Find(id);
-    if (!p || index >= p->items.size()) return;
-    const library::PlaylistItem item = p->items[index];
-    TheApp().playlists().RemoveAt(id, index);
+    if (!p) return;
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    std::vector<std::pair<size_t, library::PlaylistItem>> removed;
+    for (size_t i : indices)
+        if (i < p->items.size()) removed.emplace_back(i, p->items[i]);
+    if (removed.empty()) return;
+    TheApp().playlists().RemoveIndices(id, indices);
     TheApp().libraryChanged.Emit();
-    Toast(Tr(L"Removed from playlist"), "remove", Tr(L"Undo"), [id, index, item] {
-        if (!TheApp().playlists().Add(id, {item}, static_cast<int>(index))) return;  // the playlist is gone
+    const std::wstring text = removed.size() == 1 ? std::wstring(Tr(L"Removed from playlist"))
+                                                  : Fmt(Tr(L"Removed from playlist: {0}"), static_cast<long long>(removed.size()));
+    Toast(text, "remove", Tr(L"Undo"), [id, removed] {
+        // In ascending order each item lands back at its old index.
+        for (const auto& [index, item] : removed)
+            if (!TheApp().playlists().Add(id, {item}, static_cast<int>(index))) return;  // the playlist is gone
         TheApp().libraryChanged.Emit();
     });
 }
@@ -376,13 +385,41 @@ protected:
         if (pi == kNoItem) return;
         const std::string plId = id_;
         m.push_back(MenuItem::Separator());
-        m.push_back(Item(L"Remove from Playlist", "remove", [plId, pi] { RemoveFromPlaylist(plId, pi); }));
+        // Keyboard and menu reorder, as in the queue (UX-11); the list must show the playlist's order.
+        if (grid_->reorderable) {
+            const bool up = PlIndex(index - 1) != kNoItem, down = PlIndex(index + 1) != kNoItem;
+            MenuItem u = Item(L"Move up", "arrow_up", [this, index] { Move(index, index - 1); }, up);
+            u.shortcut = L"Alt+↑";
+            m.push_back(std::move(u));
+            MenuItem d = Item(L"Move down", "arrow_down", [this, index] { Move(index, index + 1); }, down);
+            d.shortcut = L"Alt+↓";
+            m.push_back(std::move(d));
+            m.push_back(MenuItem::Separator());
+        }
+        m.push_back(Item(L"Remove from Playlist", "remove", [plId, pi] { RemoveFromPlaylist(plId, {pi}); }));
+    }
+
+    void ExtraSelectionMenu(const std::vector<int>& sel, std::vector<MenuItem>& m) override {
+        std::vector<size_t> picked;
+        for (int i : sel)
+            if (PlIndex(i) != kNoItem) picked.push_back(PlIndex(i));
+        if (picked.empty()) return;
+        const std::string plId = id_;
+        m.push_back(MenuItem::Separator());
+        m.push_back(Item(L"Remove from Playlist", "remove", [plId, picked] { RemoveFromPlaylist(plId, picked); }));
     }
 
     void Delete(int index) override {
         const size_t pi = PlIndex(index);
         if (pi == kNoItem) return;
-        RemoveFromPlaylist(id_, pi);
+        // Delete removes every selected row when several are selected.
+        const std::vector<int> sel = grid_->Marked(index) ? grid_->Selection() : std::vector<int>{index};
+        std::vector<size_t> picked;
+        for (int i : sel)
+            if (PlIndex(i) != kNoItem) picked.push_back(PlIndex(i));
+        if (picked.empty()) picked.push_back(pi);
+        index = std::min(index, sel.front());
+        RemoveFromPlaylist(id_, picked);
         // Keep the keyboard position on the next row.
         const auto& v = grid_->Entries();
         for (int i = std::min(index, static_cast<int>(v.size()) - 1); i >= 0; --i)

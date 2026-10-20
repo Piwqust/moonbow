@@ -324,6 +324,8 @@ private:
 
         const bool searching = !filter_.empty();
         for (HomeSection* s : All()) s->Clear();
+        const std::wstring fold = searching ? library::SearchFold(filter_) : std::wstring();
+        for (HomeSection* s : All()) s->Grid()->highlight = fold;
 
         if (searching) {
             int n = SearchGroups(*snap);

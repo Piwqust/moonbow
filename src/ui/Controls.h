@@ -5,6 +5,7 @@
 #include "ui/Widget.h"
 
 #include <functional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,11 @@ enum class Tone : uint8_t { Primary, Secondary, Tertiary, Disabled, Accent };
 Color ToneColor(Tone t);
 
 // --- static content --------------------------------------------------------------------
+
+// A search match underlined in the text just painted by p.Text(text, box, style, ..., h): the menu's
+// 2 DIP accent line. `marks` are {start, length} character ranges; only for single-line text.
+using TextMarks = std::vector<std::pair<size_t, size_t>>;
+void PaintTextMarks(Painter& p, std::wstring_view text, const Rect& box, TextStyle style, HAlign h, const TextMarks& marks);
 
 class Label : public Widget {
 public:
@@ -31,6 +37,7 @@ public:
     bool wrap = false;
     int maxLines = 0;  // with wrap; 0 = unlimited
     std::function<Color()> color;  // overrides tone when set
+    TextMarks marks;               // underlined matches of a search (not with wrap)
 
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
