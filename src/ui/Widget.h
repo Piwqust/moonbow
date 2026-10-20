@@ -147,7 +147,14 @@ public:
     virtual void OnClick();
 
     std::function<void()> onClick;
+    // A right click, and the Menu key or Shift+F10 on the focused widget or one inside it (at
+    // MenuPoint). Only for a menu: the keyboard opens it without a click.
     std::function<void(const MouseEvent&)> onContextMenu;
+    // Where the Menu key opens it: the entry the keyboard is on. False: no entry, no menu.
+    virtual bool MenuPoint(Point& at) const {
+        at = {rect.Cx(), rect.Cy()};
+        return true;
+    }
     std::function<void()> onDoubleClick;
 
     // --- debugging --------------------------------------------------------------

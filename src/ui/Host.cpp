@@ -1129,44 +1129,64 @@ void Host::MoveFocus(bool backwards) {
     SetFocus(list[i], true);
 }
 
-void Host::OnKey(UINT vk, bool down, bool repeat) {
-    if (!down) return;
+bool Host::OnKey(UINT vk, bool down, bool repeat) {
+    if (!down) return false;
     KeyEvent e{vk, CurrentMods(), repeat};
+    // Shift+F10 is the Menu key: widgets see only VK_APPS.
+    if (vk == VK_F10 && e.mods.shift && !e.mods.ctrl && !e.mods.alt) e.key = vk = VK_APPS;
     HideTooltip();
     if (vk == VK_ESCAPE && capture_) {  // Esc drops a drag, as in Windows: a second one does the rest
         CancelPress();
-        return;
+        return true;
     }
 
-    for (Widget* w = focus_; w; w = w->Parent())
+    // The focus can stay on a hidden widget (the library's grid behind the player): it opens no
+    // menu, the window's own does (the video's).
+    bool hiddenFocus = false;
+    for (Widget* w = vk == VK_APPS ? focus_ : nullptr; w && !hiddenFocus; w = w->Parent()) hiddenFocus = !w->visible;
+    for (Widget* w = hiddenFocus ? nullptr : focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
             RequestRender();
-            return;
+            return true;
         }
 
     if (vk == VK_TAB && !e.mods.ctrl && !e.mods.alt) {
         MoveFocus(e.mods.shift);
-        return;
+        return true;
     }
     if (vk == VK_ESCAPE && !popups_.empty()) {
         for (size_t i = popups_.size(); i-- > 0;)
             if (!popups_[i].options.passthrough && popups_[i].options.dismissOnEscape) {
                 ClosePopupAt(i);
-                return;
+                return true;
             }
     }
+    if (vk == VK_APPS && !hiddenFocus && OpenContextMenu()) return true;
     // Space/Enter press the focused control only when it was reached with the
     // keyboard: after a mouse click Space stays the window's shortcut (play/pause).
-    if ((vk == VK_RETURN || vk == VK_SPACE) && focusVisible_ && focus_ && focus_->interactive &&
+    if ((vk == VK_RETURN || vk == VK_SPACE) && !e.mods.alt && focusVisible_ && focus_ && focus_->interactive &&
         focus_->IsEnabled() && !focus_->WantsTextInput()) {
         focus_->OnClick();
         RequestRender();
-        return;
+        return true;
     }
     // Keyboard shortcuts of the window are suspended while a modal popup is open.
     for (const Popup& p : popups_)
-        if (p.options.modal) return;
-    if (onKey) onKey(e);
+        if (p.options.modal) return true;
+    return onKey && onKey(e);
+}
+
+// The Menu key: the context menu of the focused widget, or of the nearest one around it that has
+// one (a row's list), at the entry the keyboard is on.
+bool Host::OpenContextMenu() {
+    for (Widget* w = focus_; w; w = w->Parent())
+        if (w->onContextMenu && w->IsEnabled()) {
+            Point at;
+            if (focus_->MenuPoint(at)) w->onContextMenu({at.x, at.y, MouseButton::Right, CurrentMods()});
+            RequestRender();
+            return true;
+        }
+    return false;
 }
 
 // --- tooltip -----------------------------------------------------------------------------
@@ -1685,16 +1705,27 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
+        case WM_SYSKEYDOWN: {
             if (msg == WM_SYSKEYDOWN && wp == VK_F4) break;
             g_inKey = true;
-            OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
+            const bool used = OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
             g_inKey = false;
+            if (msg == WM_SYSKEYDOWN && wp == VK_SPACE) altSpaceMenu_ = !used;
             if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
             return 0;
+        }
 
         case WM_SYSCHAR:
-            if (wp == VK_RETURN || wp == VK_SPACE) return 0;
+            // Alt+Enter is a shortcut, not a beep. Alt+Space opens the window menu (Move, Size,
+            // Minimize) unless a shortcut took it.
+            if (wp == VK_RETURN || (wp == VK_SPACE && !altSpaceMenu_)) return 0;
+            break;
+
+        case WM_SYSCOMMAND:
+            // Keyboard menu mode only for Alt+Space. A lone Alt or F10 tap (lParam 0) would enter it
+            // on the hidden window menu and eat the next key (Space = play), Alt+letter would beep.
+            // Test runs never open the native menu.
+            if ((wp & 0xFFF0) == SC_KEYMENU && (lp != VK_SPACE || g_automation)) return 0;
             break;
 
         case WM_CHAR:

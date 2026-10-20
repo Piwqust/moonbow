@@ -668,6 +668,15 @@ private:
         else if (y > sv->rect.Bottom() - 24) sv->ScrollTo(sv->Offset() + 12, false);
     }
 
+    // The Menu key: the selected (or playing) row's menu; the whole queue's when it is empty.
+    bool MenuPoint(Point& at) const override {
+        const int i = selected_ >= 0 ? selected_ : TheApp().queue().Current();
+        if (i < 0 || i >= Count()) return Widget::MenuPoint(at);
+        const Rect r = RowRect(i);
+        at = {r.x + std::min(r.w / 2, 120.0f), r.Cy()};
+        return true;
+    }
+
     void ShowMenuAt(const MouseEvent& e) {
         const int i = RowAt(e.y);
         if (i < 0) {
@@ -948,6 +957,12 @@ public:
         };
     }
     std::vector<library::Bookmark> Marks() const { return TheApp().bookmarks().For(CurrentPath()); }
+    bool MenuPoint(Point& at) const override {
+        if (selected_ < 0 || selected_ >= static_cast<int>(Marks().size())) return false;
+        const Rect r = RowRect(selected_);
+        at = {r.x + std::min(r.w / 2, 120.0f), r.Cy()};
+        return true;
+    }
     static constexpr float kPitch = 44, kRowH = 32;
     Rect RowRect(int i) const { return {rect.x + pad.l, rect.y + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH}; }
     int RowAt(float y) const {

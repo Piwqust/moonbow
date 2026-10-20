@@ -244,7 +244,8 @@ private:
     void OnMouseButton(UINT msg, WPARAM wp, LPARAM lp);
     void CancelPress();
     void AfterPress(float x, float y);
-    void OnKey(UINT vk, bool down, bool repeat);
+    bool OnKey(UINT vk, bool down, bool repeat);  // true: something used the key
+    bool OpenContextMenu();
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();
@@ -276,6 +277,7 @@ private:
     // is that widget, and mouse_ follows WM_NCMOUSEMOVE until it leaves.
     bool ncHover_ = false;
     bool cursorHidden_ = false;
+    bool altSpaceMenu_ = false;  // the last Alt+Space was no shortcut: its WM_SYSCHAR opens the window menu
     bool active_ = true;
     Widget* wheeled_ = nullptr;  // took the last wheel notch; hover is re-hit while it scrolls
 

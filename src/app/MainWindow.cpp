@@ -138,6 +138,16 @@ bool MainWindow::Create() {
     });
 
     onKey = [this](const KeyEvent& e) {
+        // The Menu key (Shift+F10) where the focus has no menu of its own: the video's, as a right
+        // click in its middle would open it.
+        if (e.key == VK_APPS && TheApp().PlayerShown()) {
+            const Rect v = player_->VideoRect();
+            for (Widget* w = Root()->HitTest(v.Cx(), v.Cy()); w; w = w->Parent())
+                if (w->onContextMenu) {
+                    w->onContextMenu({v.Cx(), v.Cy(), MouseButton::Right, e.mods});
+                    return true;
+                }
+        }
         const bool arrow = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_LEFT || e.key == VK_RIGHT;
         if (arrow && !TheApp().PlayerShown() && !Focus() && !e.mods.ctrl && !e.mods.alt && library_ && library_->View())
             if (Widget* first = library_->View()->InitialFocus()) {

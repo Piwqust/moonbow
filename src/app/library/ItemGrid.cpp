@@ -1153,9 +1153,7 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
                 return true;
             }
             return false;
-        case VK_APPS:
-        case VK_F10:
-            if (e.key == VK_F10 && !e.mods.shift) return false;
+        case VK_APPS:  // also Shift+F10 (ui::Host)
             if (selected_ >= 0 && onMenu) {
                 const Rect r = ItemRect(selected_);
                 onMenu(selected_, {r.x + std::min(r.w / 2, 120.0f), cards ? r.y + geo_.thumbH / 2 : r.Bottom()});
