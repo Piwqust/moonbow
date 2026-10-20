@@ -427,7 +427,9 @@ public:
         gap = 8;
         pad = Insets::All(28);
         width = Length::Px(440);
-        icon_ = Add<IconView>("info", 32, Tone::Secondary);
+        // The library's "Damaged file" chip says the same thing with the same sign (ItemGrid.cpp).
+        icon_ = Add<IconView>("warning", 32);
+        icon_->color = [] { return P().danger; };
         title_ = Add<Label>(L"", TextStyle::Heading, Tone::Primary);
         title_->halign = HAlign::Center;
         title_->wrap = true;
@@ -453,8 +455,24 @@ public:
         row->pad.t = 12;
         next_ = row->Add<Button>(L"", ButtonKind::Primary, "next");
         next_->onClick = [] { Run(Action::Next); };
-        close_ = row->Add<Button>(L"", ButtonKind::Secondary);
+        // A single file has nothing to go on to: the way out is back where it was opened from.
+        back_ = row->Add<Button>(L"", ButtonKind::Primary);
+        back_->onClick = [] { TheApp().ShowPlayer(false); };
+        // Outlined: a Secondary button's fill is the card's own colour.
+        close_ = row->Add<Button>(L"", ButtonKind::Outline);
         close_->onClick = [] { Run(Action::CloseMedia); };
+    }
+    // Like a dialog: named by what went wrong, and the keyboard starts on its first button.
+    void Describe(A11y& a) override {
+        a.role = Role::Window;
+        a.name = title_->Text() + L". " + body_->Text();
+    }
+    void OnShown() {
+        Widget* first = next_->visible ? static_cast<Widget*>(next_) : back_;
+        if (Host* h = GetHost())
+            h->Post([this, h, first] {
+                if (visible) h->SetFocus(first, true);
+            });
     }
     void Refresh() {
         App& app = TheApp();
@@ -468,11 +486,13 @@ public:
         detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
         more_->text = Tr(L"More details");  // here, not when built: after a language switch too
         next_->SetText(Tr(L"Next file"));
+        back_->SetText(Tr(L"Back to library"));
         close_->SetText(Tr(L"Close"));
         detail_->visible = false;
         more_->visible = !err.empty();
         const int nextIndex = app.queue().NextIndex(true);
         next_->visible = nextIndex >= 0 && nextIndex != app.queue().Current();
+        back_->visible = !next_->visible;
         InvalidateLayout();
     }
     void Paint(Painter& p) override { p.Fill(rect, P().bgPanel, 12); }
@@ -481,7 +501,7 @@ private:
     IconView* icon_;
     Label *title_, *body_, *detail_;
     LinkButton* more_;
-    Button *next_, *close_;
+    Button *next_, *back_, *close_;
 };
 
 PlayerView::PlayerView(MainWindow* window) : window_(window) {
@@ -704,7 +724,9 @@ void PlayerView::OnLayout() {
 
     // Only once mpv has nothing left to try: a failed file in a queue is skipped (a toast says so),
     // and the card would flash with the next file's name.
+    const bool errorWas = error_->visible;
     error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && s.idle && !pip;
+    if (error_->visible && !errorWas) error_->OnShown();
     if (error_->visible) {
         const Rect v = video_->Inner(immersive);
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);

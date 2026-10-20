@@ -309,6 +309,7 @@
 {L"Outline Color", L"Цвет обводки"},
 {L"Right channel", L"Правый канал"},
 {L"Next file", L"Следующий файл"},
+{L"Back to library", L"Назад в медиатеку"},
 {L"Can't open “{0}”", L"Не удаётся открыть «{0}»"},
 {L"Skipped “{0}”: it can't be played", L"Пропущен «{0}»: файл не воспроизводится"},
 {L"The file was moved or deleted.", L"Файл перемещён или удалён."},
