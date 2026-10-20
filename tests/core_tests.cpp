@@ -505,8 +505,8 @@ void TestSchema() {
     CHECK(Search(L"").empty());
     CHECK(Search(L"  ").empty());
     // Words in any order, from the page and section titles too.
-    auto online = Search(L"конфиденциальность сеть");
-    CHECK(online.size() == Search(L"СЕТЬ конфиденциальность").size());
+    auto online = Search(L"конфиденциальность онлайн");
+    CHECK(online.size() == Search(L"ОНЛАЙН конфиденциальность").size());
     bool foundLyrics = false;
     for (const Item* it : online) foundLyrics = foundLyrics || it->key == "privacy.fetchLyrics";
     CHECK(foundLyrics);
