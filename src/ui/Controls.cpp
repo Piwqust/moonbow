@@ -1836,6 +1836,7 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
     o.focusContent = false;
     o.dismissOnOutside = false;
     o.dismissOnEscape = false;
+    o.ownsAbove = false;  // a panel opened while it shows must outlive it
     const uint64_t id = nextId++;
     // However it closes (its timer, a newer toast, CloseAllPopups), the slot forgets it: a later
     // popup at the same address is never taken for it.

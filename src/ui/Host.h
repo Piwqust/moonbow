@@ -44,6 +44,7 @@ struct PopupOptions {
     bool dismissOnEscape = true;
     bool focusContent = true;        // move keyboard focus into the popup
     bool passthrough = false;        // ignores the mouse entirely (tooltips, toasts)
+    bool ownsAbove = true;           // closing it closes the popups opened after it (its submenus)
     bool animate = true;             // short fade/slide in (never when opened from the keyboard)
     // A click outside that lands on another enabled control (a bar button, the sidebar, a caption
     // button) closes the popup and also presses it. A click on a plain surface (the video) or on

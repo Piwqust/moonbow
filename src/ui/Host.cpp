@@ -590,7 +590,8 @@ void Host::ClosePopup(Widget* content) {
 void Host::ClosePopupAt(size_t index) {
     if (index >= popups_.size()) return;
     // Close anything stacked above it first (submenus).
-    while (popups_.size() > index + 1) ClosePopupAt(popups_.size() - 1);
+    if (popups_[index].options.ownsAbove)
+        while (popups_.size() > index + 1) ClosePopupAt(popups_.size() - 1);
     Popup popup = std::move(popups_[index]);
     popups_.erase(popups_.begin() + static_cast<std::ptrdiff_t>(index));
     Widget* restore = popup.previousFocus;
