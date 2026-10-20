@@ -41,7 +41,6 @@
 {L"Custom", L"Своя"},
 // --- new playlist
 {L"New Playlist", L"Новый плейлист"},
-{L"Playlist Details", L"Плейлист"},
 {L"The playlist will be saved and displayed with this title and thumbnail.",
  L"Плейлист сохранится и будет показан с этим названием и обложкой."},
 {L"e.g., Evening", L"например, Вечер"},

@@ -611,16 +611,26 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
     box->SetText(initial);
     f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
-    auto ok = [f, box, done] {
-        std::wstring text = box->Text();
+    auto trimmed = [](std::wstring text) {
         while (!text.empty() && iswspace(text.back())) text.pop_back();
         while (!text.empty() && iswspace(text.front())) text.erase(text.begin());
+        return text;
+    };
+    auto ok = [f, box, done, trimmed] {
+        std::wstring text = trimmed(box->Text());
         if (text.empty()) return;
         auto run = done;  // the dialog (and this lambda) is gone after Close()
         f->Close();
         if (run) run(text);
     };
-    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = ok;
+    auto* okButton = f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent);
+    okButton->onClick = ok;
+    // Greyed while empty, as in New Playlist: an enabled button that does nothing reads as a hang.
+    okButton->enabled = !trimmed(initial).empty();
+    box->onChange = [okButton, trimmed](const std::wstring& t) {
+        okButton->enabled = !trimmed(t).empty();
+        okButton->Invalidate();
+    };
     box->onSubmit = [ok](const std::wstring&) { ok(); };
     f->onSubmit = ok;
     dlg::ShowFrame(w, std::move(frame), box);
