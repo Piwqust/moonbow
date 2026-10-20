@@ -270,6 +270,10 @@ void MainWindow::SetPictureInPicture(bool on) {
             GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
             const LONG pw = static_cast<LONG>(480 * s), ph = static_cast<LONG>(270 * s), m = static_cast<LONG>(24 * s);
             r = {mi.rcWork.right - pw - m, mi.rcWork.bottom - ph - m, mi.rcWork.right - m, mi.rcWork.bottom - m};
+            const SIZE band = FrameBand();  // invisible, around the 16:9 client area
+            r.left -= band.cx;
+            r.right += band.cx;
+            r.bottom += band.cy;
         }
         pip_ = true;
         SetWindowPos(hwnd, HWND_TOPMOST, r.left, r.top, r.right - r.left, r.bottom - r.top,

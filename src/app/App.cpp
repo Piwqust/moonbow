@@ -632,6 +632,9 @@ void App::FitWindowToVideo() {
     int h = static_cast<int>(std::lround(static_cast<double>(s.videoH) * f + chromeH));
     w = std::max(w, static_cast<int>(760 * scale));
     h = std::max(h, static_cast<int>(440 * scale));
+    const SIZE band = main_->FrameBand();  // the window's invisible resize band around the client area
+    w += 2 * band.cx;
+    h += band.cy;
     RECT cur;
     GetWindowRect(main_->Hwnd(), &cur);
     int x = (cur.left + cur.right) / 2 - w / 2, y = (cur.top + cur.bottom) / 2 - h / 2;

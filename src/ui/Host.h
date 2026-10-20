@@ -101,6 +101,9 @@ public:
     float Scale() const { return static_cast<float>(dpi_) / 96.0f * ScaleOverride(); }
     UINT Dpi() const { return dpi_; }  // the monitor's real DPI (window frame metrics)
     Size ClientSize() const;
+    // Pixels the window is larger than its client area: the invisible resize band Windows keeps
+    // on the left and right (cx each) and at the bottom (cy) of a resizable window.
+    SIZE FrameBand() const;
     // Called when the shared GPU device becomes available.
     void OnDeviceReady();
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the

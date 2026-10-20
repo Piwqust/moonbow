@@ -25,7 +25,10 @@ namespace {
 
 constexpr wchar_t kHostClass[] = L"LumenHost";
 constexpr UINT WM_APP_POST = WM_APP + 41;
-constexpr float kResizeBorder = 6.0f;
+// The resize band along the top, inside the title bar (the frame Windows keeps is on the other
+// sides, outside the visible edge); over a button only its top pixel.
+constexpr float kResizeTop = 4.0f;
+constexpr float kResizeCorner = 16.0f;  // the corner zones' length along each edge
 constexpr UINT kTooltipDelayMs = 550;
 // Moving on from a shown tooltip within this time shows the next one at once, without the fade.
 constexpr double kTooltipWarmMs = 400;
@@ -112,7 +115,7 @@ constexpr wchar_t kRevealedProp[] = L"LumenRevealed";
 // Keeps a window's normal rect inside its monitor's work area (minus `margin` px), centred when
 // it had to shrink or stood off the screen; never below the minimum size. A first run at 200 %
 // on a 1440p screen asks for 2560x1560 px, a saved rect may come from a larger screen.
-void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
+void FitToWorkArea(HWND hwnd, int minW, int minH, int margin, SIZE band) {
     WINDOWPLACEMENT wp{sizeof(wp)};
     if (!GetWindowPlacement(hwnd, &wp)) return;
     MONITORINFO mi{sizeof(mi)};
@@ -122,7 +125,8 @@ void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
     const LONG dx = tool ? 0 : mi.rcWork.left - mi.rcMonitor.left, dy = tool ? 0 : mi.rcWork.top - mi.rcMonitor.top;
     RECT r = wp.rcNormalPosition;
     OffsetRect(&r, dx, dy);
-    const RECT& work = mi.rcWork;
+    // The invisible resize band may stand off the work area, as on any window snapped to its edge.
+    const RECT work{mi.rcWork.left - band.cx, mi.rcWork.top, mi.rcWork.right + band.cx, mi.rcWork.bottom + band.cy};
     const int workW = work.right - work.left, workH = work.bottom - work.top;
     const int w = std::max(minW, std::min<int>(r.right - r.left, workW - margin));
     const int h = std::max(minH, std::min<int>(r.bottom - r.top, workH - margin));
@@ -358,6 +362,9 @@ bool Host::Create(const HostOptions& options) {
         h = std::max(static_cast<int>(std::lround(options.minHeight * Scale())),
                      std::min(static_cast<int>(std::lround(options.height * Scale())),
                               static_cast<int>(work.bottom - work.top) - margin));
+        const SIZE band = FrameBand();  // the size asked for is the client area's
+        w += 2 * band.cx;
+        h += band.cy;
         if (!options.center) return;
         RECT ref = work;
         if (options.owner) GetWindowRect(options.owner, &ref);
@@ -473,6 +480,12 @@ void Host::SetRoot(std::unique_ptr<Widget> root) {
     root_ = std::move(root);
     if (root_) root_->SetHost(this);
     RequestLayout();
+}
+
+SIZE Host::FrameBand() const {
+    if (!options_.customFrame || !options_.resizable || fullscreen_) return {0, 0};
+    const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
+    return {GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad, GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad};
 }
 
 Size Host::ClientSize() const {
@@ -898,19 +911,26 @@ LRESULT Host::NcHitTest(LPARAM lp) {
     ScreenToClient(hwnd_, &pt);
     RECT rc;
     GetClientRect(hwnd_, &rc);
-    if (options_.resizable && !fullscreen_ && !IsWindowMaximized()) {
-        const int b = static_cast<int>(std::lround(kResizeBorder * Scale()));
-        const bool left = pt.x < b, right = pt.x >= rc.right - b, top = pt.y < b, bottom = pt.y >= rc.bottom - b;
-        if (top && left) return HTTOPLEFT;
-        if (top && right) return HTTOPRIGHT;
-        if (bottom && left) return HTBOTTOMLEFT;
-        if (bottom && right) return HTBOTTOMRIGHT;
-        if (left) return HTLEFT;
-        if (right) return HTRIGHT;
-        if (bottom) return HTBOTTOM;
-        if (top) return HTTOP;
-    }
     const float x = pt.x / Scale(), y = pt.y / Scale();
+    if (options_.resizable && !fullscreen_ && !IsWindowMaximized()) {
+        // Left, right and bottom: the frame outside the client area (WM_NCCALCSIZE), so the scroll
+        // bar, the sidebar's edge and the control bar stay what they look like.
+        const bool left = pt.x < 0, right = pt.x >= rc.right, bottom = pt.y >= rc.bottom;
+        bool top = pt.y < 1;
+        if (!top && pt.y < std::lround(kResizeTop * Scale())) {
+            top = true;
+            for (Widget* w = root_ ? root_->HitTest(x, y) : nullptr; w && top; w = w->Parent()) top = !w->interactive;
+        }
+        if (left || right || top || bottom) {
+            const int c = static_cast<int>(std::lround(kResizeCorner * Scale()));
+            const bool nearL = pt.x < c, nearR = pt.x >= rc.right - c, nearT = pt.y < c, nearB = pt.y >= rc.bottom - c;
+            if ((top && nearL) || (left && nearT)) return HTTOPLEFT;
+            if ((top && nearR) || (right && nearT)) return HTTOPRIGHT;
+            if ((bottom && nearL) || (left && nearB)) return HTBOTTOMLEFT;
+            if ((bottom && nearR) || (right && nearB)) return HTBOTTOMRIGHT;
+            return left ? HTLEFT : right ? HTRIGHT : bottom ? HTBOTTOM : HTTOP;
+        }
+    }
     for (const Popup& p : popups_)
         if (p.options.modal || (!p.options.passthrough && p.content->rect.Contains(x, y))) return HTCLIENT;
     Widget* hit = root_ ? root_->HitTest(x, y) : nullptr;
@@ -1508,26 +1528,28 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 SetPropW(hwnd_, kFittedProp, reinterpret_cast<HANDLE>(1));
                 Post([this] {
                     if (!hwnd_ || fullscreen_) return;
-                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())),
-                                  static_cast<int>(std::lround(options_.minHeight * Scale())),
-                                  static_cast<int>(std::lround(24 * Scale())));
+                    const SIZE band = FrameBand();
+                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())) + 2 * band.cx,
+                                  static_cast<int>(std::lround(options_.minHeight * Scale())) + band.cy,
+                                  static_cast<int>(std::lround(24 * Scale())), band);
                 });
             }
             break;
 
         case WM_NCCALCSIZE:
-            // Also the wp == FALSE call during CreateWindowExW: the whole window is client area
-            // from the start, without a SWP_FRAMECHANGED round trip afterwards.
+            // No caption: the client area runs to the top edge. Windows keeps its frame on the
+            // other sides, invisible outside the visible edge: the resize band of a Windows 11
+            // window (Windows Terminal does the same). Maximized, the frame is off screen on every
+            // side. Also the wp == FALSE call during CreateWindowExW, so no SWP_FRAMECHANGED round
+            // trip follows. Fullscreen and fixed-size windows are client area throughout.
             if (options_.customFrame) {
-                if (wp == TRUE && !fullscreen_ && IsZoomed(hwnd_)) {
-                    auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
-                    const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
-                    const int fx = GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad;
-                    const int fy = GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad;
-                    params->rgrc[0].left += fx;
-                    params->rgrc[0].right -= fx;
-                    params->rgrc[0].top += fy;
-                    params->rgrc[0].bottom -= fy;
+                if (!fullscreen_ && (options_.resizable || IsZoomed(hwnd_))) {
+                    RECT* r = reinterpret_cast<RECT*>(lp);  // NCCALCSIZE_PARAMS::rgrc[0] when wp is TRUE
+                    const LONG top = r->top;
+                    DefWindowProcW(hwnd_, msg, wp, lp);
+                    r->top = top;
+                    if (IsZoomed(hwnd_))
+                        r->top += GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
                 }
                 return 0;
             }
@@ -1764,8 +1786,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_GETMINMAXINFO: {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
-            mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale());
-            mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale());
+            const SIZE band = FrameBand();
+            mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale()) + 2 * band.cx;
+            mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale()) + band.cy;
             // Maximized = the monitor's work area (plus the frame WM_NCCALCSIZE takes off), so the
             // window never covers the taskbar, whatever the style (tool windows, custom frame).
             MONITORINFO mi{sizeof(mi)};
