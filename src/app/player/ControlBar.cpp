@@ -95,6 +95,25 @@ const PlayerState& PS() {
     return TheApp().player().State();
 }
 
+// `from` stepped toward `to` until it stands 3:1 from `other` (WCAG 1.4.11): the least change
+// that keeps two parts of a control apart with every accent; `to` when even that falls short.
+Color Apart(Color from, Color to, Color other) {
+    auto rgba = [](Color c) { return skin::Rgba{c.r, c.g, c.b, c.a}; };
+    for (float k = 0; k < 1; k += 0.05f)
+        if (const Color c = Color::Mix(from, to, k); skin::Contrast(rgba(c), rgba(other)) >= 3.0) return c;
+    return to;
+}
+
+// A level drawn over its empty track (the volume wedge, the music bar's waveform): the track
+// faint, the level 3:1 against it in both themes.
+struct LevelTones {
+    Color empty, level;
+};
+LevelTones LevelColors() {
+    const Color level = Apart(P().accentMid, P().accent, P().lineStrong);
+    return {Apart(P().lineStrong, P().bgBase, level), level};
+}
+
 // Icon button that runs an action and names its key in the tooltip.
 class ActionButton : public IconButton {
 public:
@@ -202,11 +221,10 @@ public:
         p.Text(std::to_wstring(static_cast<int>(std::lround(s.volume))) + L"%", {rect.x, rect.y + 6, rect.w, 22},
                TextStyle::Small, P().textPrimary, HAlign::Center);
         const Rect t = Track();
-        const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
-        p.Fill(t, empty, 2);
+        const LevelTones c = LevelColors();
+        p.Fill(t, c.empty, 2);
         const float k = static_cast<float>(std::clamp(s.volume / 100.0, 0.0, 1.0));
-        const Color fill = s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid;
-        if (k > 0) p.Fill({t.x, t.Bottom() - t.h * k, t.w, t.h * k}, fill, 2);
+        if (k > 0) p.Fill({t.x, t.Bottom() - t.h * k, t.w, t.h * k}, s.mute ? P().textDisabled : c.level, 2);
         p.FillCircle({t.Cx(), t.Bottom() - t.h * k}, dragging_ || hotTrack_ ? 7.0f : 6.0f, P().accent);
         const Rect m = MuteRect();
         if (hotMute_) p.Fill(m, P().hover, 4);
@@ -321,10 +339,11 @@ public:
             levelT_ = t;
             level_ = t > 0 ? MakeWedge(w, t) : nullptr;
         }
-        // The empty track needs ~3:1 against the bar in both themes (bgDeep vanishes in light).
-        const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
-        if (track_) p.FillGeometry(track_.Get(), empty);
-        if (level_) p.FillGeometry(level_.Get(), s.mute ? Color::Mix(empty, P().accentMid, 0.45f) : P().accentMid);
+        // The empty part is faint and the level stands 3:1 from it, so 0 % reads empty and 60 %
+        // reads 60 %; muted, the level is grey like the crossed speaker (VIS-2).
+        const LevelTones c = LevelColors();
+        if (track_) p.FillGeometry(track_.Get(), c.empty);
+        if (level_) p.FillGeometry(level_.Get(), s.mute ? P().textDisabled : c.level);
         PaintFocusRing(p, w, 2);
     }
     // The level while the pointer is on the wedge: the seek tip's bubble (26 DIP, shadow) at the
