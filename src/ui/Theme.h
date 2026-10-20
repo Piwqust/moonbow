@@ -12,7 +12,7 @@ namespace ui {
 struct Palette {
     Color bgDeep, bgBase, bgRaised, bgPanel, bgChrome, bgCard, bgSelected, bgMenu;
     Color hover, press;
-    Color lineSubtle, line, lineStrong;
+    Color lineSubtle, line, lineStrong, lineControl;
     Color textPrimary, textSecondary, textTertiary, textDisabled;
     Color accent, accentMid, accentDim, accentFaint, onAccent;
     Color scrim, shadow, danger;
@@ -23,6 +23,14 @@ struct Palette {
 enum class ThemeMode : uint8_t { Dark, Light };
 
 inline constexpr int kAccentCount = skin::kAccentTones;
+
+// The design radii (DESIGN.md section 3). Painter maps each to the skin's value; any other number
+// is geometry (pills, circles, thumbs) and never restyled, so corners use only these.
+inline constexpr float kRadiusSmall = 2;     // knobs, small marks, segments inside a control
+inline constexpr float kRadiusControl = 4;   // buttons, fields, dropdowns, checkboxes, menu rows
+inline constexpr float kRadiusCard = 6;      // cards, tiles, panels
+inline constexpr float kRadiusPopup = 12;    // menus, popovers, toasts, mini player, volume and colour popups
+inline constexpr float kRadiusWindow = 14;   // dialogs, onboarding
 
 class Theme {
 public:

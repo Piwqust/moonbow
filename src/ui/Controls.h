@@ -117,7 +117,7 @@ public:
     bool Value() const { return on_; }
     void SetValue(bool on, bool animate = true);
     std::function<void(bool)> onChange;
-    Size MeasureContent(float, float) override { return {66, 30}; }
+    Size MeasureContent(float, float) override;
     void Paint(Painter& p) override;
     void OnClick() override;
     void DebugInfo(std::string& out) const override;
@@ -299,9 +299,13 @@ public:
     Size MeasureContent(float, float) override;
     void Paint(Painter& p) override;
     bool OnMouseDown(const MouseEvent& e) override;
+    bool OnMouseMove(const MouseEvent& e) override;
+    void OnMouseLeave() override { hover_ = -1; Invalidate(); }
 
 private:
+    int IndexAt(float x) const;
     int selected_;
+    int hover_ = -1;
 };
 
 // --- containers -------------------------------------------------------------------------

@@ -1085,9 +1085,9 @@ void MiniPlayer::Paint(Painter& p) {
     const PlayerState& s = PS();
     const Rect v = VideoBox();
     const float k = compact_ ? 0.0f : OverlayShown();
-    p.Shadow(rect, 8, 18, 8);
-    p.Fill(rect, P().bgPanel, 8);
-    p.Stroke(rect, P().line, 8);
+    p.Shadow(rect, kRadiusPopup, 18, 8);
+    p.Fill(rect, P().bgMenu, kRadiusPopup);
+    p.Stroke(rect, P().line, kRadiusPopup);
     if (s.hasVideo) {
         p.Fill(v, P().videoBg, 4);
         // mpv's window sits under the whole UI layer at VideoRect(), and the library page

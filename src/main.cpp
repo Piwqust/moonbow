@@ -156,6 +156,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     OleInitialize(nullptr);
     int code = 1;
     if (gfx::Gpu::Get().CreateFactories()) {
+        gfx::Text::Get().SetScale(ui::Host::TextScale());
         gfx::Text::Get().InitAsync(instance);
         code = gallery ? app::RunGallery() : app::App::Get().Run(instance, files);
     }

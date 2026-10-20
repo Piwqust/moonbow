@@ -31,7 +31,7 @@ enum class BtnStyle : uint8_t {
     Solid,    // accent fill, onAccent text (onboarding Next / Finish)
 };
 
-// The 100x32 radius-6 buttons of the design. Grows for longer labels.
+// The 100x32 buttons of the design (control radius). Grows for longer labels.
 class DButton : public ui::Widget {
 public:
     DButton(std::wstring text, BtnStyle style, ui::TextStyle textStyle = ui::TextStyle::BodyStrong);
@@ -48,7 +48,7 @@ private:
     std::wstring text_;
 };
 
-// Dropdown with the toolbar look of the dialogs (bgRaised field, radius 6).
+// Dropdown with the toolbar look of the dialogs (bgRaised field, control radius).
 class FieldDropdown : public ui::Dropdown {
 public:
     using Dropdown::Dropdown;

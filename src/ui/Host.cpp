@@ -37,20 +37,34 @@ constexpr double kTooltipWarmMs = 400;
 bool g_automation = false;
 bool g_inKey = false;  // a key message is being handled: popups it opens don't animate
 bool g_highContrast = false;
+float g_textScale = 1.0f;
 bool g_systemRead = false;
 
-// Windows "Animation effects" and high contrast. --automation runs can't switch them (system
-// settings): the variables LUMEN_TEST_NO_ANIMATION / LUMEN_TEST_HIGH_CONTRAST stand in there.
+// Windows "Animation effects", high contrast and "Text size". --automation runs can't switch them
+// (system settings): the variables LUMEN_TEST_NO_ANIMATION / LUMEN_TEST_HIGH_CONTRAST /
+// LUMEN_TEST_TEXT_SCALE (1.5, or 150) stand in there.
 void ReadSystemSettings() {
     g_systemRead = true;
     BOOL animations = TRUE;
     if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0)) animations = TRUE;
     HIGHCONTRASTW hc{sizeof(hc)};
     g_highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) && (hc.dwFlags & HCF_HIGHCONTRASTON);
+    // UISettings.TextScaleFactor keeps its value here, as a percentage (100 to 225).
+    DWORD percent = 100, size = sizeof(percent);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Accessibility", L"TextScaleFactor", RRF_RT_REG_DWORD,
+                     nullptr, &percent, &size) != ERROR_SUCCESS)
+        percent = 100;
+    float textScale = static_cast<float>(percent) / 100.0f;
     if (g_automation) {
         if (GetEnvironmentVariableW(L"LUMEN_TEST_NO_ANIMATION", nullptr, 0)) animations = FALSE;
         if (GetEnvironmentVariableW(L"LUMEN_TEST_HIGH_CONTRAST", nullptr, 0)) g_highContrast = true;
+        wchar_t v[16] = {};
+        if (GetEnvironmentVariableW(L"LUMEN_TEST_TEXT_SCALE", v, 16)) {
+            textScale = wcstof(v, nullptr);
+            if (textScale > 4.0f) textScale /= 100.0f;
+        }
     }
+    g_textScale = std::clamp(textScale, 1.0f, 2.25f);
     AnimFloat::SetReducedMotion(!animations);
 }
 
@@ -179,6 +193,11 @@ std::function<void()> Host::onHighContrastChanged;
 bool Host::HighContrast() {
     if (!g_systemRead) ReadSystemSettings();
     return g_highContrast;
+}
+
+float Host::TextScale() {
+    if (!g_systemRead) ReadSystemSettings();
+    return g_textScale;
 }
 
 void Host::SetScaleOverride(float factor) {
@@ -1872,8 +1891,20 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const bool was = g_highContrast;
             ReadSystemSettings();
             if (g_highContrast != was && onHighContrastChanged) onHighContrastChanged();
+            if (g_textScale != gfx::Text::Get().Scale()) {
+                gfx::Text::Get().SetScale(g_textScale);
+                for (Host* h : Registry()) {
+                    InvalidateRect(h->hwnd_, nullptr, FALSE);
+                    h->RequestLayout();
+                }
+            }
             break;
         }
+
+        case WM_SYSCOLORCHANGE:
+            // Another contrast theme (Aquatic -> Desert): high contrast stays on, its colours change.
+            if (HighContrast() && onHighContrastChanged) onHighContrastChanged();
+            break;
 
         case WM_ERASEBKGND:
             return 1;

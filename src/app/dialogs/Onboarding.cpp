@@ -125,7 +125,7 @@ public:
         for (int row = 0; row < 2; ++row)
             for (int col = 0; col < 3; ++col) {
                 const Rect card{x0 + col * (cw + space), side.y + 24 + row * (ch + 26), cw, ch};
-                p.Fill(card, c.bgCard, 5);
+                p.Fill(card, c.bgCard, kRadiusCard);
                 p.Fill({card.x, card.Bottom() + 7, cw * (col == 1 ? 0.45f : 0.6f), 4}, c.textTertiary, 2);
             }
 
@@ -515,7 +515,7 @@ private:
         auto card = [pg](float y, float h) {
             auto* c = pg->Centered<Panel>(y, 680, h);
             c->fill = [] { return P().bgPanel; };
-            c->radius = 12;
+            c->radius = kRadiusCard;
             c->dir = Dir::Column;
             c->pad = {20, 8, 12, 8};
             return c;

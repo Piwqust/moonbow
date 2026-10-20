@@ -126,22 +126,37 @@ bool Text::LoadFonts(HINSTANCE instance) {
 
     if (SUCCEEDED(dw->CreateTypography(&tabular_)))
         tabular_->AddFontFeature({DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
+    return CreateFormats();
+}
 
+bool Text::CreateFormats() {
+    IDWriteFactory5* dw = Gpu::Get().DWrite();
     for (int i = 0; i < static_cast<int>(TextStyle::Count); ++i) {
         const StyleSpec& s = kStyles[i];
+        formats_[i].Reset();
+        ellipsis_[i].Reset();
         if (FAILED(dw->CreateTextFormat(family_, fonts_.Get(), s.weight, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, s.size, L"ru-ru", &formats_[i])))
+                                        DWRITE_FONT_STRETCH_NORMAL, s.size * scale_, L"ru-ru", &formats_[i])))
             return false;
         formats_[i]->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-        const float lh = std::round(s.size * 1.43f);
+        const float lh = LineHeight(static_cast<TextStyle>(i));
         formats_[i]->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, lh, std::round(lh * 0.78f));
         dw->CreateEllipsisTrimmingSign(formats_[i].Get(), &ellipsis_[i]);
     }
     return true;
 }
 
+void Text::SetScale(float scale) {
+    if (scale == scale_) return;
+    scale_ = scale;
+    if (!impl_) return;  // InitAsync creates the formats at this scale
+    WaitReady();
+    impl_->layouts.clear();
+    CreateFormats();
+}
+
 float Text::LineHeight(TextStyle s) const {
-    return std::round(kStyles[static_cast<int>(s)].size * 1.43f);
+    return std::round(kStyles[static_cast<int>(s)].size * scale_ * 1.43f);
 }
 
 IDWriteTextFormat* Text::Format(TextStyle style) {

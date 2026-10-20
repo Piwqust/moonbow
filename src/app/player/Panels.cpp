@@ -171,7 +171,6 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab, bool videoTab) {
             break;
         case Group::Mini:
             pop->SetTitle(Tr(L"Queue"));
-            pop->radius = 8;
             pop->fill = [] { return P().bgPanel; };
             pop->build = [](int) { return BuildQueueTab(true); };
             pop->place = [] { return PlaceAboveMini(CompactQueueHeight()); };

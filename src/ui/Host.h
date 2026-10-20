@@ -188,9 +188,12 @@ public:
     static void SetScaleOverride(float factor);
     static float ScaleOverride();
     // Windows high contrast is on (SPI_GETHIGHCONTRAST). onHighContrastChanged runs when it
-    // changes (WM_SETTINGCHANGE), once for all windows.
+    // changes (WM_SETTINGCHANGE) or its colours do (WM_SYSCOLORCHANGE); it may run once per window.
     static bool HighContrast();
     static std::function<void()> onHighContrastChanged;
+    // Windows Settings > Accessibility > Text size, 1 to 2.25 (gfx::Text applies it; the windows
+    // lay out again when it changes).
+    static float TextScale();
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
     // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
