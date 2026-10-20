@@ -130,6 +130,8 @@ private:
 void SetToggleCaptions(std::wstring on, std::wstring off);
 // Shown by a menu whose typed filter matches nothing.
 void SetMenuNoMatchCaption(std::wstring text);
+// The text fields' right-click menu; the app sets translated ones.
+void SetTextMenuCaptions(std::wstring cut, std::wstring copy, std::wstring paste, std::wstring selectAll);
 
 class Checkbox : public Widget {
 public:
@@ -261,6 +263,7 @@ public:
     void OnFocusChanged(bool focused) override;
     bool WantsTextInput() const override { return true; }
     Rect CaretRect() const override;
+    bool MenuPoint(Point& at) const override;
 
 private:
     Rect TextRect() const;
