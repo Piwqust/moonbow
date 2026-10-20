@@ -906,6 +906,7 @@ void TextBox::Paint(Painter& p) {
         p.Stroke(rect, c.lineStrong, 4);
     else if (live && IsHot())
         p.Stroke(rect, c.line, 4);
+    PaintFocusRing(p, rect, 4);  // reached with Tab: the ring of every other control, not just the caret
     if (!leadingIcon.empty())
         p.Icon(leadingIcon, {rect.x + 10, rect.Cy() - 10, 20, 20}, live ? c.textTertiary : c.textDisabled);
 

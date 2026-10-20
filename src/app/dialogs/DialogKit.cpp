@@ -233,12 +233,13 @@ void TextArea::Paint(Painter& p) {
     const Palette& c = P();
     p.Fill(rect, c.bgDeep, 6);
     p.Stroke(rect, IsFocused() ? c.lineStrong : IsHot() ? c.line : c.bgPanel, 6, 2);
+    PaintFocusRing(p, rect, 6);
     const Rect tr = TextRect();
     p.PushClip(rect.Inset(2));
     const float lh = LineH();
     if (text_.empty()) {
         // A few DIPs in, so the caret at the start doesn't sit on the first letter.
-        p.Text(placeholder, {tr.x + 4, tr.y, tr.w - 4, lh}, TextStyle::Body, c.textDisabled);
+        p.Text(placeholder, {tr.x + 4, tr.y, tr.w - 4, lh}, TextStyle::Body, c.textTertiary);
     } else {
         const auto lines = Lines();
         const size_t a = std::min(caret_, anchor_), b = std::max(caret_, anchor_);
