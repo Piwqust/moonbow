@@ -140,7 +140,7 @@ int Flatten(TempFolder& t, int parent, Snapshot& s) {
 
 void FillSearchKey(MediaItem& it) {
     std::wstring text = it.name;
-    for (const std::wstring* tag : {&it.title, &it.artist, &it.album}) {
+    for (const std::wstring* tag : {&it.title, &it.artist, &it.album, &it.genre}) {
         if (tag->empty()) continue;
         text += L'\n';
         text += *tag;

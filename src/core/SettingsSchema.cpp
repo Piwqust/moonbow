@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Paths.h"
 #include "../audio/LoopbackSupport.h"
+#include "../library/MediaTypes.h"
 
 #include <windows.h>
 #include <shlobj.h>
@@ -2384,16 +2385,17 @@ std::vector<const Item*> AllItems() {
 std::vector<const Item*> Search(std::wstring_view query) {
     std::vector<const Item*> out;
     std::wstring q = Fold(query);
-    if (q.empty()) return out;
-    for (const Item* it : AllItems()) {
-        if (it->hidden) continue;
-        for (const std::wstring* text : {&it->label, &it->labelRu, &it->description, &it->descriptionRu}) {
-            if (Fold(*text).find(q) != std::wstring::npos) {
-                out.push_back(it);
-                break;
+    if (q.find_first_not_of(L' ') == std::wstring::npos) return out;
+    // Words may come from different fields: "конфиденциальность сеть" = page + section.
+    for (const Category& c : Categories())
+        for (const Section& s : c.sections)
+            for (const Item& it : s.items) {
+                if (it.hidden) continue;
+                std::wstring text = c.label + L'\n' + c.labelRu + L'\n' + s.title + L'\n' + s.titleRu + L'\n' +
+                                    it.label + L'\n' + it.labelRu + L'\n' + it.description + L'\n' + it.descriptionRu;
+                for (const Choice& ch : it.choices) text += L'\n' + ch.label + L'\n' + ch.labelRu;
+                if (library::FoldedContains(Fold(text), q)) out.push_back(&it);
             }
-        }
-    }
     return out;
 }
 

@@ -499,6 +499,14 @@ void TestSchema() {
     for (const Item* it : Search(L"loudness")) foundNormalize = foundNormalize || it->key == "audio.normalize";
     CHECK(foundNormalize);
     CHECK(Search(L"").empty());
+    CHECK(Search(L"  ").empty());
+    // Words in any order, from the page and section titles too.
+    auto online = Search(L"конфиденциальность сеть");
+    CHECK(online.size() == Search(L"СЕТЬ конфиденциальность").size());
+    bool foundLyrics = false;
+    for (const Item* it : online) foundLyrics = foundLyrics || it->key == "privacy.fetchLyrics";
+    CHECK(foundLyrics);
+    CHECK(Search(L"конфиденциальность zzz").empty());
     CHECK(AdvancedOptionsLabel(Lang::Ru) == L"Дополнительные параметры");
 }
 
@@ -1546,6 +1554,13 @@ void TestMediaTypes() {
     CHECK(library::StemOf(L".hidden") == L".hidden");
     CHECK(library::PathKey(L"c:/Видео/Ёж.mkv") == library::PathKey(L"C:\\ВИДЕО\\ЁЖ.MKV"));
     CHECK(library::SearchFold(L"ЁЛКА Ёж") == L"елка еж");
+    // Search words: each must appear, in any order and any field; extra spaces are ignored.
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"track 3"));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"artist  3 "));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L""));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"umber 3"));
+    CHECK(!library::FoldedContains(L"01 track number 3\nartist a", L"track 4"));
+    CHECK(!library::FoldedContains(L"abc", L"abcd"));
     CHECK(library::UnixMsNow() > 1700000000000LL);
 
     // Subtitle matching (Add Subtitles): a prefix whose number goes on is another file.
@@ -1826,6 +1841,8 @@ void TestLibraryScan() {
     CHECK(snap->Search(L"song", library::MediaKind::Video).empty());
     CHECK(snap->Search(L"").size() == 6);
     CHECK(snap->Search(L"zzz").empty());
+    CHECK(snap->Search(L"10 фильм").size() == 1);
+    CHECK(snap->Search(L"фильм ёлок").empty());
 
     auto videos = snap->Videos();
     library::SortItems(videos, library::SortKey::Size, true);

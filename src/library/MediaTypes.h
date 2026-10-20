@@ -33,9 +33,15 @@ std::wstring StemOf(std::wstring_view path);        // "a"
 
 // Folding for search: linguistic lower case (Cyrillic included) and "ё" -> "е".
 std::wstring SearchFold(std::wstring_view text);
-// Case-insensitive substring test on already folded strings.
+// Search match on already folded strings: every space-separated word of the query is a substring
+// of the text, in any order, so "artist song" and "song 3" find what people mean.
 inline bool FoldedContains(const std::wstring& foldedText, const std::wstring& foldedQuery) {
-    return foldedText.find(foldedQuery) != std::wstring::npos;
+    for (size_t i = 0, end = 0; i < foldedQuery.size(); i = end + 1) {
+        end = foldedQuery.find(L' ', i);
+        if (end == std::wstring::npos) end = foldedQuery.size();
+        if (end > i && foldedText.find(foldedQuery.data() + i, 0, end - i) == std::wstring::npos) return false;
+    }
+    return true;
 }
 
 // "Show S01E02", "Show.1x02", "s1e2 Title" -> show "Show", season 1, episode 2. The show is the
