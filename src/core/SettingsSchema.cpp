@@ -913,8 +913,8 @@ void BuildApp(Builder& b) {
         .Desc(L"Briefly show volume, speed and track changes over the video.",
               L"Ненадолго показывать громкость, скорость и смену дорожек поверх видео.");
     b.Toggle("interface.notifyTrackChange", L"Notify when the track changes", L"Уведомлять о смене трека", false)
-        .Desc(L"Show a Windows notification with the title and cover when the next song starts.",
-              L"Показывать уведомление Windows с названием и обложкой, когда начинается следующая песня.");
+        .Desc(L"Show a Windows notification with the title when the next song starts.",
+              L"Показывать уведомление Windows с названием, когда начинается следующая песня.");
     b.Toggle("interface.trayIcon", L"Show an icon in the system tray", L"Значок в области уведомлений", false);
     b.Toggle("interface.minimizeToTray", L"Minimize to the system tray", L"Сворачивать в область уведомлений", false)
         .When("interface.trayIcon", "true");
