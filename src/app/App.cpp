@@ -1087,8 +1087,10 @@ void App::OnCopyData(const std::wstring& payload) {
         if (end > start) files.push_back(payload.substr(start, end - start));
         start = end + 1;
     }
+    // Explorer's "Add to the Lumen queue". With nothing playing yet the files open as below.
+    const bool enqueue = std::erase(files, L"--enqueue") > 0;
     if (files.empty()) return;
-    if (config_.GetBool("library.enqueue") && player_.State().fileLoaded) {
+    if ((enqueue || config_.GetBool("library.enqueue")) && player_.State().fileLoaded) {
         Enqueue(files);
         return;
     }
