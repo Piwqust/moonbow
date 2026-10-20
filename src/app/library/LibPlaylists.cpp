@@ -159,6 +159,17 @@ protected:
     unsigned RowColumns() const override { return kColDate; }
 
     void Build() override {
+        // Favorites lead the playlists as a list of their own (UX-17), no longer a tab of History.
+        const size_t favs = TheApp().favorites().All().size();
+        if (favs > 0 && Matches(Tr(L"Favorites"))) {
+            Entry f;
+            f.kind = EntryKind::Playlist;
+            f.title = Tr(L"Favorites");
+            f.subtitle = CountItems(static_cast<long long>(favs));
+            f.icon = "favorite";
+            f.count = list_ || compact_ ? static_cast<int>(favs) : -1;
+            AddRoute(std::move(f), Route{Section::Playlists, L"favorites"});
+        }
         Entry create;
         create.kind = EntryKind::Action;
         create.title = Tr(L"Create playlist");

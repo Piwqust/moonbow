@@ -1071,11 +1071,12 @@ public:
     RecentPage(Route r, bool compact) : Page(r, compact, "recent") {
         modes_ = false;
         list_ = true;
-        queueName_ = Tr(L"History");
-        if (!compact) {
+        queueName_ = Tr(Favorites() ? L"Favorites" : L"History");
+        // Favorites live on the Playlists page (UX-17); the old History route still shows them, without tabs.
+        if (!compact && !Favorites()) {
             // The views as visible tabs, not hidden in "⋯" (the side panel keeps them in its menu).
             int current = 0;
-            for (int i = 0; i < 4; ++i)
+            for (int i = 0; i < static_cast<int>(std::size(kViews)); ++i)
                 if (route_.path == kViews[i].path) current = i;
             std::vector<Choice> choices;
             float widest = 96;  // segments share one width: the longest label sets it
@@ -1258,7 +1259,7 @@ protected:
             e.Set("songs", Tr(L"No music played yet"), Tr(L"Songs you listen to will appear here."));
         else if (Favorites())
             e.Set("favorite", Tr(L"No favorites yet"),
-                  Tr(L"Right-click a video, song or stream and choose “Favorite” to keep it here."));
+                  Tr(L"Right-click a video, song or stream and choose “Add to Favorites” to keep it here."));
         else
             e.Set("recent", Tr(L"No recent items"), Tr(L"Files and streams you play will appear here."),
                   {{Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}});
@@ -1269,8 +1270,8 @@ private:
         const wchar_t* label;
         const wchar_t* path;
     };
-    static constexpr View kViews[4] = {
-        {L"Everything", L""}, {L"Continue Watching", L"continue"}, {L"Listen Again", L"audio"}, {L"Favorites", L"favorites"}};
+    static constexpr View kViews[3] = {
+        {L"Everything", L""}, {L"Continue Watching", L"continue"}, {L"Listen Again", L"audio"}};
 
     bool Favorites() const { return route_.path == L"favorites"; }
 };
@@ -1293,7 +1294,9 @@ std::unique_ptr<LibraryView> CreateLibraryView(const Route& route, bool compact)
         case Section::Videos: return lib::MakeVideosPage(route, compact);
         case Section::Music: return lib::MakeMusicPage(route, compact);
         case Section::Network: return lib::MakeNetworkPage(route, compact);
-        case Section::Playlists: return lib::MakePlaylistsPage(route, compact);
+        case Section::Playlists:
+            if (route.path == L"favorites") return lib::MakeRecentPage(route, compact);  // the pinned Favorites (UX-17)
+            return lib::MakePlaylistsPage(route, compact);
         case Section::Recent: return lib::MakeRecentPage(route, compact);
     }
     return lib::MakeHomePage(compact);

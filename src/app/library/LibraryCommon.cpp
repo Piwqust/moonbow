@@ -594,7 +594,7 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, SharedQueue queue, int
         }
     }
     const bool fav = TheApp().favorites().Contains(path);
-    MenuItem f = Item(fav ? L"Remove from Favorites" : L"Favorite", fav ? "favorite_active" : "favorite", [path] {
+    MenuItem f = Item(fav ? L"Remove from Favorites" : L"Add to Favorites", fav ? "favorite_active" : "favorite", [path] {
         const bool on = TheApp().favorites().Toggle(path);
         Toast(on ? Tr(L"Added to favorites") : Tr(L"Removed from favorites"), on ? "favorite_active" : "favorite");
         TheApp().libraryChanged.Emit();  // Home's Favorites row and the heart marks

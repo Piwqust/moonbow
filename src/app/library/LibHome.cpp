@@ -174,7 +174,7 @@ public:
         results_[0]->Grid()->roundImages = true;
         continue_ = AddSection(L"Continue Watching", Route{Section::Recent, L"continue"}, GridStyle::VideoCards);
         listen_ = AddSection(L"Listen Again", Route{Section::Recent, L"audio"}, GridStyle::SquareCards);
-        favorites_ = AddSection(L"Favorites", Route{Section::Recent, L"favorites"}, GridStyle::VideoCards);
+        favorites_ = AddSection(L"Favorites", Route{Section::Playlists, L"favorites"}, GridStyle::VideoCards);
         folders_ = AddSection(L"Frequently Visited Folders", Route{Section::Videos, L"folders"}, GridStyle::SquareCards);
         playlists_ = AddSection(L"Frequently Visited Playlists", Route{Section::Playlists, {}}, GridStyle::SquareCards);
         artists_ = AddSection(L"Frequently Listened Artists", Route{Section::Music, L"artists"}, GridStyle::SquareCards);
