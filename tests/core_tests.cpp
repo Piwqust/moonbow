@@ -375,7 +375,8 @@ void TestSchema() {
                 // Rows moved to another page keep their keys (saved values, main.cpp).
                 static const std::map<std::string, std::string> kMoved = {
                     {"library.singleInstance", "interface"}, {"library.singleInstanceFileManager", "interface"},
-                    {"library.enqueue", "interface"},        {"privacy.rememberPosition", "playback"}};
+                    {"library.enqueue", "interface"},        {"privacy.rememberPosition", "playback"},
+                    {"general.theme", "interface"},          {"general.accent", "interface"}};
                 const auto moved = kMoved.find(it.key);
                 CHECK_MSG(moved != kMoved.end() ? c.id == moved->second
                                                 : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,

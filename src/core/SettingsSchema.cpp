@@ -727,19 +727,9 @@ void BuildApp(Builder& b) {
     // ===== General =====
     b.Cat("general", "app", "preferences", L"General", L"Общие");
 
-    b.Sec("appearance", L"Appearance", L"Оформление");
+    b.Sec("language", L"Language", L"Язык");
     b.Pick("general.language", L"Interface language", L"Язык интерфейса",
            {{"ru", L"Русский", L"Русский"}, {"en", L"English", L"English"}}, "ru");
-    b.Seg("general.theme", L"Theme", L"Тема",
-          {{"dark", L"Dark", L"Тёмная"}, {"light", L"Light", L"Светлая"}, {"system", L"System", L"Системная"}},
-          "dark");
-    b.Pick("general.accent", L"Accent color", L"Цвет акцента",
-           {{"white", L"White", L"Белый", "", "#EDEDED"},
-            {"pearl", L"Pearl", L"Жемчуг", "", "#D4D4D4"},
-            {"silver", L"Silver", L"Серебро", "", "#B5B5B5"},
-            {"steel", L"Steel", L"Сталь", "", "#8F8F8F"},
-            {"graphite", L"Graphite", L"Графит", "", "#6B6B6B"}},
-           "white", ItemType::AccentPicker);
 
     b.Sec("windows", L"Windows integration", L"Интеграция с Windows");
     b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
@@ -803,9 +793,22 @@ void BuildApp(Builder& b) {
     // ===== Interface =====
     b.Cat("interface", "app", "interface", L"Interface", L"Интерфейс");
 
-    b.Sec("skin", L"Skin", L"Скин");
+    // Everything about the look in one place; theme and accent keep their general.* keys (saved values).
+    b.Sec("appearance", L"Appearance", L"Оформление");
+    b.Seg("general.theme", L"Theme", L"Тема",
+          {{"dark", L"Dark", L"Тёмная"}, {"light", L"Light", L"Светлая"}, {"system", L"System", L"Системная"}},
+          "dark")
+        .Desc(L"Light, dark or the same as Windows. The OLED black skin is always dark.",
+              L"Светлая, тёмная или как в Windows. Скин «Чёрный OLED» всегда тёмный.");
+    b.Pick("general.accent", L"Accent color", L"Цвет акцента",
+           {{"white", L"White", L"Белый", "", "#EDEDED"},
+            {"pearl", L"Pearl", L"Жемчуг", "", "#D4D4D4"},
+            {"silver", L"Silver", L"Серебро", "", "#B5B5B5"},
+            {"steel", L"Steel", L"Сталь", "", "#8F8F8F"},
+            {"graphite", L"Graphite", L"Графит", "", "#6B6B6B"}},
+           "white", ItemType::AccentPicker);
     // One widget (app/settings/SettingsSkins.cpp): the built-in skins with swatches, then "Custom file".
-    b.Pick("interface.skin", L"Look", L"Оформление",
+    b.Pick("interface.skin", L"Skin", L"Скин",
            {{"lumen", L"Lumen", L"Lumen"},
             {"oled", L"OLED black", L"Чёрный OLED"},
             {"contrast", L"High contrast", L"Высокий контраст"},
