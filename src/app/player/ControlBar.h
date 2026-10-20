@@ -61,6 +61,7 @@ public:
     ~SeekBar() override;
     bool compact = false;  // thin variant (mini player)
     bool slim = false;     // minimal control bar: a thin track that thickens under the pointer
+    bool overVideo = false;  // drawn on the picture (PiP): white, not the theme's tones
     void Paint(ui::Painter& p) override;
     bool OnMouseDown(const ui::MouseEvent& e) override;
     bool OnMouseMove(const ui::MouseEvent& e) override;

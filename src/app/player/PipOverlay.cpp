@@ -62,6 +62,7 @@ public:
         next_->onClick = [] { Run(Action::Next); };
         seek_ = Add<SeekBar>();
         seek_->compact = true;
+        seek_->overVideo = true;
         onContextMenu = [this](const MouseEvent& e) { ShowPipContextMenu(GetHost(), {e.x, e.y}); };
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeState | kChangeFile)) {

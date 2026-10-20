@@ -864,19 +864,21 @@ void SeekBar::OnMouseLeave() {
 void SeekBar::Paint(Painter& p) {
     const PlayerState& s = TheApp().player().State();
     const Rect t = Track();
-    // The unplayed track needs ~3:1 against the bar (WCAG 1.4.11). bgDeep does that only in the
-    // dark theme; in light it is #E6E6E6 on #EBEBEB, so the thin tracks take the volume wedge's
-    // "empty" tone and the tall one a groove with an outline of it.
+    // The played part stands 3:1 from the track (WCAG 1.4.11) in both themes and with every
+    // accent, and the track is the lighter of the two in the light theme too (VIS-9). The tall bar
+    // is a bgDeep groove, outlined in light where it would vanish in the bar; its played part is
+    // the least step toward the accent that reads. Thin tracks are a line with the accent on it.
+    // Over the picture (PiP) both are white: the theme's tones are made for its own surfaces.
     const bool light = Theme::Get().Mode() == ThemeMode::Light;
-    const Color empty = Color::Mix(P().textTertiary, P().textSecondary, 0.15f);
     const bool thin = slim || compact;
-    const Color track = slim ? (light ? empty : P().lineStrong) : compact ? (light ? empty : P().bgDeep)
-                        : light ? P().lineStrong : P().bgDeep;
-    // Thin tracks show the played part in the accent itself: a dimmed accent would be darker than
-    // the grey of the rest.
-    const bool strongPlayed = slim || (compact && light);
+    const Color white = Color::Hex(0xFFFFFF);
+    const Color track = overVideo ? white.Fade(0.3f) : thin ? Apart(P().lineStrong, P().bgBase, P().accent) : P().bgDeep;
+    const Color played = overVideo ? white.Fade(0.92f)
+                         : thin    ? P().accent
+                                   : Apart(Color::Mix(track, P().accent, 0.32f), P().accent, track);
+    const Color head = overVideo ? white : P().accent;
     p.Fill(t, track, 3.0f);
-    if (!thin && light) p.Stroke(t, empty, 3.0f);
+    if (!thin && light) p.Stroke(t, Apart(P().lineStrong, P().textSecondary, P().bgChrome), 3.0f);
     PaintFocusRing(p, t, 3.0f);
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
@@ -886,6 +888,7 @@ void SeekBar::Paint(Painter& p) {
         uint32_t h = 2166136261u;
         for (wchar_t ch : s.path) h = (h ^ static_cast<uint32_t>(ch)) * 16777619u;
         const float pitch = 5, playX = t.x + t.w * k;
+        const LevelTones bars = LevelColors();  // like the volume wedge: faint ahead, 3:1 played
         float smooth = 0.5f;
         for (float bx = t.x + 6; bx < t.Right() - 6; bx += pitch) {
             h = h * 1664525u + 1013904223u;
@@ -893,8 +896,7 @@ void SeekBar::Paint(Painter& p) {
             smooth = smooth * 0.55f + r * 0.45f;
             const float bh = std::round(4 + (t.h - 10) * smooth * smooth * 1.4f);
             const float bhc = std::min(bh, t.h - 6);
-            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc},
-                   bx < playX ? P().accentMid : light ? empty : P().lineStrong, 0.75f);
+            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc}, bx < playX ? bars.level : bars.empty, 0.75f);
         }
         const float x = std::clamp(playX, t.x + 2, t.Right() - 2);
         p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);
@@ -905,7 +907,7 @@ void SeekBar::Paint(Painter& p) {
         const float kc = static_cast<float>(std::clamp(s.cacheTime / s.duration, 0.0, 1.0));
         p.Fill({t.x + t.w * k, t.Bottom() - 3, t.w * (kc - k), 3}, P().line, 1);
     }
-    p.Fill({t.x, t.y, t.w * k, t.h}, strongPlayed ? P().accent : Color::Mix(track, P().accent, 0.32f), 3);
+    p.Fill({t.x, t.y, t.w * k, t.h}, played, 3);
     // A-B loop range.
     const LiveValues& lv = LiveState::Get().V();
     if (!std::isnan(lv.abA)) {
@@ -922,17 +924,17 @@ void SeekBar::Paint(Painter& p) {
             // A 4-8 DIP track has no room for a tick inside it: a 2 DIP gap in the track (uosc).
             p.Fill({cx - 1, t.y, 2, t.h}, P().bgChrome);
         else if (compact)
-            p.Fill({cx, t.y, 1, t.h}, light ? P().bgPanel : P().lineStrong);
+            p.Fill({cx, t.y, 1, t.h}, overVideo ? Color::Hex(0x000000, 0.6f) : P().bgPanel);  // a gap, like slim
         else
-            p.Fill({cx, t.y + 6, 1, t.h - 12}, light ? P().bgChrome : P().lineStrong);
+            p.Fill({cx, t.y + 6, 1, t.h - 12}, P().lineStrong);
     }
     const float x = std::clamp(t.x + t.w * k, t.x + 2, t.Right() - 2);
     if (slim)
-        p.FillCircle({x, t.Cy()}, hoverX_ >= 0 || dragging_ ? 7.0f : 5.0f, P().accent);
+        p.FillCircle({x, t.Cy()}, hoverX_ >= 0 || dragging_ ? 7.0f : 5.0f, head);
     else if (compact)
-        p.Fill({x - 2, t.y - 2, 4, t.h + 4}, P().accent, 2);
+        p.Fill({x - 2, t.y - 2, 4, t.h + 4}, head, 2);
     else
-        p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);
+        p.Fill({x - 2, t.Cy() - 10, 4, 20}, head, 2);
 }
 
 void SeekBar::PaintOver(Painter& p) {
