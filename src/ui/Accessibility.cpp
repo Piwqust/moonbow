@@ -8,6 +8,7 @@
 
 #include <typeinfo>
 #include <unordered_map>
+#include <utility>
 
 namespace ui::a11y {
 
@@ -15,6 +16,7 @@ namespace {
 
 bool g_connected = false;  // a client asked for a window: uiautomationcore.dll is loaded
 bool g_recordOnce = false;
+LCID g_culture = 0;
 
 // Leaked on purpose: widgets of static objects die after a static map would.
 // Per live widget that has had an element: a serial no other widget gets, so an element of a
@@ -124,6 +126,7 @@ A11y Describe(Widget* w) {
         a.max = s->max;
         a.now = s->Value();
         a.step = s->step;
+        if (s->format) a.value = s->format(s->Value());
         a.setRange = [s](double v) {  // like the arrow keys
             s->SetValue(static_cast<float>(v));
             if (s->onChange) s->onChange(s->Value());
@@ -159,7 +162,9 @@ Role RoleOf(Widget* w) {
     return Describe(w).role;
 }
 
-std::wstring NameOf(Widget* w, const A11y& a) {
+// `keys` gets the shortcut a tooltip names ("Pause (Space)"), which is no part of the name.
+std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys = nullptr) {
+    if (keys) *keys = a.keys;
     if (!a.name.empty()) return a.name;
     std::wstring n;
     switch (a.role) {
@@ -195,7 +200,16 @@ std::wstring NameOf(Widget* w, const A11y& a) {
         default:
             break;
     }
-    if (n.empty()) n = w->tooltip;
+    if (n.empty()) {
+        n = w->tooltip;
+        // shortcut: any button tooltip ending in " (…)" is taken for "Action (Key)" (app::WithKey);
+        // set A11y::keys in Describe instead if a tooltip ever ends in another parenthesis.
+        const size_t open = n.rfind(L" (");
+        if (a.role == Role::Button && open != std::wstring::npos && n.back() == L')') {
+            if (keys) *keys = n.substr(open + 2, n.size() - open - 3);
+            n.resize(open);
+        }
+    }
     if (n.empty() && a.role != Role::Text && a.role != Role::Window) n = LabelBefore(w);
     if (n.empty())
         if (auto* ib = dynamic_cast<IconButton*>(w)) n = Widen(ib->icon);  // shortcut: icon id, until it has a tooltip
@@ -300,6 +314,12 @@ bool Offscreen(Host* h, const Widget* w, Rect r) {
     return false;
 }
 
+// The widget a client last toggled, set or invoked: its changes are reported like the focused one's.
+struct Acted {
+    const Widget* w = nullptr;
+    int serial = 0;
+} g_acted;
+
 // Everything one call needs, checked: the element still exists.
 struct Ctx {
     Host* host = nullptr;
@@ -333,7 +353,8 @@ class Node final : public IRawElementProviderSimple,
                    public IToggleProvider,
                    public IValueProvider,
                    public IRangeValueProvider,
-                   public ISelectionItemProvider {
+                   public ISelectionItemProvider,
+                   public IExpandCollapseProvider {
 public:
     Node(HWND hwnd, const Ref& r) : hwnd_(hwnd), w_(r.w), item_(r.item) {
         if (w_) serial_ = Serials().try_emplace(w_, ++g_nextSerial).first->second;
@@ -367,6 +388,8 @@ public:
             *out = static_cast<IRangeValueProvider*>(this);
         else if (iid == __uuidof(ISelectionItemProvider))
             *out = static_cast<ISelectionItemProvider*>(this);
+        else if (iid == __uuidof(IExpandCollapseProvider))
+            *out = static_cast<IExpandCollapseProvider*>(this);
         else
             return E_NOINTERFACE;
         AddRef();
@@ -395,11 +418,14 @@ public:
                                   : r == Role::Button || r == Role::MenuItem || r == Role::ComboBox;
                 break;
             case UIA_TogglePatternId: yes = toggle >= 0; break;
-            case UIA_ValuePatternId: yes = c.item < 0 && (r == Role::Edit || r == Role::ComboBox); break;
+            case UIA_ValuePatternId:
+                yes = c.item < 0 && (r == Role::Edit || r == Role::ComboBox || (r == Role::Slider && !c.a.value.empty()));
+                break;
             case UIA_RangeValuePatternId: yes = c.item < 0 && r == Role::Slider; break;
             case UIA_SelectionItemPatternId:
                 yes = c.item >= 0 && c.a.selectItem && (r == Role::ListItem || r == Role::TabItem);
                 break;
+            case UIA_ExpandCollapsePatternId: yes = c.item >= 0 && c.it.expanded >= 0; break;
             default: break;
         }
         if (yes) {
@@ -415,8 +441,15 @@ public:
         Ctx c;
         if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
         if (id == UIA_FrameworkIdPropertyId) return Str(out, L"Lumen");
+        if (id == UIA_CulturePropertyId && g_culture) {
+            out->vt = VT_I4;
+            out->lVal = static_cast<LONG>(g_culture);
+            return S_OK;
+        }
         if (!c.w) return S_OK;  // the window's own properties come from its HWND
-        const std::wstring name = c.item >= 0 ? c.it.name : NameOf(c.w, c.a);
+        std::wstring keys;
+        const std::wstring name = c.item >= 0 ? c.it.name : NameOf(c.w, c.a, &keys);
+        if (c.item >= 0) keys = c.it.keys;
         switch (id) {
             case UIA_ControlTypePropertyId:
                 out->vt = VT_I4;
@@ -424,8 +457,13 @@ public:
                 return S_OK;
             case UIA_NamePropertyId:
                 return Str(out, name);
-            case UIA_HelpTextPropertyId:
-                return c.item < 0 && !c.w->tooltip.empty() && c.w->tooltip != name ? Str(out, c.w->tooltip) : S_OK;
+            case UIA_HelpTextPropertyId: {
+                // Not the tooltip the name was taken from ("Pause (Space)").
+                const std::wstring& help = c.a.help.empty() ? c.w->tooltip : c.a.help;
+                return c.item < 0 && !help.empty() && help != name && help.rfind(name + L" (", 0) != 0 ? Str(out, help)
+                                                                                                      : S_OK;
+            }
+            case UIA_AcceleratorKeyPropertyId: return keys.empty() ? S_OK : Str(out, keys);
             case UIA_AutomationIdPropertyId: {
                 std::wstring id16 = Widen(c.w->id);
                 if (c.item >= 0) id16 += L"#" + std::to_wstring(c.item);
@@ -592,7 +630,9 @@ public:
     HRESULT STDMETHODCALLTYPE SetValue(LPCWSTR v) override {
         Ctx c;
         if (!Load(c) || !c.w) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (c.a.role == Role::Slider) return SetValue(v ? _wtof(v) : 0.0);  // a slider's text value is read-only
         if (!c.a.setValue || !c.w->IsEnabled()) return UIA_E_ELEMENTNOTENABLED;
+        Acted();
         c.a.setValue(v ? v : L"");
         return S_OK;
     }
@@ -618,6 +658,7 @@ public:
         if (!Load(c) || !c.w) return UIA_E_ELEMENTNOTAVAILABLE;
         if (!c.a.setRange || !c.w->IsEnabled()) return UIA_E_ELEMENTNOTENABLED;
         if (v < c.a.min || v > c.a.max) return E_INVALIDARG;
+        Acted();
         c.a.setRange(v);
         return S_OK;
     }
@@ -635,6 +676,7 @@ public:
     HRESULT STDMETHODCALLTYPE Select() override {
         Ctx c;
         if (!Load(c) || c.item < 0 || !c.a.selectItem) return UIA_E_ELEMENTNOTAVAILABLE;
+        Acted();
         c.a.selectItem(c.item);
         return S_OK;
     }
@@ -656,16 +698,29 @@ public:
         return S_OK;
     }
 
+    // IExpandCollapseProvider (menu rows with a submenu): the row opens it as Enter does.
+    HRESULT STDMETHODCALLTYPE Expand() override { return Later(); }
+    HRESULT STDMETHODCALLTYPE Collapse() override { return UIA_E_INVALIDOPERATION; }  // Left / Esc in the submenu
+    HRESULT STDMETHODCALLTYPE get_ExpandCollapseState(ExpandCollapseState* out) override {
+        if (!out) return E_POINTER;
+        Ctx c;
+        if (!Load(c) || c.item < 0) return UIA_E_ELEMENTNOTAVAILABLE;
+        *out = c.it.expanded > 0 ? ExpandCollapseState_Expanded : ExpandCollapseState_Collapsed;
+        return S_OK;
+    }
+
 private:
     ~Node() = default;
 
     bool Load(Ctx& c) const { return a11y::Load(hwnd_, w_, serial_, item_, c); }
+    void Acted() const { g_acted = {w_, serial_}; }
 
     // Runs the element's click on the window's thread after this call, if it still exists then.
     HRESULT Later() {
         Ctx c;
         if (!Load(c) || !c.w) return UIA_E_ELEMENTNOTAVAILABLE;
         if (!c.w->IsEnabled() || (c.item >= 0 && !c.it.enabled)) return UIA_E_ELEMENTNOTENABLED;
+        Acted();
         c.host->Post([hwnd = hwnd_, w = w_, serial = serial_, item = item_] {
             Ctx now;
             if (!a11y::Load(hwnd, w, serial, item, now)) return;
@@ -727,7 +782,85 @@ bool Recording() {
     return g_recordOnce || (g_connected && UiaClientsAreListening());
 }
 
-void TextsPainted(const std::vector<TextRecord>& texts) {
+namespace {
+
+// What a client last heard of an element whose changes are reported (see Report).
+struct Snap {
+    std::wstring name, value;
+    int toggle = -1, selected = -1;
+    double now = 0;
+    size_t caret = 0, anchor = 0;
+};
+std::unordered_map<const Widget*, Snap>& Snaps() {
+    static auto* m = new std::unordered_map<const Widget*, Snap>;
+    return *m;
+}
+
+void RaiseProperty(Node* n, PROPERTYID id, VARIANT now) {
+    VARIANT was;
+    was.vt = VT_EMPTY;
+    UiaRaiseAutomationPropertyChangedEvent(n, id, was, now);
+}
+
+// Raises the events of what changed in `w` since the last frame: a switch toggled with Space,
+// a slider moved with the arrows, a tab or list entry selected, a field's text or caret.
+void Report(Host* host, Widget* w) {
+    const A11y a = Describe(w);
+    Snap now;
+    now.name = NameOf(w, a);
+    now.value = a.value;
+    now.toggle = a.toggle;
+    now.now = a.now;
+    if (a.selectItem && (a.role == Role::List || a.role == Role::Tab)) now.selected = a.focusedItem;
+    now.caret = a.caret;
+    now.anchor = a.anchor;
+    auto [it, fresh] = Snaps().try_emplace(w, now);
+    if (fresh) return;
+    const Snap was = std::exchange(it->second, now);
+    Node* n = Node::Make(host->Hwnd(), {w, -1});
+    VARIANT v;
+    if (now.name != was.name) {
+        v.vt = VT_BSTR;
+        v.bstrVal = SysAllocStringLen(now.name.data(), static_cast<UINT>(now.name.size()));
+        RaiseProperty(n, UIA_NamePropertyId, v);
+        SysFreeString(v.bstrVal);
+    }
+    if (now.toggle >= 0 && now.toggle != was.toggle) {
+        v.vt = VT_I4;
+        v.lVal = now.toggle ? ToggleState_On : ToggleState_Off;
+        RaiseProperty(n, UIA_ToggleToggleStatePropertyId, v);
+    }
+    if (now.value != was.value && !a.password) {
+        v.vt = VT_BSTR;
+        v.bstrVal = SysAllocStringLen(now.value.data(), static_cast<UINT>(now.value.size()));
+        RaiseProperty(n, UIA_ValueValuePropertyId, v);
+        SysFreeString(v.bstrVal);
+        if (a.select) UiaRaiseAutomationEvent(n, UIA_Text_TextChangedEventId);
+    }
+    // A slider with a text value moves once per change of that text: the seek bar of a playing
+    // file says each second, not each frame.
+    if (a.role == Role::Slider && (now.value.empty() ? now.now != was.now : now.value != was.value)) {
+        v.vt = VT_R8;
+        v.dblVal = now.now;
+        RaiseProperty(n, UIA_RangeValueValuePropertyId, v);
+    }
+    if (a.select && (now.caret != was.caret || now.anchor != was.anchor))
+        UiaRaiseAutomationEvent(n, UIA_Text_TextSelectionChangedEventId);
+    n->Release();
+    if (now.selected >= 0 && now.selected != was.selected && now.selected < a.items) {
+        Node* item = Node::Make(host->Hwnd(), {w, now.selected});
+        UiaRaiseAutomationEvent(item, UIA_SelectionItem_ElementSelectedEventId);
+        item->Release();
+    }
+}
+
+}  // namespace
+
+void SetCulture(unsigned long lcid) {
+    g_culture = lcid;
+}
+
+void TextsPainted(Host* host, const std::vector<TextRecord>& texts) {
     g_recordOnce = false;
     std::unordered_map<const Widget*, std::wstring> frame;
     const TextRecord* last = nullptr;
@@ -744,11 +877,26 @@ void TextsPainted(const std::vector<TextRecord>& texts) {
     }
     // Widgets not painted this time (scrolled away) keep what they showed last.
     for (auto& [w, s] : frame) Painted()[w] = std::move(s);
+    if (!g_connected || !host || !host->Hwnd() || !UiaClientsAreListening()) return;
+    const Ref focus = FocusRef(host);
+    Widget* acted = const_cast<Widget*>(g_acted.w);
+    if (acted) {
+        auto s = Serials().find(acted);
+        if (s == Serials().end() || s->second != g_acted.serial || acted->GetHost() != host) acted = nullptr;
+    }
+    // An element that comes back into focus is new to the client again, not a change.
+    std::erase_if(Snaps(), [&](const auto& kv) {
+        return kv.first != focus.w && kv.first != acted && kv.first->GetHost() == host;
+    });
+    if (focus.w) Report(host, focus.w);
+    if (acted && acted != focus.w) Report(host, acted);
 }
 
 void Forget(const Widget* w) {
     if (!Serials().empty()) Serials().erase(w);
     if (!Painted().empty()) Painted().erase(w);
+    if (!Snaps().empty()) Snaps().erase(w);
+    if (g_acted.w == w) g_acted = {};
 }
 
 void WindowDestroyed(HWND hwnd) {

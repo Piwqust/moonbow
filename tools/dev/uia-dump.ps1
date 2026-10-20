@@ -8,6 +8,7 @@
 #   add -Out x.txt to also write the tree to a file (UTF-8), -Max N to stop after N elements.
 # Line format:
 #   <indent>Type "Name" [x,y wxh] [off] [disabled] [focus] {Patterns} value=... toggle=... range=v/min..max
+#   [selected] [Expanded|Collapsed] help=... keys=<AcceleratorKey> heading=<level> (windows: culture=)
 #   Rects are screen pixels.
 param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Invoke = "", [string]$Out = "", [int]$Max = 5000)
 $ErrorActionPreference = "Stop"
@@ -38,6 +39,8 @@ $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
 $lines = New-Object System.Collections.Generic.List[string]
 $script:count = 0
 $script:target = $null
+# UIA_HeadingLevelPropertyId (30173): newer than the .NET client, looked up by id (null if unknown).
+$script:heading = [System.Windows.Automation.AutomationProperty]::LookupById(30173)
 
 function Describe($e, [int]$depth) {
   $c = $e.Current
@@ -57,7 +60,14 @@ function Describe($e, [int]$depth) {
     $line += " range={0:0.##}/{1:0.##}..{2:0.##}" -f $o.Current.Value, $o.Current.Minimum, $o.Current.Maximum
   }
   if ($e.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$o) -and $o.Current.IsSelected) { $line += " selected" }
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$o)) { $line += " " + $o.Current.ExpandCollapseState }
   if ($c.HelpText) { $line += ' help="' + $c.HelpText + '"' }
+  if ($c.AcceleratorKey) { $line += ' keys="' + $c.AcceleratorKey + '"' }
+  if ($script:heading) {
+    $h = $e.GetCurrentPropertyValue($script:heading)
+    if ($h -is [int] -and $h -gt 80050) { $line += " heading=" + ($h - 80050) }
+  }
+  if ($depth -eq 0) { $line += " culture=" + $e.GetCurrentPropertyValue($A::CultureProperty) }
   return $line
 }
 

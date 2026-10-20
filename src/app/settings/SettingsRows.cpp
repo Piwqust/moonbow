@@ -854,6 +854,7 @@ void TickSlider::Describe(A11y& a) {
     a.max = item.max;
     a.now = value_;
     a.step = item.step;
+    a.value = FormatValue(item, value_);
     a.setRange = [this](double v) { Change(v, true); };
 }
 

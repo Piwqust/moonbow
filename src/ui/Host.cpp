@@ -818,7 +818,7 @@ void Host::Render() {
         if (appear < 1) ctx->PopLayer();
     }
     OnFramePainted();
-    if (texts) a11y::TextsPainted(*texts);
+    if (texts) a11y::TextsPainted(this, *texts);
     const double t2 = AnimFloat::Now();
     if (surface_.End()) {
         if (!gpuPainted_) Trace("first frame");

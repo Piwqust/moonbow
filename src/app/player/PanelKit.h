@@ -149,6 +149,7 @@ public:
     float trackH = 16;
     std::vector<float> ticks;
     std::vector<std::pair<float, std::wstring>> labels;  // drawn under the track
+    std::function<std::wstring(float)> format;  // the value as screen readers say it ("1.25×")
     std::function<void(float)> onChange;  // while dragging
     std::function<void(float)> onCommit;  // release / key
     bool Dragging() const { return dragging_; }

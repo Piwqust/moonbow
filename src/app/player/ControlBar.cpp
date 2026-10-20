@@ -395,6 +395,7 @@ public:
         a.name = Tr(L"Volume");
         a.max = 100;
         a.now = PS().volume;
+        a.value = std::to_wstring(std::lround(a.now)) + L"%";
         a.step = 5;
         a.setRange = [this](double v) {
             if (PS().mute) TheApp().player().SetMute(false);
@@ -811,6 +812,8 @@ void SeekBar::Describe(A11y& a) {
     a.name = Tr(L"Seek bar");
     a.max = s.fileLoaded ? s.duration : 0;
     a.now = std::clamp(s.position, 0.0, a.max);
+    const bool hours = a.max >= 3600;
+    if (s.fileLoaded) a.value = Fmt(Tr(L"{0} of {1}"), {FormatTime(a.now, hours), FormatTime(a.max, hours)});
     a.step = 5;  // seconds, like the wheel
     if (s.fileLoaded) a.setRange = [](double v) { TheApp().player().SeekAbsolute(v, true); };
 }

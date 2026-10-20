@@ -576,6 +576,7 @@ void Range::Describe(A11y& a) {
     a.max = max;
     a.now = value_;
     a.step = step;
+    if (format) a.value = format(value_);
     a.setRange = [this](double v) {  // like the arrow keys
         const float s = Snap(static_cast<float>(v));
         if (s == value_) return;

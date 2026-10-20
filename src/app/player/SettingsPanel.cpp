@@ -131,6 +131,7 @@ Range* AddRange(SyncPage* page, Widget* section, const std::wstring& label, cons
     r->ticks = spec.ticks;
     r->labels = spec.labels;
     r->trackH = 16;
+    r->format = [fmt](float v) { return fmt(v); };
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(spec.labels.empty() ? 12.0f : 6.0f);
     r->onChange = [value, fmt, set, live = spec.liveDrag](float v) {
@@ -184,6 +185,7 @@ Range* AddBoxRange(SyncPage* page, Widget* section, const std::wstring& label, c
     r->ticks = spec.ticks;
     r->labels = spec.labels;
     r->trackH = 21;
+    r->format = [fmt](float v) { return fmt(v); };
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(14);
     r->onChange = [set](float v) { set(v); };

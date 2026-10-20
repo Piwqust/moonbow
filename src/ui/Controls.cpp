@@ -1395,8 +1395,10 @@ public:
             }
             it.role = Role::MenuItem;
             it.name = m.label;
+            it.keys = m.shortcut;
             it.rect = ItemRect(i);
             it.enabled = m.enabled;
+            if (!m.submenu.empty()) it.expanded = child_ && i == highlight_ ? 1 : 0;
             if (hasChecks_ || m.checked) it.toggle = m.checked ? 1 : 0;
         };
         a.invokeItem = [this](int k) { Activate(visible_[static_cast<size_t>(k)]); };
