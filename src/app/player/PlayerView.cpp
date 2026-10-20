@@ -873,6 +873,20 @@ private:
     Action action_;
 };
 
+// The buttons over the picture stay in the Tab order and the UIA tree; they are drawn only while
+// the card is hovered or one of them has keyboard focus (MiniPlayer::OverlayShown).
+class MiniOverlay : public Widget {
+public:
+    std::function<float()> shown;
+    void PaintChildren(Painter& p) override {
+        const float k = shown();
+        if (k <= 0.01f) return;
+        p.PushOpacity(k);
+        Widget::PaintChildren(p);
+        p.PopOpacity();
+    }
+};
+
 }  // namespace
 
 MiniPlayer::MiniPlayer(MainWindow*) {
@@ -882,7 +896,9 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     dir = Dir::None;
     onClick = [] { TheApp().ShowPlayer(true); };
 
-    overlay_ = Add<Widget>();
+    auto* overlay = Add<MiniOverlay>();
+    overlay->shown = [this] { return OverlayShown(); };
+    overlay_ = overlay;
     overlay_->dir = Dir::None;
     auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
@@ -970,7 +986,7 @@ void MiniPlayer::OnLayout() {
         return;
     }
     overlay_->Arrange(v);
-    overlay_->visible = hover_.Get() > 0.01f;
+    overlay_->visible = true;
     for (auto& c : overlay_->Children()) {
         c->visible = true;
         const Size s = c->Measure(100, 100);
@@ -995,6 +1011,14 @@ void MiniPlayer::OnLayout() {
     }
 }
 
+float MiniPlayer::OverlayShown() const {
+    if (compact_) return 1;
+    // A button under the pointer (it can come straight onto one) or reached with Tab shows them all.
+    const Host* h = GetHost();
+    const bool onButton = h && (overlay_->IsAncestorOf(h->Hot()) || (h->FocusVisible() && overlay_->IsAncestorOf(h->Focus())));
+    return onButton ? 1.0f : hover_.Get();
+}
+
 void MiniPlayer::OnMouseEnter() {
     hover_.To(1, 120);
     InvalidateLayout();
@@ -1011,7 +1035,7 @@ void MiniPlayer::OnMouseLeave() {
 void MiniPlayer::Paint(Painter& p) {
     const PlayerState& s = PS();
     const Rect v = VideoBox();
-    const float k = compact_ ? 0.0f : hover_.Get();
+    const float k = compact_ ? 0.0f : OverlayShown();
     p.Shadow(rect, 8, 18, 8);
     p.Fill(rect, P().bgPanel, 8);
     p.Stroke(rect, P().line, 8);

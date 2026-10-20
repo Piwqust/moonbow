@@ -111,6 +111,7 @@ public:
 
 private:
     ui::Rect VideoBox() const;  // video or cover art
+    float OverlayShown() const;  // 0..1: hovered, or the keyboard is on one of the picture's buttons
     ui::Widget* overlay_ = nullptr;
     ui::IconButton* next_ = nullptr;
     bool compact_ = false;  // one row (thumbnail, title, play) in a small window
