@@ -652,6 +652,11 @@ void Host::PlacePopup(Popup& popup) {
             y = (client.h - s.h) / 2;
             break;
         case Place::At:
+            if (o.at) {
+                const Point at = o.at(s);
+                x = at.x;
+                y = at.y;
+            }
             break;
     }
     x = std::clamp(x, 8.0f, std::max(8.0f, client.w - 8 - s.w));

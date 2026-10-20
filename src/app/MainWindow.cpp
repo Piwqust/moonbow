@@ -128,6 +128,9 @@ bool MainWindow::Create() {
             if (mini_ && mini_->visible && mini_->rect.x < (ClientSize().w + 600) / 2) bottom = mini_->rect.y - 12;
             return bottom - h;
         }
+        float top = -1;
+        player_->ToastBand(&top);  // the music view puts it under the cover
+        if (top >= 0) return top;
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
     toastBand = [this] { return TheApp().PlayerShown() ? player_->ToastBand() : Rect{0, 0, ClientSize().w, 0}; };
@@ -286,7 +289,9 @@ void MainWindow::SetPictureInPicture(bool on) {
             TheApp().SetUiValue("pip.rect", buf);
         }
         pip_ = false;
-        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        // Back to "Keep window above other windows" as it is set, not always off (App::ApplyWindowOptions).
+        SetWindowPos(hwnd, TheApp().config().GetBool("interface.alwaysOnTop") ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
+                     0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         SetWindowPlacement(hwnd, &pipRestore_);
     }
     chrome_.Set(1);
@@ -366,10 +371,12 @@ void MainWindow::PokeChrome() {
         chromeTimer_ = 0;
         if (!BarOverlays()) return;
         // Keep the controls while the pointer is on them or drags one (the seek bar held still above
-        // the bar), or a menu or panel is open (toasts don't count).
+        // the bar), the keyboard is on one of them, or a menu or panel is open (toasts don't count).
         Widget* hot = Pressed() ? Pressed() : Hot();
-        const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
-        if (HasInteractivePopup() || overBar || TheApp().player().State().paused) {
+        const Widget* bar = player_ ? player_->Bar() : nullptr;
+        const bool overBar = hot && bar && bar->IsAncestorOf(hot);
+        const bool keyboardOnBar = FocusVisible() && bar && bar->IsAncestorOf(Focus());
+        if (HasInteractivePopup() || overBar || keyboardOnBar || TheApp().player().State().paused) {
             PokeChrome();
             return;
         }
@@ -556,6 +563,24 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
                                                                   static_cast<LONG>(144 * Scale())};
             *result = 0;
             return true;
+        case WM_SIZING: {
+            // PiP keeps the picture's shape while its edges are dragged (no black bars), like Chrome's.
+            // shortcut: the decoded aspect only, not an aspect override or a rotation; use mpv's
+            // video-out-params dw/dh if those should count.
+            const PlayerState& s = TheApp().player().State();
+            if (!pip_ || s.videoW <= 0 || s.videoH <= 0) return false;
+            RECT& r = *reinterpret_cast<RECT*>(lp);
+            const double aspect = static_cast<double>(s.videoW) / static_cast<double>(s.videoH);
+            if (wp == WMSZ_TOP || wp == WMSZ_BOTTOM) {
+                r.right = r.left + static_cast<LONG>(std::lround((r.bottom - r.top) * aspect));
+            } else {
+                const LONG h = static_cast<LONG>(std::lround((r.right - r.left) / aspect));
+                if (wp == WMSZ_TOPLEFT || wp == WMSZ_TOPRIGHT) r.top = r.bottom - h;
+                else r.bottom = r.top + h;
+            }
+            *result = TRUE;
+            return true;
+        }
         case WM_NCRBUTTONUP:
             // In PiP the video is the caption (drag to move): a right click there would open the
             // Windows system menu; show the player's PiP menu instead.
@@ -582,6 +607,15 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             if (lp && lstrcmpW(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0 &&
                 TheApp().config().GetString("general.theme") == "system")
                 TheApp().ApplyTheme();
+            return false;
+        case WM_KEYDOWN:
+            // Tab over the hidden floating bar brings it back first, so the focus can move into it
+            // (Host moves it right after this; the next layout keeps the bar, PlayerView::OnLayout).
+            if (wp == VK_TAB && BarOverlays() && !FullscreenWithoutControls(this) && !HasInteractivePopup() && player_ &&
+                player_->Bar() && !pip_) {
+                PokeChrome();
+                player_->Bar()->visible = true;
+            }
             return false;
         case WM_SIZE:
             if (titleBar_) titleBar_->Refresh();

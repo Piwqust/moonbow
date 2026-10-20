@@ -499,9 +499,11 @@ private:
             capture_ = std::make_unique<audio::LoopbackCapture>(GetHost()->Hwnd(), ui::Host::kRepaintMessage);
         bool show = false;
         if (capture_) {
+            // Windows' "Animation effects" off: the first frame with sound in it stays, still (WCAG 2.3.3).
+            const bool still = AnimFloat::ReducedMotion() && frame_.level > 0.05f;
             capture_->SetGain(TheApp().player().OutputGain());
-            capture_->SetRunning(playing);
-            capture_->Take(frame_);
+            capture_->SetRunning(playing && !still);
+            if (!still) capture_->Take(frame_);
             show = playing && !capture_->Failed();
         }
         const float target = show ? 1.0f : 0.0f;
@@ -620,9 +622,9 @@ private:
         if (bmp) {
             p.Image(bmp, disc, inner, true);
         } else {
-            p.FillCircle(c, inner, P().bgCard);
+            p.FillCircle(c, inner, Color::Hex(0xFFFFFF, 0.12f));  // the stand-in art's tones (PaintGeneratedArt)
             const float icon = inner * 0.5f;
-            p.Icon("music", {c.x - icon / 2, c.y - icon / 2, icon, icon}, P().textTertiary);
+            p.Icon("music", {c.x - icon / 2, c.y - icon / 2, icon, icon}, Color::Hex(0xFFFFFF, 0.55f));
         }
         if (brush) ctx->DrawEllipse(D2D1::Ellipse({c.x, c.y}, inner + 0.5f, inner + 0.5f), LineBrush(ctx, dim, p.Opacity()), 1.0f);
     }
@@ -976,7 +978,9 @@ private:
             ctx->GetTransform(&old);
             if (grow != 1)
                 ctx->SetTransform(D2D1::Matrix3x2F::Scale(grow, grow, {k.center ? r.Cx() : r.x, r.Cy()}) * old);
-            if (synced && k.fill && static_cast<int>(i) == current_) {
+            // Reduced motion: the sung line lights up whole, as the column jumps line by line
+            // (AnimFloat::To does not glide then).
+            if (synced && k.fill && static_cast<int>(i) == current_ && !AnimFloat::ReducedMotion()) {
                 const double sung = lyrics_.SungFraction(current_, SmoothTime());
                 filling = sung < 1;
                 PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), white.Fade(k.ahead), a, shown);
@@ -1143,23 +1147,24 @@ private:
 
     // The gradient and groove brushes, made once per device and palette and moved with
     // SetCenter / SetRadius: synced lyrics repaint the view every frame while they glide.
+    // The stage is dark in both themes, so the light parts are white, not the palette's text.
     bool EnsureBrushes(ID2D1DeviceContext5* ctx) {
         const Palette& c = P();
-        const D2D1_COLOR_F text = c.textPrimary.D2D(), bg = c.videoBg.D2D();
+        const Color white = Color::Hex(0xFFFFFF);
+        const D2D1_COLOR_F bg = c.videoBg.D2D();
         const uint32_t gen = gfx::Gpu::Get().Generation();
         auto same = [](const D2D1_COLOR_F& a, const D2D1_COLOR_F& b) {
             return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         };
-        if (glow_ && brushGen_ == gen && same(brushText_, text) && same(brushBg_, bg)) return true;
+        if (glow_ && brushGen_ == gen && same(brushBg_, bg)) return true;
         glow_.Reset();
         vignette_.Reset();
         grooves_.Reset();
         brushGen_ = gen;
-        brushText_ = text;
         brushBg_ = bg;
-        const D2D1_GRADIENT_STOP glowStops[] = {{0.0f, c.textPrimary.WithAlpha(0.07f).D2D()},
-                                                {0.55f, c.textPrimary.WithAlpha(0.025f).D2D()},
-                                                {1.0f, c.textPrimary.WithAlpha(0.0f).D2D()}};
+        const D2D1_GRADIENT_STOP glowStops[] = {{0.0f, white.WithAlpha(0.07f).D2D()},
+                                                {0.55f, white.WithAlpha(0.025f).D2D()},
+                                                {1.0f, white.WithAlpha(0.0f).D2D()}};
         const D2D1_GRADIENT_STOP vignetteStops[] = {{0.0f, c.videoBg.WithAlpha(0.0f).D2D()},
                                                     {1.0f, c.videoBg.WithAlpha(0.85f).D2D()}};
         gfx::ComPtr<ID2D1GradientStopCollection> glowColl, vignetteColl;
@@ -1168,7 +1173,7 @@ private:
             FAILED(ctx->CreateGradientStopCollection(vignetteStops, 2, &vignetteColl)) ||
             FAILED(ctx->CreateRadialGradientBrush(props, glowColl.Get(), &glow_)) ||
             FAILED(ctx->CreateRadialGradientBrush(props, vignetteColl.Get(), &vignette_)) ||
-            FAILED(ctx->CreateSolidColorBrush(text, &grooves_))) {
+            FAILED(ctx->CreateSolidColorBrush(white.D2D(), &grooves_))) {
             glow_.Reset();
             return false;
         }
@@ -1198,10 +1203,12 @@ private:
         ctx->FillRectangle(rect.D2D(), vignette_.Get());
     }
 
-    // Monochrome stand-in art: dark square, record-like grooves and a center label.
+    // Monochrome stand-in art: dark square, record-like grooves and a center label. Translucent
+    // white on the always-dark stage, the dark theme's card tones in both themes (a light card
+    // there looked like a hole).
     void PaintGeneratedArt(Painter& p, const Rect& r, uint32_t seed) {
-        const Palette& c = P();
-        p.Fill(r, c.bgCard, 16);
+        const Color white = Color::Hex(0xFFFFFF);
+        p.Fill(r, white.Fade(0.12f), 16);
         p.PushRoundClip(r, 16);
         const Point center{r.Cx(), r.Cy()};
         const float maxR = r.w * 0.42f;
@@ -1211,17 +1218,17 @@ private:
             int k = 0;
             for (float rad = maxR * 0.38f; rad < maxR; rad += r.w * 0.012f, ++k) {
                 const float a = 0.025f + 0.035f * static_cast<float>((seed >> (k % 24)) & 1);
-                brush->SetColor(c.textPrimary.WithAlpha(a * p.Opacity()).D2D());
+                brush->SetColor(white.WithAlpha(a * p.Opacity()).D2D());
                 ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, rad, rad), brush, 1.0f);
             }
-            brush->SetColor(c.textPrimary.WithAlpha(0.14f * p.Opacity()).D2D());
+            brush->SetColor(white.WithAlpha(0.14f * p.Opacity()).D2D());
             ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, maxR, maxR), brush, 1.5f);
         }
-        p.FillCircle(center, maxR * 0.30f, c.bgSelected);
+        p.FillCircle(center, maxR * 0.30f, white.Fade(0.03f));  // over the card: the dark theme's bgSelected
         const float icon = maxR * 0.22f;
-        p.Icon("music", {center.x - icon / 2, center.y - icon / 2, icon, icon}, c.textTertiary);
+        p.Icon("music", {center.x - icon / 2, center.y - icon / 2, icon, icon}, white.Fade(0.55f));
         p.PopClip();
-        p.Stroke(r, c.line, 16);
+        p.Stroke(r, white.Fade(0.15f), 16);
     }
 
     Widget* titleTip_ = nullptr;
@@ -1272,7 +1279,7 @@ private:
     float maskH_ = -1;
     uint32_t maskGen_ = 0;
     uint32_t brushGen_ = 0;
-    D2D1_COLOR_F brushText_{}, brushBg_{};
+    D2D1_COLOR_F brushBg_{};
     ID2D1Bitmap* blurFor_ = nullptr;
     uint32_t generation_ = 0;
 };
@@ -1285,6 +1292,13 @@ void ShowMusicLyrics() {
 
 bool MusicCoverReady() {
     return !g_musicView || g_musicView->CoverReady();
+}
+
+Rect MusicToastSlot() {
+    if (!g_musicView || !g_musicView->visible) return {};
+    const auto g = g_musicView->Place();
+    // The title is 70 DIP under the cover (Paint): a 40 DIP toast sits in the middle of the gap.
+    return {g.left.x, g.cover.Bottom() + 15, g.left.w, 40};
 }
 
 std::vector<MenuItem> LyricsStyleItems() {

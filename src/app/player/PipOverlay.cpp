@@ -21,15 +21,19 @@ public:
     PipButton(const char* icon, const wchar_t* tip, int box, int iconSize, Action dimWith = Action::None)
         : IconButton(icon, Tr(tip), box, iconSize), english(tip), dimWith_(dimWith) {
         round = true;
-        tone = Tone::Primary;
     }
     const wchar_t* english;  // the tooltip, translated when painted, so a language switch reaches it
+    // Over the video in both themes: white on a dark disc, never the palette's text colours (the
+    // light theme's are near-black). qa/visual-rules.md, rule 1.
     void Paint(Painter& p) override {
         if (dimWith_ != Action::None) enabled = Enabled(dimWith_);
         tooltip = Tr(english);
-        // Dark disc so the icon stays readable over bright video.
-        p.Fill(rect, Color::Hex(0x000000, 0.35f), rect.w / 2);
-        IconButton::Paint(p);
+        const bool on = IsEnabled();
+        const float disc = !on ? 0.35f : IsPressed() ? 0.62f : IsHot() ? 0.5f : 0.35f;
+        p.Fill(rect, Color::Hex(0x000000, disc), rect.w / 2);
+        PaintFocusRing(p, rect, rect.w / 2);
+        const Color white = Color::Hex(0xFFFFFF, on ? 0.92f : 0.4f);
+        p.Icon(icon, rect.Center(iconSize, iconSize), white, white);
     }
 
 private:
@@ -58,6 +62,7 @@ public:
         next_->onClick = [] { Run(Action::Next); };
         seek_ = Add<SeekBar>();
         seek_->compact = true;
+        seek_->overVideo = true;
         onContextMenu = [this](const MouseEvent& e) { ShowPipContextMenu(GetHost(), {e.x, e.y}); };
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeState | kChangeFile)) {

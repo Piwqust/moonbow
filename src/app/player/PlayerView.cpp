@@ -439,7 +439,9 @@ public:
         gap = 8;
         pad = Insets::All(28);
         width = Length::Px(440);
-        icon_ = Add<IconView>("info", 32, Tone::Secondary);
+        // The library's "Damaged file" chip says the same thing with the same sign (ItemGrid.cpp).
+        icon_ = Add<IconView>("warning", 32);
+        icon_->color = [] { return P().danger; };
         title_ = Add<Label>(L"", TextStyle::Heading, Tone::Primary);
         title_->halign = HAlign::Center;
         title_->wrap = true;
@@ -465,8 +467,24 @@ public:
         row->pad.t = 12;
         next_ = row->Add<Button>(L"", ButtonKind::Primary, "next");
         next_->onClick = [] { Run(Action::Next); };
-        close_ = row->Add<Button>(L"", ButtonKind::Secondary);
+        // A single file has nothing to go on to: the way out is back where it was opened from.
+        back_ = row->Add<Button>(L"", ButtonKind::Primary);
+        back_->onClick = [] { TheApp().ShowPlayer(false); };
+        // Outlined: a Secondary button's fill is the card's own colour.
+        close_ = row->Add<Button>(L"", ButtonKind::Outline);
         close_->onClick = [] { Run(Action::CloseMedia); };
+    }
+    // Like a dialog: named by what went wrong, and the keyboard starts on its first button.
+    void Describe(A11y& a) override {
+        a.role = Role::Window;
+        a.name = title_->Text() + L". " + body_->Text();
+    }
+    void OnShown() {
+        Widget* first = next_->visible ? static_cast<Widget*>(next_) : back_;
+        if (Host* h = GetHost())
+            h->Post([this, h, first] {
+                if (visible) h->SetFocus(first, true);
+            });
     }
     void Refresh() {
         App& app = TheApp();
@@ -480,11 +498,13 @@ public:
         detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
         more_->text = Tr(L"More details");  // here, not when built: after a language switch too
         next_->SetText(Tr(L"Next file"));
+        back_->SetText(Tr(L"Back to library"));
         close_->SetText(Tr(L"Close"));
         detail_->visible = false;
         more_->visible = !err.empty();
         const int nextIndex = app.queue().NextIndex(true);
         next_->visible = nextIndex >= 0 && nextIndex != app.queue().Current();
+        back_->visible = !next_->visible;
         InvalidateLayout();
     }
     void Paint(Painter& p) override { p.Fill(rect, P().bgPanel, 12); }
@@ -494,7 +514,7 @@ private:
     IconView* icon_;
     Label *title_, *body_, *detail_;
     LinkButton* more_;
-    Button *next_, *close_;
+    Button *next_, *back_, *close_;
 };
 
 PlayerView::PlayerView(MainWindow* window) : window_(window) {
@@ -651,7 +671,7 @@ void PlayerView::OnLayout() {
         layoutMode_ = mode;
     }
     const bool audioOnly = s.fileLoaded && !s.hasVideo;
-    const float barH = bar_->BarHeight();
+    const float barH = bar_->BarHeight(rect.w);
     const bool pip = window_->PictureInPicture();
 
     // PiP has no room for it; it comes back with the full window.
@@ -688,7 +708,9 @@ void PlayerView::OnLayout() {
 
     const float chrome = window_->ChromeOpacity();
     bar_->opacity = immersive || overlay ? chrome : 1.0f;
-    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f);
+    // Tab brings a hidden bar back (MainWindow::HandleMessage) before its fade has begun.
+    const bool keyboardOnBar = window_->FocusVisible() && bar_->IsAncestorOf(window_->Focus());
+    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f || keyboardOnBar);
     // Over the video the bar floats (unless "full width" is chosen) and slides a few DIP while it
     // fades, so showing and hiding read as one motion rather than a blink.
     // The fullscreen side panel is a full-height sheet: the bar keeps to the picture beside it
@@ -716,7 +738,9 @@ void PlayerView::OnLayout() {
 
     // Only once mpv has nothing left to try: a failed file in a queue is skipped (a toast says so),
     // and the card would flash with the next file's name.
+    const bool errorWas = error_->visible;
     error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && s.idle && !pip;
+    if (error_->visible && !errorWas) error_->OnShown();
     if (error_->visible) {
         const Rect v = video_->Inner(immersive);
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);
@@ -741,11 +765,20 @@ void PlayerView::OnLayout() {
     UpdateStats();
 }
 
-Rect PlayerView::ToastBand() const {
+Rect PlayerView::ToastBand(float* top) const {
+    if (top) *top = -1;
+    // Not on the cover (VIS-13).
+    if (const Rect slot = music_->visible ? MusicToastSlot() : Rect{}; !slot.Empty()) {
+        if (top) *top = slot.y;
+        return slot;
+    }
     Rect a = video_->rect;
-    const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
-                       PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
-    if (panel && a.w - (panel::kPanelW + panel::kGap) >= 320) a.w -= panel::kPanelW + panel::kGap;
+    bool panel = false;
+    for (int k = 0; k <= static_cast<int>(PanelKind::Speed); ++k) panel |= PlayerPanelOpen(static_cast<PanelKind>(k));
+    // The popover's left edge (Panels.cpp, PlaceAboveBar): the toast, at most band.w - 32 wide and
+    // centred, keeps 16 DIP from it.
+    const float panelX = bar_->rect.Right() - panel::kGap - panel::kPanelW;
+    if (panel && panelX - a.x >= 320) a.w = std::min(a.w, panelX - a.x);
     return a;
 }
 
@@ -885,6 +918,20 @@ private:
     Action action_;
 };
 
+// The buttons over the picture stay in the Tab order and the UIA tree; they are drawn only while
+// the card is hovered or one of them has keyboard focus (MiniPlayer::OverlayShown).
+class MiniOverlay : public Widget {
+public:
+    std::function<float()> shown;
+    void PaintChildren(Painter& p) override {
+        const float k = shown();
+        if (k <= 0.01f) return;
+        p.PushOpacity(k);
+        Widget::PaintChildren(p);
+        p.PopOpacity();
+    }
+};
+
 }  // namespace
 
 MiniPlayer::MiniPlayer(MainWindow*) {
@@ -894,7 +941,9 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     dir = Dir::None;
     onClick = [] { TheApp().ShowPlayer(true); };
 
-    overlay_ = Add<Widget>();
+    auto* overlay = Add<MiniOverlay>();
+    overlay->shown = [this] { return OverlayShown(); };
+    overlay_ = overlay;
     overlay_->dir = Dir::None;
     auto* close = overlay_->Add<MiniOverlayButton>("stop", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
@@ -986,7 +1035,7 @@ void MiniPlayer::OnLayout() {
         return;
     }
     overlay_->Arrange(v);
-    overlay_->visible = hover_.Get() > 0.01f;
+    overlay_->visible = true;
     for (auto& c : overlay_->Children()) {
         c->visible = true;
         const Size s = c->Measure(100, 100);
@@ -1011,6 +1060,14 @@ void MiniPlayer::OnLayout() {
     }
 }
 
+float MiniPlayer::OverlayShown() const {
+    if (compact_) return 1;
+    // A button under the pointer (it can come straight onto one) or reached with Tab shows them all.
+    const Host* h = GetHost();
+    const bool onButton = h && (overlay_->IsAncestorOf(h->Hot()) || (h->FocusVisible() && overlay_->IsAncestorOf(h->Focus())));
+    return onButton ? 1.0f : hover_.Get();
+}
+
 void MiniPlayer::OnMouseEnter() {
     hover_.To(1, 120);
     InvalidateLayout();
@@ -1027,7 +1084,7 @@ void MiniPlayer::OnMouseLeave() {
 void MiniPlayer::Paint(Painter& p) {
     const PlayerState& s = PS();
     const Rect v = VideoBox();
-    const float k = compact_ ? 0.0f : hover_.Get();
+    const float k = compact_ ? 0.0f : OverlayShown();
     p.Shadow(rect, 8, 18, 8);
     p.Fill(rect, P().bgPanel, 8);
     p.Stroke(rect, P().line, 8);
