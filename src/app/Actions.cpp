@@ -740,8 +740,9 @@ void Run(Action a) {
             app.ShowPlayer(false);
             if (w->library()) w->library()->FocusSearch();
             break;
-        case Action::Back: app.GoBack(); break;
-        case Action::Forward: app.GoForward(); break;
+        // Not under the open player: the library behind it would change pages unseen.
+        case Action::Back: if (!app.PlayerShown()) app.GoBack(); break;
+        case Action::Forward: if (!app.PlayerShown()) app.GoForward(); break;
         case Action::AddBookmark: {
             if (!s.fileLoaded) break;
             const QueueItem* item = app.queue().CurrentItem();
