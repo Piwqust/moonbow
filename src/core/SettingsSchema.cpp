@@ -929,12 +929,9 @@ void BuildApp(Builder& b) {
     b.Cat("privacy", "app", "privacy", L"Privacy", L"Конфиденциальность");
 
     b.Sec("history", L"History", L"История");
-    b.Toggle("privacy.saveHistory", L"Save recently played items", L"Сохранять недавние файлы", true)
+    b.Toggle("privacy.saveHistory", L"Save history", L"Сохранять историю", true)
         .Desc(L"Keep a list of played files for History, Continue watching and Listen again.",
               L"Вести список открытых файлов для разделов «История», «Продолжить просмотр» и «Слушать снова».");
-    b.Toggle("privacy.rememberPosition", L"Remember the playback position", L"Запоминать место остановки", true)
-        .Desc(L"Save where you stopped and continue from there next time.",
-              L"Сохранять, где вы остановились, и продолжать с этого места в следующий раз.");  // Player::rememberPosition
     b.Text("privacy.excludePatterns", L"Never remember items matching", L"Не запоминать файлы по маске")
         .Desc(L"Files matching these patterns stay out of the history. Separate patterns with ';', "
               L"for example *\\Private\\*;*.tmp.mkv",
@@ -1097,6 +1094,10 @@ void BuildMedia(Builder& b) {
         .Desc(L"Resume a file from the saved position. \"Ask\" offers to resume in a message instead.",
               L"Продолжать файл с сохранённого места. «Спрашивать» — предложить это в сообщении.")
         .Mpv("resume-playback");
+    // One concept, one place: the key stays in privacy (saved values, App.cpp), the row sits under resume.
+    b.Toggle("privacy.rememberPosition", L"Save the playback position", L"Сохранять место остановки", true)
+        .Desc(L"Save where you stopped in each file, so that it can continue from there.",
+              L"Запоминать, где вы остановились в каждом файле, чтобы продолжить с этого места.");  // Player::rememberPosition
     b.Toggle("playback.autoPlay", L"Start playing as soon as a file opens", L"Начинать воспроизведение сразу", true)
         .Desc(L"When off, files open paused on the first frame.",
               L"Если выключено, файл открывается на паузе на первом кадре.")

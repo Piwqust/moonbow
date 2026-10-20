@@ -372,10 +372,13 @@ void TestSchema() {
                 if (!it.hidden) ++count;
                 const char* k = it.key.c_str();
                 CHECK_MSG(keys.insert(it.key).second, "duplicate key %s", k);
-                // Window behavior moved from Library to Interface keeps its keys (saved values, main.cpp).
-                const bool moved = it.key == "library.singleInstance" || it.key == "library.singleInstanceFileManager" ||
-                                   it.key == "library.enqueue";
-                CHECK_MSG(moved ? c.id == "interface" : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
+                // Rows moved to another page keep their keys (saved values, main.cpp).
+                static const std::map<std::string, std::string> kMoved = {
+                    {"library.singleInstance", "interface"}, {"library.singleInstanceFileManager", "interface"},
+                    {"library.enqueue", "interface"},        {"privacy.rememberPosition", "playback"}};
+                const auto moved = kMoved.find(it.key);
+                CHECK_MSG(moved != kMoved.end() ? c.id == moved->second
+                                                : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
                           "%s outside %s", k, c.id.c_str());
                 CHECK_MSG(it.category == c.id && it.section == s.id, "%s", k);
                 CHECK_MSG(FindItem(it.key) == &it, "%s", k);
