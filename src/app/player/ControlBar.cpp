@@ -143,6 +143,7 @@ public:
         Bind(this, kChangeTime | kChangeFile);
         if (duration_) {
             interactive = true;
+            focusable = true;  // Enter or Space switches it, as a click does
             tooltip = Tr(L"Show remaining time");
             remaining_ = TheApp().UiValue("player.remainingTime") == "1";
             onClick = [this] {
@@ -169,6 +170,7 @@ public:
                                   : FormatTime(s.duration, hours);
         }
         p.Text(text, rect, TextStyle::Mono, IsHot() ? P().textPrimary : P().textSecondary, HAlign::Center);
+        PaintFocusRing(p, rect, 4);
     }
 
 private:
@@ -749,6 +751,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
 
 SeekBar::SeekBar() {
     interactive = true;
+    focusable = true;
     width = Length::Grow();
     height = Length::Px(32);
     conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
@@ -805,6 +808,25 @@ bool SeekBar::OnWheel(const WheelEvent& e) {
     return true;
 }
 
+// A slider's keys. The arrows and the page keys take the player's own steps (10 s, 1 min), so
+// the bar seeks as the shortcuts do; Space still plays and pauses.
+bool SeekBar::OnKeyDown(const KeyEvent& e) {
+    const PlayerState& s = TheApp().player().State();
+    if (e.mods.ctrl || e.mods.alt || e.mods.shift) return false;
+    switch (e.key) {
+        case VK_LEFT: Run(Action::SeekBackward); return true;
+        case VK_RIGHT: Run(Action::SeekForward); return true;
+        case VK_PRIOR: Run(Action::SeekForwardLong); return true;
+        case VK_NEXT: Run(Action::SeekBackwardLong); return true;
+        case VK_SPACE: Run(Action::PlayPause); return true;
+        case VK_HOME:
+        case VK_END:
+            if (s.fileLoaded && s.duration > 0 && s.seekable) TheApp().player().SeekAbsolute(e.key == VK_HOME ? 0 : s.duration, true);
+            return true;
+        default: return false;
+    }
+}
+
 void SeekBar::Describe(A11y& a) {
     const PlayerState& s = TheApp().player().State();
     a.role = Role::Slider;
@@ -836,6 +858,7 @@ void SeekBar::Paint(Painter& p) {
     const bool strongPlayed = slim || (compact && light);
     p.Fill(t, track, 3.0f);
     if (!thin && light) p.Stroke(t, empty, 3.0f);
+    PaintFocusRing(p, t, 3.0f);
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));

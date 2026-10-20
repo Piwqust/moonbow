@@ -66,6 +66,7 @@ public:
     bool OnMouseMove(const ui::MouseEvent& e) override;
     bool OnMouseUp(const ui::MouseEvent& e) override;
     bool OnWheel(const ui::WheelEvent& e) override;
+    bool OnKeyDown(const ui::KeyEvent& e) override;
     void OnMouseLeave() override;
     void PaintOver(ui::Painter& p) override;
     void Describe(ui::A11y& a) override;
