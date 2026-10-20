@@ -62,7 +62,7 @@ Forward ForwardToRunningInstance(const std::vector<std::wstring>& args, uintptr_
     if (!other) return Forward::NoWindow;
     std::wstring payload;
     for (const auto& a : args)
-        if (!a.empty() && a[0] != L'-') payload += a + L"\n";
+        if (a == L"--enqueue" || (!a.empty() && a[0] != L'-')) payload += a + L"\n";  // Explorer's "Add to the Lumen queue"
     DWORD pid = 0;
     GetWindowThreadProcessId(other, &pid);
     AllowSetForegroundWindow(pid);

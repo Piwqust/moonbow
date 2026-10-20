@@ -338,6 +338,11 @@ void App::RestoreWindowPlacement() {
     wp.showCmd = ui::Host::Automation() ? SW_SHOWNOACTIVATE : max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
     wp.flags = 0;
     SetWindowPlacement(main_->Hwnd(), &wp);
+    // Onto a monitor scaled unlike the one it was made on, WM_DPICHANGED resized it by the scale
+    // ratio (Host applies the suggested rect). It is on that monitor now: once more, at the saved size.
+    WINDOWPLACEMENT now{sizeof(now)};
+    if (GetWindowPlacement(main_->Hwnd(), &now) && !EqualRect(&now.rcNormalPosition, &rc))
+        SetWindowPlacement(main_->Hwnd(), &wp);
 }
 
 void App::FlushStores() {
@@ -520,6 +525,7 @@ void App::OnPlayerReady(bool ok) {
         Open(files);
     }
     playerChanged.Emit(kChangeState | kChangeVolume);
+    system_.Update(kChangeState);  // the media keys can resume the last item from the start
 }
 
 void App::OnPlayerEvents() {
@@ -549,7 +555,7 @@ void App::OnPlayerEvents() {
     if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && s.loadSerial != recordedSerial_ &&
         config_.GetBool("privacy.saveHistory")) {
         recordedSerial_ = s.loadSerial;
-        history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
+        if (history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration)) system_.HistoryChanged();
     }
     if ((changes & kChangeTime) && s.fileLoaded) {
         const double now = ui::AnimFloat::Now();
@@ -1097,8 +1103,10 @@ void App::OnCopyData(const std::wstring& payload) {
         if (end > start) files.push_back(payload.substr(start, end - start));
         start = end + 1;
     }
+    // Explorer's "Add to the Lumen queue". With nothing playing yet the files open as below.
+    const bool enqueue = std::erase(files, L"--enqueue") > 0;
     if (files.empty()) return;
-    if (config_.GetBool("library.enqueue") && player_.State().fileLoaded) {
+    if ((enqueue || config_.GetBool("library.enqueue")) && player_.State().fileLoaded) {
         Enqueue(files);
         return;
     }

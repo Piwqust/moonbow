@@ -9,6 +9,7 @@
 #include <dwmapi.h>
 #include <imm.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <windowsx.h>
 
 #include <oleidl.h>
@@ -78,11 +79,33 @@ private:
     std::wstring text_;
 };
 
+// A link dragged from a browser (the address bar, a link on a page): http(s) only.
+std::wstring UrlFrom(IDataObject* data) {
+    for (const UINT cf : {RegisterClipboardFormatW(CFSTR_INETURLW), static_cast<UINT>(CF_UNICODETEXT)}) {
+        FORMATETC fmt{static_cast<CLIPFORMAT>(cf), nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+        STGMEDIUM medium{};
+        if (FAILED(data->GetData(&fmt, &medium))) continue;
+        std::wstring text;
+        if (auto* p = static_cast<const wchar_t*>(GlobalLock(medium.hGlobal))) {
+            text.assign(p, wcsnlen(p, GlobalSize(medium.hGlobal) / sizeof(wchar_t)));
+            GlobalUnlock(medium.hGlobal);
+        }
+        ReleaseStgMedium(&medium);
+        text.erase(0, text.find_first_not_of(L" \t\r\n"));
+        text.resize(std::min(text.size(), text.find_first_of(L" \t\r\n")));
+        if (_wcsnicmp(text.c_str(), L"http://", 7) == 0 || _wcsnicmp(text.c_str(), L"https://", 8) == 0) return text;
+    }
+    return {};
+}
+
 std::vector<std::wstring> FilesFrom(IDataObject* data) {
     std::vector<std::wstring> files;
     FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
     STGMEDIUM medium{};
-    if (FAILED(data->GetData(&fmt, &medium))) return files;
+    if (FAILED(data->GetData(&fmt, &medium))) {
+        if (std::wstring url = UrlFrom(data); !url.empty()) files.push_back(std::move(url));
+        return files;
+    }
     if (auto drop = static_cast<HDROP>(GlobalLock(medium.hGlobal))) {
         const UINT n = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
         for (UINT i = 0; i < n; ++i) {
@@ -189,10 +212,17 @@ void Host::Activate(HWND hwnd) {
     SetForegroundWindow(hwnd);
 }
 
-// OLE drop target: shows the overlay while files hover and hands them over on drop.
+// OLE drop target: shows the overlay while files or a link hover and hands them over on drop.
+// The shell's drag image (IDropTargetHelper) stays under the cursor over the window.
 class DropTarget : public IDropTarget {
 public:
-    explicit DropTarget(Host* host) : host_(host) {}
+    explicit DropTarget(Host* host) : host_(host) {
+        if (FAILED(CoCreateInstance(CLSID_DragDropHelper, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&helper_))))
+            helper_ = nullptr;
+    }
+    ~DropTarget() {
+        if (helper_) helper_->Release();
+    }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** out) override {
         if (riid == IID_IUnknown || riid == IID_IDropTarget) {
             *out = static_cast<IDropTarget*>(this);
@@ -208,28 +238,36 @@ public:
         if (!r) delete this;
         return r;
     }
-    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL, DWORD* effect) override {
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
         FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-        accepts_ = host_->onDropFiles && data->QueryGetData(&fmt) == S_OK;
-        *effect = accepts_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        accepts_ = host_->onDropFiles && (data->QueryGetData(&fmt) == S_OK || !UrlFrom(data).empty());
+        *effect = Effect(*effect);
         if (accepts_) host_->SetDragOver(true);
+        POINT p{pt.x, pt.y};
+        if (helper_) helper_->DragEnter(host_->Hwnd(), data, &p, *effect);
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL, DWORD* effect) override {
-        *effect = accepts_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* effect) override {
+        *effect = Effect(*effect);
+        POINT p{pt.x, pt.y};
+        if (helper_) helper_->DragOver(&p, *effect);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE DragLeave() override {
         host_->SetDragOver(false);
+        if (helper_) helper_->DragLeave();
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL, DWORD* effect) override {
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
         host_->SetDragOver(false);
+        const DWORD allowed = *effect;
         *effect = DROPEFFECT_NONE;
+        POINT p{pt.x, pt.y};
+        if (helper_) helper_->Drop(data, &p, accepts_ ? Effect(allowed) : DROPEFFECT_NONE);
         if (!accepts_) return S_OK;
         auto files = FilesFrom(data);
         if (!files.empty() && host_->onDropFiles) {
-            *effect = DROPEFFECT_COPY;
+            *effect = Effect(allowed);
             Host::Activate(host_->Hwnd());
             // Run after the drag source returns (opening files may show dialogs).
             Host* host = host_;
@@ -241,7 +279,13 @@ public:
     }
 
 private:
+    // Copy where the source allows it (Explorer); a browser's link may offer only Link.
+    DWORD Effect(DWORD allowed) const {
+        if (!accepts_) return DROPEFFECT_NONE;
+        return (allowed & DROPEFFECT_COPY) ? DROPEFFECT_COPY : (allowed & DROPEFFECT_LINK) ? DROPEFFECT_LINK : DROPEFFECT_NONE;
+    }
     Host* host_;
+    IDropTargetHelper* helper_ = nullptr;
     ULONG refs_ = 1;
     bool accepts_ = false;
 };
@@ -1740,6 +1784,8 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             g_inKey = false;
             if (msg == WM_SYSKEYDOWN && wp == VK_SPACE) altSpaceMenu_ = !used;
             if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
+            // DefWindowProc turns an unused volume key into WM_APPCOMMAND: Windows' volume.
+            if (!used && wp >= VK_VOLUME_MUTE && wp <= VK_VOLUME_UP) break;
             return 0;
         }
 

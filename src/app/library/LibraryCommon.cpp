@@ -411,6 +411,7 @@ void ClearHistory() {
     App& app = TheApp();
     app.history().Clear();  // per-file settings go with it (History::onCleared)
     app.history().Flush();
+    app.system().HistoryChanged();  // the jump list's recent files
     net::online::ClearAll();  // what the online services sent goes with the history
     app.libraryChanged.Emit();  // Home's Continue Watching and the progress bars
 }
