@@ -142,7 +142,7 @@ public:
         }
         const Rect thumb{rect.x, y - 4, 24, 8};
         p.Fill(thumb, !IsEnabled() ? c.textDisabled : (dragging_ || IsHot()) ? c.accent : c.accentMid, 4);
-        if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.accentMid, 6, 1.5f);
+        if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.focusRing, 6, 2.0f);
     }
     const Item& item;
 

@@ -877,7 +877,7 @@ void TickSlider::Paint(Painter& p) {
     if (cx - t.x - 2 > 0) p.Fill({t.x + 2, t.y + 2, cx - t.x - 2, 12}, c.accentDim, 4);
     const Rect thumb{cx - 4, rect.y, 8, 24};
     p.Fill(thumb, !on ? c.textDisabled : (dragging_ || IsHot()) ? c.accent : c.accentMid, 4);
-    if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.accentMid, 6, 1.5f);
+    if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.focusRing, 6, 2.0f);
 }
 
 void TickSlider::PaintOver(Painter& p) {

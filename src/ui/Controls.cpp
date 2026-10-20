@@ -616,7 +616,7 @@ void Slider::Paint(Painter& p) {
     }
     const float r = dragging_ || IsHot() ? 7.0f : 6.0f;
     p.FillCircle({x, rect.Cy()}, r, IsEnabled() ? c.accent : c.textDisabled);
-    if (ShowFocusRing()) p.Stroke({x - r - 3, rect.Cy() - r - 3, (r + 3) * 2, (r + 3) * 2}, c.accentMid, r + 3, 1.5f);
+    if (ShowFocusRing()) p.Stroke({x - r - 3, rect.Cy() - r - 3, (r + 3) * 2, (r + 3) * 2}, c.focusRing, r + 3, 2.0f);
 }
 
 // --- TextBox --------------------------------------------------------------------------------

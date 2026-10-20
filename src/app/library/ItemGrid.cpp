@@ -537,7 +537,7 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     }
     if (sel) {
         const bool focused = IsFocused();
-        p.Stroke(t.Inset(-3), focused ? c.accentMid : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
+        p.Stroke(t.Inset(-3), focused ? c.focusRing : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
     }
 
     const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : (e.watched || e.damaged) ? c.textTertiary : c.textSecondary;
@@ -573,7 +573,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Fill(bg, c.bgSelected, 6);
     else if (hot || Opening(e))
         p.Fill(bg, IsPressed() || Opening(e) ? c.press : c.hover, 6);
-    if (sel && ShowFocusRing()) p.Stroke(bg, c.accentMid, 6, 1.5f);
+    if (sel && ShowFocusRing()) p.Stroke(bg, c.focusRing, 6, 2.0f);
 
     const bool dragSource = dragging_ && i == press_;
     if (dragSource) p.PushOpacity(0.35f);
