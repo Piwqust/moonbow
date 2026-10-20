@@ -5,6 +5,7 @@
 #include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/MainWindow.h"
 #include "app/player/NowPlaying.h"
 #include "core/ShellText.h"
 #include "gfx/Gpu.h"
@@ -30,6 +31,7 @@
 #pragma warning(pop)
 
 #include <chrono>
+#include <functional>
 #include <vector>
 
 namespace app {
@@ -47,13 +49,17 @@ namespace wm = winrt::Windows::Media;
 namespace wss = winrt::Windows::Storage::Streams;
 
 // The cover or video frame of `path` the thumbnail cache holds already (the library and the
-// music view ask for them) as a PNG for the media flyout; null when there is none yet.
-wss::IRandomAccessStream CachedCoverPng(const std::wstring& path) {
-    library::Thumbnails& thumbs = TheApp().thumbnails();
-    std::shared_ptr<const library::ThumbnailBitmap> bmp;
+// music view ask for them); null when there is none yet.
+std::shared_ptr<const library::ThumbnailBitmap> CachedCover(const std::wstring& path) {
     for (int size : {320, 480, 720, 192, 1024, 96})
-        if ((bmp = thumbs.Cached(path, size)) != nullptr) break;
-    if (!bmp || !bmp->width || !bmp->height) return nullptr;
+        if (auto bmp = TheApp().thumbnails().Cached(path, size); bmp && bmp->width && bmp->height) return bmp;
+    return nullptr;
+}
+
+// CachedCover as a PNG for the media flyout.
+wss::IRandomAccessStream CachedCoverPng(const std::wstring& path) {
+    const auto bmp = CachedCover(path);
+    if (!bmp) return nullptr;
     gfx::ComPtr<IWICImagingFactory> wic;
     gfx::ComPtr<IStream> stream;
     stream.Attach(SHCreateMemStream(nullptr, 0));
@@ -103,8 +109,8 @@ bool SystemUsesLightTheme() {
            light != 0;
 }
 
-// Renders a design icon into an HICON.
-HICON MakeIcon(const char* name, int px, ui::Color glyph) {
+// Draws a px x px HICON with Direct2D.
+HICON RenderIcon(int px, const std::function<void(ID2D1DeviceContext5*)>& draw) {
     gfx::Gpu& gpu = gfx::Gpu::Get();
     if (!gpu.Ready()) return nullptr;
     ID2D1DeviceContext5* ctx = gpu.Ctx();
@@ -123,7 +129,7 @@ HICON MakeIcon(const char* name, int px, ui::Color glyph) {
     ctx->SetDpi(96, 96);
     ctx->BeginDraw();
     ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
-    gfx::Icons::Draw(ctx, name, {0, 0, static_cast<float>(px), static_cast<float>(px)}, glyph, glyph);
+    draw(ctx);
     const HRESULT hr = ctx->EndDraw();
     ctx->SetTarget(old.Get());
     ctx->SetDpi(dx, dy);
@@ -159,6 +165,28 @@ HICON MakeIcon(const char* name, int px, ui::Color glyph) {
     return icon;
 }
 
+// A design icon for the thumbnail buttons.
+HICON MakeIcon(const char* name, int px, ui::Color glyph) {
+    return RenderIcon(px, [&](ID2D1DeviceContext5* ctx) {
+        gfx::Icons::Draw(ctx, name, {0, 0, static_cast<float>(px), static_cast<float>(px)}, glyph, glyph);
+    });
+}
+
+// A cover cut to a square, for the track notification.
+HICON CoverIcon(const library::ThumbnailBitmap& cover, int px) {
+    return RenderIcon(px, [&](ID2D1DeviceContext5* ctx) {
+        gfx::ComPtr<ID2D1Bitmap> bmp;
+        const D2D1_BITMAP_PROPERTIES props =
+            D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        if (FAILED(ctx->CreateBitmap(D2D1::SizeU(cover.width, cover.height), cover.pixels.data(), cover.width * 4, props, &bmp)))
+            return;
+        const float w = static_cast<float>(cover.width), h = static_cast<float>(cover.height), side = std::min(w, h);
+        const D2D1_RECT_F src{(w - side) / 2, (h - side) / 2, (w + side) / 2, (h + side) / 2};
+        const D2D1_RECT_F dst{0, 0, static_cast<float>(px), static_cast<float>(px)};
+        ctx->DrawBitmap(bmp.Get(), &dst, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, &src, nullptr);
+    });
+}
+
 }  // namespace
 
 struct SystemIntegration::Impl {
@@ -182,6 +210,8 @@ struct SystemIntegration::Impl {
     bool trayAdded = false;
     bool trayV4 = false;  // NOTIFYICON_VERSION_4: callbacks carry the icon's anchor in wParam
     std::wstring trayTip, notifiedPath;
+    std::wstring notifyPath, notifyText;  // a track notification waiting for its cover
+    unsigned notifySerial = 0;
 
     ~Impl() {
         RemoveTray();
@@ -312,16 +342,35 @@ struct SystemIntegration::Impl {
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 
-    void NotifyTrack(const std::wstring& text) {
+    // The notification shows the file's cover: it is asked for now and waited for a moment.
+    void NotifyTrack(const std::wstring& path, const std::wstring& text) {
         if (!trayAdded || !TheApp().config().GetBool("interface.notifyTrackChange")) return;
         // Only worth a notification when Lumen isn't what the user is looking at.
         if (GetForegroundWindow() == hwnd && !IsIconic(hwnd)) return;
+        notifyPath = path;
+        notifyText = text;
+        const unsigned serial = ++notifySerial;
+        TheApp().images().Get(path, 320);
+        if (MainWindow* w = TheApp().main())
+            w->StartTimer(1000, [this, serial] {
+                if (serial == notifySerial) SendNotification();
+            });
+        if (CachedCover(path)) SendNotification();
+    }
+
+    void SendNotification() {
+        if (notifyText.empty() || !trayAdded) return;
         NOTIFYICONDATAW nid = TrayData();
         nid.uFlags = NIF_INFO;
         nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND;
         wcscpy_s(nid.szInfoTitle, FitShellText(Tr(L"Now playing"), {}, std::size(nid.szInfoTitle)).c_str());
-        wcscpy_s(nid.szInfo, FitShellText(text, {}, std::size(nid.szInfo)).c_str());
+        wcscpy_s(nid.szInfo, FitShellText(notifyText, {}, std::size(nid.szInfo)).c_str());
+        // Without a cover NIIF_USER shows the tray icon.
+        const auto cover = CachedCover(notifyPath);
+        nid.hBalloonIcon = cover ? CoverIcon(*cover, GetSystemMetricsForDpi(SM_CXICON, GetDpiForWindow(hwnd))) : nullptr;
         Shell_NotifyIconW(NIM_MODIFY, &nid);
+        if (nid.hBalloonIcon) DestroyIcon(nid.hBalloonIcon);
+        notifyText.clear();
     }
 
     void ShowWindowFromTray() const {
@@ -455,7 +504,10 @@ SystemIntegration::~SystemIntegration() = default;
 
 void SystemIntegration::Attach(HWND window) {
     impl_->hwnd = window;
-    TheApp().images().ready.Connect([this] { impl_->ShowCover(); });  // both live as long as the app
+    TheApp().images().ready.Connect([this] {  // both live as long as the app
+        impl_->ShowCover();
+        if (!impl_->notifyText.empty() && CachedCover(impl_->notifyPath)) impl_->SendNotification();
+    });
     if (ui::Host::Automation()) {
         impl_->traceSmtc = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
         return;
@@ -621,7 +673,7 @@ void SystemIntegration::Update(unsigned changes) {
                                                      : L"Lumen");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
-            d.NotifyTrack(tags.artist.empty() ? title : title + L"\n" + tags.artist);
+            d.NotifyTrack(item->path, tags.artist.empty() ? title : title + L"\n" + tags.artist);
         }
     }
 
