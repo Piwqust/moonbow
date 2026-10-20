@@ -726,6 +726,7 @@ private:
         none.label = Tr(L"This song has no lyrics");
         none.icon = "info";
         none.enabled = false;
+        none.note = true;
         items.push_back(std::move(none));
         // Why, in one line: where Lumen looked.
         MenuItem why;
@@ -733,6 +734,7 @@ private:
                     : onlineSerial_ == serial_ && !onlineReq_ ? Tr(L"No .lrc file, no lyrics in the tags or on LRCLIB")
                                                                : Tr(L"No .lrc file, no lyrics in the tags");
         why.enabled = false;
+        why.note = true;
         items.push_back(std::move(why));
         items.push_back(MenuItem::Separator());
         MenuItem find;

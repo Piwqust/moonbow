@@ -373,6 +373,9 @@ struct MenuItem {
     bool radio = false;  // checked items show a dot instead of a tick
     std::function<void()> action;
     std::vector<MenuItem> submenu;
+    // Last, after the fields the brace initializers fill: information, not a command; readable
+    // text that the keyboard skips (set enabled = false too).
+    bool note = false;
 
     static MenuItem Separator() {
         MenuItem m;
