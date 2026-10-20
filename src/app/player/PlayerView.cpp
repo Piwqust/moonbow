@@ -674,7 +674,9 @@ void PlayerView::OnLayout() {
 
     const float chrome = window_->ChromeOpacity();
     bar_->opacity = immersive || overlay ? chrome : 1.0f;
-    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f);
+    // Tab brings a hidden bar back (MainWindow::HandleMessage) before its fade has begun.
+    const bool keyboardOnBar = window_->FocusVisible() && bar_->IsAncestorOf(window_->Focus());
+    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f || keyboardOnBar);
     // Over the video the bar floats (unless "full width" is chosen) and slides a few DIP while it
     // fades, so showing and hiding read as one motion rather than a blink.
     // The fullscreen side panel is a full-height sheet: the bar keeps to the picture beside it

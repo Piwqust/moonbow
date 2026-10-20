@@ -352,10 +352,12 @@ void MainWindow::PokeChrome() {
         chromeTimer_ = 0;
         if (!BarOverlays()) return;
         // Keep the controls while the pointer is on them or drags one (the seek bar held still above
-        // the bar), or a menu or panel is open (toasts don't count).
+        // the bar), the keyboard is on one of them, or a menu or panel is open (toasts don't count).
         Widget* hot = Pressed() ? Pressed() : Hot();
-        const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
-        if (HasInteractivePopup() || overBar || TheApp().player().State().paused) {
+        const Widget* bar = player_ ? player_->Bar() : nullptr;
+        const bool overBar = hot && bar && bar->IsAncestorOf(hot);
+        const bool keyboardOnBar = FocusVisible() && bar && bar->IsAncestorOf(Focus());
+        if (HasInteractivePopup() || overBar || keyboardOnBar || TheApp().player().State().paused) {
             PokeChrome();
             return;
         }
@@ -568,6 +570,15 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             if (lp && lstrcmpW(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0 &&
                 TheApp().config().GetString("general.theme") == "system")
                 TheApp().ApplyTheme();
+            return false;
+        case WM_KEYDOWN:
+            // Tab over the hidden floating bar brings it back first, so the focus can move into it
+            // (Host moves it right after this; the next layout keeps the bar, PlayerView::OnLayout).
+            if (wp == VK_TAB && BarOverlays() && !FullscreenWithoutControls(this) && !HasInteractivePopup() && player_ &&
+                player_->Bar() && !pip_) {
+                PokeChrome();
+                player_->Bar()->visible = true;
+            }
             return false;
         case WM_SIZE:
             if (titleBar_) titleBar_->Refresh();
