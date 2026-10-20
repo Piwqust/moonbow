@@ -330,6 +330,17 @@ void NavSidebar::SetCollapsed(bool collapsed) {
     InvalidateLayout();
 }
 
+void NavSidebar::Toggle() {
+    pin_ = collapsed_ ? Pin::Open : Pin::Closed;
+    SetCollapsed(pin_ == Pin::Closed);
+}
+
+void NavSidebar::FitWindow(float windowW) {
+    // Fluent's NavigationView goes compact below 1008 epx: the content keeps its room.
+    const bool rail = pin_ == Pin::Closed || (pin_ == Pin::Auto && windowW < 1000);
+    if (rail != collapsed_) SetCollapsed(rail);
+}
+
 void NavSidebar::Refresh() {
     Invalidate();
 }

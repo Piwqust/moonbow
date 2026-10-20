@@ -38,6 +38,10 @@ public:
     ~NavSidebar() override;
     void SetCollapsed(bool collapsed);
     bool Collapsed() const { return collapsed_; }
+    // The user's toggle: pins the sidebar open or closed at any window width.
+    void Toggle();
+    // Until the user pins it, a window narrower than about 1000 DIP shows the rail (DESK-12).
+    void FitWindow(float windowW);
     // The rail of the player's side panel: it navigates the panel and keeps the player on screen.
     void SetInPlayer(bool inPlayer) { inPlayer_ = inPlayer; }
     bool InPlayer() const { return inPlayer_; }
@@ -47,6 +51,7 @@ public:
 private:
     bool collapsed_ = false;
     bool inPlayer_ = false;
+    enum class Pin : uint8_t { Auto, Open, Closed } pin_ = Pin::Auto;
     ScopedConnection routeConn_, langConn_;
 };
 
