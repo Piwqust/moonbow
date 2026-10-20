@@ -164,6 +164,7 @@ void ScanBanner::Poll() {
         }
     }
     if (show != visible) {
+        if (show) a11y::Announce(GetHost(), text_);
         visible = show;
         InvalidateLayout();
     }

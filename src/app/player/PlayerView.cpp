@@ -476,6 +476,7 @@ public:
         InvalidateLayout();
     }
     void Paint(Painter& p) override { p.Fill(rect, P().bgPanel, 12); }
+    std::wstring Spoken() const { return title_->Text() + L". " + body_->Text(); }
 
 private:
     IconView* icon_;
@@ -529,6 +530,7 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
+        if ((m & kChangeError) && !TheApp().FailedPath().empty()) a11y::Announce(window_, error_->Spoken());
         // The basic keys once, at the first file ever played in the player (the onboarding has no page for
         // them). A song started from the library stays there: the toast would cover the page header.
         if ((m & kChangeFile) && PS().fileLoaded && (TheApp().PlayerShown() || TheApp().PlayerPending()) &&

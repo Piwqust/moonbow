@@ -63,6 +63,9 @@ void WindowDestroyed(HWND hwnd);
 // moves between their entries (menu rows, grid cards).
 void FocusChanged(Host* host);
 void StructureChanged(Host* host);
+// Has screen readers say `text` now, without moving focus: status messages (toasts, a library
+// scan, the next track, a playback error). A newer message replaces one not yet spoken.
+void Announce(Host* host, const std::wstring& text);
 }  // namespace a11y
 
 }  // namespace ui

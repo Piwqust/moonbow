@@ -772,4 +772,15 @@ void StructureChanged(Host* host) {
     n->Release();
 }
 
+void Announce(Host* host, const std::wstring& text) {
+    if (!g_connected || !host || !host->Hwnd() || text.empty() || !UiaClientsAreListening()) return;
+    Node* n = Node::Make(host->Hwnd(), {});
+    BSTR t = SysAllocStringLen(text.data(), static_cast<UINT>(text.size()));
+    BSTR id = SysAllocString(L"lumen.status");
+    UiaRaiseNotificationEvent(n, NotificationKind_ActionCompleted, NotificationProcessing_ImportantMostRecent, t, id);
+    SysFreeString(t);
+    SysFreeString(id);
+    n->Release();
+}
+
 }  // namespace ui::a11y

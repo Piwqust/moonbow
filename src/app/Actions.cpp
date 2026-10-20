@@ -129,7 +129,7 @@ MainWindow* Win() {
     return TheApp().main();
 }
 
-constexpr UINT kToastMs = 1200;
+constexpr UINT kToastMs = 3000;  // time to read it (WCAG 2.2.1); ShowToast keeps no toast shorter
 
 const PlayerState& PS() {
     return TheApp().player().State();
@@ -894,18 +894,28 @@ void ReleaseHeldOsd(bool show) {
 }
 
 void OnPlayerChangeForOsd(unsigned changes) {
+    // Same text as the title bar: the episode, the tag title, or the file name without its extension.
+    auto titleNow = [] {
+        const std::wstring file = FileNameOf(PS().path);
+        std::wstring title = episodes::Title(PS().path);
+        if (title.empty()) title = PS().title.empty() ? file : PS().title;
+        if (_wcsicmp(title.c_str(), file.c_str()) == 0) {
+            const size_t dot = title.find_last_of(L'.');
+            if (dot != std::wstring::npos && dot > 0) title.resize(dot);
+        }
+        return title;
+    };
+    // Screen readers hear the new track as it starts (the title bar changes silently).
+    static uint64_t announced = 0;
+    if ((changes & kChangeFile) && PS().fileLoaded && PS().loadSerial != announced) {
+        announced = PS().loadSerial;
+        ui::a11y::Announce(Win(), titleNow());
+    }
     if ((changes & kChangeFile) && PS().loadSerial != g_toastSerial) {
         // Whatever was pending or on screen was about the previous file.
         g_pendingOsd = PendingOsd::None;
         if (ui::AnimFloat::Now() - g_toastAt < kToastMs) {
-            // Same text as the title bar: the episode, the tag title, or the file name without its extension.
-            const std::wstring file = FileNameOf(PS().path);
-            std::wstring title = episodes::Title(PS().path);
-            if (title.empty()) title = PS().title.empty() ? file : PS().title;
-            if (_wcsicmp(title.c_str(), file.c_str()) == 0) {
-                const size_t dot = title.find_last_of(L'.');
-                if (dot != std::wstring::npos && dot > 0) title.resize(dot);
-            }
+            const std::wstring title = titleNow();
             if (!title.empty()) Toast(title, "play");
             g_toastSerial = PS().loadSerial;
         }

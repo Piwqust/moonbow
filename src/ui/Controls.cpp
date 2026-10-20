@@ -1766,6 +1766,7 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
             host->Post([host] { DismissToast(host); });
         };
     }
+    const std::wstring spoken = actionLabel.empty() ? text : text + L". " + actionLabel;
     auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon), std::move(actionLabel), std::move(action));
     const Rect band = host->toastBand ? host->toastBand() : Rect{0, 0, host->ClientSize().w, 0};
     bubble->maxW = std::max(240.0f, band.w - 32);  // the popup measures again with the window's width
@@ -1786,8 +1787,9 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         if (it != Toasts().end() && it->second.id == id) Toasts().erase(it);
     };
     Toasts()[host] = {host->ShowPopup(std::move(bubble), o), id};
-    // A toast with a button (Undo, Open) stays long enough to read it and reach the button.
-    CloseToastAfter(host, id, clickable ? std::max<UINT>(ms, 8000) : ms);
+    a11y::Announce(host, spoken);
+    // Long enough to read (3 s at least); one with a button (Undo, Open) also to reach the button.
+    CloseToastAfter(host, id, std::max<UINT>(ms, clickable ? 8000 : 3000));
 }
 
 void DismissToast(Host* host) {
