@@ -731,6 +731,14 @@ void TestConfigPersistence() {
         CHECK(c.Load());
         CHECK(!c.GetBool("video.smoothMotion"));
     }
+    // Buffering moved from milliseconds to seconds.
+    WriteFile(file, R"({"version":2,"values":{"network.cacheLocal":500,"network.cacheNetwork":90000}})");
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetDouble("network.cacheLocalSecs") == 0.5);
+        CHECK(c.GetDouble("network.cacheNetworkSecs") == 90);
+    }
 }
 
 void TestHiddenCondition() {
@@ -1108,10 +1116,10 @@ void TestAudioSubtitleOptions() {
     CHECK(FindOption(MpvOptionFor(c, "subtitles.blur"), "sub-blur") == "1.5");
 
     c.SetString("network.buffering", "custom");
-    c.SetDouble("network.cacheLocal", 300);
-    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "0.3");
+    c.SetDouble("network.cacheLocalSecs", 0.3);
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocalSecs"), "demuxer-readahead-secs") == "0.3");
     c.SetString("network.buffering", "normal");
-    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "1");  // reset
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocalSecs"), "demuxer-readahead-secs") == "1");  // reset
 
     c.SetDouble("audio.maxVolume", 300);
     CHECK(c.GetDouble("audio.maxVolume") == 200);

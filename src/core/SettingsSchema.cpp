@@ -225,7 +225,7 @@ std::optional<std::string> BuildCacheSecs(const Config& c) {
     std::string mode = c.GetString("network.buffering");
     if (mode == "low") return "10";
     if (mode == "high") return "300";
-    if (mode == "custom") return Num(std::max(1.0, c.GetDouble("network.cacheNetwork") / 1000.0));
+    if (mode == "custom") return Num(std::max(1.0, c.GetDouble("network.cacheNetworkSecs")));
     return "60";
 }
 
@@ -268,7 +268,7 @@ std::optional<std::string> BuildHttpProxy(const Config& c) {
 // Read-ahead of files mpv does not cache (local files and discs); streams use cache-secs.
 std::optional<std::string> BuildReadahead(const Config& c) {
     if (c.GetString("network.buffering") != "custom") return std::nullopt;
-    return Num(std::max(0.05, c.GetDouble("network.cacheLocal") / 1000.0));
+    return Num(std::max(0.05, c.GetDouble("network.cacheLocalSecs")));
 }
 
 std::optional<std::string> BuildYtdl(const Config& c) {
@@ -1127,6 +1127,8 @@ void BuildMedia(Builder& b) {
         .Desc(L"Language for DVD and Blu-ray menus when the disc offers several.",
               L"Язык меню DVD и Blu-ray, если на диске их несколько.")
         .Hidden();  // not implemented yet
+    // Track numbers are for odd files; the preferred languages (Audio, Subtitles) pick tracks otherwise.
+    b.advanced = true;
     b.Number("playback.audioTrack", L"Default audio track", L"Аудиодорожка по умолчанию", 0, 99, 1, 0)
         .Hint(L"Auto", L"Авто")
         .Desc(L"Track number to start with. 0 picks automatically by the preferred language.",
@@ -1137,6 +1139,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Subtitle track number to start with. 0 picks automatically by the preferred language.",
               L"С какой дорожки субтитров начинать. 0 — выбрать автоматически по предпочтительному языку.")
         .MpvBuild("sid", BuildSid, "auto");
+    b.advanced = false;
 
     // app/player/LiveState (library/FileSettings): restored through loadfile options.
     b.Sec("perFile", L"Per-File Settings", L"Настройки для каждого файла");
@@ -1257,7 +1260,7 @@ void BuildMedia(Builder& b) {
             .MpvBuild("hdr-contrast-recovery", BuildContrastRecovery, "0")
             .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
     }
-    b.Pick("video.upscaler", L"Upscaler", L"Алгоритм увеличения",
+    b.Pick("video.upscaler", L"Upscaling method", L"Способ увеличения",
            {{"auto", L"From the quality setting", L"По настройке качества"},
             {"bilinear", L"Bilinear (fastest)", L"Билинейный (самый быстрый)"},
             {"spline36", L"Spline36", L"Spline36"},
@@ -1268,7 +1271,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Filter used to enlarge videos smaller than the window.",
               L"Фильтр, которым увеличиваются видео меньше окна.")
         .MpvBuild("scale", BuildScale, "lanczos");
-    b.Toggle("video.superResolution", L"AI upscaling (NVIDIA RTX / Intel)", L"ИИ-апскейл (NVIDIA RTX / Intel)", false)
+    b.Toggle("video.superResolution", L"AI upscaling (NVIDIA RTX / Intel)", L"Увеличение с помощью ИИ (NVIDIA RTX / Intel)", false)
         .Desc(L"Enlarge low-resolution video with the graphics card's Video Super Resolution. Needs an NVIDIA RTX or "
               L"Intel Arc / Core Ultra GPU and Direct3D 11 hardware decoding.",
               L"Увеличивать видео низкого разрешения через Video Super Resolution видеокарты. Нужна NVIDIA RTX или "
@@ -1277,24 +1280,24 @@ void BuildMedia(Builder& b) {
         .Desc(L"Turn SDR video into HDR on NVIDIA RTX cards. Needs Windows HDR on and Direct3D 11 hardware decoding.",
               L"Превращать SDR-видео в HDR на видеокартах NVIDIA RTX. Нужны включённый HDR в Windows и аппаратное "
               L"декодирование Direct3D 11.");
-    b.Toggle("video.deband", L"Debanding", L"Устранение полос", false)
+    b.Toggle("video.deband", L"Smooth gradients (debanding)", L"Сглаживать градиенты (дебандинг)", false)
         .Desc(L"Smooth out color banding in gradients (skies, dark scenes).",
               L"Сглаживает ступеньки в градиентах (небо, тёмные сцены).")
         .MpvBuild("deband", BuildDeband, "no")
         .MpvBuild("deband-range", BuildDebandRange, "16");
-    b.Slider("video.debandRange", L"Banding removal radius", L"Радиус устранения полос", 1, 64, 1, 16)
+    b.Slider("video.debandRange", L"Smoothing radius", L"Радиус сглаживания", 1, 64, 1, 16)
         .Desc(L"How far debanding looks for steps. 16 suits most videos.",
               L"Как далеко искать ступеньки. Для большинства видео подходит 16.")
         .When("video.deband", "true")
         .MpvBuild("deband-range", BuildDebandRange, "16");
-    b.Slider("video.filmGrain", L"Film grain variance", L"Плёночное зерно", 0, 256, 1, 48)
-        .Desc(L"Grain added after banding removal to hide remaining steps.",
-              L"Зерно, которое добавляется после устранения полос, чтобы скрыть остатки ступенек.")
+    b.Slider("video.filmGrain", L"Masking grain", L"Маскирующее зерно", 0, 256, 1, 48)
+        .Desc(L"Grain added after smoothing to hide the remaining steps.",
+              L"Зерно, которое добавляется после сглаживания, чтобы скрыть остатки ступенек.")
         .When("video.deband", "true")
         .Mpv("deband-grain");
 
-    b.Sec("tonemapping", L"HDR Tone Mapping", L"Тональная компрессия HDR");
-    b.Pick("video.toneMapping", L"Tone mapping", L"Тональная компрессия",
+    b.Sec("tonemapping", L"HDR brightness and color", L"Яркость и цвета HDR");
+    b.Pick("video.toneMapping", L"Brightness fitting (tone mapping)", L"Подгонка яркости (тональная компрессия)",
            {{"auto", L"Automatic", L"Автоматически", "auto"},
             {"bt.2390", L"BT.2390", L"BT.2390", "bt.2390"},
             {"bt.2446a", L"BT.2446a", L"BT.2446a", "bt.2446a"},
@@ -1308,7 +1311,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"How HDR brightness is fitted to a screen that can't show all of it.",
               L"Как яркость HDR укладывается в возможности экрана.")
         .Mpv("tone-mapping");
-    b.Pick("video.gamutMapping", L"Gamut mapping", L"Преобразование цветового охвата",
+    b.Pick("video.gamutMapping", L"Color fitting (gamut mapping)", L"Подгонка цветов (цветовой охват)",
            {{"auto", L"Automatic", L"Автоматически", "auto"},
             {"perceptual", L"Perceptual", L"Перцептивное", "perceptual"},
             {"relative", L"Relative colorimetric", L"Относительное колориметрическое", "relative"},
@@ -1320,8 +1323,8 @@ void BuildMedia(Builder& b) {
         .Mpv("gamut-mapping-mode");
     b.Pick("video.hdrComputePeak", L"Measure scene brightness", L"Измерять яркость сцены",
            {{"auto", L"Automatic", L"Автоматически"}, {"yes", L"On", L"Вкл."}, {"no", L"Off", L"Выкл."}}, "auto")
-        .Desc(L"Analyze each frame's brightness for more accurate tone mapping. Costs some GPU time.",
-              L"Анализировать яркость каждого кадра для более точной тональной компрессии. Немного нагружает видеокарту.")
+        .Desc(L"Analyze each frame's brightness to fit it more accurately. Costs some GPU time.",
+              L"Анализировать яркость каждого кадра, чтобы точнее подгонять яркость. Немного нагружает видеокарту.")
         .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
     b.Number("video.targetPeak", L"Display peak brightness", L"Пиковая яркость экрана", 0, 10000, 10, 0)
         .Unit(L"nits", L"нит")
@@ -1372,8 +1375,8 @@ void BuildMedia(Builder& b) {
     b.inferred = false;
     b.Button("video.resetPicture", L"Reset picture", L"Сбросить изображение", "reset-picture", L"Reset", L"Сбросить");
 
-    b.Sec("deinterlacing", L"Deinterlacing", L"Устранение чересстрочности");
-    b.Pick("video.deinterlace", L"Mode", L"Режим",
+    b.Sec("deinterlacing", L"Interlaced video", L"Чересстрочное видео");
+    b.Pick("video.deinterlace", L"Remove comb lines (deinterlacing)", L"Убирать гребёнку (деинтерлейсинг)",
            {{"auto", L"Automatic", L"Автоматически"}, {"on", L"On", L"Вкл."}, {"off", L"Off", L"Выкл."}}, "auto")
         .Desc(L"Remove comb lines from interlaced video (TV recordings, DVDs). Automatic applies it only to "
               L"interlaced frames.",
@@ -1559,18 +1562,18 @@ void BuildMedia(Builder& b) {
               L"Держать тихие и громкие файлы на одном уровне. Работает вместе с эквалайзером.")
         .MpvBuild("af", BuildAf);
     b.Seg("audio.normalizeMode", L"Normalization", L"Способ выравнивания",
-          {{"ebu", L"EBU R128", L"EBU R128"}, {"dynamic", L"Dynamic", L"Динамический"}}, "ebu")
+          {{"ebu", L"Standard (EBU R128)", L"Стандартный (EBU R128)"}, {"dynamic", L"Dynamic", L"Динамический"}}, "ebu")
         .Inferred()
-        .Desc(L"EBU R128 aims at a target loudness. Dynamic also lifts quiet passages within a file, like "
-              L"dialogue between loud scenes.",
-              L"EBU R128 приводит звук к целевой громкости. Динамический ещё и поднимает тихие места внутри файла, "
-              L"например диалоги между громкими сценами.")
+        .Desc(L"Standard brings every file to one target loudness (EBU R128, as in broadcasting). Dynamic also "
+              L"lifts quiet passages within a file, like dialogue between loud scenes.",
+              L"Стандартный приводит каждый файл к одной целевой громкости (EBU R128, как на телевидении). "
+              L"Динамический ещё и поднимает тихие места внутри файла, например диалоги между громкими сценами.")
         .When("audio.normalize", "true")
         .MpvBuild("af", BuildAf);
     b.Number("audio.targetLevel", L"Target level", L"Целевой уровень", -40, -5, 1, -23)
         .Unit(L"LUFS", L"LUFS")
-        .Desc(L"Loudness to aim for in EBU R128 mode. -23 is the broadcast standard, -16 is louder.",
-              L"К какой громкости стремиться в режиме EBU R128. -23 — телевизионный стандарт, -16 — громче.")
+        .Desc(L"Loudness to aim for in the Standard way. -23 is the broadcast standard, -16 is louder.",
+              L"К какой громкости стремиться в стандартном способе. -23 — телевизионный стандарт, -16 — громче.")
         .When("audio.normalize", "true")
         .MpvBuild("af", BuildAf);
     b.Toggle("audio.nightMode", L"Night mode", L"Ночной режим", false)
@@ -2007,18 +2010,18 @@ void BuildSystem(Builder& b) {
               L"Сколько потока загружать заранее. Большой буфер переживает медленную сеть, но старт дольше.")
         .MpvBuild("cache-secs", BuildCacheSecs)
         .MpvBuild("demuxer-max-bytes", BuildDemuxerMaxBytes);
-    b.Number("network.cacheLocal", L"Local files", L"Локальные файлы", 0, 60000, 50, 300)
-        .Unit(L"ms", L"мс")
-        .Desc(L"How far ahead to read files on this computer. Less uses less memory; 1000 is mpv's default.",
-              L"Насколько вперёд читать файлы с этого компьютера. Меньше — меньше памяти; 1000 — как в mpv.")
+    b.Number("network.cacheLocalSecs", L"Local files", L"Локальные файлы", 0, 60, 0.05, 0.3)
+        .Unit(L"s", L"с")
+        .Desc(L"How far ahead to read files on this computer. Less uses less memory; 1 is mpv's default.",
+              L"Насколько вперёд читать файлы с этого компьютера. Меньше — меньше памяти; 1 — как в mpv.")
         .When("network.buffering", "custom")
         .MpvBuild("demuxer-readahead-secs", BuildReadahead, "1");
     b.Number("network.cacheDisc", L"Discs", L"Диски", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
         .When("network.buffering", "custom")
         .Hidden();  // not implemented yet
-    b.Number("network.cacheNetwork", L"Network streams", L"Сетевые потоки", 1000, 3600000, 500, 60000)
-        .Unit(L"ms", L"мс")
+    b.Number("network.cacheNetworkSecs", L"Network streams", L"Сетевые потоки", 1, 3600, 0.5, 60)
+        .Unit(L"s", L"с")
         .When("network.buffering", "custom")
         .MpvBuild("cache-secs", BuildCacheSecs);
     b.Number("network.cacheLive", L"Live capture", L"Захват с устройств", 0, 60000, 50, 300)
