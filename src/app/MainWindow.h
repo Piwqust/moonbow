@@ -71,6 +71,7 @@ protected:
     // The content shows once the first screen is complete (App::FirstScreenReady); a file given at
     // launch may take longer, until its first frame.
     bool ContentReady() override;
+    ui::Rect FadeRect() override;
     UINT ContentCapMs() override;
 
 private:

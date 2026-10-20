@@ -217,6 +217,8 @@ protected:
     // background; the content fades in from it with the first frame that is ready, or
     // ContentCapMs after the show at the latest, so a slow disk never hides it.
     virtual bool ContentReady() { return true; }
+    // The part of the window that fades in at ContentShown; around it is drawn from the first frame.
+    virtual Rect FadeRect() { return {0, 0, ClientSize().w, ClientSize().h}; }
     virtual UINT ContentCapMs() { return 400; }
     void Reveal();
     void ShowContent();

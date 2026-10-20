@@ -402,6 +402,16 @@ bool MainWindow::ContentReady() {
     return TheApp().FirstScreenReady();
 }
 
+// A big library takes a while to its first screen: meanwhile the title bar and the sidebar are
+// there (and work), only the page fades in. A file opened at start fades in whole: the player
+// comes instead of the library.
+ui::Rect MainWindow::FadeRect() {
+    const Size c = ClientSize();
+    if (!library_ || library_->rect.w <= 0 || TheApp().OpensFileAtStart() || TheApp().PlayerShown() || Immersive())
+        return {0, 0, c.w, c.h};
+    return library_->rect;
+}
+
 UINT MainWindow::ContentCapMs() {
     return TheApp().OpensFileAtStart() ? 700 : 400;
 }
