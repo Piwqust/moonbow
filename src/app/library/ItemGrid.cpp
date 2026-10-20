@@ -540,7 +540,8 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Stroke(t.Inset(-3), focused ? c.accentMid : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
     }
 
-    const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : (e.watched || e.damaged) ? c.textTertiary : c.textSecondary;
+    // Three steps (VIS-4): headings and titles primary, subtitles tertiary; hover shows on the artwork.
+    const Color fg = now ? c.accent : (e.watched || e.damaged) && !hot && !sel ? c.textTertiary : c.textPrimary;
     const float ly = t.Bottom() + kLabelGap;
     ItemText(p, i, e.title, {r.x, ly - 2, r.w, kLineH + 4}, TextStyle::Large, fg);
     if (!e.subtitle.empty())
@@ -608,7 +609,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
                      : e.kind == EntryKind::Action ? (hot ? c.textPrimary : c.textTertiary)
                      : (hot || sel)                ? c.textPrimary
                      : (e.watched || e.damaged)    ? c.textTertiary
-                                                   : c.textSecondary;
+                                                   : c.textPrimary;
     float x = compactRow ? t.Right() + 10 : cells.title.x;
     float right = r.Right();
     const bool menu = e.kind != EntryKind::Action && e.kind != EntryKind::Category && onMenu;
@@ -806,10 +807,10 @@ void ItemGrid::PaintColumns(Painter& p, const Rect& r) {
 void ItemGrid::PaintHeader(Painter& p, int i, const Rect& r) {
     const Entry& e = entries_[static_cast<size_t>(i)];
     if (IsCardStyle(style_)) {
-        p.Text(e.title, {r.x, r.Bottom() - 24 - 16, r.w, 24}, TextStyle::Section, P().textSecondary);
+        p.Text(e.title, {r.x, r.Bottom() - 24 - 16, r.w, 24}, TextStyle::Section, P().textPrimary);
     } else {
         const float h = 22;
-        p.Text(e.title, {r.x, r.Bottom() - h - 8, r.w, h}, TextStyle::BodyMedium, P().textSecondary);
+        p.Text(e.title, {r.x, r.Bottom() - h - 8, r.w, h}, TextStyle::BodyMedium, P().textPrimary);
         // The count ends where the rows' last column ends (before the "⋯" and heart slots).
         float right = r.Right();
         if (onMenu) right -= 36;

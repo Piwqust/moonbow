@@ -230,7 +230,9 @@ Size SectionTitle::MeasureContent(float availW, float) {
 void SectionTitle::Paint(Painter& p) {
     const Palette& c = P();
     const bool hot = IsHot();
-    const Color fg = hot ? c.textPrimary : c.textSecondary;
+    // A heading reads primary at rest (VIS-4); hover shows as a plate, as on the compact rows.
+    const Color fg = c.textPrimary;
+    if (!compact_ && hot) p.Fill({rect.x - 8, rect.y - 4, rect.w + 8, rect.h + 8}, c.hover, 6);
     if (compact_) {
         if (hot) p.Fill({rect.x - 8, rect.y, rect.w + 16, rect.h}, c.hover, 6);
         p.Text(text, {rect.x, rect.y, rect.w - 28, rect.h}, TextStyle::Body, fg);

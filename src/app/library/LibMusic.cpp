@@ -477,7 +477,7 @@ private:
             box->width = Length::Grow();
             box->pad = {0, top, 0, 16};
             box->visible = false;
-            box->Add<Label>(Tr(text), TextStyle::Section, Tone::Secondary)->width = Length::Grow();
+            box->Add<Label>(Tr(text), TextStyle::Section, Tone::Primary)->width = Length::Grow();
             return box;
         };
         albumsTitle_ = title(L"Albums", 1, 0);
