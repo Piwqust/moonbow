@@ -160,6 +160,9 @@ bool Config::ApplyDocument(const json::Value& doc) {
         }
         if (std::optional<json::Value> v = Validate(*item, value)) next[m.key] = std::move(*v);
     }
+    // Files before version 2 left out the theme when it was the old default, Dark: keep it dark
+    // rather than switch those users to System.
+    if (doc.GetNumber("version", 1) < 2 && !values->Find("general.theme")) next["general.theme"] = json::Value("dark");
     for (const Item* item : settings::AllItems()) {
         if (!item->HasValue()) continue;
         auto it = next.find(item->key);
@@ -190,7 +193,7 @@ json::Value Config::ToJson() const {
     }
     for (const json::Member& m : unknown_.AsObject()) values.Set(m.key, m.value);
     json::Value doc = json::Value::MakeObject();
-    doc.Set("version", 1);
+    doc.Set("version", 2);  // 2: the theme defaults to System (see ApplyDocument)
     doc.Set("values", std::move(values));
     return doc;
 }

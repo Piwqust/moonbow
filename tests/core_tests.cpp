@@ -665,7 +665,7 @@ void TestConfigPersistence() {
     const json::Value* values = doc ? doc->Find("values") : nullptr;
     CHECK(values && values->size() == 3);  // only non-default values
     CHECK(values && values->Find("privacy.saveHistory") == nullptr);
-    CHECK(doc && doc->GetNumber("version") == 1);
+    CHECK(doc && doc->GetNumber("version") == 2);
 
     // Unknown keys survive a round trip; invalid values are dropped on load.
     (*doc)["values"].Set("future.setting", json::Value("keep me"));
@@ -694,6 +694,14 @@ void TestConfigPersistence() {
         c.ResetCategory("video");
         CHECK(!c.GetBool("video.wallpaper"));
         CHECK(c.Save());
+    }
+
+    // Version 1 files did not store the old default theme, Dark: they keep it; newer ones don't.
+    for (int version : {1, 2}) {
+        WriteFile(file, "{\"version\": " + std::to_string(version) + ", \"values\": {\"audio.targetLevel\": -16}}");
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetString("general.theme") == (version == 1 ? "dark" : "system"));
     }
 
     // A corrupt file is kept as settings.corrupt-<time>.json, reported once, and defaults are used.
