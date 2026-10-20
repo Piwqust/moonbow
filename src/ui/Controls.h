@@ -71,6 +71,7 @@ class Button : public Widget {
 public:
     Button(std::wstring text, ButtonKind kind = ButtonKind::Secondary, std::string icon = {});
     void SetText(std::wstring text);
+    const std::wstring& Text() const { return text_; }
     ButtonKind kind;
     std::string icon;
     TextStyle style = TextStyle::BodyStrong;
@@ -136,6 +137,7 @@ public:
     Checkbox(std::wstring text, bool checked = false);
     bool Value() const { return checked_; }
     void SetValue(bool v) { checked_ = v; Invalidate(); }
+    const std::wstring& Text() const { return text_; }
     std::function<void(bool)> onChange;
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;

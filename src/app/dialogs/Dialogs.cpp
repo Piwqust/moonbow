@@ -146,6 +146,9 @@ public:
             p.Text(text_, box, TextStyle::Mono, SoftText(), HAlign::Center);
         p.Icon("open", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, IsHot() ? c.textPrimary : c.textTertiary);
     }
+    // "Stop: S", not a bare "S": the action is in another column.
+    void Describe(A11y& a) override { a.name = action + L": " + (text_.empty() ? L"—" : text_); }
+    std::wstring action;
 
 private:
     std::wstring text_;
@@ -215,8 +218,8 @@ public:
                     f->Close();
                     TheApp().OpenSettings("controls");
                 };
-                row->Add<KeyField>(k1, edit);
-                row->Add<KeyField>(k2, edit);
+                row->Add<KeyField>(k1, edit)->action = label;
+                row->Add<KeyField>(k2, edit)->action = label;
                 ++shown;
             }
         }
@@ -807,6 +810,7 @@ void ShowKeyboardShortcutsDialog() {
         std::vector<Choice>{{Tr(L"All Fields"), "all"}, {Tr(L"Action"), "action"}, {Tr(L"Hotkey"), "key"}}, 0);
     mode->width = Length::Px(200);
     mode->height = Length::Px(34);
+    mode->a11yName = Tr(L"Search in");
 
     Widget* body = f->Body();
     body->pad = {20, shortWindow ? 10.0f : 20.0f, 20, 0};

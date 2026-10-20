@@ -66,21 +66,28 @@ void PaintedDeep(const Widget* w, std::wstring& out, bool labels = false) {
         if (c->visible && !(labels && (c->interactive || c->focusable))) PaintedDeep(c.get(), out, labels);
 }
 
+A11y Describe(Widget* w);
+std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys = nullptr);
+
 // The label right before a control (settings rows: "Label [control]", or a "Label [value]" row
-// above a slider), looking up through wrappers the control is the first child of. A control
-// right before it means a row of controls: no label. A list takes its section title, which may
-// be a button.
-std::wstring LabelBefore(const Widget* w, bool buttons = false) {
+// above a slider), looking up through wrappers the control is the first child of. A control,
+// tabs or a list right before it mean a row of controls or another section: no label. A list
+// takes only its section title, a text or a "Title >" button.
+std::wstring LabelBefore(const Widget* w, bool list = false) {
     for (int depth = 0; w && w->Parent() && depth < 3; ++depth, w = w->Parent()) {
         const auto& sib = w->Parent()->Children();
         size_t at = 0;
         while (at < sib.size() && sib[at].get() != w) ++at;
         while (at > 0 && !sib[at - 1]->visible) --at;
         if (at == 0) continue;
-        const Widget* s = sib[at - 1].get();
-        if (!buttons && (s->interactive || s->focusable)) return {};
+        Widget* s = sib[at - 1].get();
+        const A11y d = Describe(s);
+        if (list) return d.role == Role::Text || d.role == Role::Button ? NameOf(s, d) : std::wstring();
+        if (s->focusable || IsLeaf(d.role) || d.role == Role::Tab || d.role == Role::List) return {};
+        // A label with an "i" button names itself in Describe; a header with buttons is no label.
+        if (HasInteractiveDescendant(s)) return d.name;
         std::wstring t;
-        PaintedDeep(s, t, !buttons);
+        PaintedDeep(s, t, true);
         return t;
     }
     return {};
@@ -106,14 +113,21 @@ bool IsPopupRoot(const Widget* w) {
 
 A11y Describe(Widget* w) {
     A11y a;
+    // Named from their own text, not the last painted frame: scrolled out of view, they still have it.
     if (auto* l = dynamic_cast<Label*>(w)) {
         a.role = l->Text().empty() ? Role::Skip : Role::Text;
         a.name = l->Text();
+        if (l->style <= TextStyle::Heading) a.heading = l->style <= TextStyle::Title ? 1 : 2;
+    } else if (auto* b = dynamic_cast<Button*>(w)) {
+        a.name = b->Text();
+    } else if (auto* lb = dynamic_cast<LinkButton*>(w)) {
+        a.name = lb->text;
     } else if (auto* t = dynamic_cast<Toggle*>(w)) {
         a.role = Role::CheckBox;
         a.toggle = t->Value() ? 1 : 0;
     } else if (auto* c = dynamic_cast<Checkbox*>(w)) {
         a.role = Role::CheckBox;
+        a.name = c->Text();
         a.toggle = c->Value() ? 1 : 0;
     } else if (auto* d = dynamic_cast<Dropdown*>(w)) {
         a.role = Role::ComboBox;
@@ -134,7 +148,7 @@ A11y Describe(Widget* w) {
         };
     } else if (auto* tb = dynamic_cast<TextBox*>(w)) {
         a.role = Role::Edit;
-        a.name = tb->placeholder;
+        a.help = tb->placeholder;  // the name is its label; a search field has only this
         a.password = tb->password;
         if (!tb->password) a.value = tb->Text();
         if (!tb->readOnly) a.setValue = [tb](const std::wstring& v) { tb->SetText(v, true); };
@@ -143,6 +157,7 @@ A11y Describe(Widget* w) {
     } else if (dynamic_cast<Dialog*>(w)) {
         a.role = Role::Window;
     }
+    if (!w->a11yName.empty()) a.name = w->a11yName;
     w->Describe(a);
     if (a.role == Role::Auto) {
         const bool text = Painted().count(w) > 0;
@@ -163,7 +178,7 @@ Role RoleOf(Widget* w) {
 }
 
 // `keys` gets the shortcut a tooltip names ("Pause (Space)"), which is no part of the name.
-std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys = nullptr) {
+std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys) {
     if (keys) *keys = a.keys;
     if (!a.name.empty()) return a.name;
     std::wstring n;
@@ -181,7 +196,13 @@ std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys = nullptr) {
             break;
         case Role::ComboBox: case Role::Edit: case Role::Slider:
             n = LabelBefore(w);
+            // A "Label  value" row above a slider: the value is the slider's, not part of its name.
+            if (!a.value.empty() && n.size() > a.value.size() && n.ends_with(L" " + a.value))
+                n.resize(n.size() - a.value.size() - 1);
+            if (n.empty() && a.role == Role::Edit && w->tooltip.empty()) n = a.help;
             break;
+        case Role::Group:  // a row or a panel: named in Describe, else nothing (its tooltip is help)
+            return n;
         case Role::List:
             n = LabelBefore(w, true);
             break;
@@ -210,7 +231,7 @@ std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys = nullptr) {
             n.resize(open);
         }
     }
-    if (n.empty() && a.role != Role::Text && a.role != Role::Window) n = LabelBefore(w);
+    if (n.empty() && (IsLeaf(a.role) || a.role == Role::Tab)) n = LabelBefore(w);
     if (n.empty())
         if (auto* ib = dynamic_cast<IconButton*>(w)) n = Widen(ib->icon);  // shortcut: icon id, until it has a tooltip
     if (n.size() > 400) n.resize(400);
@@ -464,6 +485,10 @@ public:
                                                                                                       : S_OK;
             }
             case UIA_AcceleratorKeyPropertyId: return keys.empty() ? S_OK : Str(out, keys);
+            case UIA_HeadingLevelPropertyId:
+                out->vt = VT_I4;
+                out->lVal = c.item < 0 && c.a.heading > 0 ? HeadingLevel1 + std::min(c.a.heading, 9) - 1 : HeadingLevel_None;
+                return S_OK;
             case UIA_AutomationIdPropertyId: {
                 std::wstring id16 = Widen(c.w->id);
                 if (c.item >= 0) id16 += L"#" + std::to_wstring(c.item);

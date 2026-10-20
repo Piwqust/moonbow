@@ -8,7 +8,8 @@
 #   add -Out x.txt to also write the tree to a file (UTF-8), -Max N to stop after N elements.
 # Line format:
 #   <indent>Type "Name" [x,y wxh] [off] [disabled] [focus] {Patterns} value=... toggle=... range=v/min..max
-#   [selected] [Expanded|Collapsed] help=... keys=<AcceleratorKey> heading=<level> (windows: culture=)
+#   [selected] [Expanded|Collapsed] help=... keys=<AcceleratorKey> sel=<from>..<to> (Text pattern)
+#   (windows: culture=). HeadingLevel is newer than this .NET client: not shown.
 #   Rects are screen pixels.
 param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Invoke = "", [string]$Out = "", [int]$Max = 5000)
 $ErrorActionPreference = "Stop"
@@ -39,8 +40,6 @@ $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
 $lines = New-Object System.Collections.Generic.List[string]
 $script:count = 0
 $script:target = $null
-# UIA_HeadingLevelPropertyId (30173): newer than the .NET client, looked up by id (null if unknown).
-$script:heading = [System.Windows.Automation.AutomationProperty]::LookupById(30173)
 
 function Describe($e, [int]$depth) {
   $c = $e.Current
@@ -63,9 +62,13 @@ function Describe($e, [int]$depth) {
   if ($e.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$o)) { $line += " " + $o.Current.ExpandCollapseState }
   if ($c.HelpText) { $line += ' help="' + $c.HelpText + '"' }
   if ($c.AcceleratorKey) { $line += ' keys="' + $c.AcceleratorKey + '"' }
-  if ($script:heading) {
-    $h = $e.GetCurrentPropertyValue($script:heading)
-    if ($h -is [int] -and $h -gt 80050) { $line += " heading=" + ($h - 80050) }
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$o)) {
+    $doc = $o.DocumentRange
+    $sel = @($o.GetSelection())
+    if ($sel.Count) {
+      $from = $sel[0].CompareEndpoints("Start", $doc, "Start")
+      $line += " sel=$from.." + ($from + $sel[0].GetText(-1).Length)
+    }
   }
   if ($depth -eq 0) { $line += " culture=" + $e.GetCurrentPropertyValue($A::CultureProperty) }
   return $line

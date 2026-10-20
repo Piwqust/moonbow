@@ -208,7 +208,10 @@ void ItemGrid::Describe(ui::A11y& a) {
     a.item = [this](int i, ui::A11y::Item& it) {
         const Entry& e = entries_[static_cast<size_t>(i)];
         it.role = IsLabel(e.kind) ? ui::Role::Text : ui::Role::ListItem;
-        it.name = e.subtitle.empty() ? e.title : e.title + L", " + e.subtitle;
+        // What the row or card shows: track number, title, artist or info, length.
+        it.name = (e.track > 0 ? std::to_wstring(e.track) + L". " : L"") + e.title;
+        if (!e.subtitle.empty()) it.name += L", " + e.subtitle;
+        if (e.kind == EntryKind::Media && e.duration > 0) it.name += L", " + FormatDuration(e.duration);
         it.rect = ItemRect(i);
         it.selected = i == selected_;
     };

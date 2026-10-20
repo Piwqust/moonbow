@@ -206,6 +206,7 @@ void AddVideoTabs(Widget* toolbar, int current) {
     }
     auto* tabs = toolbar->Add<Segmented>(std::move(choices), current);
     tabs->segmentWidth = widest;
+    tabs->a11yName = Tr(L"Videos");
     tabs->onChange = [tabs](int i) {
         const std::wstring path = kTabPaths[i];
         // Posted: navigating replaces this page while its control is still handling the click.

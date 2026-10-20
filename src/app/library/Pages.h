@@ -70,6 +70,7 @@ public:
     std::wstring text;
     ui::Size MeasureContent(float availW, float availH) override;
     void Paint(ui::Painter& p) override;
+    void Describe(ui::A11y& a) override;
 
 private:
     bool compact_;

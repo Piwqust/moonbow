@@ -223,6 +223,11 @@ SectionTitle::SectionTitle(std::wstring t, bool compact) : text(std::move(t)), c
     if (compact) width = Length::Grow();
 }
 
+void SectionTitle::Describe(A11y& a) {
+    a.name = text;
+    a.heading = 2;
+}
+
 Size SectionTitle::MeasureContent(float availW, float) {
     const float w = gfx::Text::Get().Measure(text, compact_ ? TextStyle::Body : TextStyle::Section).width;
     return {std::min(availW, w + 5 + 24), compact_ ? 32.0f : 24.0f};
@@ -604,6 +609,7 @@ void Page::Refresh() {
     grid_->reorderable = Reorderable() && filter_.empty();
     for (int h = 0; h < kHeadCount; ++h) grid_->heads[h] = heads_[h];
     grid_->sort = headSort_;
+    grid_->a11yName = queueName_;  // the list is what "Play All" queues: "Songs", the album, "History"
     grid_->SetEntries(std::move(entries_));
     entries_.clear();
 
@@ -1084,6 +1090,7 @@ public:
             }
             auto* tabs = toolbar_->Add<Segmented>(std::move(choices), current);
             tabs->segmentWidth = widest;
+            tabs->a11yName = Tr(L"History");
             tabs->onChange = [this](int i) {
                 const std::wstring path = kViews[i].path;
                 // Posted: navigating replaces this page while its control is still handling the click.

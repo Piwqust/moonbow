@@ -934,6 +934,10 @@ MiniPlayer::MiniPlayer(MainWindow*) {
 
 MiniPlayer::~MiniPlayer() = default;
 
+void MiniPlayer::Describe(A11y& a) {
+    a.name = Tr(L"Mini player");
+}
+
 Size MiniPlayer::MeasureContent(float availW, float availH) {
     compact_ = availW < kMiniCompactW || availH < kMiniCompactH;
     return compact_ ? Size{kMiniCompactCardW, kMiniCompactCardH} : Size{kMiniW, kMiniVideoH + 16 + 60};

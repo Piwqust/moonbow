@@ -87,6 +87,8 @@
 {L"Bookmark", L"Закладка"},
 {L"Bookmarks", L"Закладки"},
 {L"Open player", L"Открыть плеер"},
+{L"Mini player", L"Мини-плеер"},
+{L"Control bar", L"Панель управления"},
 {L"Current Time", L"Текущее время"},
 {L"Duration", L"Длительность"},
 {L"Volume", L"Громкость"},

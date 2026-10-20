@@ -108,6 +108,7 @@ public:
     void OnLayout() override;
     void OnMouseEnter() override;
     void OnMouseLeave() override;
+    void Describe(ui::A11y& a) override;
 
 private:
     ui::Rect VideoBox() const;  // video or cover art

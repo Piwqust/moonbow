@@ -952,6 +952,10 @@ ControlBar::~ControlBar() {
     TheApp().config().Unsubscribe(configToken_);
 }
 
+void ControlBar::Describe(A11y& a) {
+    a.name = Tr(L"Control bar");
+}
+
 void ControlBar::ReadStyle() {
     const std::string style = TheApp().config().GetString("interface.barStyle");
     minimal_ = style == "minimal";
