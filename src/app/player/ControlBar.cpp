@@ -485,6 +485,11 @@ public:
         if (iconFn_) icon = iconFn_();
         IconButton::Paint(p);
     }
+    // HDR only shows a state; its click opens the panel.
+    bool toggles = true;
+    void Describe(A11y& a) override {
+        if (active_ && toggles) a.toggle = active_() ? 1 : 0;
+    }
 
 private:
     std::function<bool()> active_;
@@ -521,6 +526,7 @@ public:
         if (key_ != Action::None) tooltip = WithKey(Tr(tip_), key_);
         IconButton::Paint(p);
     }
+    void Describe(A11y& a) override { a.toggle = PlayerPanelOpen(kind_) ? 1 : 0; }
 
 private:
     PanelKind kind_;
@@ -713,9 +719,12 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
         case ControlId::Record: return button("record", L"Record", Action::Record);
         case ControlId::Snapshot: return button("snapshot", L"Snapshot", Action::Snapshot);
         case ControlId::PictureInPicture: return button("pip", L"Picture in Picture", Action::PictureInPicture);
-        case ControlId::Hdr:
-            return std::make_unique<StateButton>(
+        case ControlId::Hdr: {
+            auto b = std::make_unique<StateButton>(
                 "hdr", L"HDR", [] { TogglePlayerPanel(PanelKind::Settings, {}); }, [] { return PS().hdr; });
+            b->toggles = false;
+            return b;
+        }
         case ControlId::Zoom: return button("zoom", L"Zoom", Action::ZoomIn);
         case ControlId::RightSidebar: return button("sidebar_right", L"Sidebar", Action::ToggleSidebar);
         case ControlId::Quit: return button("quit", L"Quit", Action::Quit);

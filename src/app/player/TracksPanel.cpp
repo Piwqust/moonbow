@@ -94,7 +94,9 @@ public:
         liveConn_ = Connect(Live().changed, [this] { InvalidateLayout(); });
     }
     bool editing = false;
+    std::wstring name;  // for screen readers when no list title stands before it
     static constexpr float kPitch = 44, kRowH = 32;
+    int Count() const { return static_cast<int>(rows_().size()); }
 
     Size MeasureContent(float availW, float) override {
         const size_t n = rows_().size();
@@ -173,6 +175,22 @@ public:
         Invalidate();
         return true;
     }
+    // One choice is on at a time: list items with radio semantics (the ticked row is selected).
+    void Describe(A11y& a) override {
+        a.role = Role::List;
+        const auto rows = rows_();
+        if (!name.empty()) a.name = name;
+        if (rows.empty()) a.name = empty_;
+        a.items = static_cast<int>(rows.size());
+        a.item = [this, rows](int i, A11y::Item& it) {
+            const ChoiceRow& row = rows[static_cast<size_t>(i)];
+            it.name = row.detail.empty() ? row.label : row.label + L", " + row.detail;
+            it.rect = RowRect(i);
+            it.selected = row.checked;
+        };
+        a.selectItem = a.invokeItem = [this](int i) { Activate(i, false); };
+        a.focusedItem = focusRow_;
+    }
 
 private:
     void Activate(int i, bool remove) {
@@ -188,6 +206,28 @@ private:
     int hover_ = -1, focusRow_ = -1;
     bool hoverX_ = false;
     ScopedConnection playerConn_, liveConn_;
+};
+
+// Shows the ✕ on each added track; off and dimmed while nothing is added.
+class RemoveModeButton : public IconButton {
+public:
+    explicit RemoveModeButton(ChoiceList* list) : IconButton("remove", Tr(L"Remove external tracks"), 30, 24), list_(list) {
+        onClick = [this] {
+            list_->editing = !list_->editing;
+            list_->Invalidate();
+            Invalidate();
+        };
+    }
+    void Paint(Painter& p) override {
+        enabled = list_->Count() > 0;
+        if (!enabled) list_->editing = false;
+        active = list_->editing;
+        IconButton::Paint(p);
+    }
+    void Describe(A11y& a) override { a.toggle = list_->editing ? 1 : 0; }
+
+private:
+    ChoiceList* list_;
 };
 
 // "Embedded Tracks" row (60 DIP) with optional icon buttons on the right.
@@ -276,7 +316,9 @@ std::vector<ChoiceRow> DeviceRows() {
 
 void AddTracksSection(Widget* page, const wchar_t* type) {
     page->Add<Widget>()->height = Length::Px(16);
-    page->Add<ChoiceList>([type] { return OffRows(type); });
+    const std::wstring_view t(type);
+    page->Add<ChoiceList>([type] { return OffRows(type); })->name =
+        Tr(t == L"video" ? L"Video" : t == L"audio" ? L"Audio" : L"Subtitles");
     AddSectionLine(page);
     AddListTitle(page, Tr(L"Embedded Tracks"));
     page->Add<ChoiceList>([type] { return TrackRows(type, false); }, Tr(L"No tracks"));
@@ -284,12 +326,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
     AddSectionLine(page);
     Widget* title = AddListTitle(page, Tr(L"External Tracks"));
     auto* list = page->Add<ChoiceList>([type] { return TrackRows(type, true); }, Tr(L"None added"));
-    auto* edit = AddTitleButton(title, "edit", L"Remove external tracks", nullptr);
-    edit->onClick = [list, edit] {
-        list->editing = !list->editing;
-        edit->active = list->editing;
-        list->Invalidate();
-    };
+    title->Add<RemoveModeButton>(list);
     const bool subs = std::wstring_view(type) == L"sub";
     if (subs)
         AddTitleButton(title, "search", L"Find subtitles online", [] {

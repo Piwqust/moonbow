@@ -1256,7 +1256,8 @@ public:
             const Rect row{rect.x + 4, cy, rect.w - 8, kMenuItemH};
             const bool hot = i == highlight_ && m.enabled;
             if (hot) p.Fill(row, c.hover, 4);
-            const Color fg = !m.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            // A note is information, so it keeps text contrast; a disabled command may fade.
+            const Color fg = m.note ? c.textSecondary : !m.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
             float x = row.x + 12;
             if (hasIcons_) {
                 if (!m.icon.empty()) p.Icon(m.icon, {x, row.Cy() - 10, 20, 20}, fg, m.enabled ? c.accentMid : fg);
@@ -1393,10 +1394,10 @@ public:
                 it.role = Role::Skip;
                 return;
             }
-            it.role = Role::MenuItem;
+            it.role = m.note ? Role::Text : Role::MenuItem;
             it.name = m.label;
             it.rect = ItemRect(i);
-            it.enabled = m.enabled;
+            it.enabled = m.enabled || m.note;
             if (hasChecks_ || m.checked) it.toggle = m.checked ? 1 : 0;
         };
         a.invokeItem = [this](int k) { Activate(visible_[static_cast<size_t>(k)]); };
