@@ -545,7 +545,10 @@ void LibraryPane::BuildHeader() {
     crumbs_->width = Length::Grow();
 
     count_ = header_->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
-    count_->pad = {0, 0, 12, 0};
+    // A label ignores padding: this keeps 16 DIP (with the gaps) after the count, even when the
+    // search box follows it directly (VIS-14).
+    countGap_ = header_->Add<Widget>();
+    countGap_->width = Length::Px(8);
     sort_ = header_->Add<IconButton>("sort", Tr(L"Sort"));
     sort_->onClick = [this] {
         if (!view_) return;
@@ -665,6 +668,7 @@ void LibraryPane::OnLayout() {
     // page readable by folding its parents into "…").
     const bool tight = !compact_ && rect.w < 900;
     if (count_) count_->visible = countWanted_ && !tight;
+    if (countGap_) countGap_->visible = count_ && count_->visible;
     Widget::OnLayout();
     // A box too narrow for the whole hint says just "Search", not a cut "Search in “…".
     if (search_) {

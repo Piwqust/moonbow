@@ -74,6 +74,7 @@ private:
     ui::Widget* header_ = nullptr;
     ui::Widget* crumbs_ = nullptr;
     ui::Label* count_ = nullptr;
+    ui::Widget* countGap_ = nullptr;
     ui::IconButton* back_ = nullptr;
     ui::IconButton* forward_ = nullptr;
     ui::IconButton* sort_ = nullptr;
