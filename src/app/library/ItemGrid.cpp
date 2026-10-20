@@ -1101,11 +1101,11 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
         case VK_UP: target = Navigate(selected_, 0, -1); break;
         case VK_DOWN: target = Navigate(selected_, 0, 1); break;
         case VK_LEFT:
-            if (!cards) return false;
+            if (!cards || e.mods.alt) return false;  // Alt+Left is Back
             target = Navigate(selected_, -1, 0);
             break;
         case VK_RIGHT:
-            if (!cards) return false;
+            if (!cards || e.mods.alt) return false;
             target = Navigate(selected_, 1, 0);
             break;
         case VK_HOME:

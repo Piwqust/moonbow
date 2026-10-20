@@ -1020,8 +1020,12 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
                 if (w->interactive && w->IsEnabled() && w->OnMouseDown(e)) break;
             }
         } else {
-            for (Widget* w = target; w; w = w->Parent())
-                if (w->interactive && w->OnMouseDown(e)) break;
+            bool used = false;
+            for (Widget* w = target; w && !used; w = w->Parent()) used = w->interactive && w->OnMouseDown(e);
+            // The mouse's Back and Forward buttons, where nothing under the pointer uses them (the
+            // video: previous / next file), are the keys of the same name: library history.
+            if (!used && (e.button == MouseButton::X1 || e.button == MouseButton::X2))
+                OnKey(e.button == MouseButton::X1 ? VK_BROWSER_BACK : VK_BROWSER_FORWARD, true, false);
         }
     } else if (e.button == MouseButton::Left) {
         Widget* t = capture_ ? capture_ : pressed_;
