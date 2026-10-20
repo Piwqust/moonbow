@@ -787,7 +787,7 @@ private:
     void ShowOff() {
         for (Widget* w : std::initializer_list<Widget*>{query_, season_, episode_, lang_, search_}) w->enabled = false;
         Message(Tr(L"Subtitle search is off"),
-                Tr(L"Turn on \"Search for subtitles online\" in Settings › Privacy and paste your own OpenSubtitles "
+                Tr(L"Turn on \"Search for subtitles online\" in Settings › Privacy › Online services and paste your own OpenSubtitles "
                    L"API key there. The key is free: sign in at opensubtitles.com, open your profile, then API "
                    L"Consumers, and create one."),
                 true);

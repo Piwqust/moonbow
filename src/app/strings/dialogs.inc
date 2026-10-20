@@ -33,12 +33,7 @@
  L"Строка {0} не похожа на ссылку. Ссылки начинаются с https://, rtsp:// или udp://"},
 {L"{0} links will be opened as one queue.", L"Ссылки ({0}) откроются одной очередью."},
 {L"Playlist name", L"Название плейлиста"},
-{L"(optional)", L"(необязательно)"},
-{L"The playlist will be saved and displayed with this title.", L"Плейлист сохранится и будет показан под этим названием."},
-{L"e.g., Favorite TV Channels", L"например, Любимые каналы"},
-{L"Buffering", L"Буферизация"},
-{L"More buffering survives a slow connection but starts later. Applies to all streams.",
- L"Большой буфер выдерживает медленную сеть, но поток начинается позже. Действует для всех потоков."},
+{L"Buffering settings…", L"Настроить буферизацию…"},
 {L"Low", L"Низкая"},
 {L"Normal", L"Обычная"},
 {L"High", L"Высокая"},
@@ -116,7 +111,7 @@
 {L"{0} of {1} videos matched", L"Найдены для {0} из {1} видео"},
 {L"Subtitles added to {0} videos", L"Субтитры добавлены к видео: {0}"},
 // --- audio and subtitles
-{L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network).", L"Для ссылок на видеосайты нужен yt-dlp.exe рядом с Lumen.exe (Настройки > Сеть)."},
+{L"Video site links need yt-dlp.exe next to Lumen.exe (Settings › Network).", L"Для ссылок на видеосайты нужен yt-dlp.exe рядом с Lumen.exe («Настройки › Сеть»)."},
 {L"The video page opens through yt-dlp.", L"Страница с видео откроется через yt-dlp."},
 // --- about
 {L"Version {0}", L"Версия {0}"},

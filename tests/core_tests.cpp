@@ -372,10 +372,14 @@ void TestSchema() {
                 if (!it.hidden) ++count;
                 const char* k = it.key.c_str();
                 CHECK_MSG(keys.insert(it.key).second, "duplicate key %s", k);
-                // Window behavior moved from Library to Interface keeps its keys (saved values, main.cpp).
-                const bool moved = it.key == "library.singleInstance" || it.key == "library.singleInstanceFileManager" ||
-                                   it.key == "library.enqueue";
-                CHECK_MSG(moved ? c.id == "interface" : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
+                // Rows moved to another page keep their keys (saved values, main.cpp).
+                static const std::map<std::string, std::string> kMoved = {
+                    {"library.singleInstance", "interface"}, {"library.singleInstanceFileManager", "interface"},
+                    {"library.enqueue", "interface"},        {"privacy.rememberPosition", "playback"},
+                    {"general.theme", "interface"},          {"general.accent", "interface"}};
+                const auto moved = kMoved.find(it.key);
+                CHECK_MSG(moved != kMoved.end() ? c.id == moved->second
+                                                : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
                           "%s outside %s", k, c.id.c_str());
                 CHECK_MSG(it.category == c.id && it.section == s.id, "%s", k);
                 CHECK_MSG(FindItem(it.key) == &it, "%s", k);
@@ -450,7 +454,7 @@ void TestSchema() {
         for (size_t i = 0; i < 5 && i < accent->choices.size(); ++i) CHECK(accent->choices[i].extra == colors[i]);
     }
     const Item* theme = FindItem("general.theme");
-    CHECK(theme && theme->type == ItemType::Segmented && theme->choices.size() == 3 && theme->def.AsString() == "dark");
+    CHECK(theme && theme->type == ItemType::Segmented && theme->choices.size() == 3 && theme->def.AsString() == "system");
     const Item* lang = FindItem("general.language");
     CHECK(lang && lang->def.AsString() == "ru" && lang->FindChoice("en"));
     const Item* hwdec = FindItem("performance.hwdec");
@@ -515,7 +519,7 @@ void TestSchema() {
 void TestConfigValues() {
     FreshDataDir(L"config-values");
     Config c;
-    CHECK(c.GetString("general.theme") == "dark");
+    CHECK(c.GetString("general.theme") == "system");
     CHECK(c.GetString("general.language") == "ru");
     CHECK(c.GetBool("privacy.saveHistory"));
     CHECK(c.GetDouble("playback.speed") == 1);
@@ -595,7 +599,7 @@ void TestConfigValues() {
     CHECK(c.GetDouble("audio.eqPreamp") == 0);
 
     c.ResetAll();
-    CHECK(c.GetString("general.theme") == "dark");
+    CHECK(c.GetString("general.theme") == "system");
     CHECK(c.GetDouble("audio.eq60") == 0);
     CHECK(c.ToJson().Find("values")->size() == 0);
 }
@@ -652,7 +656,7 @@ void TestConfigPersistence() {
         CHECK(c.FilePath() == file);
         CHECK(c.Flush());  // nothing to save
         CHECK(!FileExists(file));
-        c.SetString("general.theme", "system");
+        c.SetString("general.theme", "light");
         c.SetDouble("audio.targetLevel", -16);
         c.SetWString("subtitles.font", L"Ubuntu Кириллица");
         c.SetBool("privacy.saveHistory", false);
@@ -669,7 +673,7 @@ void TestConfigPersistence() {
     const json::Value* values = doc ? doc->Find("values") : nullptr;
     CHECK(values && values->size() == 3);  // only non-default values
     CHECK(values && values->Find("privacy.saveHistory") == nullptr);
-    CHECK(doc && doc->GetNumber("version") == 1);
+    CHECK(doc && doc->GetNumber("version") == 2);
 
     // Unknown keys survive a round trip; invalid values are dropped on load.
     (*doc)["values"].Set("future.setting", json::Value("keep me"));
@@ -682,7 +686,7 @@ void TestConfigPersistence() {
         CHECK(c.Load());
         CHECK(changed.size() == 3);
         CHECK(!c.Dirty());
-        CHECK(c.GetString("general.theme") == "system");
+        CHECK(c.GetString("general.theme") == "light");
         CHECK(c.GetDouble("audio.targetLevel") == -16);
         CHECK(c.GetWString("subtitles.font") == L"Ubuntu Кириллица");
         CHECK(c.GetString("general.language") == "ru");
@@ -700,13 +704,21 @@ void TestConfigPersistence() {
         CHECK(c.Save());
     }
 
+    // Version 1 files did not store the old default theme, Dark: they keep it; newer ones don't.
+    for (int version : {1, 2}) {
+        WriteFile(file, "{\"version\": " + std::to_string(version) + ", \"values\": {\"audio.targetLevel\": -16}}");
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetString("general.theme") == (version == 1 ? "dark" : "system"));
+    }
+
     // A corrupt file is kept as settings.corrupt-<time>.json, reported once, and defaults are used.
     TakeCorruptFileNotices();
     WriteFile(file, "{ this is not json");
     {
         Config c;
         CHECK(!c.Load());
-        CHECK(c.GetString("general.theme") == "dark");
+        CHECK(c.GetString("general.theme") == "system");
         CHECK(CountFiles(dir, L"settings.corrupt-*.json") == 1);
         const std::vector<std::wstring> notices = TakeCorruptFileNotices();
         CHECK(notices.size() == 1 && notices[0] == L"settings.json");
@@ -726,6 +738,14 @@ void TestConfigPersistence() {
         Config c;
         CHECK(c.Load());
         CHECK(!c.GetBool("video.smoothMotion"));
+    }
+    // Buffering moved from milliseconds to seconds.
+    WriteFile(file, R"({"version":2,"values":{"network.cacheLocal":500,"network.cacheNetwork":90000}})");
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetDouble("network.cacheLocalSecs") == 0.5);
+        CHECK(c.GetDouble("network.cacheNetworkSecs") == 90);
     }
 }
 
@@ -1104,10 +1124,10 @@ void TestAudioSubtitleOptions() {
     CHECK(FindOption(MpvOptionFor(c, "subtitles.blur"), "sub-blur") == "1.5");
 
     c.SetString("network.buffering", "custom");
-    c.SetDouble("network.cacheLocal", 300);
-    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "0.3");
+    c.SetDouble("network.cacheLocalSecs", 0.3);
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocalSecs"), "demuxer-readahead-secs") == "0.3");
     c.SetString("network.buffering", "normal");
-    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "1");  // reset
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocalSecs"), "demuxer-readahead-secs") == "1");  // reset
 
     c.SetDouble("audio.maxVolume", 300);
     CHECK(c.GetDouble("audio.maxVolume") == 200);

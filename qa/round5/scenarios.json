@@ -5,7 +5,7 @@
     "A step does one or more of: cmd (tools/dev/command.ps1 text; when command.ps1 exists the step runs only this, otherwise its other fields are the fallback), keys (\"Ctrl+Shift+P\" or a list; System.Windows.Forms.Keys names), type (text), move | click | double | right | wheel (+delta) with a selector, mods ([ctrl, shift]), window (switch the target: main | owned | {title}), size, wait (ms), capture (extra capture label), after (ms after the step, default 250).",
     "A selector: \"x,y\" in DIPs, or {type (regex on the short widget type), id, text (v2 dumps), popup (true/false), parent, nth (negative from the end)} plus the point: center, dx/dy (DIPs, negative from the right/bottom), fx/fy (fractions), card k (ItemGrid card; cardStyle square|video), row k (ItemGrid list row; rowTop).",
     "Posted Ctrl+letter keys also reach TranslateMessage, so a focused text box receives the letter: such steps add Backspace, and the search box is clicked rather than opened with Ctrl+K.",
-    "Never press: Ctrl+O, Ctrl+F (native file and folder pickers), Обзор/Browse buttons, Settings > General > file associations (#file-associations)."
+    "Never press: Ctrl+O, Ctrl+Shift+O (native file and folder pickers), Обзор/Browse buttons, Settings > General > file associations (#file-associations)."
   ],
   "vars": {
     "MEDIA": "%TEMP%\\lumen-qa\\media",

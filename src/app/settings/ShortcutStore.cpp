@@ -145,10 +145,28 @@ void Apply(const json::Value& doc) {
         if (keys.empty()) keys.push_back({0, ui::Mods{}});  // explicitly unassigned
         overrides[id] = std::move(keys);
     }
+    // A key the user gave one action leaves the defaults of the others: a newer version may have
+    // moved a default onto it (Ctrl+F was Open folder, now Search), and the user's choice wins.
+    auto claimed = [&](const KeyBinding& k) {
+        for (const auto& [id, keys] : overrides)
+            for (const KeyBinding& o : keys)
+                if (SameBinding(o, k)) return true;
+        return false;
+    };
     for (const ActionInfo& info : AllActions()) {
         if (info.action == Action::None) continue;
         auto it = overrides.find(info.id);
-        SetBindings(info.action, it == overrides.end() ? std::vector<KeyBinding>{} : it->second);
+        if (it != overrides.end()) {
+            SetBindings(info.action, it->second);
+            continue;
+        }
+        std::vector<KeyBinding> keep;
+        for (const KeyBinding& k : info.keys)
+            if (!claimed(k)) keep.push_back(k);
+        if (keep.size() == info.keys.size())
+            SetBindings(info.action, {});
+        else
+            SetBindings(info.action, keep.empty() ? std::vector<KeyBinding>{{0, ui::Mods{}}} : keep);
     }
 }
 

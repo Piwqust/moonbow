@@ -771,7 +771,7 @@ private:
         }
         lib::ShowConfirm(Tr(L"Find lyrics online?"),
                          Tr(L"The song's artist, title, album and length are sent to lrclib.net. “Always search” "
-                            L"also looks up the next songs without lyrics; you can turn it off in Settings > Network."),
+                            L"also looks up the next songs without lyrics; you can turn it off in Settings › Privacy › Online services."),
                          Tr(L"Find now"), search, Tr(L"Always search"), [search] {
                              TheApp().config().SetBool("privacy.fetchLyrics", true);
                              search();

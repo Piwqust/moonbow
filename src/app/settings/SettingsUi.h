@@ -198,7 +198,7 @@ std::unique_ptr<ui::Widget> MakeShortcutEditor(PageHost& page);
 // Folder / file pickers (IFileOpenDialog / IFileSaveDialog). Empty when cancelled.
 std::wstring PickPath(HWND owner, settings::PathKind kind, const std::wstring& current);
 
-// Confirmation dialog in the settings window; skipped when general.showDialogs is off.
+// Confirmation dialog in the settings window. Always shown: what it guards cannot be undone.
 void Confirm(ui::Host* host, std::wstring title, std::wstring text, std::wstring okText, std::function<void()> ok);
 
 }  // namespace app::sui

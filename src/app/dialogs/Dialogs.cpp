@@ -716,8 +716,8 @@ private:
         visible = true;
         if (!net::online::MetadataOn()) {
             auto* l = Add<Label>(net::online::MetadataKeyRejected()
-                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy.")
-                                     : Tr(L"Paste your TMDB API key in Settings › Privacy to see posters and descriptions."),
+                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy › Online services.")
+                                     : Tr(L"Paste your TMDB API key in Settings › Privacy › Online services to see posters and descriptions."),
                                  TextStyle::Body, Tone::Tertiary);
             l->wrap = true;
             l->width = Length::Grow();
@@ -909,44 +909,34 @@ void ShowNetworkStreamDialog() {
         }
     }
 
-    AddSeparator(body);
-    AddFieldHeader(body, Tr(L"Playlist name"), Tr(L"The playlist will be saved and displayed with this title."),
-                   Tr(L"(optional)"));
-    auto* name = body->Add<TextBox>(Tr(L"e.g., Favorite TV Channels"));
+    // One link just plays; several can be kept as a playlist, named only when that is asked for.
+    auto* save = body->Add<Checkbox>(Tr(L"Save as playlist"));
+    save->visible = false;
+    auto* name = body->Add<TextBox>(Tr(L"Playlist name"));
     name->width = Length::Grow();
     name->height = Length::Px(37);
+    name->visible = false;
 
-    // Buffering (Settings > Network) right here: streams are where it matters. Same
-    // heading + description scale as the two fields above.
-    AddSeparator(body);
-    auto* buf = body->Add<SideRow>();
-    Widget* bl = AddFieldHeader(
-        buf, Tr(L"Buffering"),
-        Tr(L"More buffering survives a slow connection but starts later. Applies to all streams."));
-    bl->width = Length::Grow();
-    std::vector<Choice> modes = {{Tr(L"Low"), "low"}, {Tr(L"Normal"), "normal"}, {Tr(L"High"), "high"}};
-    const std::string current = TheApp().config().GetString("network.buffering");
-    if (current == "custom") modes.push_back({Tr(L"Custom"), "custom"});
-    int sel = 1;
-    for (size_t i = 0; i < modes.size(); ++i)
-        if (modes[i].value == current) sel = static_cast<int>(i);
-    auto* dd = buf->Add<FieldDropdown>(modes, sel);
-    dd->width = Length::Px(200);
-    dd->height = Length::Px(34);
-    dd->onChange = [dd](int i) {
-        if (i >= 0) TheApp().config().SetString("network.buffering", dd->Choices()[static_cast<size_t>(i)].value);
-    };
+    // Buffering applies to every stream, so it is a setting, not a choice in this dialog.
+    auto* buffering = body->Add<LinkButton>(Tr(L"Buffering settings…"), TextStyle::Small);
+    buffering->onClick = [] { TheApp().OpenSettings("network"); };
 
     f->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
     auto* open = f->Footer()->Add<DButton>(Tr(L"Open"), BtnStyle::Accent);
     open->enabled = false;
 
-    auto validate = [urls, hint, hintIcon, open] {
+    auto validate = [body, urls, hint, hintIcon, open, save, name] {
         int bad = 0;
         const std::wstring text = urls->Text();
         const auto links = ParseLinks(text, &bad);
-        open->enabled = bad == 0 && !links.empty();
+        const bool many = links.size() > 1;
+        if (save->visible != many || name->visible != (many && save->Value())) {
+            save->visible = many;
+            name->visible = many && save->Value();
+            body->InvalidateLayout();
+        }
+        open->enabled = bad == 0 && !links.empty() && !(name->visible && Trim(name->Text()).empty());
         // The line being typed isn't an error yet ("h", "http", "rtsp:/"): only once it is long
         // enough to have a scheme, or another line follows it.
         if (bad != 0) {
@@ -965,7 +955,7 @@ void ShowNetworkStreamDialog() {
             hint->SetText(Fmt(Tr(L"Line {0} is not a link. Links look like https://, rtsp:// or udp://"),
                               {std::to_wstring(bad)}));
         else if (site && !SiteLinksPlayable())
-            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network)."));
+            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings › Network)."));
         else if (site && links.size() == 1)
             hint->SetText(Tr(L"The video page opens through yt-dlp."));
         else if (links.size() > 1)
@@ -975,11 +965,17 @@ void ShowNetworkStreamDialog() {
         open->Invalidate();
     };
     urls->onChange = [validate](const std::wstring&) { validate(); };
+    name->onChange = [validate](const std::wstring&) { validate(); };
+    save->onChange = [validate, name](bool on) {
+        validate();
+        if (Host* h = name->GetHost(); on && h) h->SetFocus(name);
+    };
     auto submit = [f, urls, name] {
         int bad = 0;
         const auto links = ParseLinks(urls->Text(), &bad);
         if (bad || links.empty()) return;
-        const std::wstring listName = Trim(name->Text());
+        const std::wstring listName = name->visible ? Trim(name->Text()) : std::wstring();
+        if (name->visible && listName.empty()) return;  // asked to save: a playlist needs a name
         f->Close();
         if (!listName.empty()) {
             const std::string id = TheApp().playlists().Create(listName);

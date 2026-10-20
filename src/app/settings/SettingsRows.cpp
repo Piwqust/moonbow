@@ -1391,10 +1391,6 @@ std::wstring PickPath(HWND owner, settings::PathKind kind, const std::wstring& c
 
 void Confirm(Host* host, std::wstring title, std::wstring text, std::wstring okText, std::function<void()> ok) {
     if (!host) return;
-    if (!Cfg().GetBool("general.showDialogs")) {
-        ok();
-        return;
-    }
     // The same kit and layout as the library's confirms (LibraryCommon ShowConfirm, LB-17):
     // Cancel on the left and focused with its ring, the action on the right (VF-05).
     auto frame = std::make_unique<dlg::Frame>(std::move(title), dlg::FitWidth(host, 440));

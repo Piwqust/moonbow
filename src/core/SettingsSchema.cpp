@@ -226,7 +226,7 @@ std::optional<std::string> BuildCacheSecs(const Config& c) {
     std::string mode = c.GetString("network.buffering");
     if (mode == "low") return "10";
     if (mode == "high") return "300";
-    if (mode == "custom") return Num(std::max(1.0, c.GetDouble("network.cacheNetwork") / 1000.0));
+    if (mode == "custom") return Num(std::max(1.0, c.GetDouble("network.cacheNetworkSecs")));
     return "60";
 }
 
@@ -269,7 +269,7 @@ std::optional<std::string> BuildHttpProxy(const Config& c) {
 // Read-ahead of files mpv does not cache (local files and discs); streams use cache-secs.
 std::optional<std::string> BuildReadahead(const Config& c) {
     if (c.GetString("network.buffering") != "custom") return std::nullopt;
-    return Num(std::max(0.05, c.GetDouble("network.cacheLocal") / 1000.0));
+    return Num(std::max(0.05, c.GetDouble("network.cacheLocalSecs")));
 }
 
 std::optional<std::string> BuildYtdl(const Config& c) {
@@ -728,26 +728,11 @@ void BuildApp(Builder& b) {
     // ===== General =====
     b.Cat("general", "app", "preferences", L"General", L"Общие");
 
-    b.Sec("appearance", L"Appearance", L"Оформление");
+    b.Sec("language", L"Language", L"Язык");
     b.Pick("general.language", L"Interface language", L"Язык интерфейса",
            {{"ru", L"Русский", L"Русский"}, {"en", L"English", L"English"}}, "ru");
-    b.Seg("general.theme", L"Theme", L"Тема",
-          {{"dark", L"Dark", L"Тёмная"}, {"light", L"Light", L"Светлая"}, {"system", L"System", L"Системная"}},
-          "dark");
-    b.Pick("general.accent", L"Accent color", L"Цвет акцента",
-           {{"white", L"White", L"Белый", "", "#EDEDED"},
-            {"pearl", L"Pearl", L"Жемчуг", "", "#D4D4D4"},
-            {"silver", L"Silver", L"Серебро", "", "#B5B5B5"},
-            {"steel", L"Steel", L"Сталь", "", "#8F8F8F"},
-            {"graphite", L"Graphite", L"Графит", "", "#6B6B6B"}},
-           "white", ItemType::AccentPicker);
 
-    b.Sec("startup", L"Startup", L"Запуск");
-    b.Toggle("general.showDialogs", L"Show confirmation and error dialogs", L"Показывать подтверждения и ошибки", true)
-        .Desc(L"Ask before destructive actions and show a window when a file cannot be played. When off, "
-              L"errors appear as short on-screen messages.",
-              L"Спрашивать перед необратимыми действиями и показывать окно, если файл не открылся. "
-              L"Если выключено, ошибки появляются короткими сообщениями поверх видео.");
+    b.Sec("windows", L"Windows integration", L"Интеграция с Windows");
     b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
         .Desc(L"Look for a new version of Lumen once a day. Nothing else is sent.",
               L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.")
@@ -809,9 +794,22 @@ void BuildApp(Builder& b) {
     // ===== Interface =====
     b.Cat("interface", "app", "interface", L"Interface", L"Интерфейс");
 
-    b.Sec("skin", L"Skin", L"Скин");
+    // Everything about the look in one place; theme and accent keep their general.* keys (saved values).
+    b.Sec("appearance", L"Appearance", L"Оформление");
+    b.Seg("general.theme", L"Theme", L"Тема",
+          {{"dark", L"Dark", L"Тёмная"}, {"light", L"Light", L"Светлая"}, {"system", L"System", L"Системная"}},
+          "system")  // follows Windows, like onboarding suggests; WM_SETTINGCHANGE re-themes live
+        .Desc(L"Light, dark or the same as Windows. The OLED black skin is always dark.",
+              L"Светлая, тёмная или как в Windows. Скин «Чёрный OLED» всегда тёмный.");
+    b.Pick("general.accent", L"Accent color", L"Цвет акцента",
+           {{"white", L"White", L"Белый", "", "#EDEDED"},
+            {"pearl", L"Pearl", L"Жемчуг", "", "#D4D4D4"},
+            {"silver", L"Silver", L"Серебро", "", "#B5B5B5"},
+            {"steel", L"Steel", L"Сталь", "", "#8F8F8F"},
+            {"graphite", L"Graphite", L"Графит", "", "#6B6B6B"}},
+           "white", ItemType::AccentPicker);
     // One widget (app/settings/SettingsSkins.cpp): the built-in skins with swatches, then "Custom file".
-    b.Pick("interface.skin", L"Look", L"Оформление",
+    b.Pick("interface.skin", L"Skin", L"Скин",
            {{"lumen", L"Lumen", L"Lumen"},
             {"oled", L"OLED black", L"Чёрный OLED"},
             {"contrast", L"High contrast", L"Высокий контраст"},
@@ -876,7 +874,7 @@ void BuildApp(Builder& b) {
               L"Файлы, открытые в запущенном окне, добавляются в конец очереди.")
         .When("library.singleInstance", "true");
 
-    b.Sec("controls", L"Playback Controls", L"Панель управления");
+    b.Sec("controls", L"Playback controls", L"Панель управления");
     b.Toggle("interface.compactMode", L"Start in compact mode", L"Запускать в компактном режиме", false)
         .Desc(L"Open with a small window and the minimal control bar.",
               L"Открываться в маленьком окне с минимальной панелью управления.")
@@ -910,14 +908,14 @@ void BuildApp(Builder& b) {
         .Desc(L"Show a thin progress line along the bottom of the video while the controls are hidden.",
               L"Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.");
 
-    b.Sec("notifications", L"Notifications and System Tray", L"Уведомления и системный трей");
+    b.Sec("notifications", L"Notifications and system tray", L"Уведомления и системный трей");
     b.inferred = true;
     b.Toggle("interface.osdMessages", L"Show on-screen messages", L"Сообщения поверх видео", true)
         .Desc(L"Briefly show volume, speed and track changes over the video.",
               L"Ненадолго показывать громкость, скорость и смену дорожек поверх видео.");
     b.Toggle("interface.notifyTrackChange", L"Notify when the track changes", L"Уведомлять о смене трека", false)
-        .Desc(L"Show a Windows notification with the title and cover when the next song starts.",
-              L"Показывать уведомление Windows с названием и обложкой, когда начинается следующая песня.");
+        .Desc(L"Show a Windows notification with the title when the next song starts.",
+              L"Показывать уведомление Windows с названием, когда начинается следующая песня.");
     b.Toggle("interface.trayIcon", L"Show an icon in the system tray", L"Значок в области уведомлений", false);
     b.Toggle("interface.minimizeToTray", L"Minimize to the system tray", L"Сворачивать в область уведомлений", false)
         .When("interface.trayIcon", "true");
@@ -930,12 +928,9 @@ void BuildApp(Builder& b) {
     b.Cat("privacy", "app", "privacy", L"Privacy", L"Конфиденциальность");
 
     b.Sec("history", L"History", L"История");
-    b.Toggle("privacy.saveHistory", L"Save recently played items", L"Сохранять недавние файлы", true)
+    b.Toggle("privacy.saveHistory", L"Save history", L"Сохранять историю", true)
         .Desc(L"Keep a list of played files for History, Continue watching and Listen again.",
               L"Вести список открытых файлов для разделов «История», «Продолжить просмотр» и «Слушать снова».");
-    b.Toggle("privacy.rememberPosition", L"Remember the playback position", L"Запоминать место остановки", true)
-        .Desc(L"Save where you stopped and continue from there next time.",
-              L"Сохранять, где вы остановились, и продолжать с этого места в следующий раз.");  // Player::rememberPosition
     b.Text("privacy.excludePatterns", L"Never remember items matching", L"Не запоминать файлы по маске")
         .Desc(L"Files matching these patterns stay out of the history. Separate patterns with ';', "
               L"for example *\\Private\\*;*.tmp.mkv",
@@ -948,7 +943,7 @@ void BuildApp(Builder& b) {
               L"Забыть все недавние файлы, сохранённые позиции, настройки отдельных файлов и данные онлайн-сервисов "
               L"(постеры, описания, тексты песен). Отменить нельзя.");
 
-    b.Sec("network", L"Network", L"Сеть");
+    b.Sec("online", L"Online services", L"Онлайн-сервисы");
     // Online services (src/net/Online.cpp). Each is off until the user turns it on; the services
     // that need a key use the user's own, stored DPAPI-encrypted (Config.cpp, `secret` items).
     b.Toggle("privacy.fetchLyrics", L"Search for song lyrics online (LRCLIB)",
@@ -1035,8 +1030,8 @@ void BuildApp(Builder& b) {
     // ===== Controls =====
     b.Cat("controls", "app", "hotkeys", L"Controls", L"Управление");
 
-    b.Sec("shortcuts", L"Keyboard Shortcuts", L"Сочетания клавиш");
-    b.Button("controls.editShortcuts", L"Shortcut list", L"Список сочетаний", "edit-shortcuts", L"Edit Keyboard Shortcuts",
+    b.Sec("shortcuts", L"Keyboard shortcuts", L"Сочетания клавиш");
+    b.Button("controls.editShortcuts", L"Shortcut list", L"Список сочетаний", "edit-shortcuts", L"Edit keyboard shortcuts",
              L"Изменить сочетания клавиш");
     b.Button("controls.resetShortcuts", L"Reset all shortcuts", L"Сбросить все сочетания", "reset-shortcuts", L"Reset",
              L"Сбросить");
@@ -1046,7 +1041,7 @@ void BuildApp(Builder& b) {
         .Desc(L"Overrides of the default shortcuts, edited in the Keyboard Shortcuts dialog.",
               L"Изменённые сочетания клавиш; редактируются в окне «Сочетания клавиш».");
 
-    b.Sec("skip", L"Skip Amounts", L"Шаг перемотки");
+    b.Sec("skip", L"Skip amounts", L"Шаг перемотки");
     b.Number("controls.skipVeryShort", L"Very short skip", L"Очень короткий", 1, 3600, 1, 3).Unit(L"s", L"с");
     b.Number("controls.skipShort", L"Short skip", L"Короткий", 1, 3600, 1, 10).Unit(L"s", L"с");
     b.Number("controls.skipMedium", L"Medium skip", L"Средний", 1, 3600, 1, 60).Unit(L"s", L"с");
@@ -1098,6 +1093,10 @@ void BuildMedia(Builder& b) {
         .Desc(L"Resume a file from the saved position. \"Ask\" offers to resume in a message instead.",
               L"Продолжать файл с сохранённого места. «Спрашивать» — предложить это в сообщении.")
         .Mpv("resume-playback");
+    // One concept, one place: the key stays in privacy (saved values, App.cpp), the row sits under resume.
+    b.Toggle("privacy.rememberPosition", L"Save the playback position", L"Сохранять место остановки", true)
+        .Desc(L"Save where you stopped in each file, so that it can continue from there.",
+              L"Запоминать, где вы остановились в каждом файле, чтобы продолжить с этого места.");  // Player::rememberPosition
     b.Toggle("playback.autoPlay", L"Start playing as soon as a file opens", L"Начинать воспроизведение сразу", true)
         .Desc(L"When off, files open paused on the first frame.",
               L"Если выключено, файл открывается на паузе на первом кадре.")
@@ -1129,6 +1128,8 @@ void BuildMedia(Builder& b) {
         .Desc(L"Language for DVD and Blu-ray menus when the disc offers several.",
               L"Язык меню DVD и Blu-ray, если на диске их несколько.")
         .Hidden();  // not implemented yet
+    // Track numbers are for odd files; the preferred languages (Audio, Subtitles) pick tracks otherwise.
+    b.advanced = true;
     b.Number("playback.audioTrack", L"Default audio track", L"Аудиодорожка по умолчанию", 0, 99, 1, 0)
         .Hint(L"Auto", L"Авто")
         .Desc(L"Track number to start with. 0 picks automatically by the preferred language.",
@@ -1139,9 +1140,10 @@ void BuildMedia(Builder& b) {
         .Desc(L"Subtitle track number to start with. 0 picks automatically by the preferred language.",
               L"С какой дорожки субтитров начинать. 0 — выбрать автоматически по предпочтительному языку.")
         .MpvBuild("sid", BuildSid, "auto");
+    b.advanced = false;
 
     // app/player/LiveState (library/FileSettings): restored through loadfile options.
-    b.Sec("perFile", L"Per-File Settings", L"Настройки для каждого файла");
+    b.Sec("perFile", L"Per-file settings", L"Настройки для каждого файла");
     b.Toggle("playback.perFile", L"Remember settings for each file", L"Запоминать настройки для каждого файла", true)
         .Desc(L"The audio and subtitle tracks you pick and their delays come back the next time the file opens.",
               L"Выбранные аудиодорожка и субтитры и их задержки вернутся, когда файл откроется снова.");
@@ -1236,7 +1238,7 @@ void BuildMedia(Builder& b) {
     b.inferred = false;
 
     b.inferred = true;
-    b.Sec("quality", L"Image Quality", L"Качество изображения");
+    b.Sec("quality", L"Image quality", L"Качество изображения");
     {
         auto q = b.Pick("video.quality", L"Preset", L"Пресет",
                         {{"fast", L"Fast", L"Быстро"},
@@ -1259,7 +1261,7 @@ void BuildMedia(Builder& b) {
             .MpvBuild("hdr-contrast-recovery", BuildContrastRecovery, "0")
             .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
     }
-    b.Pick("video.upscaler", L"Upscaler", L"Алгоритм увеличения",
+    b.Pick("video.upscaler", L"Upscaling method", L"Способ увеличения",
            {{"auto", L"From the quality setting", L"По настройке качества"},
             {"bilinear", L"Bilinear (fastest)", L"Билинейный (самый быстрый)"},
             {"spline36", L"Spline36", L"Spline36"},
@@ -1270,7 +1272,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Filter used to enlarge videos smaller than the window.",
               L"Фильтр, которым увеличиваются видео меньше окна.")
         .MpvBuild("scale", BuildScale, "lanczos");
-    b.Toggle("video.superResolution", L"AI upscaling (NVIDIA RTX / Intel)", L"ИИ-апскейл (NVIDIA RTX / Intel)", false)
+    b.Toggle("video.superResolution", L"AI upscaling (NVIDIA RTX / Intel)", L"Увеличение с помощью ИИ (NVIDIA RTX / Intel)", false)
         .Desc(L"Enlarge low-resolution video with the graphics card's Video Super Resolution. Needs an NVIDIA RTX or "
               L"Intel Arc / Core Ultra GPU and Direct3D 11 hardware decoding.",
               L"Увеличивать видео низкого разрешения через Video Super Resolution видеокарты. Нужна NVIDIA RTX или "
@@ -1279,24 +1281,24 @@ void BuildMedia(Builder& b) {
         .Desc(L"Turn SDR video into HDR on NVIDIA RTX cards. Needs Windows HDR on and Direct3D 11 hardware decoding.",
               L"Превращать SDR-видео в HDR на видеокартах NVIDIA RTX. Нужны включённый HDR в Windows и аппаратное "
               L"декодирование Direct3D 11.");
-    b.Toggle("video.deband", L"Debanding", L"Устранение полос", false)
+    b.Toggle("video.deband", L"Smooth gradients (debanding)", L"Сглаживать градиенты (дебандинг)", false)
         .Desc(L"Smooth out color banding in gradients (skies, dark scenes).",
               L"Сглаживает ступеньки в градиентах (небо, тёмные сцены).")
         .MpvBuild("deband", BuildDeband, "no")
         .MpvBuild("deband-range", BuildDebandRange, "16");
-    b.Slider("video.debandRange", L"Banding removal radius", L"Радиус устранения полос", 1, 64, 1, 16)
+    b.Slider("video.debandRange", L"Smoothing radius", L"Радиус сглаживания", 1, 64, 1, 16)
         .Desc(L"How far debanding looks for steps. 16 suits most videos.",
               L"Как далеко искать ступеньки. Для большинства видео подходит 16.")
         .When("video.deband", "true")
         .MpvBuild("deband-range", BuildDebandRange, "16");
-    b.Slider("video.filmGrain", L"Film grain variance", L"Плёночное зерно", 0, 256, 1, 48)
-        .Desc(L"Grain added after banding removal to hide remaining steps.",
-              L"Зерно, которое добавляется после устранения полос, чтобы скрыть остатки ступенек.")
+    b.Slider("video.filmGrain", L"Masking grain", L"Маскирующее зерно", 0, 256, 1, 48)
+        .Desc(L"Grain added after smoothing to hide the remaining steps.",
+              L"Зерно, которое добавляется после сглаживания, чтобы скрыть остатки ступенек.")
         .When("video.deband", "true")
         .Mpv("deband-grain");
 
-    b.Sec("tonemapping", L"HDR Tone Mapping", L"Тональная компрессия HDR");
-    b.Pick("video.toneMapping", L"Tone mapping", L"Тональная компрессия",
+    b.Sec("tonemapping", L"HDR brightness and color", L"Яркость и цвета HDR");
+    b.Pick("video.toneMapping", L"Brightness fitting (tone mapping)", L"Подгонка яркости (тональная компрессия)",
            {{"auto", L"Automatic", L"Автоматически", "auto"},
             {"bt.2390", L"BT.2390", L"BT.2390", "bt.2390"},
             {"bt.2446a", L"BT.2446a", L"BT.2446a", "bt.2446a"},
@@ -1310,7 +1312,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"How HDR brightness is fitted to a screen that can't show all of it.",
               L"Как яркость HDR укладывается в возможности экрана.")
         .Mpv("tone-mapping");
-    b.Pick("video.gamutMapping", L"Gamut mapping", L"Преобразование цветового охвата",
+    b.Pick("video.gamutMapping", L"Color fitting (gamut mapping)", L"Подгонка цветов (цветовой охват)",
            {{"auto", L"Automatic", L"Автоматически", "auto"},
             {"perceptual", L"Perceptual", L"Перцептивное", "perceptual"},
             {"relative", L"Relative colorimetric", L"Относительное колориметрическое", "relative"},
@@ -1322,8 +1324,8 @@ void BuildMedia(Builder& b) {
         .Mpv("gamut-mapping-mode");
     b.Pick("video.hdrComputePeak", L"Measure scene brightness", L"Измерять яркость сцены",
            {{"auto", L"Automatic", L"Автоматически"}, {"yes", L"On", L"Вкл."}, {"no", L"Off", L"Выкл."}}, "auto")
-        .Desc(L"Analyze each frame's brightness for more accurate tone mapping. Costs some GPU time.",
-              L"Анализировать яркость каждого кадра для более точной тональной компрессии. Немного нагружает видеокарту.")
+        .Desc(L"Analyze each frame's brightness to fit it more accurately. Costs some GPU time.",
+              L"Анализировать яркость каждого кадра, чтобы точнее подгонять яркость. Немного нагружает видеокарту.")
         .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
     b.Number("video.targetPeak", L"Display peak brightness", L"Пиковая яркость экрана", 0, 10000, 10, 0)
         .Unit(L"nits", L"нит")
@@ -1374,8 +1376,8 @@ void BuildMedia(Builder& b) {
     b.inferred = false;
     b.Button("video.resetPicture", L"Reset picture", L"Сбросить изображение", "reset-picture", L"Reset", L"Сбросить");
 
-    b.Sec("deinterlacing", L"Deinterlacing", L"Устранение чересстрочности");
-    b.Pick("video.deinterlace", L"Mode", L"Режим",
+    b.Sec("deinterlacing", L"Interlaced video", L"Чересстрочное видео");
+    b.Pick("video.deinterlace", L"Remove comb lines (deinterlacing)", L"Убирать гребёнку (деинтерлейсинг)",
            {{"auto", L"Automatic", L"Автоматически"}, {"on", L"On", L"Вкл."}, {"off", L"Off", L"Выкл."}}, "auto")
         .Desc(L"Remove comb lines from interlaced video (TV recordings, DVDs). Automatic applies it only to "
               L"interlaced frames.",
@@ -1560,19 +1562,19 @@ void BuildMedia(Builder& b) {
         .Desc(L"Keep quiet and loud files at a similar level. Works together with the equalizer.",
               L"Держать тихие и громкие файлы на одном уровне. Работает вместе с эквалайзером.")
         .MpvBuild("af", BuildAf);
-    b.Seg("audio.normalizeMode", L"Normalization", L"Способ выравнивания",
-          {{"ebu", L"EBU R128", L"EBU R128"}, {"dynamic", L"Dynamic", L"Динамический"}}, "ebu")
+    b.Pick("audio.normalizeMode", L"Normalization", L"Способ выравнивания",  // a list: the term needs the width
+          {{"ebu", L"Standard (EBU R128)", L"Стандартный (EBU R128)"}, {"dynamic", L"Dynamic", L"Динамический"}}, "ebu")
         .Inferred()
-        .Desc(L"EBU R128 aims at a target loudness. Dynamic also lifts quiet passages within a file, like "
-              L"dialogue between loud scenes.",
-              L"EBU R128 приводит звук к целевой громкости. Динамический ещё и поднимает тихие места внутри файла, "
-              L"например диалоги между громкими сценами.")
+        .Desc(L"Standard brings every file to one target loudness (EBU R128, as in broadcasting). Dynamic also "
+              L"lifts quiet passages within a file, like dialogue between loud scenes.",
+              L"Стандартный приводит каждый файл к одной целевой громкости (EBU R128, как на телевидении). "
+              L"Динамический ещё и поднимает тихие места внутри файла, например диалоги между громкими сценами.")
         .When("audio.normalize", "true")
         .MpvBuild("af", BuildAf);
     b.Number("audio.targetLevel", L"Target level", L"Целевой уровень", -40, -5, 1, -23)
         .Unit(L"LUFS", L"LUFS")
-        .Desc(L"Loudness to aim for in EBU R128 mode. -23 is the broadcast standard, -16 is louder.",
-              L"К какой громкости стремиться в режиме EBU R128. -23 — телевизионный стандарт, -16 — громче.")
+        .Desc(L"Loudness to aim for in the Standard way. -23 is the broadcast standard, -16 is louder.",
+              L"К какой громкости стремиться в стандартном способе. -23 — телевизионный стандарт, -16 — громче.")
         .When("audio.normalize", "true")
         .MpvBuild("af", BuildAf);
     b.Toggle("audio.nightMode", L"Night mode", L"Ночной режим", false)
@@ -1800,7 +1802,7 @@ void BuildMedia(Builder& b) {
     // ===== Subtitles =====
     b.Cat("subtitles", "media", "subtitles", L"Subtitles", L"Субтитры");
 
-    b.Sec("tracks", L"Tracks & Languages", L"Дорожки и языки");
+    b.Sec("tracks", L"Tracks and languages", L"Дорожки и языки");
     b.Toggle("subtitles.enabled", L"Enable subtitles", L"Показывать субтитры", true)
         .Desc(L"Show subtitles when a file has them. You can still turn them on from the player.",
               L"Показывать субтитры, если они есть. Их всегда можно включить в плеере.")
@@ -1829,7 +1831,7 @@ void BuildMedia(Builder& b) {
               L"Кодировка текстовых файлов субтитров. Смените, если вместо букв «кракозябры».")
         .Mpv("sub-codepage");
 
-    b.Sec("loading", L"Loading Subtitles", L"Загрузка субтитров");
+    b.Sec("loading", L"Loading subtitles", L"Загрузка субтитров");
     b.Toggle("subtitles.autoLoad", L"Load subtitle files automatically", L"Подключать файлы субтитров автоматически", true)
         .Desc(L"Load .srt, .ass and other subtitle files found next to the video.",
               L"Подключать файлы .srt, .ass и другие, лежащие рядом с видео.")
@@ -1941,7 +1943,7 @@ void BuildMedia(Builder& b) {
         .MpvBool("sub-ass-override", "force", "scale");
 
     // Read by app/player/SubWords.cpp. The links open in the browser only on a click.
-    b.Sec("words", L"Words in Subtitles", L"Слова в субтитрах");
+    b.Sec("words", L"Words in subtitles", L"Слова в субтитрах");
     b.Toggle("subtitles.wordPicker", L"Pick words on pause", L"Выбор слов на паузе", true)
         .Desc(L"On pause, a click on a word in the subtitles copies it or looks it up in a dictionary or a translator. "
               L"Shift-click or drag to pick several words; W does it from the keyboard.",
@@ -1960,12 +1962,12 @@ void BuildMedia(Builder& b) {
     // ===== Library =====
     b.Cat("library", "media", "folder", L"Library", L"Медиатека");
 
-    b.Sec("folders", L"Library Folders", L"Папки медиатеки");
+    b.Sec("folders", L"Library folders", L"Папки медиатеки");
     b.Info("library.folders", L"Folders", L"Папки", "library-folders")
         .Desc(L"The folders Lumen looks for videos and music in. Removing one leaves its files on disk.",
               L"Папки, в которых Lumen ищет видео и музыку. Если убрать папку, файлы останутся на диске.");
 
-    b.Sec("opening", L"Opening Files", L"Открытие файлов");
+    b.Sec("opening", L"Opening files", L"Открытие файлов");
     b.Pick("library.openFolder", L"When opening a folder", L"При открытии папки",
            {{"subfolders", L"Include subfolders", L"Вместе с вложенными папками"},
             {"folder", L"This folder only", L"Только эта папка"}},
@@ -1976,7 +1978,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Include hidden and system files in the library and in the queue of an opened folder.",
               L"Включать скрытые и системные файлы в медиатеку и в очередь открытой папки.");
 
-    b.Sec("metadata", L"Metadata & Artwork", L"Метаданные и обложки");
+    b.Sec("metadata", L"Metadata and artwork", L"Метаданные и обложки");
     b.Pick("library.metadata", L"Fetch titles and artwork", L"Названия и обложки",
            {{"file", L"From the file only", L"Только из файла"},
             {"internet", L"From the file and the internet (TMDB)", L"Из файла и из интернета (TMDB)"}},
@@ -2014,18 +2016,18 @@ void BuildSystem(Builder& b) {
               L"Сколько потока загружать заранее. Большой буфер переживает медленную сеть, но старт дольше.")
         .MpvBuild("cache-secs", BuildCacheSecs)
         .MpvBuild("demuxer-max-bytes", BuildDemuxerMaxBytes);
-    b.Number("network.cacheLocal", L"Local files", L"Локальные файлы", 0, 60000, 50, 300)
-        .Unit(L"ms", L"мс")
-        .Desc(L"How far ahead to read files on this computer. Less uses less memory; 1000 is mpv's default.",
-              L"Насколько вперёд читать файлы с этого компьютера. Меньше — меньше памяти; 1000 — как в mpv.")
+    b.Number("network.cacheLocalSecs", L"Local files", L"Локальные файлы", 0, 60, 0.05, 0.3)
+        .Unit(L"s", L"с")
+        .Desc(L"How far ahead to read files on this computer. Less uses less memory; 1 is mpv's default.",
+              L"Насколько вперёд читать файлы с этого компьютера. Меньше — меньше памяти; 1 — как в mpv.")
         .When("network.buffering", "custom")
         .MpvBuild("demuxer-readahead-secs", BuildReadahead, "1");
     b.Number("network.cacheDisc", L"Discs", L"Диски", 0, 60000, 50, 300)
         .Unit(L"ms", L"мс")
         .When("network.buffering", "custom")
         .Hidden();  // not implemented yet
-    b.Number("network.cacheNetwork", L"Network streams", L"Сетевые потоки", 1000, 3600000, 500, 60000)
-        .Unit(L"ms", L"мс")
+    b.Number("network.cacheNetworkSecs", L"Network streams", L"Сетевые потоки", 1, 3600, 0.5, 60)
+        .Unit(L"s", L"с")
         .When("network.buffering", "custom")
         .MpvBuild("cache-secs", BuildCacheSecs);
     b.Number("network.cacheLive", L"Live capture", L"Захват с устройств", 0, 60000, 50, 300)
@@ -2034,7 +2036,7 @@ void BuildSystem(Builder& b) {
         .Hidden();  // not implemented yet
 
     // On the main page: people who paste a YouTube link look here first.
-    b.Sec("web", L"Web Videos", L"Видео с сайтов");
+    b.Sec("web", L"Web videos", L"Видео с сайтов");
     b.inferred = true;
     {
         const std::wstring& ytdlp = YtDlpPath();
@@ -2139,7 +2141,7 @@ void BuildSystem(Builder& b) {
               L"Потоки процессора для программного декодирования. 0 — автоматически.")
         .MpvBuild("vd-lavc-threads", BuildDecodeThreads);
 
-    b.Sec("smooth", L"Smooth Playback", L"Плавное воспроизведение");
+    b.Sec("smooth", L"Smooth playback", L"Плавное воспроизведение");
     b.Toggle("performance.frameDrop", L"Drop frames when the system can't keep up", L"Пропускать кадры при нехватке ресурсов",
              true)
         .MpvBool("framedrop", "vo", "no");
@@ -2405,7 +2407,7 @@ std::vector<const Item*> Search(std::wstring_view query) {
 }
 
 const std::wstring& AdvancedOptionsLabel(Lang lang) {
-    static const std::wstring en = L"Advanced Options", ru = L"Дополнительные параметры";
+    static const std::wstring en = L"Advanced options", ru = L"Дополнительные параметры";
     return lang == Lang::Ru ? ru : en;
 }
 

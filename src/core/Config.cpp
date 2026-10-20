@@ -125,12 +125,21 @@ bool Config::ApplyDocument(const json::Value& doc) {
     std::unordered_map<std::string, std::string> sealed;
     // Keys that were renamed: an old file keeps its value under the new name (unless the file
     // already has the new key).
-    static const std::pair<const char*, const char*> kRenamed[] = {
-        {"performance.interpolation", "video.smoothMotion"},
+    static const struct {
+        const char *from, *to;
+        double scale;  // numbers are multiplied by it (a unit change)
+    } kRenamed[] = {
+        {"performance.interpolation", "video.smoothMotion", 1},
+        {"network.cacheLocal", "network.cacheLocalSecs", 0.001},  // milliseconds -> seconds
+        {"network.cacheNetwork", "network.cacheNetworkSecs", 0.001},
     };
+    double scale = 1;
     auto renamed = [&](const std::string& key) -> const char* {
-        for (const auto& [from, to] : kRenamed)
-            if (key == from && !values->Find(to)) return to;
+        for (const auto& r : kRenamed)
+            if (key == r.from && !values->Find(r.to)) {
+                scale = r.scale;
+                return r.to;
+            }
         return nullptr;
     };
     for (const json::Member& m : values->AsObject()) {
@@ -141,8 +150,9 @@ bool Config::ApplyDocument(const json::Value& doc) {
             continue;
         }
         if (newKey) {
+            const json::Value old = m.value.IsNumber() ? json::Value(m.value.AsNumber() * scale) : m.value;
             if (item->HasValue())
-                if (std::optional<json::Value> v = Validate(*item, m.value)) next[item->key] = std::move(*v);
+                if (std::optional<json::Value> v = Validate(*item, old)) next[item->key] = std::move(*v);
             continue;
         }
         if (!item->HasValue()) continue;
@@ -160,6 +170,9 @@ bool Config::ApplyDocument(const json::Value& doc) {
         }
         if (std::optional<json::Value> v = Validate(*item, value)) next[m.key] = std::move(*v);
     }
+    // Files before version 2 left out the theme when it was the old default, Dark: keep it dark
+    // rather than switch those users to System.
+    if (doc.GetNumber("version", 1) < 2 && !values->Find("general.theme")) next["general.theme"] = json::Value("dark");
     for (const Item* item : settings::AllItems()) {
         if (!item->HasValue()) continue;
         auto it = next.find(item->key);
@@ -190,7 +203,7 @@ json::Value Config::ToJson() const {
     }
     for (const json::Member& m : unknown_.AsObject()) values.Set(m.key, m.value);
     json::Value doc = json::Value::MakeObject();
-    doc.Set("version", 1);
+    doc.Set("version", 2);  // 2: the theme defaults to System (see ApplyDocument)
     doc.Set("values", std::move(values));
     return doc;
 }

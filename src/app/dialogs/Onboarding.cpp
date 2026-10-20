@@ -9,6 +9,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
+#include "core/SettingsSchema.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
 
@@ -557,18 +558,13 @@ private:
 
         // What Lumen keeps about the user, right here instead of on a page of its own.
         auto* prefs = card(178 + rows.size() * 48.0f + 16 + 16, 0);  // 0: as tall as its rows
-        struct Opt {
-            const char* key;
-            const wchar_t *title, *desc;
-        };
-        const Opt opts[] = {
-            {"privacy.saveHistory", L"Remember what you play",
-             L"Keep a list of played files for History, Continue watching and Listen again."},
-            {"privacy.rememberPosition", L"Continue where you left off",
-             L"Save where you stopped and continue from there next time."},
-            {"library.thumbnails", L"Show thumbnails", L"Use Windows thumbnails for videos and embedded covers for music."},
-        };
+        // The Settings rows' own words, so a switch is found there under the same name.
+        const char* const opts[] = {"privacy.saveHistory", "privacy.rememberPosition", "library.thumbnails"};
+        const settings::Lang lang =
+            CurrentLanguage() == Language::Russian ? settings::Lang::Ru : settings::Lang::En;
         for (size_t i = 0; i < std::size(opts); ++i) {
+            const settings::Item* item = settings::FindItem(opts[i]);
+            if (!item) continue;
             if (i > 0) AddSeparator(prefs);
             auto* row = prefs->Add<Widget>();
             row->dir = Dir::Row;
@@ -582,11 +578,11 @@ private:
             // ran into the separator below.
             text->width = Length::Px(680 - 20 - 12 - 24 - 66);  // card - padding - gap - toggle
             text->gap = 4;
-            text->Add<Label>(Tr(opts[i].title), TextStyle::Body)->color = SoftText;
-            auto* d = text->Add<Label>(Tr(opts[i].desc), TextStyle::Small, Tone::Tertiary);
+            text->Add<Label>(item->Label(lang), TextStyle::Body)->color = SoftText;
+            auto* d = text->Add<Label>(item->Description(lang), TextStyle::Small, Tone::Tertiary);
             d->wrap = true;
             d->width = Length::Grow();
-            const std::string key = opts[i].key;
+            const std::string key = opts[i];
             auto* t = row->Add<Toggle>(Cfg().GetBool(key));
             t->onChange = [key](bool on) { Cfg().SetBool(key, on); };
         }

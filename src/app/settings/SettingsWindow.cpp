@@ -420,7 +420,7 @@ private:
                 sec->AddChild(std::move(editor));
                 if (state_.Open("shortcuts"))
                     if (auto* b = dynamic_cast<Button*>(FindById(sec, "edit-shortcuts")))
-                        b->SetText(Tr(L"Hide Keyboard Shortcuts"));
+                        b->SetText(Tr(L"Hide keyboard shortcuts"));
             }
         }
         if (anyAdvanced) {
@@ -513,7 +513,7 @@ private:
             state_.open["shortcuts"] = open;
             if (Widget* editor = FindById(Root(), "shortcut-editor")) editor->visible = open;
             if (auto* b = dynamic_cast<Button*>(FindById(Root(), "edit-shortcuts")))
-                b->SetText(open ? std::wstring(Tr(L"Hide Keyboard Shortcuts")) : item.ActionLabel(Lang()));
+                b->SetText(open ? std::wstring(Tr(L"Hide keyboard shortcuts")) : item.ActionLabel(Lang()));
             RequestLayout();
             return;
         }
