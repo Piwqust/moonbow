@@ -877,12 +877,31 @@ void Host::Render() {
         // Drawn unseen until ContentShown: its layout runs and its images are asked for. A layer,
         // not the painter's opacity: the whole frame fades as one, overlapping parts don't show through.
         const float appear = contentAppear_.Get();
+        const Size client = ClientSize();
+        // What lies around FadeRect (the main window's title bar and sidebar) is there from the
+        // first frame, its buttons working (OnMouseButton): only the rest fades in.
+        const Rect fade = appear < 1 ? FadeRect() : Rect{0, 0, client.w, client.h};
+        if (appear < 1 && root_) {
+            const Rect around[] = {{0, 0, client.w, fade.y},
+                                   {0, fade.Bottom(), client.w, client.h - fade.Bottom()},
+                                   {0, fade.y, fade.x, fade.h},
+                                   {fade.Right(), fade.y, client.w - fade.Right(), fade.h}};
+            for (const Rect& r : around)
+                if (r.w > 0 && r.h > 0) {
+                    p.PushClip(r);
+                    root_->PaintTree(p);
+                    p.PopClip();
+                }
+        }
         if (appear < 1)
             ctx->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                                                   D2D1::IdentityMatrix(), appear),
                            nullptr);
-        if (root_) root_->PaintTree(p);
-        const Size client = ClientSize();
+        if (root_) {
+            if (appear < 1) p.PushClip(fade);
+            root_->PaintTree(p);
+            if (appear < 1) p.PopClip();
+        }
         for (Popup& popup : popups_) {
             const float k = popup.appear ? popup.appear->Get() : 1.0f;
             if (popup.options.scrim) p.Fill({0, 0, client.w, client.h}, P().scrim.Fade(k));
@@ -1020,9 +1039,9 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     if (down) {
-        // Before the first screen fades in the window shows only its background: a press there
+        // Before the first screen fades in the window shows only its background there: a press
         // must not reach the buttons laid out under it (at most 400-700 ms after start).
-        if (!contentShown_) return;
+        if (!contentShown_ && FadeRect().Contains(x, y)) return;
         HideTooltip();
         // Clicking outside popups closes them (topmost first). Like a Windows menu, the click
         // that closes one is used up: it doesn't also pause the video or press the button under

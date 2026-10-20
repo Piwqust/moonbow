@@ -7,7 +7,8 @@ reveal mark show their window at once, so from the first frame). Pixels that sti
 end of the series (a playing video, its clock) are intended motion and left out. What is left
 should not change after the window appears, except:
   - the window's content fading in once from its plain background: the first change, from a
-    frame that shows nothing but the background, a single rise of opacity (every frame on the
+    frame that shows nothing but the background where it changes (the main window's title bar
+    and sidebar may be there from the reveal), a single rise of opacity (every frame on the
     way from that frame to the final one, never back or sideways) over at most FADE_MS;
   - after an "OPEN": the switch to the opened file, in one step (one event of at most 2 frames);
   - one toast (a small change centred horizontally) per window or open.
@@ -134,8 +135,12 @@ def main():
     def fade_in(e):
         """None when the event is the content's one fade-in from the plain background, else why not."""
         k0, k1 = e["k0"], e["k0"] + e["steps"]
-        # A fade that began with the reveal may be under way in the first captured frame.
-        if k0 > 0 and not plain(imgs[k0]):
+        # A fade that began with the reveal may be under way in the first captured frame. Plain where
+        # it changes: the main window's title bar and sidebar are there from the reveal.
+        # Where the fade changes the picture, start to end (single steps can be too faint to box).
+        ys, xs = np.nonzero(np.abs(imgs[k1] - imgs[k0]) > PIXEL_DIFF)
+        x0, y0, x1, y1 = (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1) if len(xs) else (0, 0, size[0], size[1])
+        if k0 > 0 and not plain(imgs[k0][y0:y1, x0:x1]):
             return "it does not start from the plain background"
         took = seen[k1]["t"] - seen[k0 + 1]["t"]
         if took > FADE_MS:
