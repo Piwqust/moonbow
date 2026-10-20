@@ -520,6 +520,7 @@ void App::OnPlayerReady(bool ok) {
         Open(files);
     }
     playerChanged.Emit(kChangeState | kChangeVolume);
+    system_.Update(kChangeState);  // the media keys can resume the last item from the start
 }
 
 void App::OnPlayerEvents() {

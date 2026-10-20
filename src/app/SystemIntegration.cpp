@@ -1,5 +1,6 @@
 #include "app/SystemIntegration.h"
 
+#include "Trace.h"
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/App.h"
@@ -8,9 +9,15 @@
 #include "core/ShellText.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
+#include "library/History.h"
+#include "library/Thumbnails.h"
+#include "ui/Anim.h"
 #include "ui/Host.h"
 
 #include <shellapi.h>
+#include <shcore.h>
+#include <shlwapi.h>
+#include <wincodec.h>
 #include <windowsx.h>
 #include <shobjidl.h>
 #include <systemmediatransportcontrolsinterop.h>
@@ -19,8 +26,10 @@
 #pragma warning(disable : 4265 4946 5205 4459 4100)
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
+#include <winrt/Windows.Storage.Streams.h>
 #pragma warning(pop)
 
+#include <chrono>
 #include <vector>
 
 namespace app {
@@ -29,11 +38,62 @@ namespace {
 
 constexpr UINT WM_APP_SMTC = WM_APP + 90;
 constexpr UINT WM_APP_TRAY = WM_APP + 91;
+constexpr UINT WM_APP_SMTC_SEEK = WM_APP + 92;  // wParam: milliseconds
 constexpr UINT kTrayId = 1;
 enum TrayCommand : UINT { kTrayShow = 100, kTrayPlay, kTrayPrev, kTrayNext, kTrayQuit };
 constexpr UINT kBtnPrev = 1, kBtnPlay = 2, kBtnNext = 3;
 
 namespace wm = winrt::Windows::Media;
+namespace wss = winrt::Windows::Storage::Streams;
+
+// The cover or video frame of `path` the thumbnail cache holds already (the library and the
+// music view ask for them) as a PNG for the media flyout; null when there is none yet.
+wss::IRandomAccessStream CachedCoverPng(const std::wstring& path) {
+    library::Thumbnails& thumbs = TheApp().thumbnails();
+    std::shared_ptr<const library::ThumbnailBitmap> bmp;
+    for (int size : {320, 480, 720, 192, 1024, 96})
+        if ((bmp = thumbs.Cached(path, size)) != nullptr) break;
+    if (!bmp || !bmp->width || !bmp->height) return nullptr;
+    gfx::ComPtr<IWICImagingFactory> wic;
+    gfx::ComPtr<IStream> stream;
+    stream.Attach(SHCreateMemStream(nullptr, 0));
+    gfx::ComPtr<IWICBitmapEncoder> encoder;
+    gfx::ComPtr<IWICBitmapFrameEncode> frame;
+    WICPixelFormatGUID format = GUID_WICPixelFormat32bppPBGRA;
+    if (!stream || FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) ||
+        FAILED(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder)) ||
+        FAILED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache)) ||
+        FAILED(encoder->CreateNewFrame(&frame, nullptr)) || FAILED(frame->Initialize(nullptr)) ||
+        FAILED(frame->SetSize(bmp->width, bmp->height)) || FAILED(frame->SetPixelFormat(&format)))
+        return nullptr;
+    // PNG takes straight BGRA: the same bytes for an opaque cover.
+    if (format != GUID_WICPixelFormat32bppPBGRA && format != GUID_WICPixelFormat32bppBGRA) return nullptr;
+    if (FAILED(frame->WritePixels(bmp->height, bmp->width * 4, static_cast<UINT>(bmp->pixels.size()),
+                                  const_cast<BYTE*>(bmp->pixels.data()))) ||
+        FAILED(frame->Commit()) || FAILED(encoder->Commit()))
+        return nullptr;
+    stream->Seek({}, STREAM_SEEK_SET, nullptr);
+    wss::IRandomAccessStream out{nullptr};
+    if (FAILED(CreateRandomAccessStreamOverStream(stream.Get(), BSOS_DEFAULT, winrt::guid_of<wss::IRandomAccessStream>(),
+                                                  winrt::put_abi(out))))
+        return nullptr;
+    return out;
+}
+
+// What media Play starts while nothing is loaded: the queue's current item, or else the newest
+// unfinished history item, as WMP and Spotify continue the last one.
+std::wstring ResumePath() {
+    App& app = TheApp();
+    if (const QueueItem* item = app.queue().CurrentItem()) return item->path;
+    for (const library::HistoryEntry& e : app.history().Entries())
+        if (e.path.find(L"://") == std::wstring::npos && e.Progress() < 0.95) return e.path;
+    return {};
+}
+
+winrt::Windows::Foundation::TimeSpan Ticks(double seconds) {
+    return std::chrono::duration_cast<winrt::Windows::Foundation::TimeSpan>(
+        std::chrono::duration<double>(std::max(0.0, seconds)));
+}
 
 // The taskbar's own mode (not the apps' one): the thumbnail buttons sit on its preview flyout.
 bool SystemUsesLightTheme() {
@@ -111,7 +171,12 @@ struct SystemIntegration::Impl {
     bool lightIcons = false;
     bool shownPlaying = false, shownPrev = true, shownNext = true;
     wm::SystemMediaTransportControls smtc{nullptr};
-    winrt::event_token buttonToken{};
+    winrt::event_token buttonToken{}, seekToken{};
+    bool traceSmtc = false;  // --automation with LUMEN_TRACE: no media controls, trace what they would get
+    std::wstring smtcPath;   // the item the media flyout shows (empty: disabled)
+    bool smtcCover = false;  // ...with its picture
+    int smtcFlags = -1;      // previous | next << 1 | shuffle << 2 | repeat << 3, as last sent
+    double timelinePos = 0, timelineAt = 0;
     double lastProgress = -1;
     UINT trayCreated = 0;  // "TaskbarCreated": Explorer restarted, add the icon again
     bool trayAdded = false;
@@ -125,6 +190,7 @@ struct SystemIntegration::Impl {
         if (smtc) {
             try {
                 smtc.ButtonPressed(buttonToken);
+                smtc.PlaybackPositionChangeRequested(seekToken);
                 smtc.IsEnabled(false);
             } catch (...) {
             }
@@ -308,8 +374,78 @@ struct SystemIntegration::Impl {
                 // Raised on a worker thread: hand it to the UI thread.
                 PostMessageW(target, WM_APP_SMTC, static_cast<WPARAM>(args.Button()), 0);
             });
+            // A drag of the flyout's position bar (offered by the timeline's seek range).
+            seekToken = smtc.PlaybackPositionChangeRequested(
+                [target](auto&&, const wm::PlaybackPositionChangeRequestedEventArgs& args) {
+                    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(args.RequestedPlaybackPosition());
+                    PostMessageW(target, WM_APP_SMTC_SEEK, static_cast<WPARAM>(std::max<long long>(0, ms.count())), 0);
+                });
         } catch (...) {
             smtc = nullptr;
+        }
+    }
+
+    // Previous / Next as the player's own buttons, shuffle and repeat as the queue has them.
+    void SyncSmtcFlags() {
+        if (smtcPath.empty()) return;
+        const PlayQueue& q = TheApp().queue();
+        const int flags = (Enabled(Action::Previous) ? 1 : 0) | (Enabled(Action::Next) ? 2 : 0) | (q.Shuffle() ? 4 : 0) |
+                          static_cast<int>(q.RepeatMode()) << 3;
+        if (flags == smtcFlags) return;
+        smtcFlags = flags;
+        Trace(("smtc: previous " + std::to_string(flags & 1) + " next " + std::to_string((flags >> 1) & 1) +
+               " shuffle " + std::to_string((flags >> 2) & 1) + " repeat " + std::to_string(flags >> 3))
+                  .c_str());
+        if (!smtc) return;
+        try {
+            smtc.IsPreviousEnabled((flags & 1) != 0);
+            smtc.IsNextEnabled((flags & 2) != 0);
+            smtc.ShuffleEnabled((flags & 4) != 0);
+            smtc.AutoRepeatMode(q.RepeatMode() == Repeat::One   ? wm::MediaPlaybackAutoRepeatMode::Track
+                                : q.RepeatMode() == Repeat::All ? wm::MediaPlaybackAutoRepeatMode::List
+                                                                : wm::MediaPlaybackAutoRepeatMode::None);
+        } catch (...) {
+        }
+    }
+
+    // The flyout moves its position bar on by itself while playing: sent on a file, a pause or
+    // play, and when the position jumps (a seek) or stalls.
+    void SyncTimeline(const PlayerState& s, bool force) {
+        const double now = ui::AnimFloat::Now();
+        const double expected = timelinePos + (s.paused ? 0.0 : (now - timelineAt) / 1000.0 * s.speed);
+        if (!force && std::abs(s.position - expected) < 1.5) return;
+        timelinePos = s.fileLoaded ? s.position : 0;
+        timelineAt = now;
+        const double end = s.fileLoaded ? std::max(0.0, s.duration) : 0;
+        char line[80];
+        snprintf(line, sizeof(line), "smtc: timeline %.1f / %.1f", timelinePos, end);
+        Trace(line);
+        if (!smtc) return;
+        try {
+            wm::SystemMediaTransportControlsTimelineProperties t;
+            t.StartTime(Ticks(0));
+            t.MinSeekTime(Ticks(0));
+            t.EndTime(Ticks(end));
+            t.MaxSeekTime(Ticks(s.seekable ? end : 0));
+            t.Position(Ticks(timelinePos));
+            smtc.UpdateTimelineProperties(t);
+        } catch (...) {
+        }
+    }
+
+    // The flyout's picture of smtcPath, once the thumbnail cache has one.
+    void ShowCover() {
+        if (smtcCover || smtcPath.empty()) return;
+        try {
+            const wss::IRandomAccessStream png = CachedCoverPng(smtcPath);
+            if (!png) return;
+            smtcCover = true;
+            Trace(("smtc: cover, png of " + std::to_string(png.Size()) + " bytes").c_str());
+            if (!smtc) return;
+            auto updater = smtc.DisplayUpdater();
+            updater.Thumbnail(wss::RandomAccessStreamReference::CreateFromStream(png));
+            updater.Update();
+        } catch (...) {
         }
     }
 };
@@ -319,7 +455,11 @@ SystemIntegration::~SystemIntegration() = default;
 
 void SystemIntegration::Attach(HWND window) {
     impl_->hwnd = window;
-    if (ui::Host::Automation()) return;
+    TheApp().images().ready.Connect([this] { impl_->ShowCover(); });  // both live as long as the app
+    if (ui::Host::Automation()) {
+        impl_->traceSmtc = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+        return;
+    }
     impl_->taskbarCreated = RegisterWindowMessageW(L"TaskbarButtonCreated");
     impl_->trayCreated = RegisterWindowMessageW(L"TaskbarCreated");
     // Let the (non-elevated or elevated) shell deliver it either way.
@@ -353,7 +493,8 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
     // or media-key command reaches the player.
     if (TheApp().Quitting()) {
         d.RemoveTray();
-        if (msg == WM_APP_TRAY || msg == WM_APP_SMTC || (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED)) {
+        if (msg == WM_APP_TRAY || msg == WM_APP_SMTC || msg == WM_APP_SMTC_SEEK ||
+            (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED)) {
             *result = 0;
             return true;
         }
@@ -415,15 +556,28 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
     }
     if (msg == WM_APP_SMTC) {
         using B = wm::SystemMediaTransportControlsButton;
-        const PlayerState& s = TheApp().player().State();
+        App& app = TheApp();
+        const PlayerState& s = app.player().State();
         switch (static_cast<B>(wp)) {
-            case B::Play: if (s.paused || !s.fileLoaded) Run(Action::PlayPause); break;
+            case B::Play:
+                if (!s.fileLoaded && !app.queue().CurrentItem()) {
+                    if (const std::wstring path = ResumePath(); !path.empty()) app.Open({path});
+                } else if (s.paused || !s.fileLoaded) {
+                    Run(Action::PlayPause);
+                }
+                break;
             case B::Pause: if (!s.paused) Run(Action::PlayPause); break;
             case B::Stop: Run(Action::Stop); break;
             case B::Next: Run(Action::Next); break;
             case B::Previous: Run(Action::Previous); break;
             default: break;
         }
+        *result = 0;
+        return true;
+    }
+    if (msg == WM_APP_SMTC_SEEK) {
+        const PlayerState& s = TheApp().player().State();
+        if (s.fileLoaded && s.seekable) TheApp().player().SeekAbsolute(static_cast<double>(wp) / 1000.0, true);
         *result = 0;
         return true;
     }
@@ -452,6 +606,9 @@ void SystemIntegration::Update(unsigned changes) {
         }
     }
 
+    if (!d.smtcPath.empty() && s.fileLoaded && (changes & kChangeTime)) d.SyncTimeline(s, false);
+    d.SyncSmtcFlags();
+
     if (!(changes & (kChangeState | kChangeFile | kChangeMeta))) return;
     // The tags as the player screens show them (the library's reader first, then mpv's).
     const PlayingTags& tags = CurrentTags();
@@ -460,7 +617,7 @@ void SystemIntegration::Update(unsigned changes) {
 
     // Tray tooltip and track notification (once per file).
     if (changes & (kChangeFile | kChangeMeta)) {
-        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" — Lumen", std::size(NOTIFYICONDATAW{}.szTip))
+        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" вЂ” Lumen", std::size(NOTIFYICONDATAW{}.szTip))
                                                      : L"Lumen");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
@@ -468,26 +625,58 @@ void SystemIntegration::Update(unsigned changes) {
         }
     }
 
-    // Media transport controls.
-    if (!d.smtc) return;
+    // Media transport controls. With nothing loaded they offer the item media Play resumes, so
+    // the media keys work from the start.
+    if (!d.smtc && !d.traceSmtc) return;
     try {
-        const bool enabled = s.fileLoaded && app.config().GetBool("interface.mediaControls");
-        d.smtc.IsEnabled(enabled);
-        if (!enabled) return;
-        d.smtc.PlaybackStatus(s.paused ? wm::MediaPlaybackStatus::Paused : wm::MediaPlaybackStatus::Playing);
-        if (changes & (kChangeFile | kChangeMeta)) {
-            auto updater = d.smtc.DisplayUpdater();
-            if (s.hasVideo) {
-                updater.Type(wm::MediaPlaybackType::Video);
-                updater.VideoProperties().Title(title);
-            } else {
-                updater.Type(wm::MediaPlaybackType::Music);
-                updater.MusicProperties().Title(title);
-                updater.MusicProperties().Artist(tags.artist);
-                updater.MusicProperties().AlbumTitle(tags.album);
-            }
-            updater.Update();
+        const std::wstring path = s.fileLoaded ? (item ? item->path : s.path) : ResumePath();
+        const bool enabled = !path.empty() && app.config().GetBool("interface.mediaControls");
+        if (d.smtc) d.smtc.IsEnabled(enabled);
+        if (!enabled) {
+            if (!d.smtcPath.empty()) Trace("smtc: disabled");
+            d.smtcPath.clear();
+            d.smtcFlags = -1;
+            return;
         }
+        if (d.smtc)
+            d.smtc.PlaybackStatus(s.fileLoaded && !s.paused ? wm::MediaPlaybackStatus::Playing
+                                                            : wm::MediaPlaybackStatus::Paused);
+        if ((changes & (kChangeFile | kChangeMeta)) || path != d.smtcPath) {
+            std::wstring shown = title, artist = tags.artist, album = tags.album;
+            bool video = s.hasVideo;
+            if (!s.fileLoaded) {
+                const library::HistoryEntry* h = app.history().Find(path);
+                shown = h && !h->title.empty()                              ? h->title
+                        : item && item->path == path && !item->title.empty() ? item->title
+                                                                             : FileNameOf(path);
+                artist.clear();
+                album.clear();
+                video = library::KindOf(path) != library::MediaKind::Audio;
+            }
+            const bool newItem = path != d.smtcPath;
+            d.smtcPath = path;
+            if (newItem) d.smtcCover = false;
+            Trace(("smtc: " + std::string(video ? "video " : "music ") + WideToUtf8(shown) +
+                   (artist.empty() ? "" : " / " + WideToUtf8(artist)) + (s.fileLoaded ? "" : " (to resume)"))
+                      .c_str());
+            if (d.smtc) {
+                auto updater = d.smtc.DisplayUpdater();
+                if (video) {
+                    updater.Type(wm::MediaPlaybackType::Video);
+                    updater.VideoProperties().Title(shown);
+                } else {
+                    updater.Type(wm::MediaPlaybackType::Music);
+                    updater.MusicProperties().Title(shown);
+                    updater.MusicProperties().Artist(artist);
+                    updater.MusicProperties().AlbumTitle(album);
+                }
+                if (newItem) updater.Thumbnail(nullptr);  // not the previous item's picture
+                updater.Update();
+            }
+            d.ShowCover();
+            d.SyncSmtcFlags();
+        }
+        d.SyncTimeline(s, true);
     } catch (...) {
     }
 }
