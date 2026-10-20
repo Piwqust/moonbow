@@ -399,6 +399,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     instance_ = instance;
     for (auto& a : args)
         if (!a.empty() && a[0] != L'-') pendingOpen_.push_back(a);
+    if (!pendingOpen_.empty()) launchAt_ = ui::AnimFloat::Now();
 
     config_.Load();
     LoadUiState();
@@ -436,6 +437,16 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     forwardedAt_ = ui::AnimFloat::Now();
     RestoreWindowPlacement();
     if (!IsWindowVisible(main_->Hwnd())) main_->Show();
+    if (!pendingOpen_.empty()) {
+        // The queue and the player's frame, named after the file, come with the window's first
+        // frame instead of after mpv starts (posted: the reveal waits for it). PlayIndex keeps
+        // the item for OnPlayerReady.
+        main_->Post([this] {
+            if (engineReady_ || pendingOpen_.empty()) return;
+            const std::vector<std::wstring> files = pendingOpen_;
+            Open(files);
+        });
+    }
     ApplyWindowOptions();
     system_.Attach(main_->Hwnd());
     Trace("window shown");
@@ -524,6 +535,7 @@ void App::OnPlayerReady(bool ok) {
         pendingOpen_.clear();
         Open(files);
     }
+    launchAt_ = -1;  // a later open waits from its own start
     playerChanged.Emit(kChangeState | kChangeVolume);
     system_.Update(kChangeState);  // the media keys can resume the last item from the start
 }
@@ -552,6 +564,11 @@ void App::OnPlayerEvents() {
         if (failedPath_.empty()) ShowToast(main_.get(), Fmt(Tr(L"Can't play: {0}"), {s.lastError}), "info", 3000);
     }
     if ((changes & kChangeFile) && s.fileLoaded) failedPath_.clear();
+    // Before CheckPlayerHold: the player it shows has its picture.
+    if (openAt_ >= 0 && ((changes & kChangeError) || (s.loadSerial > openSerial_ && s.shownSerial == s.loadSerial))) {
+        openAt_ = -1;
+        if (main_) main_->RequestRender();  // the loading line goes
+    }
     if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && s.loadSerial != recordedSerial_ &&
         config_.GetBool("privacy.saveHistory")) {
         recordedSerial_ = s.loadSerial;
@@ -701,7 +718,10 @@ void App::CheckPlayerHold() {
 }
 
 bool App::FirstScreenReady() const {
-    if (!started_ || OpensFileAtStart() || images_.Busy()) return false;
+    if (!started_) return false;
+    // A file given at launch: the player's frame at once; its picture and cover fade in themselves.
+    if (playerShown_) return true;
+    if (OpensFileAtStart() || images_.Busy()) return false;
     // The library is scanned at every start: Home waits for its first results instead of
     // showing "Scanning your library" (or nothing) and then the cards.
     return libraryShown_ || library_.Roots().empty();
@@ -811,7 +831,7 @@ void App::BuildFolderQueue(const std::wstring& file) {
 
 void App::Open(const std::vector<std::wstring>& paths) {
     if (paths.empty()) return;
-    if (!engineReady_) {
+    if (!engineReady_ && !main_) {
         pendingOpen_ = paths;
         pendingIndex_ = -1;  // the newer request wins
         return;
@@ -872,12 +892,22 @@ void App::PlayIndex(int index, bool showPlayer) {
     settingCurrent_ = false;
     const QueueItem* item = queue_.CurrentItem();
     if (!item) return;
+    // The wait runs from the launch for a file given at launch; an open still in flight keeps its
+    // loading line.
+    if (openAt_ < 0) openAt_ = launchAt_ >= 0 ? launchAt_ : ui::AnimFloat::Now();
+    openSerial_ = player_.State().loadSerial;
+    if (main_) {
+        const double left = kLoadingLineMs - (ui::AnimFloat::Now() - openAt_);
+        main_->StartTimer(static_cast<UINT>(std::max(1.0, left)), [this] { main_->RequestRender(); });
+    }
     if (!engineReady_) {
         // Keep the queue (a playlist, a folder) as built: reopening the path would rebuild it
         // from the file's folder.
         pendingOpen_.clear();
         pendingIndex_ = queue_.Current();
         pendingShowPlayer_ = showPlayer;
+        // At launch the player's frame comes at once, while mpv starts.
+        if (showPlayer && !playerShown_ && main_ && !main_->ContentShown()) ShowPlayer(true);
         return;
     }
     // A jump the user asked for: "replace" (it also drops the queued next file), then queue anew.
@@ -885,7 +915,14 @@ void App::PlayIndex(int index, bool showPlayer) {
     SyncNextInPlayer(true);
     // "Start playing as soon as a file opens"; the next item of a running queue always plays.
     player_.SetPause(!config_.GetBool("playback.autoPlay") && !player_.State().fileLoaded);
-    if (showPlayer && !playerShown_) HoldPlayer();
+    if (showPlayer && !playerShown_) {
+        // At launch there is no screen to keep: the player's frame comes at once (its picture
+        // fades in when it is up). Later the current screen stays until the first frame.
+        if (main_ && main_->ContentShown())
+            HoldPlayer();
+        else
+            ShowPlayer(true);
+    }
 }
 
 void App::SyncNextInPlayer(bool force) {
@@ -961,6 +998,7 @@ void App::Previous() {
 
 void App::StopPlayback() {
     failedPath_.clear();
+    openAt_ = -1;
     SaveHistoryPosition();
     player_.Stop();
     if (main_ && main_->IsFullscreen()) main_->SetFullscreen(false);
@@ -1051,6 +1089,7 @@ void App::ShowPlayer(bool show) {
         preFitRect_ = {};
     }
     if (main_) main_->UpdateScreen();
+    if (show && main_ && main_->playerView()) main_->playerView()->CoverPicture(openAt_ >= 0);
     screenChanged.Emit();
     if (held && show) FitIfPending();
     if (held) ReleaseHeldOsd(show);

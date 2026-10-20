@@ -338,6 +338,15 @@ public:
             // On its way: neither the stand-in art nor its glow, so the cover never replaces them.
             loading = !bmp && images.Loading(path, px);
         }
+        // The stand-in art of a file without a cover fades in when the lookup ends, as a cover does.
+        if (loading) {
+            artWaited_ = true;
+            art_.Set(0);
+        } else if (artWaited_) {
+            artWaited_ = false;
+            art_.To(1.0f, 140);
+        }
+        if (!bmp) appear = std::min(appear, art_.Get());
 
         p.PushClip(rect);
         p.PushOpacity(appear);
@@ -1269,6 +1278,8 @@ private:
     audio::VisualFrame frame_;
     AnimFloat vizShow_{0};  // 0 = the cover, 1 = the visualizer
     double lastPaint_ = 0;
+    bool artWaited_ = false;   // the cover was being looked up at the last paint
+    AnimFloat art_{1.0f};      // the stand-in art's fade-in after that lookup
     gfx::ComPtr<ID2D1StrokeStyle> roundStroke_;
     gfx::ComPtr<ID2D1SolidColorBrush> lineBrush_;
     uint32_t strokeGen_ = 0, lineGen_ = 0;

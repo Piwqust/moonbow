@@ -135,6 +135,11 @@ public:
     // decoded, a file given at launch showing).
     bool FirstScreenReady() const;
     bool OpensFileAtStart() const { return !pendingOpen_.empty() || pendingIndex_ >= 0 || playerPending_; }
+    // AnimFloat::Now() when the file being opened was asked for (at launch: the process start),
+    // until its first frame is up or it fails; -1 when nothing is opening. The seek bar shows a
+    // loading line once this is kLoadingLineMs old, and the player's picture fades in after it.
+    double OpeningSince() const { return openAt_; }
+    static constexpr UINT kLoadingLineMs = 300;  // a file at launch is up in ~0.27 s here
     // The file that failed to open (shown as a card in the player); empty when none.
     const std::wstring& FailedPath() const { return failedPath_; }
     const std::wstring& FailedError() const { return failedError_; }
@@ -218,6 +223,9 @@ private:
     uint64_t holdSerial_ = 0;      // PlayerState::loadSerial when the hold began: a newer file ends it
     UINT_PTR holdTimer_ = 0;
     double holdStart_ = 0;         // AnimFloat::Now() when the hold began
+    double openAt_ = -1;           // OpeningSince
+    double launchAt_ = -1;         // Run's start while a file given at launch waits for PlayIndex
+    uint64_t openSerial_ = 0;      // PlayerState::loadSerial when that open was sent
     bool started_ = false;         // Run has loaded the stores
     bool libraryShown_ = false;    // the pages got the first scan results
     std::wstring failedPath_, failedError_;

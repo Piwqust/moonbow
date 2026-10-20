@@ -11,7 +11,13 @@ should not change after the window appears, except:
     and sidebar may be there from the reveal), a single rise of opacity (every frame on the
     way from that frame to the final one, never back or sideways) over at most FADE_MS;
   - after an "OPEN": the switch to the opened file, in one step (one event of at most 2 frames);
-  - one toast (a small change centred horizontally) per window or open.
+  - one toast (a small change centred horizontally) per window or open;
+  - a file given at launch: the player's frame comes first and its video area is black until the
+    first picture fades in; once a picture was seen, an empty video area is a flash;
+  - later, an image (a cover, a song's stand-in art) fading in the same way from the plain
+    background in less than half the window;
+  - a slow open: the seek bar's loading line coming and going in the control bar's row, until just
+    after the first picture.
 Everything else is reported (a pop = one-frame change, a fade = several) and fails the verdict,
 as does a window that changes size after it appeared. --sheet writes a contact sheet of the seen
 frames (for looking at them, which numbers don't replace).
@@ -80,8 +86,12 @@ def main():
         x, y, w, h = f["video"]
         k = size[0] / f["w"]
         return (max(0, int(x * k)), max(0, int(y * k)), min(size[0], int((x + w) * k + 1)), min(size[1], int((y + h) * k + 1)))
-    def plain(im):  # nothing but the window background (before its content shows)
-        return float((np.abs(im - np.median(im)) > PIXEL_DIFF).mean()) < 0.01
+    def plain(im, where=None):  # nothing but the window background (before its content shows),
+        # and the player's black picture area of a file given at launch; only `where` if given
+        lit = im > PIXEL_DIFF
+        bg = np.median(im[lit]) if lit.any() else 0.0  # the black area may be most of the window
+        other = (np.abs(im - bg) > PIXEL_DIFF) & lit
+        return float(other.mean() if where is None else other[where].mean()) < 0.01
 
     # Intended ongoing motion: pixels that change over the last 2 s of the series (a clock too).
     end_t = seen[-1]["t"]
@@ -138,10 +148,17 @@ def main():
         # A fade that began with the reveal may be under way in the first captured frame. Plain where
         # it changes: the main window's title bar and sidebar are there from the reveal.
         # Where the fade changes the picture, start to end (single steps can be too faint to box).
-        ys, xs = np.nonzero(np.abs(imgs[k1] - imgs[k0]) > PIXEL_DIFF)
-        x0, y0, x1, y1 = (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1) if len(xs) else (0, 0, size[0], size[1])
-        if k0 > 0 and not plain(imgs[k0][y0:y1, x0:x1]):
+        # Faint changes count too (a dim stand-in art on black).
+        changed = (np.abs(imgs[k1] - imgs[k0]) > PIXEL_DIFF / 4) & keep
+        if k0 > 0 and changed.any() and not plain(imgs[k0], changed):
             return "it does not start from the plain background"
+        # One step seen: a faint fade goes on changing there below the event threshold; a pop is
+        # complete at once.
+        # complete at once. Its brightness, not its pixels: a stand-in art turns as it plays.
+        if k0 > 0 and e["steps"] == 1 and k1 + 1 < len(imgs):
+            region = changed if changed.any() else np.abs(imgs[k1] - imgs[k0]) > PIXEL_DIFF / 4
+            if region.any() and abs(float(imgs[k1 + 1][region].mean() - imgs[k1][region].mean())) < 0.5:
+                return "it appears at once (a pop)"
         took = seen[k1]["t"] - seen[k0 + 1]["t"]
         if took > FADE_MS:
             return f"it takes {took} ms"
@@ -161,6 +178,17 @@ def main():
                 return f"{seen[k]['t']} ms is not a blend of the background and the final frame"
             prev = alpha
         return None
+
+    def has_picture(f, im):
+        b = video_box(f)
+        return bool(b) and b[2] - b[0] > 8 and b[3] - b[1] > 8 and float(im[b[1]:b[3], b[0]:b[2]].std()) >= 4
+    first_picture = next((f["t"] for f, im in zip(seen, imgs) if has_picture(f, im)), None)
+
+    def loading_line(e):
+        """The seek bar's loading line of a slow open: in the control bar's row, coming and going
+        until just after the first picture (its going lets the time labels and progress in)."""
+        x0, y0, x1, y1 = e["box"]
+        return y0 >= size[1] * 0.85 and y1 - y0 <= size[1] * 0.08 and (first_picture is None or e["t0"] <= first_picture + 400)
 
     # Windows to check: after the reveal, and after every open.
     starts = [("reveal", reveal_t)] + [("open", t) for t in opens if t >= reveal_t]
@@ -185,6 +213,14 @@ def main():
                     print(f"  ok   {label} (the content fading in)")
                     continue
                 label += f" (not the content fade-in: {why})"
+            if what == "reveal" and j > 0:
+                x0, y0, x1, y1 = e["box"]
+                if (x1 - x0) * (y1 - y0) < 0.5 * size[0] * size[1] and fade_in(e) is None:
+                    print(f"  ok   {label} (an image fading in from the background)")
+                    continue
+            if loading_line(e):
+                print(f"  ok   {label} (the seek bar's loading line)")
+                continue
             if toast_like(e) and toasts == 0:
                 toasts += 1
                 print(f"  ok   {label} (toast)")
@@ -193,11 +229,16 @@ def main():
             failures.append(label)
         if what == "open" and not mine:
             print(f"  note open at {t0} ms: nothing changed within {a.window} ms")
+    picture_seen = False
     for k, (f, im) in enumerate(zip(seen, imgs)):
         b = video_box(f)
         if k in faded or plain(im):  # the plain player background before the content comes
             continue
-        if b and b[2] - b[0] > 8 and b[3] - b[1] > 8 and float(im[b[1]:b[3], b[0]:b[2]].std()) < 4:
+        if not (b and b[2] - b[0] > 8 and b[3] - b[1] > 8):
+            continue
+        if has_picture(f, im):
+            picture_seen = True
+        elif picture_seen:
             failures.append(f"{f['t']} ms: the video area is shown empty (no frame yet)")
             print(f"  FAIL {failures[-1]}")
 

@@ -475,6 +475,9 @@ void MainWindow::PaintBackground(Painter& p) {
     if (appliedVideo_.right <= appliedVideo_.left || appliedVideo_.bottom <= appliedVideo_.top ||
         TheApp().PlayerPending()) {
         p.Fill({0, 0, client.w, client.h}, bg);
+        // A file given at launch: the picture area is black from the first frame and the player's
+        // chrome fades in around it (no light-to-black swing in the light theme).
+        if (ContentAppear() < 1 && TheApp().PlayerShown() && player_) p.Fill(player_->PictureRect(), P().videoBg);
         return;
     }
     const float l = appliedVideo_.left / s, t = appliedVideo_.top / s, r = appliedVideo_.right / s,
@@ -484,7 +487,7 @@ void MainWindow::PaintBackground(Painter& p) {
     p.Fill({0, t, l, b - t}, bg);
     p.Fill({r, t, client.w - r, b - t}, bg);
     // The picture fades in with the rest of the window's first content.
-    if (const float k = ContentAppear(); k < 1) p.Fill({l, t, r - l, b - t}, bg.Fade(1 - k));
+    if (const float k = ContentAppear(); k < 1) p.Fill({l, t, r - l, b - t}, P().videoBg.Fade(1 - k));
 }
 
 void MainWindow::PaintSkeleton(HDC dc) {

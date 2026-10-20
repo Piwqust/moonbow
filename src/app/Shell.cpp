@@ -225,7 +225,8 @@ void TitleBar::Refresh() {
     const PlayerState& s = app.player().State();
     const QueueItem* item = app.queue().CurrentItem();
     // Not while the player waits for the file's first frame: the title changes with the screen.
-    const bool media = s.fileLoaded && item && !app.PlayerPending();
+    // A file opened at launch is named while it opens: the title doesn't change when it loads.
+    const bool media = (s.fileLoaded || (app.PlayerShown() && app.OpeningSince() >= 0)) && item && !app.PlayerPending();
     std::wstring folder = media ? FolderNameOf(item->path) : std::wstring();
     // Only what changed is laid out again: this also runs for every size change of the window.
     bool changed = false;

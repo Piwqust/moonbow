@@ -144,7 +144,8 @@ public:
         Bind(this, kChangeState | kChangeFile);
     }
     void Paint(Painter& p) override {
-        const bool loaded = PS().fileLoaded;
+        // An opening file already has its button: it doesn't light up when the file loads.
+        const bool loaded = PS().fileLoaded || TheApp().OpeningSince() >= 0;
         Color bg = loaded ? P().accent : P().bgCard;
         if (loaded && IsPressed()) bg = Color::Mix(bg, P().bgBase, 0.22f);
         else if (loaded && IsHot()) bg = Color::Mix(bg, P().bgBase, 0.1f);
@@ -178,6 +179,7 @@ public:
     void Paint(Painter& p) override {
         const PlayerState& s = PS();
         std::wstring text = L"--:--:--";
+        if (!s.fileLoaded && TheApp().OpeningSince() >= 0) text = duration_ ? L"" : L"0:00";  // calm while it opens
         if (s.fileLoaded) {
             const double pos = ShownPosition(s);
             const bool hours = s.duration >= 3600 || pos >= 3600;
@@ -899,6 +901,27 @@ void SeekBar::Paint(Painter& p) {
     p.Fill(t, track, 3.0f);
     if (!thin && light) p.Stroke(t, Apart(P().lineStrong, P().textSecondary, P().bgChrome), 3.0f);
     PaintFocusRing(p, t, 3.0f);
+    // A file that is slow to open: a segment runs along the track (YouTube, Netflix). It comes in
+    // kLoadingLineMs after the open, so a quick open never shows it, and fades out with it.
+    const double since = TheApp().OpeningSince();
+    const bool loading = since >= 0 && ui::AnimFloat::Now() - since >= App::kLoadingLineMs;
+    if (loading != (lineShown_.Target() > 0)) lineShown_.To(loading ? 1.0f : 0.0f, loading ? 200.0f : 150.0f);
+    if (const float a = lineShown_.Get(); a > 0) {
+        const Color line = (overVideo ? white : P().accent).Fade(0.6f * a);
+        if (ui::AnimFloat::ReducedMotion()) {
+            p.Fill(t, line.Fade(0.5f), 3.0f);  // no motion: the track lit steadily
+        } else {
+            if (!sweep_.Active()) {
+                sweep_.Set(0);
+                sweep_.To(1, 1100, ui::Ease::InOut);
+            }
+            const float seg = std::max(24.0f, t.w * 0.22f);
+            p.PushClip(t);
+            p.Fill({t.x - seg + (t.w + seg) * sweep_.Get(), t.y, seg, t.h}, line, 3.0f);
+            p.PopClip();
+        }
+    }
+    if (loading) return;
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));

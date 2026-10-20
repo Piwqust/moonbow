@@ -34,9 +34,15 @@ public:
 
     // Rect where the video is shown (window DIPs); empty when not visible.
     ui::Rect VideoRect() const;
+    // The picture's area, also the music view's (window DIPs); empty when the player isn't laid out.
+    ui::Rect PictureRect() const;
     // Where a toast centres: the video area left of an open popover, clear of it; in the music view
     // the gap under the cover, and then `top` (else -1) is where the toast's top goes.
     ui::Rect ToastBand(float* top = nullptr) const;
+
+    // The player came before its picture (App::ShowPlayer): the picture area stays black until the
+    // opening file's first frame is up, then the picture fades in from it.
+    void CoverPicture(bool cover);
 
     void OnLayout() override;
     float SubtitleBand(float h) const;
@@ -71,6 +77,8 @@ private:
     bool menuPaused_ = false;  // play/pause as last seen (PV-17: the video menu closes on a change)
     int layoutMode_ = -1;      // fullscreen | hide-UI | PiP bits of the last layout
     bool thinShown_ = false;
+    bool covered_ = false;          // CoverPicture: waiting for the first frame
+    ui::AnimFloat picture_{1.0f};   // 0 = the picture area is black, 1 = the picture shows
     float thinW_ = 0;
     int thinPx_ = -1;
     uint64_t configToken_ = 0;

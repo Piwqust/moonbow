@@ -1,5 +1,7 @@
 #include "gfx/Gpu.h"
 
+#include "Trace.h"
+
 #include <algorithm>
 
 namespace gfx {
@@ -89,7 +91,7 @@ bool Gpu::FinishDevice() {
             return false;
         }
     }
-    if (Ready()) ReleaseDeviceObjects();
+    if (Ready()) ReleaseDeviceObjects(true);
     d3d_ = std::move(next);
     if (CreateDeviceObjects()) return true;
     ReleaseDeviceObjects();
@@ -117,13 +119,14 @@ bool Gpu::CreateDeviceObjects() {
         FAILED(d2dDevice_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &ctx_)))
         return false;
     ctx_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    if (FAILED(DCompositionCreateDevice(dxgiDevice_.Get(), IID_PPV_ARGS(&dcomp_)))) return false;
+    // No rendering device: it only shows swap chains, so it outlives a device switch.
+    if (!dcomp_ && FAILED(DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&dcomp_)))) return false;
     ++generation_;
     return true;
 }
 
-void Gpu::ReleaseDeviceObjects() {
-    dcomp_.Reset();
+void Gpu::ReleaseDeviceObjects(bool keepComposition) {
+    if (!keepComposition) dcomp_.Reset();
     ctx_.Reset();
     d2dDevice_.Reset();
     dxgi_.Reset();
@@ -159,6 +162,9 @@ void Surface::Drop() {
     visual_.Reset();
     dcompTarget_.Reset();
     swap_.Reset();
+    oldSwap_.Reset();
+    switchFrames_ = 0;
+    dcomp_.Reset();
 }
 
 bool Surface::Build() {
@@ -176,14 +182,25 @@ bool Surface::Build() {
     desc.Scaling = DXGI_SCALING_STRETCH;
     desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-    if (FAILED(gpu.Dxgi()->CreateSwapChainForComposition(gpu.D3D(), &desc, nullptr, &swap_))) return false;
-
+    ComPtr<IDXGISwapChain1> fresh;
+    if (FAILED(gpu.Dxgi()->CreateSwapChainForComposition(gpu.D3D(), &desc, nullptr, &fresh))) return false;
+    // A new device under the same composition (WARP → hardware): the old swap chain stays on
+    // screen until the new one has presented (End). Rebuilding the target would show the
+    // window's bare GDI background for a frame, a grey flash over the player.
+    if (visual_ && dcomp_.Get() == gpu.DComp()) {
+        if (!oldSwap_) oldSwap_ = std::move(swap_);
+        swap_ = std::move(fresh);
+        switchFrames_ = 2;  // the first present may not be composed yet when the content changes
+        return BuildTarget();
+    }
+    swap_ = std::move(fresh);
     // topmost = TRUE: composed above child windows, i.e. above mpv's video window.
     IDCompositionDevice* dcomp = gpu.DComp();
     if (FAILED(dcomp->CreateTargetForHwnd(hwnd_, TRUE, &dcompTarget_)) || FAILED(dcomp->CreateVisual(&visual_)) ||
         FAILED(visual_->SetContent(swap_.Get())) || FAILED(dcompTarget_->SetRoot(visual_.Get())) ||
         FAILED(dcomp->Commit()))
         return false;
+    dcomp_ = dcomp;
     return BuildTarget();
 }
 
@@ -225,7 +242,11 @@ ID2D1DeviceContext5* Surface::Begin() {
     Gpu& gpu = Gpu::Get();
     if (!gpu.Ready() || !hwnd_) return nullptr;
     if (!swap_ || generation_ != gpu.Generation()) {
-        Drop();
+        if (visual_ && dcomp_.Get() == gpu.DComp()) {
+            target_.Reset();  // the old device's: Build swaps the content in under the same visual
+        } else {
+            Drop();
+        }
         if (!Build()) Drop();
     } else if (!target_) {
         BuildTarget();
@@ -260,6 +281,14 @@ bool Surface::End() {
         Drop();
         gpu.RecreateDevice();
         return false;
+    }
+    if (SUCCEEDED(hr) && switchFrames_ > 0 && --switchFrames_ == 0) {
+        if (FAILED(visual_->SetContent(swap_.Get())) || FAILED(gpu.DComp()->Commit())) {
+            Drop();  // rebuilt whole on the next frame
+            return false;
+        }
+        oldSwap_.Reset();
+        Trace("device switch: content swapped in");
     }
     return true;
 }

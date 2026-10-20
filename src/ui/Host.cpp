@@ -946,6 +946,7 @@ void Host::Render() {
     } else {
         RequestLayout();
     }
+    if (surface_.Switching()) RequestRender();  // the new device's frame replaces the old one next frame
     RedrawAllIfDeviceChanged(generation);
     g_frameStats.Add(t1 - t0, t2 - t1, AnimFloat::Now() - t2);
     gfx::Text::Get().EndFrame();

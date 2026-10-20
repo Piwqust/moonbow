@@ -78,6 +78,8 @@ private:
     bool dragging_ = false;
     double dragTime_ = 0, dragFrom_ = 0;
     float hoverX_ = -1;
+    ui::AnimFloat sweep_;  // the loading line's run along the track (App::OpeningSince)
+    ui::AnimFloat lineShown_;  // the loading line's opacity
     ScopedConnection conn_, liveConn_;
 };
 

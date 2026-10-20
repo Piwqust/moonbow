@@ -17,6 +17,7 @@
 #include "app/player/SubStyle.h"
 #include "app/player/SubWords.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -561,6 +562,11 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     stats_ = std::make_unique<StatsOverlay>(window, [this] { Invalidate(); });
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+        if (covered_ && TheApp().OpeningSince() < 0) {
+            covered_ = false;
+            picture_.To(1.0f, 200, ui::Ease::Out);
+            Invalidate();
+        }
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
         if ((m & kChangeError) && !TheApp().FailedPath().empty()) a11y::Announce(window_, error_->Spoken());
         // The basic keys once, at the first file ever played in the player (the onboarding has no page for
@@ -623,10 +629,13 @@ bool PlayerView::PipControlsShown() const {
 }
 
 Rect PlayerView::VideoRect() const {
-    const bool immersive = window_->IsFullscreen() || window_->UiHidden();
+    return music_->visible ? Rect{} : PictureRect();
+}
+
+Rect PlayerView::PictureRect() const {
     // While App::PlayerPending the player is laid out unseen: mpv's window goes there already.
-    if ((!visible && !TheApp().PlayerPending()) || music_->visible) return {};
-    return video_->Inner(immersive);
+    if (!visible && !TheApp().PlayerPending()) return {};
+    return video_->Inner(window_->IsFullscreen() || window_->UiHidden());
 }
 
 // Height of the strip mpv draws two lines of subtitles in, from the bottom of a picture `h` DIP
@@ -670,7 +679,9 @@ void PlayerView::OnLayout() {
         if (layoutMode_ >= 0) CloseStaleMenu();
         layoutMode_ = mode;
     }
-    const bool audioOnly = s.fileLoaded && !s.hasVideo;
+    // A song opened at launch has the music view before it loads: no video layout in between.
+    const QueueItem* opening = !s.fileLoaded && TheApp().OpeningSince() >= 0 ? TheApp().queue().CurrentItem() : nullptr;
+    const bool audioOnly = s.fileLoaded ? !s.hasVideo : opening && library::KindOf(opening->path) == library::MediaKind::Audio;
     const float barH = bar_->BarHeight(rect.w);
     const bool pip = window_->PictureInPicture();
 
@@ -782,14 +793,26 @@ Rect PlayerView::ToastBand(float* top) const {
     return a;
 }
 
+void PlayerView::CoverPicture(bool cover) {
+    covered_ = cover;
+    picture_.Set(cover ? 0.0f : 1.0f);
+    Invalidate();
+}
+
 void PlayerView::Paint(Painter& p) {
     const bool immersive = window_->IsFullscreen() || window_->UiHidden();
-    if (immersive) return;
+    // Black over the picture until it is up (CoverPicture), so mpv's first frames never pop in.
+    const float cover = music_->visible ? 0.0f : 1.0f - picture_.Get();
+    if (immersive) {
+        if (cover > 0) p.Fill(video_->Inner(true), P().videoBg.Fade(cover));
+        return;
+    }
     // Chrome around the video hole (never paint over the video itself).
     const Rect a = video_->rect;
     p.Fill({a.x, a.y, kVideoPad, a.h}, P().bgChrome);
     p.Fill({a.Right() - kVideoPad, a.y, kVideoPad, a.h}, P().bgChrome);
     if (!PS().fileLoaded) p.Fill(video_->Inner(false), P().videoBg);
+    else if (cover > 0) p.Fill(video_->Inner(false), P().videoBg.Fade(cover));
 }
 
 // Fullscreen: the title (and the chapter) in a panel at the top that comes and goes with the

@@ -61,7 +61,9 @@ public:
 
 private:
     bool CreateDeviceObjects();
-    void ReleaseDeviceObjects();
+    // keepComposition: the WARP → hardware switch keeps the DComp device, so windows keep their
+    // composition target and swap their content in without a frame of bare background.
+    void ReleaseDeviceObjects(bool keepComposition = false);
 
     void PostReady();  // notifyMutex_ held
 
@@ -97,6 +99,9 @@ public:
     ID2D1DeviceContext5* Begin();
     // false when the device was lost; the caller should simply redraw.
     bool End();
+    // A new device's swap chain waits for its second frame before it replaces the old one on
+    // screen: the caller draws again soon.
+    bool Switching() const { return switchFrames_ > 0; }
 
     UINT Width() const { return width_; }
     UINT Height() const { return height_; }
@@ -115,6 +120,9 @@ private:
     ComPtr<ID2D1Bitmap1> target_;
     ComPtr<IDCompositionTarget> dcompTarget_;
     ComPtr<IDCompositionVisual> visual_;
+    ComPtr<IDCompositionDevice> dcomp_;     // the device visual_ belongs to
+    ComPtr<IDXGISwapChain1> oldSwap_;       // still on screen while switchFrames_ > 0
+    int switchFrames_ = 0;                  // frames to present before swap_ replaces oldSwap_
 };
 
 }  // namespace gfx
