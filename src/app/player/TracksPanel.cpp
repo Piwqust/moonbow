@@ -94,6 +94,7 @@ public:
         liveConn_ = Connect(Live().changed, [this] { InvalidateLayout(); });
     }
     bool editing = false;
+    std::wstring name;  // for screen readers when no list title stands before it
     static constexpr float kPitch = 44, kRowH = 32;
 
     Size MeasureContent(float availW, float) override {
@@ -172,6 +173,22 @@ public:
         else return false;
         Invalidate();
         return true;
+    }
+    // One choice is on at a time: list items with radio semantics (the ticked row is selected).
+    void Describe(A11y& a) override {
+        a.role = Role::List;
+        const auto rows = rows_();
+        if (!name.empty()) a.name = name;
+        if (rows.empty()) a.name = empty_;
+        a.items = static_cast<int>(rows.size());
+        a.item = [this, rows](int i, A11y::Item& it) {
+            const ChoiceRow& row = rows[static_cast<size_t>(i)];
+            it.name = row.detail.empty() ? row.label : row.label + L", " + row.detail;
+            it.rect = RowRect(i);
+            it.selected = row.checked;
+        };
+        a.selectItem = a.invokeItem = [this](int i) { Activate(i, false); };
+        a.focusedItem = focusRow_;
     }
 
 private:
@@ -276,7 +293,9 @@ std::vector<ChoiceRow> DeviceRows() {
 
 void AddTracksSection(Widget* page, const wchar_t* type) {
     page->Add<Widget>()->height = Length::Px(16);
-    page->Add<ChoiceList>([type] { return OffRows(type); });
+    const std::wstring_view t(type);
+    page->Add<ChoiceList>([type] { return OffRows(type); })->name =
+        Tr(t == L"video" ? L"Video" : t == L"audio" ? L"Audio" : L"Subtitles");
     AddSectionLine(page);
     AddListTitle(page, Tr(L"Embedded Tracks"));
     page->Add<ChoiceList>([type] { return TrackRows(type, false); }, Tr(L"No tracks"));

@@ -181,6 +181,7 @@ public:
         PaintFocusRing(p, rect, rect.h / 2);
     }
     float Width() const { return std::ceil(gfx::Text::Get().Measure(Tr(label_), TextStyle::BodyMedium).width) + 50; }
+    void Describe(A11y& a) override { a.toggle = active ? 1 : 0; }
     bool OnKeyDown(const KeyEvent& e) override {
         if (e.key != VK_RETURN && e.key != VK_SPACE) return false;
         OnClick();

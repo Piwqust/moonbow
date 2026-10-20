@@ -656,6 +656,34 @@ public:
 
     int Selected() const { return selected_; }
 
+    // For screen readers: "title, artist, 4:20", the playing row says so.
+    void Describe(A11y& a) override {
+        a.role = Role::List;
+        a.name = Count() > 0 ? Tr(L"Queue") : Tr(L"Queue is empty");  // the painted hint, not "0 items"
+        a.items = Count();
+        a.item = [this](int i, A11y::Item& it) {
+            const RowInfo& info = Info(i);
+            it.name = info.title;
+            if (!info.artist.empty()) it.name += L", " + info.artist;
+            // Only what is known: probing every file for a reader would read the whole queue.
+            const double d = Playing(i) && PS().duration > 0 ? PS().duration : info.duration;
+            if (d > 0) it.name += L", " + ClockTime(d);
+            if (i == TheApp().queue().Current()) it.name += L", " + std::wstring(Tr(L"Now playing"));
+            it.rect = RowRect(i);
+            it.selected = i == selected_;
+        };
+        a.selectItem = [this](int i) {
+            selected_ = i;
+            Invalidate();
+        };
+        a.invokeItem = [this](int i) {
+            selected_ = i;
+            Play(i);
+            Invalidate();
+        };
+        a.focusedItem = selected_;
+    }
+
 private:
     bool OnRemoveButton(int i, float x) const {
         return !compact_ && !removeCold_ && x >= RowRect(i).Right() - (covers_ ? 32 : 28);
@@ -823,6 +851,7 @@ public:
             p.Text(L"1", b, TextStyle::Micro, P().onAccent, HAlign::Center);
         }
     }
+    void Describe(A11y& a) override { a.toggle = TheApp().queue().RepeatMode() != Repeat::Off ? 1 : 0; }
 
 private:
     ScopedConnection conn_;
@@ -841,6 +870,7 @@ public:
         tooltip = WithKey(Tr(L"Shuffle"), Action::ToggleShuffle);
         IconButton::Paint(p);
     }
+    void Describe(A11y& a) override { a.toggle = TheApp().queue().Shuffle() ? 1 : 0; }
 
 private:
     ScopedConnection conn_;
@@ -1054,6 +1084,29 @@ public:
     int Selected() const { return selected_; }
     std::function<void()> onChanged;
 
+    void Describe(A11y& a) override {
+        a.role = Role::List;
+        const auto marks = Marks();
+        a.name = !marks.empty() ? Tr(L"Bookmarks") : PS().fileLoaded ? Tr(L"No bookmarks yet") : Tr(L"Nothing is playing");
+        a.items = static_cast<int>(marks.size());
+        a.item = [this, marks](int i, A11y::Item& it) {
+            const auto k = static_cast<size_t>(i);
+            it.name = BookmarkName(marks[k], k) + L", " + FormatTime(marks[k].time, true);
+            it.rect = RowRect(i);
+            it.selected = i == selected_;
+        };
+        a.selectItem = [this](int i) {
+            selected_ = i;
+            Invalidate();
+        };
+        a.invokeItem = [this](int i) {
+            selected_ = i;
+            Seek(i);
+            Invalidate();
+        };
+        a.focusedItem = selected_;
+    }
+
 private:
     void Changed() {
         InvalidateLayout();
@@ -1248,6 +1301,30 @@ public:
     void Seek(int i) {
         if (i < 0 || i >= Count()) return;
         TheApp().player().SeekAbsolute(PS().chapters[static_cast<size_t>(i)].time, true);
+    }
+
+    void Describe(A11y& a) override {
+        a.role = Role::List;
+        a.name = Count() > 0 ? Tr(L"Chapters") : Tr(L"This file has no chapters");
+        a.items = Count();
+        a.item = [this, cur = CurrentChapter()](int i, A11y::Item& it) {
+            const Chapter& ch = PS().chapters[static_cast<size_t>(i)];
+            it.name = ch.title.empty() ? Fmt(Tr(L"Chapter {0}"), static_cast<long long>(i + 1)) : ch.title;
+            it.name += L", " + FormatTime(ch.time, PS().duration >= 3600);
+            if (i == cur) it.name += L", " + std::wstring(Tr(L"Now playing"));
+            it.rect = RowRect(i);
+            it.selected = i == selected_;
+        };
+        a.selectItem = [this](int i) {
+            selected_ = i;
+            Invalidate();
+        };
+        a.invokeItem = [this](int i) {
+            selected_ = i;
+            Seek(i);
+            Invalidate();
+        };
+        a.focusedItem = selected_;
     }
 
 private:
