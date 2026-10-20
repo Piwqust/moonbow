@@ -43,6 +43,8 @@ public:
     std::string Create(const std::wstring& name);  // returns the new id
     bool Rename(std::string_view id, const std::wstring& name);
     bool Delete(std::string_view id);
+    // Undo of Delete: the playlist comes back with its id at `index`. False if the id exists.
+    bool Restore(Playlist p, size_t index);
 
     // insertAt < 0 or past the end appends.
     bool Add(std::string_view id, const std::vector<PlaylistItem>& items, int insertAt = -1);

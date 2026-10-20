@@ -2,7 +2,8 @@
 // Virtualized collection of library entries: card grids (video 16:9 or square covers),
 // list rows with columns, or compact side-panel rows. Items are painted directly (no
 // child widgets), only those intersecting the painter's clip, so folders with thousands
-// of files stay smooth. Single selection, keyboard navigation, drag to reorder (rows).
+// of files stay smooth. Selection (Ctrl/Shift for several items where multiSelect is on),
+// keyboard navigation, drag and Alt+Up/Down to reorder (rows).
 #include "app/Signal.h"
 #include "ui/Controls.h"
 
@@ -74,14 +75,18 @@ public:
     bool stretch = true;      // cards grow to fill the width (pages); fixed size on home
     unsigned columns = kColDuration;
     bool reorderable = false;  // Rows only
+    std::wstring highlight;    // folded search query: its words are underlined in the texts (VIS-17)
+    bool multiSelect = false;  // Ctrl+click toggles an item, Shift+click / Shift+arrows select a range
     bool roundImages = false;  // artist cards
     bool thumbs = true;        // Rows: artwork before the title (album pages show only the track number)
     ColumnTitle heads[kHeadCount];
     std::string sort;  // current sort value, marks the sorted column
     std::function<void(const std::string&)> onSort;  // a column title was clicked: the new sort value
 
-    int Selected() const { return selected_; }
-    void Select(int index, bool scrollIntoView = true);
+    int Selected() const { return selected_; }  // the focused item (one of the selection)
+    void Select(int index, bool scrollIntoView = true);  // that item alone
+    bool Marked(int index) const;  // in the selection
+    std::vector<int> Selection() const;  // in order
     // Absolute rect of an entry's slot (empty when hidden by maxRows).
     ui::Rect ItemRect(int index) const;
     int IndexAt(float x, float y) const;
@@ -137,6 +142,9 @@ private:
     int Navigate(int from, int dx, int dy) const;
     int DropIndexAt(float y) const;
     void UpdateHover(float x, float y);
+    void SetCursor(int index, bool scrollIntoView);  // moves selected_, keeps the marks
+    void ToggleMark(int index);
+    void SelectRange(int to, bool scrollIntoView);  // anchor_ .. to
     // Paints one text of item `i`; for the hovered item it also notes whether the text was cut.
     void ItemText(ui::Painter& p, int i, const std::wstring& text, const ui::Rect& box, ui::TextStyle style, ui::Color c,
                   ui::HAlign h = ui::HAlign::Leading);
@@ -153,6 +161,8 @@ private:
     uint64_t version_ = 1, computedVersion_ = 0;
 
     int selected_ = -1;
+    std::vector<bool> marked_;  // several selected (multiSelect); empty = just selected_
+    int anchor_ = -1;           // where a Shift range starts
     int hover_ = -1;
     bool hoverMore_ = false;
     int hoverHead_ = -1;

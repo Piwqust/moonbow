@@ -31,7 +31,7 @@
 {L"Reassign", L"Переназначить"},
 {L"{0} is already used by “{1}”.", L"{0} уже используется для «{1}»."},
 {L"Restore the default shortcut", L"Вернуть сочетание по умолчанию"},
-{L"Hide Keyboard Shortcuts", L"Скрыть сочетания клавиш"},
+{L"Hide keyboard shortcuts", L"Скрыть сочетания клавиш"},
 {L"Reset all shortcuts?", L"Сбросить все сочетания клавиш?"},
 {L"Every keyboard shortcut returns to its default.", L"Все сочетания клавиш вернутся к стандартным."},
 {L"Shortcuts reset", L"Сочетания клавиш сброшены"},
@@ -62,7 +62,7 @@
 {L"No shaders", L"Нет шейдеров"},
 // --- skins (Interface)
 {L"Monochrome, the default", L"Монохром, по умолчанию"},
-{L"Black page, dark theme only", L"Чёрный фон, только тёмная тема"},
+{L"Black page, always the dark theme", L"Чёрный фон, тема всегда тёмная"},
 {L"Brighter text and lines", L"Ярче текст и линии"},
 {L"Warm tones, softer corners", L"Тёплые тона, мягкие углы"},
 {L"Custom file…", L"Свой файл…"},

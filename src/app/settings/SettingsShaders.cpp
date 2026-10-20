@@ -59,8 +59,6 @@ std::vector<std::wstring> ListShaders() {
 class ShaderToggle : public Toggle, public Syncable {
 public:
     ShaderToggle(const Item& it, std::string name) : item_(it), name_(std::move(name)) {
-        width = Length::Px(68);
-        height = Length::Px(32);
         SetValue(On(), false);
         onChange = [this](bool on) {
             std::vector<std::string> list = SplitList(Cfg().GetString(item_.key));

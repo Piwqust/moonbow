@@ -120,6 +120,8 @@ MenuItem PlayItem() {
     return Item(s.paused || !s.fileLoaded ? L"Play" : L"Pause", Action::PlayPause, s.paused || !s.fileLoaded ? "play" : "pause");
 }
 
+// Grouped by task: playback, what plays (video, audio, subtitles), the queue, what the file is,
+// opening something else, the settings.
 void ShowVideoContextMenu(Host* host, Point at) {
     App& app = TheApp();
     const PlayerState& s = PS();
@@ -129,7 +131,6 @@ void ShowVideoContextMenu(Host* host, Point at) {
     items.push_back(Item(L"Stop", Action::Stop, "stop_twotone"));
     items.push_back(Item(L"Previous Item", Action::Previous, "previous_twotone"));
     items.push_back(Item(L"Next Item", Action::Next, "next_twotone"));
-    if (!music) items.push_back(Item(L"Record", Action::Record, "record"));
     items.push_back(Item(L"Hide UI", Action::HideUI, "ui"));
 
     MenuItem playback{Tr(L"Playback"), L"", "playback"};
@@ -146,7 +147,13 @@ void ShowVideoContextMenu(Host* host, Point at) {
     shuffle.checked = app.queue().Shuffle();
     playback.submenu.push_back(shuffle);
     playback.submenu.push_back(Item(L"A-B loop", Action::ABLoop));
+    // Rare, and it writes a file: not among the first commands.
+    if (!music) {
+        playback.submenu.push_back(MenuItem::Separator());
+        playback.submenu.push_back(Item(L"Record", Action::Record));
+    }
     items.push_back(playback);
+    items.push_back(MenuItem::Separator());
 
     MenuItem video{Tr(L"Video"), L"", "video"};
     video.submenu = TrackItems(L"video", "vid", true);
@@ -180,10 +187,32 @@ void ShowVideoContextMenu(Host* host, Point at) {
     mute.checked = s.mute;
     audio.submenu.push_back(mute);
     items.push_back(audio);
+
     if (music) {
         MenuItem lyrics{Tr(L"Lyrics style"), L"", "music"};
         lyrics.submenu = LyricsStyleItems();
         items.push_back(std::move(lyrics));
+    } else {
+        MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
+        subs.submenu = TrackItems(L"sub", "sid", true);
+        subs.submenu.push_back(MenuItem::Separator());
+        subs.submenu.push_back(Item(L"Add subtitle file…", Action::OpenSubtitles, "add"));
+        items.push_back(subs);
+    }
+    items.push_back(MenuItem::Separator());
+
+    MenuItem queue{Tr(L"Queue"), L"", "list"};
+    const auto& q = app.queue().Items();
+    for (size_t i = 0; i < q.size() && i < 30; ++i) {
+        MenuItem m{q[i].title.empty() ? FileNameOf(q[i].path) : q[i].title};
+        m.radio = true;
+        m.checked = static_cast<int>(i) == app.queue().Current();
+        m.action = [i] { TheApp().PlayIndex(static_cast<int>(i)); };
+        queue.submenu.push_back(std::move(m));
+    }
+    if (queue.submenu.empty()) queue.submenu.push_back({Tr(L"Queue is empty"), L"", "", false, false});
+    items.push_back(queue);
+    if (music) {
         MenuItem dock{Tr(L"Queue beside the music"), L"", "queue"};
         const std::string side = QueueDockSide();
         for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"", L"Not pinned"},
@@ -199,42 +228,25 @@ void ShowVideoContextMenu(Host* host, Point at) {
         items.push_back(std::move(dock));
     }
     items.push_back(MenuItem::Separator());
+
     items.push_back(Item(L"Media information", Action::ShowInfo, "info"));
     MenuItem stats = Item(L"Statistics", Action::ToggleStats, "wrench");
     stats.checked = app.config().GetBool("general.developerMode");
     items.push_back(stats);
     items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
-
-    MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
-    subs.submenu = TrackItems(L"sub", "sid", true);
-    subs.submenu.push_back(MenuItem::Separator());
-    subs.submenu.push_back(Item(L"Add subtitle file…", Action::OpenSubtitles, "add"));
-    if (!music) items.push_back(subs);
-
-    MenuItem more{Tr(L"More Settings"), L"", "settings"};
-    more.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
-                            [] { TogglePlayerPanel(PanelKind::Settings, {}); }});
-    more.submenu.push_back(Item(L"Customize player", Action::CustomizePlayer, "edit"));
-    more.submenu.push_back(Item(L"Settings", Action::Settings, "preferences"));
-    items.push_back(more);
-
-    MenuItem playlist{Tr(L"Playlist"), L"", "playlist"};
-    const auto& q = app.queue().Items();
-    for (size_t i = 0; i < q.size() && i < 30; ++i) {
-        MenuItem m{q[i].title.empty() ? FileNameOf(q[i].path) : q[i].title};
-        m.radio = true;
-        m.checked = static_cast<int>(i) == app.queue().Current();
-        m.action = [i] { TheApp().PlayIndex(static_cast<int>(i)); };
-        playlist.submenu.push_back(std::move(m));
-    }
-    if (playlist.submenu.empty()) playlist.submenu.push_back({Tr(L"Queue is empty"), L"", "", false, false});
-    items.push_back(playlist);
+    items.push_back(MenuItem::Separator());
 
     MenuItem open{Tr(L"Open Media"), L"", "open"};
     open.submenu.push_back(Item(L"Open file", Action::OpenFile, "file"));
     open.submenu.push_back(Item(L"Open folder", Action::OpenFolder, "folder"));
     open.submenu.push_back(Item(L"Open network stream", Action::OpenNetwork, "streaming"));
     items.push_back(open);
+    MenuItem settings{Tr(L"Settings"), L"", "settings"};
+    settings.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
+                                [] { TogglePlayerPanel(PanelKind::Settings, {}); }});
+    settings.submenu.push_back(Item(L"Customize player", Action::CustomizePlayer, "edit"));
+    settings.submenu.push_back(Item(L"Lumen Settings", Action::Settings, "preferences"));
+    items.push_back(settings);
     items.push_back(Item(L"Quit", Action::Quit, "quit"));
     KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
 }
@@ -427,7 +439,9 @@ public:
         gap = 8;
         pad = Insets::All(28);
         width = Length::Px(440);
-        icon_ = Add<IconView>("info", 32, Tone::Secondary);
+        // The library's "Damaged file" chip says the same thing with the same sign (ItemGrid.cpp).
+        icon_ = Add<IconView>("warning", 32);
+        icon_->color = [] { return P().danger; };
         title_ = Add<Label>(L"", TextStyle::Heading, Tone::Primary);
         title_->halign = HAlign::Center;
         title_->wrap = true;
@@ -453,8 +467,24 @@ public:
         row->pad.t = 12;
         next_ = row->Add<Button>(L"", ButtonKind::Primary, "next");
         next_->onClick = [] { Run(Action::Next); };
-        close_ = row->Add<Button>(L"", ButtonKind::Secondary);
+        // A single file has nothing to go on to: the way out is back where it was opened from.
+        back_ = row->Add<Button>(L"", ButtonKind::Primary);
+        back_->onClick = [] { TheApp().ShowPlayer(false); };
+        // Outlined: a Secondary button's fill is the card's own colour.
+        close_ = row->Add<Button>(L"", ButtonKind::Outline);
         close_->onClick = [] { Run(Action::CloseMedia); };
+    }
+    // Like a dialog: named by what went wrong, and the keyboard starts on its first button.
+    void Describe(A11y& a) override {
+        a.role = Role::Window;
+        a.name = title_->Text() + L". " + body_->Text();
+    }
+    void OnShown() {
+        Widget* first = next_->visible ? static_cast<Widget*>(next_) : back_;
+        if (Host* h = GetHost())
+            h->Post([this, h, first] {
+                if (visible) h->SetFocus(first, true);
+            });
     }
     void Refresh() {
         App& app = TheApp();
@@ -468,20 +498,23 @@ public:
         detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
         more_->text = Tr(L"More details");  // here, not when built: after a language switch too
         next_->SetText(Tr(L"Next file"));
+        back_->SetText(Tr(L"Back to library"));
         close_->SetText(Tr(L"Close"));
         detail_->visible = false;
         more_->visible = !err.empty();
         const int nextIndex = app.queue().NextIndex(true);
         next_->visible = nextIndex >= 0 && nextIndex != app.queue().Current();
+        back_->visible = !next_->visible;
         InvalidateLayout();
     }
     void Paint(Painter& p) override { p.Fill(rect, P().bgPanel, 12); }
+    std::wstring Spoken() const { return title_->Text() + L". " + body_->Text(); }
 
 private:
     IconView* icon_;
     Label *title_, *body_, *detail_;
     LinkButton* more_;
-    Button *next_, *close_;
+    Button *next_, *back_, *close_;
 };
 
 PlayerView::PlayerView(MainWindow* window) : window_(window) {
@@ -529,6 +562,7 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
 
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
         if (m & (kChangeError | kChangeFile)) error_->Refresh();
+        if ((m & kChangeError) && !TheApp().FailedPath().empty()) a11y::Announce(window_, error_->Spoken());
         // The basic keys once, at the first file ever played in the player (the onboarding has no page for
         // them). A song started from the library stays there: the toast would cover the page header.
         if ((m & kChangeFile) && PS().fileLoaded && (TheApp().PlayerShown() || TheApp().PlayerPending()) &&
@@ -637,7 +671,7 @@ void PlayerView::OnLayout() {
         layoutMode_ = mode;
     }
     const bool audioOnly = s.fileLoaded && !s.hasVideo;
-    const float barH = bar_->BarHeight();
+    const float barH = bar_->BarHeight(rect.w);
     const bool pip = window_->PictureInPicture();
 
     // PiP has no room for it; it comes back with the full window.
@@ -674,7 +708,9 @@ void PlayerView::OnLayout() {
 
     const float chrome = window_->ChromeOpacity();
     bar_->opacity = immersive || overlay ? chrome : 1.0f;
-    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f);
+    // Tab brings a hidden bar back (MainWindow::HandleMessage) before its fade has begun.
+    const bool keyboardOnBar = window_->FocusVisible() && bar_->IsAncestorOf(window_->Focus());
+    bar_->visible = !pip && (!(immersive || overlay) || chrome > 0.01f || keyboardOnBar);
     // Over the video the bar floats (unless "full width" is chosen) and slides a few DIP while it
     // fades, so showing and hiding read as one motion rather than a blink.
     // The fullscreen side panel is a full-height sheet: the bar keeps to the picture beside it
@@ -702,7 +738,9 @@ void PlayerView::OnLayout() {
 
     // Only once mpv has nothing left to try: a failed file in a queue is skipped (a toast says so),
     // and the card would flash with the next file's name.
+    const bool errorWas = error_->visible;
     error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && s.idle && !pip;
+    if (error_->visible && !errorWas) error_->OnShown();
     if (error_->visible) {
         const Rect v = video_->Inner(immersive);
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);
@@ -727,11 +765,20 @@ void PlayerView::OnLayout() {
     UpdateStats();
 }
 
-Rect PlayerView::ToastBand() const {
+Rect PlayerView::ToastBand(float* top) const {
+    if (top) *top = -1;
+    // Not on the cover (VIS-13).
+    if (const Rect slot = music_->visible ? MusicToastSlot() : Rect{}; !slot.Empty()) {
+        if (top) *top = slot.y;
+        return slot;
+    }
     Rect a = video_->rect;
-    const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
-                       PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
-    if (panel && a.w - (panel::kPanelW + panel::kGap) >= 320) a.w -= panel::kPanelW + panel::kGap;
+    bool panel = false;
+    for (int k = 0; k <= static_cast<int>(PanelKind::Speed); ++k) panel |= PlayerPanelOpen(static_cast<PanelKind>(k));
+    // The popover's left edge (Panels.cpp, PlaceAboveBar): the toast, at most band.w - 32 wide and
+    // centred, keeps 16 DIP from it.
+    const float panelX = bar_->rect.Right() - panel::kGap - panel::kPanelW;
+    if (panel && panelX - a.x >= 320) a.w = std::min(a.w, panelX - a.x);
     return a;
 }
 
@@ -871,6 +918,20 @@ private:
     Action action_;
 };
 
+// The buttons over the picture stay in the Tab order and the UIA tree; they are drawn only while
+// the card is hovered or one of them has keyboard focus (MiniPlayer::OverlayShown).
+class MiniOverlay : public Widget {
+public:
+    std::function<float()> shown;
+    void PaintChildren(Painter& p) override {
+        const float k = shown();
+        if (k <= 0.01f) return;
+        p.PushOpacity(k);
+        Widget::PaintChildren(p);
+        p.PopOpacity();
+    }
+};
+
 }  // namespace
 
 MiniPlayer::MiniPlayer(MainWindow*) {
@@ -880,9 +941,11 @@ MiniPlayer::MiniPlayer(MainWindow*) {
     dir = Dir::None;
     onClick = [] { TheApp().ShowPlayer(true); };
 
-    overlay_ = Add<Widget>();
+    auto* overlay = Add<MiniOverlay>();
+    overlay->shown = [this] { return OverlayShown(); };
+    overlay_ = overlay;
     overlay_->dir = Dir::None;
-    auto* close = overlay_->Add<MiniOverlayButton>("close", L"Stop", Action::Stop, 28, 18);
+    auto* close = overlay_->Add<MiniOverlayButton>("stop", L"Stop", Action::Stop, 28, 18);
     close->id = "close";
     // An upward chevron, as Spotify's and YouTube's mini players expand: "open" read as a new window.
     auto* expand = overlay_->Add<MiniOverlayButton>("chevron_up", L"Open player", Action::None, 28, 18);
@@ -932,6 +995,10 @@ MiniPlayer::MiniPlayer(MainWindow*) {
 
 MiniPlayer::~MiniPlayer() = default;
 
+void MiniPlayer::Describe(A11y& a) {
+    a.name = Tr(L"Mini player");
+}
+
 Size MiniPlayer::MeasureContent(float availW, float availH) {
     compact_ = availW < kMiniCompactW || availH < kMiniCompactH;
     return compact_ ? Size{kMiniCompactCardW, kMiniCompactCardH} : Size{kMiniW, kMiniVideoH + 16 + 60};
@@ -968,7 +1035,7 @@ void MiniPlayer::OnLayout() {
         return;
     }
     overlay_->Arrange(v);
-    overlay_->visible = hover_.Get() > 0.01f;
+    overlay_->visible = true;
     for (auto& c : overlay_->Children()) {
         c->visible = true;
         const Size s = c->Measure(100, 100);
@@ -993,6 +1060,14 @@ void MiniPlayer::OnLayout() {
     }
 }
 
+float MiniPlayer::OverlayShown() const {
+    if (compact_) return 1;
+    // A button under the pointer (it can come straight onto one) or reached with Tab shows them all.
+    const Host* h = GetHost();
+    const bool onButton = h && (overlay_->IsAncestorOf(h->Hot()) || (h->FocusVisible() && overlay_->IsAncestorOf(h->Focus())));
+    return onButton ? 1.0f : hover_.Get();
+}
+
 void MiniPlayer::OnMouseEnter() {
     hover_.To(1, 120);
     InvalidateLayout();
@@ -1009,10 +1084,10 @@ void MiniPlayer::OnMouseLeave() {
 void MiniPlayer::Paint(Painter& p) {
     const PlayerState& s = PS();
     const Rect v = VideoBox();
-    const float k = compact_ ? 0.0f : hover_.Get();
-    p.Shadow(rect, 8, 18, 8);
-    p.Fill(rect, P().bgPanel, 8);
-    p.Stroke(rect, P().line, 8);
+    const float k = compact_ ? 0.0f : OverlayShown();
+    p.Shadow(rect, kRadiusPopup, 18, 8);
+    p.Fill(rect, P().bgMenu, kRadiusPopup);
+    p.Stroke(rect, P().line, kRadiusPopup);
     if (s.hasVideo) {
         p.Fill(v, P().videoBg, 4);
         // mpv's window sits under the whole UI layer at VideoRect(), and the library page

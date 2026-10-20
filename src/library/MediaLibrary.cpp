@@ -140,7 +140,7 @@ int Flatten(TempFolder& t, int parent, Snapshot& s) {
 
 void FillSearchKey(MediaItem& it) {
     std::wstring text = it.name;
-    for (const std::wstring* tag : {&it.title, &it.artist, &it.album}) {
+    for (const std::wstring* tag : {&it.title, &it.artist, &it.album, &it.genre}) {
         if (tag->empty()) continue;
         text += L'\n';
         text += *tag;
@@ -265,6 +265,7 @@ void ReadMetadata(MediaItem& it) {
 }
 
 struct CacheEntry {
+    std::wstring path;
     uint64_t size = 0;
     int64_t mtime = 0;
     double duration = 0;
@@ -290,6 +291,7 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     if (!items) return cache;
     for (const json::Value& e : items->AsArray()) {
         CacheEntry c;
+        c.path = e.GetWString("p");
         c.size = static_cast<uint64_t>(e.GetInt("s"));
         c.mtime = e.GetInt("m");
         c.duration = e.GetNumber("d");
@@ -304,7 +306,7 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
         c.albumArtist = e.GetWString("aa");
         c.firstSeen = e.GetInt("f");
         c.stale = version < kCacheVersion || e.GetBool("o");
-        cache.emplace(PathKey(e.GetWString("p")), std::move(c));
+        cache.emplace(PathKey(c.path), std::move(c));
     }
     return cache;
 }
@@ -344,15 +346,42 @@ void ReadMetadataParallel(Snapshot& snap, const std::vector<size_t>& pending, si
     for (std::thread& t : pool) t.join();
 }
 
-using KeptCache = std::vector<std::pair<std::wstring, CacheEntry>>;  // PathKey -> entry
+// A library root that is not reachable (a USB disk unplugged, a renamed folder) keeps the files
+// the cache knows under it, as offline items: the library doesn't look wiped, and the tags are
+// there when the drive comes back. `root.path` is the root; adds the subfolders on the way.
+void AddCachedItem(TempFolder& root, const CacheEntry& c) {
+    const size_t start = root.path.size() + (root.path.back() == L'\\' ? 0 : 1);
+    if (c.path.size() <= start) return;
+    TempFolder* node = &root;
+    for (size_t at = start, slash; (slash = c.path.find(L'\\', at)) != std::wstring::npos; at = slash + 1) {
+        const std::wstring name = c.path.substr(at, slash - at);
+        auto it = std::find_if(node->children.begin(), node->children.end(),
+                               [&](const auto& child) { return child->name == name; });
+        if (it == node->children.end()) {
+            node->children.push_back(std::make_unique<TempFolder>());
+            node->children.back()->path = c.path.substr(0, slash);
+            node->children.back()->name = name;
+            it = node->children.end() - 1;
+        }
+        node = it->get();
+    }
+    MediaItem it;
+    it.path = c.path;
+    it.name = StemOf(c.path);
+    it.folder = node->path;
+    it.kind = KindOf(c.path);
+    it.size = c.size;
+    it.mtime = c.mtime;
+    it.offline = true;
+    if (it.kind != MediaKind::Other) node->items.push_back(std::move(it));
+}
 
 // `unread` (by item index): files whose metadata is not read yet (still queued, or cloud-only)
 // are written as stale entries: only their first-seen time is kept, so they don't turn "new"
-// again, and the tags are read on a later scan. `kept`: entries of library roots that were not
-// reachable (a USB disk unplugged), written back unchanged.
-void SaveCache(const Snapshot& s, const std::vector<char>& unread, const KeptCache& kept) {
+// again, and the tags are read on a later scan.
+void SaveCache(const Snapshot& s, const std::vector<char>& unread) {
     json::Value items = json::Value::MakeArray();
-    items.MutArray().reserve(s.items.size() + kept.size());
+    items.MutArray().reserve(s.items.size());
     auto add = [&](const std::wstring& path, const CacheEntry& c) {
         json::Value e = json::Value::MakeObject();
         e.Set("p", json::ToUtf8(path));
@@ -383,10 +412,9 @@ void SaveCache(const Snapshot& s, const std::vector<char>& unread, const KeptCac
             add(it.path, stale);
             continue;
         }
-        add(it.path, {it.size, it.mtime, it.duration, it.title, it.artist, it.album, it.albumArtist, it.genre, it.track,
-                      it.year, it.disc, it.damaged, it.firstSeen});
+        add(it.path, {it.path, it.size, it.mtime, it.duration, it.title, it.artist, it.album, it.albumArtist, it.genre,
+                      it.track, it.year, it.disc, it.damaged, it.firstSeen});
     }
-    for (const auto& [key, c] : kept) add(key, c);
     json::Value doc = json::Value::MakeObject();
     doc.Set("version", kCacheVersion);
     doc.Set("items", std::move(items));
@@ -638,6 +666,15 @@ bool MediaLibrary::RemoveRoot(const std::wstring& folder) {
     return true;
 }
 
+bool MediaLibrary::RestoreRoot(const std::wstring& folder, size_t index) {
+    const std::wstring key = PathKey(folder);
+    for (const std::wstring& r : roots_)
+        if (PathKey(r) == key) return false;
+    roots_.insert(roots_.begin() + static_cast<ptrdiff_t>(std::min(index, roots_.size())), NormalizePath(folder));
+    Save();
+    return true;
+}
+
 void MediaLibrary::SetRoots(std::vector<std::wstring> folders) {
     roots_.clear();
     for (const std::wstring& f : folders) AddRoot(f);
@@ -737,20 +774,23 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
 
     // 1. Enumerate.
     auto t0 = Clock::now();
-    std::vector<std::wstring> missingRoots;  // PathKey with a trailing backslash
+    auto cache = options.readMetadata ? LoadCache() : std::unordered_map<std::wstring, CacheEntry>();
     for (const std::wstring& root : roots) {
         if (cancel) break;
-        DWORD attr = GetFileAttributesW(root.c_str());
-        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            std::wstring key = PathKey(root);
-            if (key.empty() || key.back() != L'\\') key += L'\\';
-            missingRoots.push_back(std::move(key));
-            continue;
-        }
         TempFolder t;
         t.path = root;
         t.name = FileNameOf(root);
         if (t.name.empty() || (root.size() == 3 && root[1] == L':')) t.name = root;  // "D:\"
+        DWORD attr = GetFileAttributesW(root.c_str());
+        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            snap->missingRoots.push_back(root);
+            std::wstring key = PathKey(root);
+            if (key.empty() || key.back() != L'\\') key += L'\\';
+            for (const auto& [path, entry] : cache)
+                if (path.compare(0, key.size(), key) == 0) AddCachedItem(t, entry);
+            if (!t.items.empty() || !t.children.empty()) Flatten(t, -1, *snap);
+            continue;
+        }
         Enumerate(t, options, cancel, snap->stats, progressTotal_, announce);
         ++snap->stats.folders;
         Flatten(t, -1, *snap);
@@ -761,15 +801,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     std::vector<size_t> pending;
     std::vector<char> unread(snap->items.size(), 0);  // see SaveCache
     bool uncached = false;                             // a file the cache doesn't know yet
-    KeptCache kept;  // a drive that is off keeps its tags for when it comes back
     if (options.readMetadata && !cancel) {
-        auto cache = LoadCache();
-        for (const auto& [key, entry] : cache)
-            for (const std::wstring& r : missingRoots)
-                if (key.compare(0, r.size(), r) == 0) {
-                    kept.emplace_back(key, entry);
-                    break;
-                }
         // A root the cache knows nothing about (a new library, a folder just added) is scanned for
         // the first time: its files aren't "new", they are the library.
         std::vector<std::wstring> rootKeys;
@@ -877,13 +909,13 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
             snap->stats.metadataSecondPass = true;
             snap->complete = false;
             snap->stats.metadataFiles = done;
-            if (options.readMetadata) SaveCache(*snap, unread, kept);
+            if (options.readMetadata) SaveCache(*snap, unread);
             Publish(std::make_shared<Snapshot>(*snap));
             lastPublish = Clock::now();
         }
         if (snap->stats.metadataSecondPass && Clock::now() - lastPublish > kProgressInterval && done < pending.size()) {
             snap->stats.metadataFiles = done;
-            if (options.readMetadata) SaveCache(*snap, unread, kept);
+            if (options.readMetadata) SaveCache(*snap, unread);
             Publish(std::make_shared<Snapshot>(*snap));
             lastPublish = Clock::now();
         }
@@ -893,7 +925,7 @@ void MediaLibrary::ScanThread(uint64_t generation, std::vector<std::wstring> roo
     snap->stats.metadataMsPerFile = done ? snap->stats.metadataMs / static_cast<double>(done) : 0;
 
     // Files only found (cloud-only ones are never read) are saved too, or they'd be new every scan.
-    if (!cancel && options.readMetadata && (done > 0 || uncached)) SaveCache(*snap, unread, kept);
+    if (!cancel && options.readMetadata && (done > 0 || uncached)) SaveCache(*snap, unread);
     if (!cancel && (!snap->complete || done > 0)) {
         snap->complete = true;
         Publish(std::make_shared<const Snapshot>(std::move(*snap)));

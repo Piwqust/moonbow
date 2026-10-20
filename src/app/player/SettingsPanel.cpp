@@ -131,6 +131,7 @@ Range* AddRange(SyncPage* page, Widget* section, const std::wstring& label, cons
     r->ticks = spec.ticks;
     r->labels = spec.labels;
     r->trackH = 16;
+    r->format = [fmt](float v) { return fmt(v); };
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(spec.labels.empty() ? 12.0f : 6.0f);
     r->onChange = [value, fmt, set, live = spec.liveDrag](float v) {
@@ -184,6 +185,8 @@ Range* AddBoxRange(SyncPage* page, Widget* section, const std::wstring& label, c
     r->ticks = spec.ticks;
     r->labels = spec.labels;
     r->trackH = 21;
+    r->format = [fmt](float v) { return fmt(v); };
+    r->a11yName = label;  // the row above holds the value box too
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(14);
     r->onChange = [set](float v) { set(v); };
@@ -536,8 +539,9 @@ std::unique_ptr<Widget> VideoTab() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
     AddTrackLists(page, L"video");
+    // What resets with the next file apart from what carries on to the next files.
     AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Defaults"));
+    AddSectionTitle(page, Tr(L"This File"));
     Widget* s = AddSection(page);
     auto* top = s->Add<Widget>();
     top->height = Length::Px(8);
@@ -557,9 +561,6 @@ std::unique_ptr<Widget> VideoTab() {
                {Tr(L"1:1 Original"), "original", ""},
                {Tr(L"2:1 Double"), "double", ""}},
               [] { return Live().zoomMode; }, [](const std::string& v) { Live().SetZoomMode(v); });
-    AddConfigChoice(page, s, Tr(L"HDR"), "video.hdr");
-    AddConfigChoice(page, s, Tr(L"Tone Mapping"), "video.toneMapping");
-    AddConfigChoice(page, s, Tr(L"Resolution"), "playback.videoQuality");
     AddChoice(page, s, Tr(L"Aspect Ratio"),
               {{Tr(L"Default"), "auto", ""},
                {L"16:9", "16:9", ""},
@@ -570,16 +571,6 @@ std::unique_ptr<Widget> VideoTab() {
                {L"5:4", "5:4", ""},
                {L"1:1", "1:1", ""}},
               [] { return Live().aspect; }, [](const std::string& v) { Live().SetAspect(v); });
-    AddChoice(page, s, Tr(L"Crop"),
-              {{Tr(L"Default"), "none", ""},
-               {L"16:9", "16:9", ""},
-               {L"4:3", "4:3", ""},
-               {L"21:9", "21:9", ""},
-               {L"2.35:1", "2.35:1", ""},
-               {Tr(L"Custom"), "custom", ""}},
-              [] { return Live().crop; }, [](const std::string& v) { Live().SetCrop(v); });
-    AddChoice(page, s, Tr(L"Deinterlace"), {{Tr(L"Auto"), "auto", ""}, {Tr(L"On"), "yes", ""}, {Tr(L"Off"), "no", ""}},
-              [] { return Live().deinterlace; }, [](const std::string& v) { Live().SetDeinterlace(v); });
     {
         // The rule for the next file (Player.cpp reset-on-next-file, LiveState's file change).
         auto* note = s->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
@@ -598,6 +589,26 @@ std::unique_ptr<Widget> VideoTab() {
     }
     auto* bottom = s->Add<Widget>();
     bottom->height = Length::Px(8);
+
+    // Crop and deinterlacing stay for the next files; the rest are settings.
+    AddSectionLine(page);
+    AddSectionTitle(page, Tr(L"All Files"));
+    Widget* g = AddSection(page);
+    AddChoice(page, g, Tr(L"Crop"),
+              {{Tr(L"Default"), "none", ""},
+               {L"16:9", "16:9", ""},
+               {L"4:3", "4:3", ""},
+               {L"21:9", "21:9", ""},
+               {L"2.35:1", "2.35:1", ""},
+               {Tr(L"Custom"), "custom", ""}},
+              [] { return Live().crop; }, [](const std::string& v) { Live().SetCrop(v); });
+    AddChoice(page, g, Tr(L"Deinterlace"), {{Tr(L"Auto"), "auto", ""}, {Tr(L"On"), "yes", ""}, {Tr(L"Off"), "no", ""}},
+              [] { return Live().deinterlace; }, [](const std::string& v) { Live().SetDeinterlace(v); });
+    AddConfigChoice(page, g, Tr(L"HDR"), "video.hdr");
+    AddConfigChoice(page, g, Tr(L"Tone Mapping"), "video.toneMapping");
+    AddConfigChoice(page, g, Tr(L"Resolution"), "playback.videoQuality");
+    auto* gbottom = g->Add<Widget>();
+    gbottom->height = Length::Px(8);
 
     AddSectionLine(page);
     AddSectionTitle(page, Tr(L"Quality"));
@@ -756,7 +767,7 @@ std::unique_ptr<Widget> AudioTab() {
     auto root = Page(&page);
     AddTrackLists(page, L"audio");
     AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Defaults"));
+    AddSectionTitle(page, Tr(L"All Files"));  // nothing here resets with the next file
     Widget* s = AddSection(page);
     AddConfigChoice(page, s, Tr(L"Audio Language"), "audio.language");
     AddChoice(page, s, Tr(L"Stereo Mode"),
@@ -856,13 +867,16 @@ std::unique_ptr<Widget> SubtitlesTab() {
     auto root = Page(&page);
     AddTrackLists(page, L"sub");
     AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Defaults"));
-    Widget* s = AddSection(page);
+    AddSectionTitle(page, Tr(L"This File"));
+    Widget* f = AddSection(page);
     AddTracks(
-        page, s, Tr(L"Secondary Subtitles"), L"sub", [] { return std::to_string(Live().V().secondarySid); },
+        page, f, Tr(L"Secondary Subtitles"), L"sub", [] { return std::to_string(Live().V().secondarySid); },
         [](const std::string& v) {
             TheApp().player().SetProperty("secondary-sid", std::string(v == "0" ? "no" : v));
         });
+    AddSectionLine(page);
+    AddSectionTitle(page, Tr(L"All Files"));
+    Widget* s = AddSection(page);
     AddConfigChoice(page, s, Tr(L"Subtitle Language"), "subtitles.language");
     AddToggle(page, s, Tr(L"Show Subtitles"), [] { return Live().V().subVisible; },
               [](bool v) { TheApp().player().SetProperty("sub-visibility", v); });
@@ -1014,6 +1028,8 @@ public:
     explicit SettingsFooter(Popover* owner) {
         width = Length::Grow();
         Add<PresetField>();
+        // What the bar is for: "preset" alone said nothing (UX-14).
+        hint_ = Add<Label>(Tr(L"Save these values as a preset to come back to them"), TextStyle::Small, Tone::Tertiary);
         adv_ = Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
         adv_->onClick = [] {
             static const char* kCats[] = {"playback", "video", "audio", "subtitles"};
@@ -1032,12 +1048,13 @@ public:
 
 private:
     // Short popover (an 800x500 window): one row, the settings button shows its icon only, so
-    // the footer takes 62 DIP instead of 125 and leaves the room to the scrolling rows.
+    // the footer takes 62 DIP instead of 151 and leaves the room to the scrolling rows.
     void SetCompact(bool on) {
         if (compact_ == (on ? 1 : 0)) return;
         compact_ = on ? 1 : 0;
         dir = on ? Dir::Row : Dir::Column;
-        height = Length::Px(on ? 62.0f : 125.0f);
+        height = Length::Px(on ? 62.0f : 151.0f);
+        hint_->visible = !on;
         pad = on ? Insets{20, 10, 20, 10} : Insets{20, 21, 20, 20};
         gap = on ? 8.0f : 10.0f;
         adv_->text = on ? L"" : Tr(L"Open Advanced Settings");
@@ -1047,6 +1064,7 @@ private:
         adv_->filled = on;
     }
     FlatButton* adv_ = nullptr;
+    Label* hint_ = nullptr;
     int compact_ = -1;
 };
 

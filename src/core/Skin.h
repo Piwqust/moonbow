@@ -28,7 +28,7 @@ Rgba Mix(const Rgba& x, const Rgba& y, float t);
 enum Token : int {
     kBgDeep, kBgBase, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu,
     kHover, kPress,
-    kLineSubtle, kLine, kLineStrong,
+    kLineSubtle, kLine, kLineStrong, kLineControl,
     kTextPrimary, kTextSecondary, kTextTertiary, kTextDisabled,
     kAccent, kAccentMid, kAccentDim, kAccentFaint, kOnAccent,
     kScrim, kShadow, kDanger,
@@ -82,8 +82,21 @@ ParseResult Parse(std::string_view text);
 // `accentTone` is general.accent; a skin accent replaces it.
 Colors Resolve(bool dark, int accentTone, const Skin* skin);
 
+// The colours of a Windows contrast theme (GetSysColor), which replace every skin while high
+// contrast is on: the user picked them for the whole system.
+struct SystemColors {
+    Rgba window, windowText, highlight, highlightText, hotlight, grayText, buttonFace;
+};
+// A one-mode skin (dark when the window colour is dark) painted only in those colours.
+Skin FromSystemColors(const SystemColors& sys);
+
 // WCAG 2.x contrast ratio of two opaque colours (alpha ignored), 1..21.
 double Contrast(const Rgba& a, const Rgba& b);
+
+// The keyboard focus ring: the accent where it stands out 3:1 on every background, else
+// text.primary (the darker accents and accent.mid did not, WCAG 1.4.11).
+Rgba FocusRing(const Colors& c);
+inline constexpr int kFocusRingFg = kTokenCount;  // ContrastIssue::fg of the focus ring
 
 struct ContrastIssue {
     bool dark = true;

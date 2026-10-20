@@ -8,6 +8,7 @@
 
 #include <typeinfo>
 #include <unordered_map>
+#include <utility>
 
 namespace ui::a11y {
 
@@ -15,6 +16,7 @@ namespace {
 
 bool g_connected = false;  // a client asked for a window: uiautomationcore.dll is loaded
 bool g_recordOnce = false;
+LCID g_culture = 0;
 
 // Leaked on purpose: widgets of static objects die after a static map would.
 // Per live widget that has had an element: a serial no other widget gets, so an element of a
@@ -64,21 +66,28 @@ void PaintedDeep(const Widget* w, std::wstring& out, bool labels = false) {
         if (c->visible && !(labels && (c->interactive || c->focusable))) PaintedDeep(c.get(), out, labels);
 }
 
+A11y Describe(Widget* w);
+std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys = nullptr);
+
 // The label right before a control (settings rows: "Label [control]", or a "Label [value]" row
-// above a slider), looking up through wrappers the control is the first child of. A control
-// right before it means a row of controls: no label. A list takes its section title, which may
-// be a button.
-std::wstring LabelBefore(const Widget* w, bool buttons = false) {
+// above a slider), looking up through wrappers the control is the first child of. A control,
+// tabs or a list right before it mean a row of controls or another section: no label. A list
+// takes only its section title, a text or a "Title >" button.
+std::wstring LabelBefore(const Widget* w, bool list = false) {
     for (int depth = 0; w && w->Parent() && depth < 3; ++depth, w = w->Parent()) {
         const auto& sib = w->Parent()->Children();
         size_t at = 0;
         while (at < sib.size() && sib[at].get() != w) ++at;
         while (at > 0 && !sib[at - 1]->visible) --at;
         if (at == 0) continue;
-        const Widget* s = sib[at - 1].get();
-        if (!buttons && (s->interactive || s->focusable)) return {};
+        Widget* s = sib[at - 1].get();
+        const A11y d = Describe(s);
+        if (list) return d.role == Role::Text || d.role == Role::Button ? NameOf(s, d) : std::wstring();
+        if (s->focusable || IsLeaf(d.role) || d.role == Role::Tab || d.role == Role::List) return {};
+        // A label with an "i" button names itself in Describe; a header with buttons is no label.
+        if (HasInteractiveDescendant(s)) return d.name;
         std::wstring t;
-        PaintedDeep(s, t, !buttons);
+        PaintedDeep(s, t, true);
         return t;
     }
     return {};
@@ -104,14 +113,21 @@ bool IsPopupRoot(const Widget* w) {
 
 A11y Describe(Widget* w) {
     A11y a;
+    // Named from their own text, not the last painted frame: scrolled out of view, they still have it.
     if (auto* l = dynamic_cast<Label*>(w)) {
         a.role = l->Text().empty() ? Role::Skip : Role::Text;
         a.name = l->Text();
+        if (l->style <= TextStyle::Heading) a.heading = l->style <= TextStyle::Title ? 1 : 2;
+    } else if (auto* b = dynamic_cast<Button*>(w)) {
+        a.name = b->Text();
+    } else if (auto* lb = dynamic_cast<LinkButton*>(w)) {
+        a.name = lb->text;
     } else if (auto* t = dynamic_cast<Toggle*>(w)) {
         a.role = Role::CheckBox;
         a.toggle = t->Value() ? 1 : 0;
     } else if (auto* c = dynamic_cast<Checkbox*>(w)) {
         a.role = Role::CheckBox;
+        a.name = c->Text();
         a.toggle = c->Value() ? 1 : 0;
     } else if (auto* d = dynamic_cast<Dropdown*>(w)) {
         a.role = Role::ComboBox;
@@ -124,6 +140,7 @@ A11y Describe(Widget* w) {
         a.max = s->max;
         a.now = s->Value();
         a.step = s->step;
+        if (s->format) a.value = s->format(s->Value());
         a.setRange = [s](double v) {  // like the arrow keys
             s->SetValue(static_cast<float>(v));
             if (s->onChange) s->onChange(s->Value());
@@ -131,7 +148,7 @@ A11y Describe(Widget* w) {
         };
     } else if (auto* tb = dynamic_cast<TextBox*>(w)) {
         a.role = Role::Edit;
-        a.name = tb->placeholder;
+        a.help = tb->placeholder;  // the name is its label; a search field has only this
         a.password = tb->password;
         if (!tb->password) a.value = tb->Text();
         if (!tb->readOnly) a.setValue = [tb](const std::wstring& v) { tb->SetText(v, true); };
@@ -140,6 +157,7 @@ A11y Describe(Widget* w) {
     } else if (dynamic_cast<Dialog*>(w)) {
         a.role = Role::Window;
     }
+    if (!w->a11yName.empty()) a.name = w->a11yName;
     w->Describe(a);
     if (a.role == Role::Auto) {
         const bool text = Painted().count(w) > 0;
@@ -159,7 +177,9 @@ Role RoleOf(Widget* w) {
     return Describe(w).role;
 }
 
-std::wstring NameOf(Widget* w, const A11y& a) {
+// `keys` gets the shortcut a tooltip names ("Pause (Space)"), which is no part of the name.
+std::wstring NameOf(Widget* w, const A11y& a, std::wstring* keys) {
+    if (keys) *keys = a.keys;
     if (!a.name.empty()) return a.name;
     std::wstring n;
     switch (a.role) {
@@ -176,7 +196,13 @@ std::wstring NameOf(Widget* w, const A11y& a) {
             break;
         case Role::ComboBox: case Role::Edit: case Role::Slider:
             n = LabelBefore(w);
+            // A "Label  value" row above a slider: the value is the slider's, not part of its name.
+            if (!a.value.empty() && n.size() > a.value.size() && n.ends_with(L" " + a.value))
+                n.resize(n.size() - a.value.size() - 1);
+            if (n.empty() && a.role == Role::Edit && w->tooltip.empty()) n = a.help;
             break;
+        case Role::Group:  // a row or a panel: named in Describe, else nothing (its tooltip is help)
+            return n;
         case Role::List:
             n = LabelBefore(w, true);
             break;
@@ -195,8 +221,17 @@ std::wstring NameOf(Widget* w, const A11y& a) {
         default:
             break;
     }
-    if (n.empty()) n = w->tooltip;
-    if (n.empty() && a.role != Role::Text && a.role != Role::Window) n = LabelBefore(w);
+    if (n.empty()) {
+        n = w->tooltip;
+        // shortcut: any button tooltip ending in " (…)" is taken for "Action (Key)" (app::WithKey);
+        // set A11y::keys in Describe instead if a tooltip ever ends in another parenthesis.
+        const size_t open = n.rfind(L" (");
+        if (a.role == Role::Button && open != std::wstring::npos && n.back() == L')') {
+            if (keys) *keys = n.substr(open + 2, n.size() - open - 3);
+            n.resize(open);
+        }
+    }
+    if (n.empty() && (IsLeaf(a.role) || a.role == Role::Tab)) n = LabelBefore(w);
     if (n.empty())
         if (auto* ib = dynamic_cast<IconButton*>(w)) n = Widen(ib->icon);  // shortcut: icon id, until it has a tooltip
     if (n.size() > 400) n.resize(400);
@@ -300,6 +335,12 @@ bool Offscreen(Host* h, const Widget* w, Rect r) {
     return false;
 }
 
+// The widget a client last toggled, set or invoked: its changes are reported like the focused one's.
+struct Acted {
+    const Widget* w = nullptr;
+    int serial = 0;
+} g_acted;
+
 // Everything one call needs, checked: the element still exists.
 struct Ctx {
     Host* host = nullptr;
@@ -326,6 +367,206 @@ bool Load(HWND hwnd, Widget* w, int serial, int item, Ctx& c) {
     return true;
 }
 
+// --- Text pattern of a field ------------------------------------------------------------------
+
+bool WordChar(wchar_t c) {
+    return iswalnum(c) || c == L'_';
+}
+
+bool WordStart(const std::wstring& t, size_t i) {
+    return i == 0 || (i < t.size() && WordChar(t[i]) && !WordChar(t[i - 1]));
+}
+
+// `at` moved by `count` units inside `t` (a single line: lines, paragraphs and pages are all of
+// it); `moved` gets the units crossed.
+size_t MoveBy(const std::wstring& t, size_t at, TextUnit unit, int count, int* moved) {
+    *moved = 0;
+    if (unit == TextUnit_Character || unit == TextUnit_Word) {
+        for (; count > 0 && at < t.size(); --count, ++*moved)
+            do ++at; while (unit == TextUnit_Word && at < t.size() && !WordStart(t, at));
+        for (; count < 0 && at > 0; ++count, --*moved)
+            do --at; while (unit == TextUnit_Word && at > 0 && !WordStart(t, at));
+    } else if (count > 0 && at < t.size()) {
+        at = t.size();
+        *moved = 1;
+    } else if (count < 0 && at > 0) {
+        at = 0;
+        *moved = -1;
+    }
+    return at;
+}
+
+// A span of an Edit's text: [from, to) as UTF-16 offsets, checked against the field on every call.
+class TextRange final : public ITextRangeProvider {
+public:
+    TextRange(HWND hwnd, Widget* w, int serial, size_t from, size_t to)
+        : hwnd_(hwnd), w_(w), serial_(serial), from_(from), to_(to) {}
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG n = InterlockedDecrement(&refs_);
+        if (n == 0) delete this;
+        return n;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (iid != __uuidof(IUnknown) && iid != __uuidof(ITextRangeProvider)) return E_NOINTERFACE;
+        *out = static_cast<ITextRangeProvider*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Clone(ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = new TextRange(hwnd_, w_, serial_, from_, to_);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Compare(ITextRangeProvider* other, BOOL* out) override {
+        if (!other || !out) return E_POINTER;
+        const auto* o = static_cast<TextRange*>(other);  // UI Automation hands back only ranges of this provider
+        *out = o->w_ == w_ && o->from_ == from_ && o->to_ == to_;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE CompareEndpoints(TextPatternRangeEndpoint end, ITextRangeProvider* other,
+                                               TextPatternRangeEndpoint otherEnd, int* out) override {
+        if (!other || !out) return E_POINTER;
+        const auto* o = static_cast<TextRange*>(other);
+        *out = static_cast<int>(At(end)) - static_cast<int>(o->At(otherEnd));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE ExpandToEnclosingUnit(TextUnit unit) override {
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (unit == TextUnit_Character || unit == TextUnit_Word) {
+            from_ = std::min(from_, t.empty() ? 0 : t.size() - 1);
+            while (unit == TextUnit_Word && !WordStart(t, from_)) --from_;
+            int moved = 0;
+            to_ = MoveBy(t, from_, unit, 1, &moved);
+        } else {
+            from_ = 0;
+            to_ = t.size();
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE FindAttribute(TEXTATTRIBUTEID, VARIANT, BOOL, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE FindText(BSTR what, BOOL backward, BOOL ignoreCase, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        const size_t n = what ? SysStringLen(what) : 0;
+        if (n == 0 || to_ - from_ < n) return S_OK;
+        for (size_t k = 0; k <= to_ - from_ - n; ++k) {
+            const size_t i = backward ? to_ - n - k : from_ + k;
+            if (CompareStringOrdinal(t.data() + i, static_cast<int>(n), what, static_cast<int>(n), ignoreCase) == CSTR_EQUAL) {
+                *out = new TextRange(hwnd_, w_, serial_, i, i + n);
+                break;
+            }
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetAttributeValue(TEXTATTRIBUTEID, VARIANT* out) override {
+        if (!out) return E_POINTER;
+        out->vt = VT_UNKNOWN;
+        return UiaGetReservedNotSupportedValue(&out->punkVal);
+    }
+    HRESULT STDMETHODCALLTYPE GetBoundingRectangles(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        const Rect r = c.a.textRect ? c.a.textRect(from_, to_) : c.w->rect;
+        POINT o{0, 0};
+        ClientToScreen(hwnd_, &o);
+        const double s = c.host->Scale();
+        const double box[4] = {o.x + r.x * s, o.y + r.y * s, r.w * s, r.h * s};
+        *out = SafeArrayCreateVector(VT_R8, 0, 4);
+        if (!*out) return E_OUTOFMEMORY;
+        for (LONG i = 0; i < 4; ++i) SafeArrayPutElement(*out, &i, const_cast<double*>(&box[i]));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetEnclosingElement(IRawElementProviderSimple** out) override;
+    HRESULT STDMETHODCALLTYPE GetText(int maxLength, BSTR* out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        std::wstring part = t.substr(std::min(from_, t.size()), to_ - from_);
+        if (maxLength >= 0 && part.size() > static_cast<size_t>(maxLength)) part.resize(static_cast<size_t>(maxLength));
+        *out = SysAllocStringLen(part.data(), static_cast<UINT>(part.size()));
+        return *out ? S_OK : E_OUTOFMEMORY;
+    }
+    HRESULT STDMETHODCALLTYPE Move(TextUnit unit, int count, int* moved) override {
+        if (!moved) return E_POINTER;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        const bool caret = from_ == to_;
+        from_ = to_ = MoveBy(t, from_, unit, count, moved);
+        return caret ? S_OK : ExpandToEnclosingUnit(unit);
+    }
+    HRESULT STDMETHODCALLTYPE MoveEndpointByUnit(TextPatternRangeEndpoint end, TextUnit unit, int count,
+                                                 int* moved) override {
+        if (!moved) return E_POINTER;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        Set(end, MoveBy(t, At(end), unit, count, moved));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE MoveEndpointByRange(TextPatternRangeEndpoint end, ITextRangeProvider* other,
+                                                  TextPatternRangeEndpoint otherEnd) override {
+        if (!other) return E_POINTER;
+        Set(end, static_cast<TextRange*>(other)->At(otherEnd));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Select() override {
+        Ctx c;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        c.a.select(from_, to_);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE AddToSelection() override { return UIA_E_INVALIDOPERATION; }
+    HRESULT STDMETHODCALLTYPE RemoveFromSelection() override { return UIA_E_INVALIDOPERATION; }
+    HRESULT STDMETHODCALLTYPE ScrollIntoView(BOOL) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE GetChildren(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = SafeArrayCreateVector(VT_UNKNOWN, 0, 0);
+        return *out ? S_OK : E_OUTOFMEMORY;
+    }
+
+private:
+    ~TextRange() = default;
+    bool Load(Ctx& c) const { return a11y::Load(hwnd_, w_, serial_, -1, c) && c.w && c.a.select; }
+    bool Text(std::wstring& t) {
+        Ctx c;
+        if (!Load(c)) return false;
+        t = c.a.value;
+        to_ = std::min(to_, t.size());  // the text may have got shorter since
+        from_ = std::min(from_, to_);
+        return true;
+    }
+    size_t At(TextPatternRangeEndpoint end) const { return end == TextPatternRangeEndpoint_Start ? from_ : to_; }
+    void Set(TextPatternRangeEndpoint end, size_t at) {
+        if (end == TextPatternRangeEndpoint_Start) {
+            from_ = at;
+            to_ = std::max(to_, at);
+        } else {
+            to_ = at;
+            from_ = std::min(from_, at);
+        }
+    }
+
+    LONG refs_ = 1;
+    HWND hwnd_;
+    Widget* w_;  // checked against Serials() before every use, never dereferenced unchecked
+    int serial_;
+    size_t from_, to_;
+};
+
 class Node final : public IRawElementProviderSimple,
                    public IRawElementProviderFragment,
                    public IRawElementProviderFragmentRoot,
@@ -333,7 +574,9 @@ class Node final : public IRawElementProviderSimple,
                    public IToggleProvider,
                    public IValueProvider,
                    public IRangeValueProvider,
-                   public ISelectionItemProvider {
+                   public ISelectionItemProvider,
+                   public IExpandCollapseProvider,
+                   public ITextProvider {
 public:
     Node(HWND hwnd, const Ref& r) : hwnd_(hwnd), w_(r.w), item_(r.item) {
         if (w_) serial_ = Serials().try_emplace(w_, ++g_nextSerial).first->second;
@@ -367,6 +610,10 @@ public:
             *out = static_cast<IRangeValueProvider*>(this);
         else if (iid == __uuidof(ISelectionItemProvider))
             *out = static_cast<ISelectionItemProvider*>(this);
+        else if (iid == __uuidof(IExpandCollapseProvider))
+            *out = static_cast<IExpandCollapseProvider*>(this);
+        else if (iid == __uuidof(ITextProvider))
+            *out = static_cast<ITextProvider*>(this);
         else
             return E_NOINTERFACE;
         AddRef();
@@ -395,11 +642,16 @@ public:
                                   : r == Role::Button || r == Role::MenuItem || r == Role::ComboBox;
                 break;
             case UIA_TogglePatternId: yes = toggle >= 0; break;
-            case UIA_ValuePatternId: yes = c.item < 0 && (r == Role::Edit || r == Role::ComboBox); break;
+            case UIA_ValuePatternId:
+                yes = c.item < 0 && (r == Role::Edit || r == Role::ComboBox || (r == Role::Slider && !c.a.value.empty()));
+                break;
             case UIA_RangeValuePatternId: yes = c.item < 0 && r == Role::Slider; break;
             case UIA_SelectionItemPatternId:
-                yes = c.item >= 0 && c.a.selectItem && (r == Role::ListItem || r == Role::TabItem);
+                yes = c.item >= 0 ? c.a.selectItem && (r == Role::ListItem || r == Role::TabItem)
+                                  : c.a.selected >= 0 && (r == Role::ListItem || r == Role::TabItem);
                 break;
+            case UIA_ExpandCollapsePatternId: yes = c.item >= 0 && c.it.expanded >= 0; break;
+            case UIA_TextPatternId: yes = c.item < 0 && r == Role::Edit && c.a.select; break;
             default: break;
         }
         if (yes) {
@@ -415,8 +667,15 @@ public:
         Ctx c;
         if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
         if (id == UIA_FrameworkIdPropertyId) return Str(out, L"Lumen");
+        if (id == UIA_CulturePropertyId && g_culture) {
+            out->vt = VT_I4;
+            out->lVal = static_cast<LONG>(g_culture);
+            return S_OK;
+        }
         if (!c.w) return S_OK;  // the window's own properties come from its HWND
-        const std::wstring name = c.item >= 0 ? c.it.name : NameOf(c.w, c.a);
+        std::wstring keys;
+        const std::wstring name = c.item >= 0 ? c.it.name : NameOf(c.w, c.a, &keys);
+        if (c.item >= 0) keys = c.it.keys;
         switch (id) {
             case UIA_ControlTypePropertyId:
                 out->vt = VT_I4;
@@ -424,8 +683,17 @@ public:
                 return S_OK;
             case UIA_NamePropertyId:
                 return Str(out, name);
-            case UIA_HelpTextPropertyId:
-                return c.item < 0 && !c.w->tooltip.empty() && c.w->tooltip != name ? Str(out, c.w->tooltip) : S_OK;
+            case UIA_HelpTextPropertyId: {
+                // Not the tooltip the name was taken from ("Pause (Space)").
+                const std::wstring& help = !c.a.help.empty() ? c.a.help : !c.w->helpText.empty() ? c.w->helpText : c.w->tooltip;
+                return c.item < 0 && !help.empty() && help != name && help.rfind(name + L" (", 0) != 0 ? Str(out, help)
+                                                                                                      : S_OK;
+            }
+            case UIA_AcceleratorKeyPropertyId: return keys.empty() ? S_OK : Str(out, keys);
+            case UIA_HeadingLevelPropertyId:
+                out->vt = VT_I4;
+                out->lVal = c.item < 0 && c.a.heading > 0 ? HeadingLevel1 + std::min(c.a.heading, 9) - 1 : HeadingLevel_None;
+                return S_OK;
             case UIA_AutomationIdPropertyId: {
                 std::wstring id16 = Widen(c.w->id);
                 if (c.item >= 0) id16 += L"#" + std::to_wstring(c.item);
@@ -592,7 +860,9 @@ public:
     HRESULT STDMETHODCALLTYPE SetValue(LPCWSTR v) override {
         Ctx c;
         if (!Load(c) || !c.w) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (c.a.role == Role::Slider) return SetValue(v ? _wtof(v) : 0.0);  // a slider's text value is read-only
         if (!c.a.setValue || !c.w->IsEnabled()) return UIA_E_ELEMENTNOTENABLED;
+        Acted();
         c.a.setValue(v ? v : L"");
         return S_OK;
     }
@@ -618,6 +888,7 @@ public:
         if (!Load(c) || !c.w) return UIA_E_ELEMENTNOTAVAILABLE;
         if (!c.a.setRange || !c.w->IsEnabled()) return UIA_E_ELEMENTNOTENABLED;
         if (v < c.a.min || v > c.a.max) return E_INVALIDARG;
+        Acted();
         c.a.setRange(v);
         return S_OK;
     }
@@ -634,7 +905,9 @@ public:
     // ISelectionItemProvider (single selection)
     HRESULT STDMETHODCALLTYPE Select() override {
         Ctx c;
+        if (Load(c) && c.item < 0 && c.w && c.a.selected >= 0) return Later();  // as a click would
         if (!Load(c) || c.item < 0 || !c.a.selectItem) return UIA_E_ELEMENTNOTAVAILABLE;
+        Acted();
         c.a.selectItem(c.item);
         return S_OK;
     }
@@ -643,16 +916,71 @@ public:
     HRESULT STDMETHODCALLTYPE get_IsSelected(BOOL* out) override {
         if (!out) return E_POINTER;
         Ctx c;
-        if (!Load(c) || c.item < 0) return UIA_E_ELEMENTNOTAVAILABLE;
-        *out = c.it.selected;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        *out = c.item >= 0 ? c.it.selected : c.a.selected > 0;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE get_SelectionContainer(IRawElementProviderSimple** out) override {
         if (!out) return E_POINTER;
         *out = nullptr;
         Ctx c;
-        if (!Load(c) || c.item < 0) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (c.item < 0) return S_OK;  // a lone widget: no container to name
         *out = static_cast<IRawElementProviderSimple*>(Make(hwnd_, {c.w, -1}));
+        return S_OK;
+    }
+
+    // IExpandCollapseProvider (menu rows with a submenu): the row opens it as Enter does.
+    HRESULT STDMETHODCALLTYPE Expand() override { return Later(); }
+    HRESULT STDMETHODCALLTYPE Collapse() override { return UIA_E_INVALIDOPERATION; }  // Left / Esc in the submenu
+    HRESULT STDMETHODCALLTYPE get_ExpandCollapseState(ExpandCollapseState* out) override {
+        if (!out) return E_POINTER;
+        Ctx c;
+        if (!Load(c) || c.item < 0) return UIA_E_ELEMENTNOTAVAILABLE;
+        *out = c.it.expanded > 0 ? ExpandCollapseState_Expanded : ExpandCollapseState_Collapsed;
+        return S_OK;
+    }
+
+    // ITextProvider (fields): one line, one selection (the caret when empty).
+    HRESULT STDMETHODCALLTYPE GetSelection(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        return OneRange(out, std::min(c.a.caret, c.a.anchor), std::max(c.a.caret, c.a.anchor));
+    }
+    HRESULT STDMETHODCALLTYPE GetVisibleRanges(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        return OneRange(out, 0, c.a.value.size());
+    }
+    HRESULT STDMETHODCALLTYPE RangeFromChild(IRawElementProviderSimple*, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        return E_INVALIDARG;  // a field has no child elements
+    }
+    HRESULT STDMETHODCALLTYPE RangeFromPoint(UiaPoint, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        // shortcut: the caret, not the character under the point; hit-test the text if a client needs it.
+        *out = new TextRange(hwnd_, w_, serial_, c.a.caret, c.a.caret);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_DocumentRange(ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        *out = new TextRange(hwnd_, w_, serial_, 0, c.a.value.size());
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_SupportedTextSelection(SupportedTextSelection* out) override {
+        if (!out) return E_POINTER;
+        *out = SupportedTextSelection_Single;
         return S_OK;
     }
 
@@ -660,12 +988,14 @@ private:
     ~Node() = default;
 
     bool Load(Ctx& c) const { return a11y::Load(hwnd_, w_, serial_, item_, c); }
+    void Acted() const { g_acted = {w_, serial_}; }
 
     // Runs the element's click on the window's thread after this call, if it still exists then.
     HRESULT Later() {
         Ctx c;
         if (!Load(c) || !c.w) return UIA_E_ELEMENTNOTAVAILABLE;
         if (!c.w->IsEnabled() || (c.item >= 0 && !c.it.enabled)) return UIA_E_ELEMENTNOTENABLED;
+        Acted();
         c.host->Post([hwnd = hwnd_, w = w_, serial = serial_, item = item_] {
             Ctx now;
             if (!a11y::Load(hwnd, w, serial, item, now)) return;
@@ -678,6 +1008,16 @@ private:
             }
         });
         return S_OK;
+    }
+
+    HRESULT OneRange(SAFEARRAY** out, size_t from, size_t to) const {
+        *out = SafeArrayCreateVector(VT_UNKNOWN, 0, 1);
+        if (!*out) return E_OUTOFMEMORY;
+        auto* range = new TextRange(hwnd_, w_, serial_, from, to);
+        LONG i = 0;
+        const HRESULT hr = SafeArrayPutElement(*out, &i, static_cast<IUnknown*>(range));  // the array holds its own reference
+        range->Release();
+        return hr;
     }
 
     template <class F>
@@ -707,6 +1047,15 @@ private:
     int item_;
 };
 
+HRESULT TextRange::GetEnclosingElement(IRawElementProviderSimple** out) {
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    Ctx c;
+    if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+    *out = static_cast<IRawElementProviderSimple*>(Node::Make(hwnd_, {w_, -1}));
+    return S_OK;
+}
+
 }  // namespace
 
 bool WantsRoot(LPARAM objectId) {
@@ -727,7 +1076,85 @@ bool Recording() {
     return g_recordOnce || (g_connected && UiaClientsAreListening());
 }
 
-void TextsPainted(const std::vector<TextRecord>& texts) {
+namespace {
+
+// What a client last heard of an element whose changes are reported (see Report).
+struct Snap {
+    std::wstring name, value;
+    int toggle = -1, selected = -1;
+    double now = 0;
+    size_t caret = 0, anchor = 0;
+};
+std::unordered_map<const Widget*, Snap>& Snaps() {
+    static auto* m = new std::unordered_map<const Widget*, Snap>;
+    return *m;
+}
+
+void RaiseProperty(Node* n, PROPERTYID id, VARIANT now) {
+    VARIANT was;
+    was.vt = VT_EMPTY;
+    UiaRaiseAutomationPropertyChangedEvent(n, id, was, now);
+}
+
+// Raises the events of what changed in `w` since the last frame: a switch toggled with Space,
+// a slider moved with the arrows, a tab or list entry selected, a field's text or caret.
+void Report(Host* host, Widget* w) {
+    const A11y a = Describe(w);
+    Snap now;
+    now.name = NameOf(w, a);
+    now.value = a.value;
+    now.toggle = a.toggle;
+    now.now = a.now;
+    if (a.selectItem && (a.role == Role::List || a.role == Role::Tab)) now.selected = a.focusedItem;
+    now.caret = a.caret;
+    now.anchor = a.anchor;
+    auto [it, fresh] = Snaps().try_emplace(w, now);
+    if (fresh) return;
+    const Snap was = std::exchange(it->second, now);
+    Node* n = Node::Make(host->Hwnd(), {w, -1});
+    VARIANT v;
+    if (now.name != was.name) {
+        v.vt = VT_BSTR;
+        v.bstrVal = SysAllocStringLen(now.name.data(), static_cast<UINT>(now.name.size()));
+        RaiseProperty(n, UIA_NamePropertyId, v);
+        SysFreeString(v.bstrVal);
+    }
+    if (now.toggle >= 0 && now.toggle != was.toggle) {
+        v.vt = VT_I4;
+        v.lVal = now.toggle ? ToggleState_On : ToggleState_Off;
+        RaiseProperty(n, UIA_ToggleToggleStatePropertyId, v);
+    }
+    if (now.value != was.value && !a.password) {
+        v.vt = VT_BSTR;
+        v.bstrVal = SysAllocStringLen(now.value.data(), static_cast<UINT>(now.value.size()));
+        RaiseProperty(n, UIA_ValueValuePropertyId, v);
+        SysFreeString(v.bstrVal);
+        if (a.select) UiaRaiseAutomationEvent(n, UIA_Text_TextChangedEventId);
+    }
+    // A slider with a text value moves once per change of that text: the seek bar of a playing
+    // file says each second, not each frame.
+    if (a.role == Role::Slider && (now.value.empty() ? now.now != was.now : now.value != was.value)) {
+        v.vt = VT_R8;
+        v.dblVal = now.now;
+        RaiseProperty(n, UIA_RangeValueValuePropertyId, v);
+    }
+    if (a.select && (now.caret != was.caret || now.anchor != was.anchor))
+        UiaRaiseAutomationEvent(n, UIA_Text_TextSelectionChangedEventId);
+    n->Release();
+    if (now.selected >= 0 && now.selected != was.selected && now.selected < a.items) {
+        Node* item = Node::Make(host->Hwnd(), {w, now.selected});
+        UiaRaiseAutomationEvent(item, UIA_SelectionItem_ElementSelectedEventId);
+        item->Release();
+    }
+}
+
+}  // namespace
+
+void SetCulture(unsigned long lcid) {
+    g_culture = lcid;
+}
+
+void TextsPainted(Host* host, const std::vector<TextRecord>& texts) {
     g_recordOnce = false;
     std::unordered_map<const Widget*, std::wstring> frame;
     const TextRecord* last = nullptr;
@@ -744,11 +1171,26 @@ void TextsPainted(const std::vector<TextRecord>& texts) {
     }
     // Widgets not painted this time (scrolled away) keep what they showed last.
     for (auto& [w, s] : frame) Painted()[w] = std::move(s);
+    if (!g_connected || !host || !host->Hwnd() || !UiaClientsAreListening()) return;
+    const Ref focus = FocusRef(host);
+    Widget* acted = const_cast<Widget*>(g_acted.w);
+    if (acted) {
+        auto s = Serials().find(acted);
+        if (s == Serials().end() || s->second != g_acted.serial || acted->GetHost() != host) acted = nullptr;
+    }
+    // An element that comes back into focus is new to the client again, not a change.
+    std::erase_if(Snaps(), [&](const auto& kv) {
+        return kv.first != focus.w && kv.first != acted && kv.first->GetHost() == host;
+    });
+    if (focus.w) Report(host, focus.w);
+    if (acted && acted != focus.w) Report(host, acted);
 }
 
 void Forget(const Widget* w) {
     if (!Serials().empty()) Serials().erase(w);
     if (!Painted().empty()) Painted().erase(w);
+    if (!Snaps().empty()) Snaps().erase(w);
+    if (g_acted.w == w) g_acted = {};
 }
 
 void WindowDestroyed(HWND hwnd) {
@@ -769,6 +1211,17 @@ void StructureChanged(Host* host) {
     if (!g_connected || !host || !host->Hwnd() || !UiaClientsAreListening()) return;
     Node* n = Node::Make(host->Hwnd(), {});
     UiaRaiseStructureChangedEvent(n, StructureChangeType_ChildrenInvalidated, nullptr, 0);
+    n->Release();
+}
+
+void Announce(Host* host, const std::wstring& text) {
+    if (!g_connected || !host || !host->Hwnd() || text.empty() || !UiaClientsAreListening()) return;
+    Node* n = Node::Make(host->Hwnd(), {});
+    BSTR t = SysAllocStringLen(text.data(), static_cast<UINT>(text.size()));
+    BSTR id = SysAllocString(L"lumen.status");
+    UiaRaiseNotificationEvent(n, NotificationKind_ActionCompleted, NotificationProcessing_ImportantMostRecent, t, id);
+    SysFreeString(t);
+    SysFreeString(id);
     n->Release();
 }
 

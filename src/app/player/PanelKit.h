@@ -16,7 +16,7 @@ namespace app::panel {
 
 inline constexpr float kPanelW = 400;
 inline constexpr float kHeaderH = 50;
-inline constexpr float kRadius = 10;
+inline constexpr float kRadius = ui::kRadiusPopup;
 inline constexpr float kGap = 20;  // between the bar and the popover, and to the window edge
 
 // Text color of list rows (#969696 in the design: a touch brighter than textSecondary).
@@ -149,6 +149,7 @@ public:
     float trackH = 16;
     std::vector<float> ticks;
     std::vector<std::pair<float, std::wstring>> labels;  // drawn under the track
+    std::function<std::wstring(float)> format;  // the value as screen readers say it ("1.25×")
     std::function<void(float)> onChange;  // while dragging
     std::function<void(float)> onCommit;  // release / key
     bool Dragging() const { return dragging_; }

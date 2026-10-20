@@ -60,6 +60,10 @@ public:
         return c;
     }
 
+    std::wstring CountText(long long n) const override {
+        return tab_ == L"movies" ? CountMovies(n) : tab_ == L"shows" ? CountShows(n) : CountEpisodes(n);
+    }
+
     std::vector<MenuItem> SortMenu() override {
         if (tab_ != L"movies") return {};
         std::vector<MenuItem> m;
@@ -76,6 +80,7 @@ public:
         std::vector<MenuItem> m;
         m.push_back(Item(L"Add Folder to Library…", "new-folder", [] { AddFolderToLibrary(); }));
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         return m;
     }
 
@@ -206,6 +211,7 @@ void AddVideoTabs(Widget* toolbar, int current) {
     }
     auto* tabs = toolbar->Add<Segmented>(std::move(choices), current);
     tabs->segmentWidth = widest;
+    tabs->a11yName = Tr(L"Videos");
     tabs->onChange = [tabs](int i) {
         const std::wstring path = kTabPaths[i];
         // Posted: navigating replaces this page while its control is still handling the click.

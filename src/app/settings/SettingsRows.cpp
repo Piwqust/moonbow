@@ -97,16 +97,23 @@ std::wstring FormatValue(const Item& item, double v, bool withUnit) {
 
 namespace {
 
+// The description of a setting: its tooltip on hover, and for the keyboard a Tab stop that shows
+// it on focus, Enter or Space.
 class InfoIcon : public Widget {
 public:
     explicit InfoIcon(std::wstring text) {
         tooltip = std::move(text);
         interactive = true;
+        focusable = true;
         width = Length::Px(18);
         height = Length::Px(18);
     }
     void Paint(Painter& p) override {
-        p.Icon("info", rect, IsHot() ? P().textSecondary : P().textTertiary);
+        PaintFocusRing(p, rect, 9);
+        p.Icon("info", rect, IsHot() || ShowFocusRing() ? P().textSecondary : P().textTertiary);
+    }
+    void OnClick() override {
+        if (Host* h = GetHost()) h->ShowTooltip(this);
     }
 };
 
@@ -122,6 +129,7 @@ public:
     }
     // Width the label needs to show its whole text.
     float NaturalWidth() { return std::ceil(label_->Measure(kInf, kInf).w) + (info_ ? 28.0f : 0.0f); }
+    void Describe(A11y& a) override { a.name = label_->Text(); }  // the "Turn on …" tooltip is help
     Size MeasureContent(float availW, float) override {
         const Size l = label_->Measure(availW, kInf);
         return {l.w + (info_ ? 28.0f : 0.0f), std::max(l.h, 18.0f)};
@@ -166,8 +174,6 @@ private:
 class BoolToggle : public Toggle, public Syncable {
 public:
     explicit BoolToggle(const Item& it) : Toggle(Cfg().GetBool(it.key)), item(it) {
-        width = Length::Px(68);
-        height = Length::Px(32);
         onChange = [this](bool on) { Cfg().SetBool(item.key, on); };
     }
     void Sync() override { SetValue(Cfg().GetBool(item.key)); }
@@ -304,6 +310,17 @@ public:
         return {rect.x + 2 + i * (w + 4), rect.y + 2, w, rect.h - 4};
     }
     int Count() const { return std::min(static_cast<int>(item.choices.size()), kAccentCount); }
+    void Describe(A11y& a) override {  // five named swatches, as a list
+        a.role = Role::List;
+        a.items = Count();
+        a.item = [this](int i, A11y::Item& it) {
+            it.name = item.choices[static_cast<size_t>(i)].Label(Lang());
+            it.rect = Cell(i);
+            it.selected = i == selected_;
+        };
+        a.selectItem = [this](int i) { Select(i); };
+        a.focusedItem = selected_;
+    }
     int At(float x) const {
         for (int i = 0; i < Count(); ++i)
             if (x >= Cell(i).x - 2 && x < Cell(i).Right() + 2) return i;
@@ -447,9 +464,9 @@ public:
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
-        p.Shadow(rect, 8);
-        p.Fill(rect, c.bgMenu, 8);
-        p.Stroke(rect, c.line, 8);
+        p.Shadow(rect, kRadiusPopup);
+        p.Fill(rect, c.bgMenu, kRadiusPopup);
+        p.Stroke(rect, c.line, kRadiusPopup);
         uint32_t cur = 0;
         const bool has = ParseHex(Cfg().GetString(item.key), &cur);
         for (int i = 0; i < 16; ++i) {
@@ -854,6 +871,7 @@ void TickSlider::Describe(A11y& a) {
     a.max = item.max;
     a.now = value_;
     a.step = item.step;
+    a.value = FormatValue(item, value_);
     a.setRange = [this](double v) { Change(v, true); };
 }
 
@@ -877,7 +895,7 @@ void TickSlider::Paint(Painter& p) {
     if (cx - t.x - 2 > 0) p.Fill({t.x + 2, t.y + 2, cx - t.x - 2, 12}, c.accentDim, 4);
     const Rect thumb{cx - 4, rect.y, 8, 24};
     p.Fill(thumb, !on ? c.textDisabled : (dragging_ || IsHot()) ? c.accent : c.accentMid, 4);
-    if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.accentMid, 6, 1.5f);
+    if (ShowFocusRing()) p.Stroke(thumb.Inset(-3), c.focusRing, 6, 2.0f);
 }
 
 void TickSlider::PaintOver(Painter& p) {
@@ -1159,6 +1177,14 @@ void SettingRow::Build(std::wstring label, std::wstring description, std::unique
     gap = 16;
     minH = minHeight;
     id = item.key;
+    // Screen readers read the description with the control (UI Automation HelpText).
+    if (control && !description.empty()) {
+        std::function<void(Widget*)> help = [&](Widget* w) {
+            if (w->focusable && w->helpText.empty()) w->helpText = description;
+            for (auto& c : w->Children()) help(c.get());
+        };
+        help(control.get());
+    }
     Add<RowLabel>(std::move(label), std::move(description));
     if (control) {
         control_ = AddChild(std::move(control));
@@ -1282,6 +1308,7 @@ std::unique_ptr<Widget> MakeItemRow(const Item& item, PageHost& page) {
         }
         case ItemType::Info:
             if (item.action == "addons-list") return MakeAddonsList(item, page);
+            if (item.action == "library-folders") return MakeLibraryFolders(item, page);
             if (item.action == "subtitle-preview") return MakeSubtitlePreview(item);
             if (item.action == "loudness-conflict") return std::make_unique<LoudnessConflictHint>(item);
             break;
@@ -1373,10 +1400,6 @@ std::wstring PickPath(HWND owner, settings::PathKind kind, const std::wstring& c
 
 void Confirm(Host* host, std::wstring title, std::wstring text, std::wstring okText, std::function<void()> ok) {
     if (!host) return;
-    if (!Cfg().GetBool("general.showDialogs")) {
-        ok();
-        return;
-    }
     // The same kit and layout as the library's confirms (LibraryCommon ShowConfirm, LB-17):
     // Cancel on the left and focused with its ring, the action on the right (VF-05).
     auto frame = std::make_unique<dlg::Frame>(std::move(title), dlg::FitWidth(host, 440));

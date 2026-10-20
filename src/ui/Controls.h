@@ -5,6 +5,7 @@
 #include "ui/Widget.h"
 
 #include <functional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,11 @@ enum class Tone : uint8_t { Primary, Secondary, Tertiary, Disabled, Accent };
 Color ToneColor(Tone t);
 
 // --- static content --------------------------------------------------------------------
+
+// A search match underlined in the text just painted by p.Text(text, box, style, ..., h): the menu's
+// 2 DIP accent line. `marks` are {start, length} character ranges; only for single-line text.
+using TextMarks = std::vector<std::pair<size_t, size_t>>;
+void PaintTextMarks(Painter& p, std::wstring_view text, const Rect& box, TextStyle style, HAlign h, const TextMarks& marks);
 
 class Label : public Widget {
 public:
@@ -31,6 +37,7 @@ public:
     bool wrap = false;
     int maxLines = 0;  // with wrap; 0 = unlimited
     std::function<Color()> color;  // overrides tone when set
+    TextMarks marks;               // underlined matches of a search (not with wrap)
 
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
@@ -71,6 +78,7 @@ class Button : public Widget {
 public:
     Button(std::wstring text, ButtonKind kind = ButtonKind::Secondary, std::string icon = {});
     void SetText(std::wstring text);
+    const std::wstring& Text() const { return text_; }
     ButtonKind kind;
     std::string icon;
     TextStyle style = TextStyle::BodyStrong;
@@ -116,7 +124,7 @@ public:
     bool Value() const { return on_; }
     void SetValue(bool on, bool animate = true);
     std::function<void(bool)> onChange;
-    Size MeasureContent(float, float) override { return {66, 30}; }
+    Size MeasureContent(float, float) override;
     void Paint(Painter& p) override;
     void OnClick() override;
     void DebugInfo(std::string& out) const override;
@@ -130,12 +138,15 @@ private:
 void SetToggleCaptions(std::wstring on, std::wstring off);
 // Shown by a menu whose typed filter matches nothing.
 void SetMenuNoMatchCaption(std::wstring text);
+// The text fields' right-click menu; the app sets translated ones.
+void SetTextMenuCaptions(std::wstring cut, std::wstring copy, std::wstring paste, std::wstring selectAll);
 
 class Checkbox : public Widget {
 public:
     Checkbox(std::wstring text, bool checked = false);
     bool Value() const { return checked_; }
     void SetValue(bool v) { checked_ = v; Invalidate(); }
+    const std::wstring& Text() const { return text_; }
     std::function<void(bool)> onChange;
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
@@ -261,6 +272,8 @@ public:
     void OnFocusChanged(bool focused) override;
     bool WantsTextInput() const override { return true; }
     Rect CaretRect() const override;
+    bool MenuPoint(Point& at) const override;
+    void Describe(A11y& a) override;
 
 private:
     Rect TextRect() const;
@@ -293,9 +306,13 @@ public:
     Size MeasureContent(float, float) override;
     void Paint(Painter& p) override;
     bool OnMouseDown(const MouseEvent& e) override;
+    bool OnMouseMove(const MouseEvent& e) override;
+    void OnMouseLeave() override { hover_ = -1; Invalidate(); }
 
 private:
+    int IndexAt(float x) const;
     int selected_;
+    int hover_ = -1;
 };
 
 // --- containers -------------------------------------------------------------------------
@@ -373,6 +390,9 @@ struct MenuItem {
     bool radio = false;  // checked items show a dot instead of a tick
     std::function<void()> action;
     std::vector<MenuItem> submenu;
+    // Last, after the fields the brace initializers fill: information, not a command; readable
+    // text that the keyboard skips (set enabled = false too).
+    bool note = false;
 
     static MenuItem Separator() {
         MenuItem m;
@@ -409,8 +429,9 @@ private:
 Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog);
 
 // Transient message at the top center of the window. With an action ("Open folder") the toast
-// takes clicks on its button; without one the mouse passes through it.
-void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 1600, std::wstring actionLabel = {},
+// takes clicks on its button; without one the mouse passes through it. Screen readers say it
+// (a11y::Announce), and it stays at least 3 s.
+void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 3000, std::wstring actionLabel = {},
                std::function<void()> action = {});
 // Closes the toast on screen, if any (e.g. when the file it was about is replaced).
 void DismissToast(Host* host);

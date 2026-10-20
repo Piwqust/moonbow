@@ -30,3 +30,21 @@ saw this in October 2026 on a blue cover with the Spotify-style lyrics.
 
 **Fine.** `Color::Mix` of two palette colors on a solid panel (hover tints, the track's played
 part). The panel is the real background there.
+
+## 2. Over a picture, no theme text colors
+
+**The rule.** Icons and text drawn straight on the video or the music view's stage take a fixed
+white (`Color::Hex(0xFFFFFF, 0.92f)`, dimmed with `Fade`), in both themes. Never `P().text*` or a
+`Tone::`, unless the line paints on an opaque plate of its own (the mini player's pills).
+
+**Why.** The palette's text colors are made for the theme's own surfaces. In the light theme
+`textPrimary` is `#141414`: over a dark scrim or a dark film it disappears. The picture-in-picture
+buttons were near-black on their dark discs in the light theme (1.47:1, UI review 2026-10-20,
+VIS-1), and the music view's stand-in art was a pale card on its black stage (VIS-8).
+
+**How to find it.**
+- `python tools/dev/check-colors.py` lists every theme text tone in the files that draw over a
+  picture (`OVER_PICTURE` in the script: the PiP overlay, the music view). A line on a plate of
+  its own says so with the comment `on a plate`. Add a file to the list when it starts painting
+  over the video.
+- Capture the change in the light theme over a bright and over a dark video, not only in dark.

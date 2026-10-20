@@ -1,5 +1,6 @@
 #pragma once
 #include "app/App.h"
+#include "app/I18n.h"
 #include "app/Signal.h"
 #include "ui/Controls.h"
 
@@ -24,6 +25,8 @@ class LibraryView : public ui::Widget {
 public:
     virtual std::vector<Crumb> Breadcrumbs() const = 0;
     virtual long long ItemCount() const { return -1; }  // < 0 hides the counter
+    // The counter's text with the page's noun ("3 альбома"); mixed pages count "items".
+    virtual std::wstring CountText(long long n) const { return CountItems(n); }
     // Nothing to sort or lay out: the page shows its empty state (the counter may be hidden too).
     virtual bool IsEmpty() const { return false; }
     virtual bool HasViewModes() const { return false; }

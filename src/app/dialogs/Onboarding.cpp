@@ -9,7 +9,9 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/dialogs/DialogKit.h"
+#include "core/SettingsSchema.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
 
 #include <shlobj.h>
 
@@ -43,6 +45,21 @@ std::wstring DefaultVideosFolder() {
 bool IsDir(const std::wstring& p) {
     const DWORD a = GetFileAttributesW(p.c_str());
     return !p.empty() && a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// A whole drive, the user profile or Windows: thousands of folders that hold no media, and a
+// slow first scan. 1 = a drive, 2 = one of those folders, 0 = neither.
+int TooBroad(const std::wstring& p) {
+    const std::wstring key = library::PathKey(p);
+    if (key.size() <= 3 && key.size() >= 2 && key[1] == L':') return 1;
+    for (REFKNOWNFOLDERID id : {FOLDERID_Profile, FOLDERID_Windows}) {
+        PWSTR known = nullptr;
+        const bool same =
+            SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &known)) && known && library::PathKey(known) == key;
+        CoTaskMemFree(known);
+        if (same) return 2;
+    }
+    return 0;
 }
 
 // Page whose children sit at fixed design coordinates (relative to the page); a height of 0
@@ -108,7 +125,7 @@ public:
         for (int row = 0; row < 2; ++row)
             for (int col = 0; col < 3; ++col) {
                 const Rect card{x0 + col * (cw + space), side.y + 24 + row * (ch + 26), cw, ch};
-                p.Fill(card, c.bgCard, 5);
+                p.Fill(card, c.bgCard, kRadiusCard);
                 p.Fill({card.x, card.Bottom() + 7, cw * (col == 1 ? 0.45f : 0.6f), 4}, c.textTertiary, 2);
             }
 
@@ -136,6 +153,11 @@ public:
     }
     bool selected = false;
     std::wstring caption;
+    void Describe(A11y& a) override {
+        a.role = Role::ListItem;
+        a.name = caption;
+        a.selected = selected ? 1 : 0;
+    }
     void Paint(Painter& p) override {
         const Palette& c = P();
         const Rect frame{rect.x, rect.y, rect.w, rect.h - 41};
@@ -281,10 +303,14 @@ private:
     void LayoutChrome() {
         const Rect r = root_->rect;
         if (page_) page_->Arrange(r);
-        next_->Arrange({r.x + 928, r.y + 671, 100, 32});
-        back_->Arrange({r.x + 820, r.y + 671, 100, 32});
+        // Buttons grow with the text (Windows "Text size"), keeping the right edge and the 8 DIP gap.
+        const Size ns = next_->Measure(300, 64), bs = back_->Measure(300, 64);
+        const float nw = std::max(100.0f, ns.w), bw = std::max(100.0f, bs.w), bh = std::max(32.0f, ns.h);
+        const float nx = r.x + 1028 - nw, bx = nx - 8 - bw;
+        next_->Arrange({nx, r.y + 671, nw, bh});
+        back_->Arrange({bx, r.y + 671, bw, bh});
         const Size s = skip_->Measure(200, 32);
-        skip_->Arrange({(step_ == 0 ? r.x + 928 : r.x + 820) - 24 - s.w, r.y + 671 + (32 - s.h) / 2, s.w, s.h});
+        skip_->Arrange({(step_ == 0 ? nx : bx) - 24 - s.w, r.y + 671 + (bh - s.h) / 2, s.w, s.h});
         dots_->Arrange({r.x, r.y + 727, kW, 16});
     }
 
@@ -434,9 +460,19 @@ private:
         folderBox_->onSubmit = [this](const std::wstring&) { host_.Post([this] { Next(); }); };
         auto* status = pg->At<Label>(Rect{248, 524, 595, 18}, L"", TextStyle::Small, Tone::Tertiary);
         auto check = [status](const std::wstring& t) {
-            status->SetText(t.empty()   ? Tr(L"You can add folders later from the sidebar.")
-                            : IsDir(t) ? Tr(L"Folder found. Lumen will look for videos and music in it.")
-                                        : Tr(L"This folder doesn't exist. It won't be added."));
+            const bool dir = IsDir(t);
+            const int broad = dir ? TooBroad(t) : 0;
+            const wchar_t* text =
+                t.empty()     ? L"You can add folders later from the sidebar."
+                : broad == 1 ? L"This is a whole drive: Lumen would scan all of it. Better pick your media folder."
+                : broad == 2 ? L"This is a system folder: Lumen would scan all of it. Better pick your media folder."
+                : dir        ? L"Folder found. Lumen will look for videos and music in it."
+                             : L"This folder doesn't exist. It won't be added.";
+            status->SetText(Tr(text));
+            // A missing folder is an error and a whole drive a warning, not the grey helper line.
+            // Primary, not danger: red text is under 4.5:1 on the dark theme.
+            status->tone = !t.empty() && !dir ? Tone::Primary : broad ? Tone::Secondary : Tone::Tertiary;
+            status->Invalidate();
         };
         check(folder_);
         folderBox_->onChange = [this, check](const std::wstring& t) {
@@ -455,7 +491,7 @@ private:
     }
 
     void BuildAppearance(AbsPage* pg) {
-        pg->Centered<Label>(56, 800, 42, Tr(L"Choose a theme."), TextStyle::Title, Tone::Secondary)->halign =
+        pg->Centered<Label>(72, 700, 39, Tr(L"Choose a theme."), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         pg->Centered<PreviewWindow>(124, 480, 270);
         const std::string theme = Cfg().GetString("general.theme");
@@ -480,7 +516,7 @@ private:
     }
 
     void BuildSummary(AbsPage* pg) {
-        pg->Centered<Label>(80, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<Label>(72, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         pg->Centered<Label>(132, 700, 22, Tr(L"Here is how Lumen is set up. Everything can be changed later in Settings."),
                             TextStyle::Large, Tone::Tertiary)
@@ -488,7 +524,7 @@ private:
         auto card = [pg](float y, float h) {
             auto* c = pg->Centered<Panel>(y, 680, h);
             c->fill = [] { return P().bgPanel; };
-            c->radius = 12;
+            c->radius = kRadiusCard;
             c->dir = Dir::Column;
             c->pad = {20, 8, 12, 8};
             return c;
@@ -531,18 +567,13 @@ private:
 
         // What Lumen keeps about the user, right here instead of on a page of its own.
         auto* prefs = card(178 + rows.size() * 48.0f + 16 + 16, 0);  // 0: as tall as its rows
-        struct Opt {
-            const char* key;
-            const wchar_t *title, *desc;
-        };
-        const Opt opts[] = {
-            {"privacy.saveHistory", L"Remember what you play",
-             L"Keep a list of played files for History, Continue watching and Listen again."},
-            {"privacy.rememberPosition", L"Continue where you left off",
-             L"Save where you stopped and continue from there next time."},
-            {"library.thumbnails", L"Show thumbnails", L"Use Windows thumbnails for videos and embedded covers for music."},
-        };
+        // The Settings rows' own words, so a switch is found there under the same name.
+        const char* const opts[] = {"privacy.saveHistory", "privacy.rememberPosition", "library.thumbnails"};
+        const settings::Lang lang =
+            CurrentLanguage() == Language::Russian ? settings::Lang::Ru : settings::Lang::En;
         for (size_t i = 0; i < std::size(opts); ++i) {
+            const settings::Item* item = settings::FindItem(opts[i]);
+            if (!item) continue;
             if (i > 0) AddSeparator(prefs);
             auto* row = prefs->Add<Widget>();
             row->dir = Dir::Row;
@@ -556,11 +587,11 @@ private:
             // ran into the separator below.
             text->width = Length::Px(680 - 20 - 12 - 24 - 66);  // card - padding - gap - toggle
             text->gap = 4;
-            text->Add<Label>(Tr(opts[i].title), TextStyle::Body)->color = SoftText;
-            auto* d = text->Add<Label>(Tr(opts[i].desc), TextStyle::Small, Tone::Tertiary);
+            text->Add<Label>(item->Label(lang), TextStyle::Body)->color = SoftText;
+            auto* d = text->Add<Label>(item->Description(lang), TextStyle::Small, Tone::Tertiary);
             d->wrap = true;
             d->width = Length::Grow();
-            const std::string key = opts[i].key;
+            const std::string key = opts[i];
             auto* t = row->Add<Toggle>(Cfg().GetBool(key));
             t->onChange = [key](bool on) { Cfg().SetBool(key, on); };
         }

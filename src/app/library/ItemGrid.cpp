@@ -11,6 +11,7 @@
 #include <map>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace app::lib {
 
@@ -159,7 +160,9 @@ ItemGrid::ItemGrid() {
         if (JustOpened()) return;
         const int i = IndexAt(e.x, e.y);
         if (i < 0 || !Selectable(i)) return;
-        Select(i, false);
+        // A right click inside a selection of several acts on all of them (UX-11), as in Explorer.
+        if (marked_.empty() || !Marked(i)) Select(i, false);
+        else SetCursor(i, false);
         if (GetHost()) GetHost()->SetFocus(this);
         if (onMenu) onMenu(i, {e.x, e.y});
     };
@@ -179,6 +182,10 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
         selPath = entries_[static_cast<size_t>(selected_)].path;
         selTitle = entries_[static_cast<size_t>(selected_)].title;
     }
+    auto key = [](const Entry& e) { return e.path + L"\x1F" + e.title; };
+    std::unordered_set<std::wstring> marks;
+    for (size_t i = 0; i < marked_.size() && i < entries_.size(); ++i)
+        if (marked_[i]) marks.insert(key(entries_[i]));
     entries_ = std::move(entries);
     Disambiguate(entries_);
     selected_ = -1;
@@ -188,6 +195,18 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
                 selected_ = static_cast<int>(i);
                 break;
             }
+    // A rebuild (a file started, a rescan) keeps a selection of several items.
+    marked_.clear();
+    if (!marks.empty()) {
+        marked_.assign(entries_.size(), false);
+        size_t found = 0;
+        for (size_t i = 0; i < entries_.size(); ++i)
+            if (!IsLabel(entries_[i].kind) && marks.count(key(entries_[i]))) {
+                marked_[i] = true;
+                ++found;
+            }
+        if (found == 0) marked_.clear();
+    }
     hover_ = -1;
     hoverHead_ = -1;
     press_ = -1;
@@ -207,10 +226,18 @@ void ItemGrid::Describe(ui::A11y& a) {
     a.items = static_cast<int>(entries_.size());
     a.item = [this](int i, ui::A11y::Item& it) {
         const Entry& e = entries_[static_cast<size_t>(i)];
-        it.role = IsLabel(e.kind) ? ui::Role::Text : ui::Role::ListItem;
-        it.name = e.subtitle.empty() ? e.title : e.title + L", " + e.subtitle;
+        // Only what is laid out: a home shelf shows one row, and an entry without a place can't
+        // be opened (its section title leads to the rest). Column titles have no text of their own.
+        const bool placed = static_cast<size_t>(i) < slots_.size() && slots_[static_cast<size_t>(i)].w > 0;
+        it.role = !placed || e.kind == EntryKind::Columns ? ui::Role::Skip
+                  : IsLabel(e.kind)                       ? ui::Role::Text
+                                                          : ui::Role::ListItem;
+        // What the row or card shows: track number, title, artist or info, length.
+        it.name = (e.track > 0 ? std::to_wstring(e.track) + L". " : L"") + e.title;
+        if (!e.subtitle.empty()) it.name += L", " + e.subtitle;
+        if (e.kind == EntryKind::Media && e.duration > 0) it.name += L", " + FormatDuration(e.duration);
         it.rect = ItemRect(i);
-        it.selected = i == selected_;
+        it.selected = Marked(i);
     };
     a.selectItem = [this](int i) { Select(i); };
     a.invokeItem = [this](int i) {  // as a double click (Enter) would
@@ -382,6 +409,50 @@ ScrollView* ItemGrid::Scroller() const {
 
 void ItemGrid::Select(int index, bool scrollIntoView) {
     if (index >= 0 && !Selectable(index)) return;
+    if (!marked_.empty()) {
+        marked_.clear();
+        Invalidate();
+    }
+    anchor_ = index;
+    SetCursor(index, scrollIntoView);
+}
+
+bool ItemGrid::Marked(int index) const {
+    if (marked_.empty()) return index >= 0 && index == selected_;
+    return index >= 0 && static_cast<size_t>(index) < marked_.size() && marked_[static_cast<size_t>(index)];
+}
+
+std::vector<int> ItemGrid::Selection() const {
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
+        if (Marked(i) && Selectable(i)) out.push_back(i);
+    return out;
+}
+
+void ItemGrid::ToggleMark(int index) {
+    if (!Selectable(index)) return;
+    if (marked_.empty()) {
+        marked_.assign(entries_.size(), false);
+        if (Selectable(selected_)) marked_[static_cast<size_t>(selected_)] = true;
+    }
+    marked_[static_cast<size_t>(index)] = !marked_[static_cast<size_t>(index)];
+    anchor_ = index;
+    SetCursor(index, false);
+    Invalidate();
+}
+
+void ItemGrid::SelectRange(int to, bool scrollIntoView) {
+    if (!Selectable(to)) return;
+    const int from = Selectable(anchor_) ? anchor_ : Selectable(selected_) ? selected_ : to;
+    anchor_ = from;
+    marked_.assign(entries_.size(), false);
+    for (int i = std::min(from, to); i <= std::max(from, to); ++i)
+        if (Selectable(i)) marked_[static_cast<size_t>(i)] = true;
+    SetCursor(to, scrollIntoView);
+    Invalidate();
+}
+
+void ItemGrid::SetCursor(int index, bool scrollIntoView) {
     const bool changed = index != selected_;
     selected_ = index;
     if (index >= 0 && scrollIntoView)
@@ -459,7 +530,7 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         const float tileW = video ? kVideoMinW : kSquareMinW;
         if (t.w > tileW) t = {t.x, t.y, tileW, video ? std::round(tileW * kVideoRatio) : tileW};
     }
-    const bool sel = i == selected_;
+    const bool sel = Marked(i);
     const bool opening = Opening(e);
     const bool pressed = (hot && IsPressed()) || opening;
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
@@ -536,11 +607,13 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         }
     }
     if (sel) {
-        const bool focused = IsFocused();
-        p.Stroke(t.Inset(-3), focused ? c.accentMid : c.lineStrong, kCardRadius + 3, focused ? 2.0f : 1.5f);
+        // Several selected cards keep the strong ring without focus: it is all that marks them.
+        const bool strong = IsFocused() || !marked_.empty();
+        p.Stroke(t.Inset(-3), strong ? c.focusRing : c.lineStrong, kCardRadius + 3, strong ? 2.0f : 1.5f);
     }
 
-    const Color fg = now ? c.accent : (hot || sel) ? c.textPrimary : (e.watched || e.damaged) ? c.textTertiary : c.textSecondary;
+    // Three steps (VIS-4): headings and titles primary, subtitles tertiary; hover shows on the artwork.
+    const Color fg = now ? c.accent : (e.watched || e.damaged) && !hot && !sel ? c.textTertiary : c.textPrimary;
     const float ly = t.Bottom() + kLabelGap;
     ItemText(p, i, e.title, {r.x, ly - 2, r.w, kLineH + 4}, TextStyle::Large, fg);
     if (!e.subtitle.empty())
@@ -565,7 +638,7 @@ bool ItemGrid::OnPlayButton(int i, float x, float y) const {
 void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const Palette& c = P();
     const Entry& e = entries_[static_cast<size_t>(i)];
-    const bool sel = i == selected_;
+    const bool sel = Marked(i);
     const bool compact = style_ == GridStyle::CompactRows;
     const Rect bg{r.x - 8, r.y + 1, r.w + 16, r.h - 2};
     // Selection keeps the full selected tone even without focus, so it never looks like hover.
@@ -573,7 +646,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Fill(bg, c.bgSelected, 6);
     else if (hot || Opening(e))
         p.Fill(bg, IsPressed() || Opening(e) ? c.press : c.hover, 6);
-    if (sel && ShowFocusRing()) p.Stroke(bg, c.accentMid, 6, 1.5f);
+    if (i == selected_ && ShowFocusRing()) p.Stroke(bg, c.focusRing, 6, 2.0f);
 
     const bool dragSource = dragging_ && i == press_;
     if (dragSource) p.PushOpacity(0.35f);
@@ -601,6 +674,10 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         if (now) {
             p.Fill(t, c.scrim, 2);
             p.Icon("play", t.Center(18, 18), c.accent);
+        } else if (hot && reorderable && onMove && !compactRow) {
+            // The row can be dragged (manual order): the handle on its artwork, as in the queue (UX-11).
+            p.Fill(t, Color::Hex(0x000000, 0.55f), 2);
+            p.Icon("move", t.Center(20, 20), Color::Hex(0xFFFFFF));
         }
     }
 
@@ -608,7 +685,7 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
                      : e.kind == EntryKind::Action ? (hot ? c.textPrimary : c.textTertiary)
                      : (hot || sel)                ? c.textPrimary
                      : (e.watched || e.damaged)    ? c.textTertiary
-                                                   : c.textSecondary;
+                                                   : c.textPrimary;
     float x = compactRow ? t.Right() + 10 : cells.title.x;
     float right = r.Right();
     const bool menu = e.kind != EntryKind::Action && e.kind != EntryKind::Category && onMenu;
@@ -806,10 +883,10 @@ void ItemGrid::PaintColumns(Painter& p, const Rect& r) {
 void ItemGrid::PaintHeader(Painter& p, int i, const Rect& r) {
     const Entry& e = entries_[static_cast<size_t>(i)];
     if (IsCardStyle(style_)) {
-        p.Text(e.title, {r.x, r.Bottom() - 24 - 16, r.w, 24}, TextStyle::Section, P().textSecondary);
+        p.Text(e.title, {r.x, r.Bottom() - 24 - 16, r.w, 24}, TextStyle::Section, P().textPrimary);
     } else {
         const float h = 22;
-        p.Text(e.title, {r.x, r.Bottom() - h - 8, r.w, h}, TextStyle::BodyMedium, P().textSecondary);
+        p.Text(e.title, {r.x, r.Bottom() - h - 8, r.w, h}, TextStyle::BodyMedium, P().textPrimary);
         // The count ends where the rows' last column ends (before the "⋯" and heart slots).
         float right = r.Right();
         if (onMenu) right -= 36;
@@ -882,6 +959,7 @@ void ItemGrid::Paint(Painter& p) {
 
 void ItemGrid::ItemText(Painter& p, int i, const std::wstring& text, const Rect& box, TextStyle style, Color c, HAlign h) {
     p.Text(text, box, style, c, h);
+    if (!highlight.empty()) PaintTextMarks(p, text, box, style, h, library::MatchRanges(text, highlight));
     if (collectTip_ && i == hover_ && !text.empty() && (box.w <= 0 || p.Measure(text, style).width > box.w + 0.5f))
         tipCut_ = true;
 }
@@ -939,7 +1017,9 @@ bool ItemGrid::OnMouseDown(const MouseEvent& e) {
         }
     }
     if (JustOpened() || !Selectable(i)) return true;
-    Select(i, false);
+    if (multiSelect && e.mods.ctrl) ToggleMark(i);
+    else if (multiSelect && e.mods.shift) SelectRange(i, false);
+    else Select(i, false);
     press_ = i;
     pressAt_ = {e.x, e.y};
     pressPlay_ = OnPlayButton(i, e.x, e.y);
@@ -1096,16 +1176,33 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
     const int n = static_cast<int>(entries_.size());
     if (n == 0) return false;
     const bool cards = IsCardStyle(style_);
+    // Alt+Up/Down moves the row in a list in manual order, as the queue's "Move up/down" (UX-11).
+    if (e.mods.alt && !cards && (e.key == VK_UP || e.key == VK_DOWN) && reorderable && onMove && Selectable(selected_)) {
+        const int to = Navigate(selected_, 0, e.key == VK_UP ? -1 : 1);
+        if (to != selected_) onMove(selected_, to);  // the page rebuilds and selects the moved row
+        return true;
+    }
+    if (multiSelect && e.mods.ctrl && e.key == 'A') {
+        const int keep = selected_;
+        anchor_ = Navigate(-1, 0, 0);
+        for (int i = n - 1; i >= 0; --i)
+            if (Selectable(i)) {
+                SelectRange(i, false);
+                break;
+            }
+        if (Selectable(keep)) SetCursor(keep, false);
+        return true;
+    }
     int target = -2;
     switch (e.key) {
         case VK_UP: target = Navigate(selected_, 0, -1); break;
         case VK_DOWN: target = Navigate(selected_, 0, 1); break;
         case VK_LEFT:
-            if (!cards) return false;
+            if (!cards || e.mods.alt) return false;  // Alt+Left is Back
             target = Navigate(selected_, -1, 0);
             break;
         case VK_RIGHT:
-            if (!cards) return false;
+            if (!cards || e.mods.alt) return false;
             target = Navigate(selected_, 1, 0);
             break;
         case VK_HOME:
@@ -1153,9 +1250,7 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
                 return true;
             }
             return false;
-        case VK_APPS:
-        case VK_F10:
-            if (e.key == VK_F10 && !e.mods.shift) return false;
+        case VK_APPS:  // also Shift+F10 (ui::Host)
             if (selected_ >= 0 && onMenu) {
                 const Rect r = ItemRect(selected_);
                 onMenu(selected_, {r.x + std::min(r.w / 2, 120.0f), cards ? r.y + geo_.thumbH / 2 : r.Bottom()});
@@ -1163,7 +1258,10 @@ bool ItemGrid::OnKeyDown(const KeyEvent& e) {
             return true;
         default: return false;
     }
-    if (target >= 0) Select(target, true);
+    if (target >= 0) {
+        if (multiSelect && e.mods.shift) SelectRange(target, true);
+        else Select(target, true);
+    }
     return true;
 }
 

@@ -123,6 +123,10 @@ std::wstring CountSongs(long long n) {
     return CountWith(n, L"song", L"songs", L"песня", L"песни", L"песен");
 }
 
+std::wstring CountFiles(long long n) {
+    return CountWith(n, L"file", L"files", L"файл", L"файла", L"файлов");
+}
+
 std::wstring CountPlays(long long n) {
     return CountWith(n, L"play", L"plays", L"прослушивание", L"прослушивания", L"прослушиваний");
 }
@@ -137,6 +141,26 @@ std::wstring CountStations(long long n) {
 
 std::wstring CountEpisodes(long long n) {
     return CountWith(n, L"episode", L"episodes", L"выпуск", L"выпуска", L"выпусков");
+}
+
+std::wstring CountArtists(long long n) {
+    return CountWith(n, L"artist", L"artists", L"исполнитель", L"исполнителя", L"исполнителей");
+}
+
+std::wstring CountGenres(long long n) {
+    return CountWith(n, L"genre", L"genres", L"жанр", L"жанра", L"жанров");
+}
+
+std::wstring CountMovies(long long n) {
+    return CountWith(n, L"movie", L"movies", L"фильм", L"фильма", L"фильмов");
+}
+
+std::wstring CountShows(long long n) {
+    return CountWith(n, L"show", L"shows", L"сериал", L"сериала", L"сериалов");
+}
+
+std::wstring CountPlaylists(long long n) {
+    return CountWith(n, L"playlist", L"playlists", L"плейлист", L"плейлиста", L"плейлистов");
 }
 
 std::wstring ArtistLabel(const std::wstring& artist) {
@@ -407,8 +431,24 @@ void ClearHistory() {
     App& app = TheApp();
     app.history().Clear();  // per-file settings go with it (History::onCleared)
     app.history().Flush();
+    app.system().HistoryChanged();  // the jump list's recent files
     net::online::ClearAll();  // what the online services sent goes with the history
     app.libraryChanged.Emit();  // Home's Continue Watching and the progress bars
+}
+
+void RemoveFromHistory(const std::wstring& path) {
+    library::History& hist = TheApp().history();
+    const library::HistoryEntry* h = hist.Find(path);
+    if (!h) return;
+    // The entry holds the resume point: Undo brings it back to its place (UX-9).
+    const library::HistoryEntry copy = *h;
+    const size_t index = static_cast<size_t>(h - hist.Entries().data());
+    hist.Remove(path);
+    TheApp().libraryChanged.Emit();
+    Toast(Tr(L"Removed from history"), "remove", Tr(L"Undo"), [copy, index] {
+        if (!TheApp().history().Restore(copy, index)) return;
+        TheApp().libraryChanged.Emit();
+    });
 }
 
 void AddFolderToLibrary() {
@@ -442,12 +482,23 @@ void ShowFolderInLibrary(const std::wstring& folder) {
     app.ShowPlayer(false);
 }
 
-void RemoveLibraryRoot(const std::wstring& folder) {
+void RemoveLibraryRoot(const std::wstring& folder, ui::Host* toastHost) {
     library::MediaLibrary& lib = TheApp().library();
-    if (!lib.RemoveRoot(folder)) return;
+    const std::wstring key = library::PathKey(folder);
+    const auto& roots = lib.Roots();
+    const auto at = std::find_if(roots.begin(), roots.end(), [&](const std::wstring& r) { return library::PathKey(r) == key; });
+    if (at == roots.end()) return;
+    const std::wstring root = *at;
+    const size_t index = static_cast<size_t>(at - roots.begin());
+    if (!lib.RemoveRoot(root)) return;
     lib.Save();
     RescanLibrary();
-    Toast(Tr(L"Folder removed from the library. Files stay on disk."), "folder");
+    if (!toastHost) toastHost = TheApp().main();
+    if (!toastHost) return;
+    ShowToast(toastHost, Tr(L"Folder removed from the library. Files stay on disk."), "folder", 5000, Tr(L"Undo"),
+              [root, index] {
+                  if (TheApp().library().RestoreRoot(root, index)) RescanLibrary();
+              });
 }
 
 // --- shell ------------------------------------------------------------------------------
@@ -464,6 +515,10 @@ void ShowInExplorer(const std::wstring& path) {
 }
 
 // --- menus ------------------------------------------------------------------------------
+
+MenuItem LibraryFoldersItem() {
+    return Item(L"Library Folders…", "folder", [] { TheApp().OpenSettings("library"); });
+}
 
 MenuItem Item(const wchar_t* label, const char* icon, std::function<void()> action, bool enabled) {
     MenuItem m;
@@ -574,7 +629,7 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, SharedQueue queue, int
         }
     }
     const bool fav = TheApp().favorites().Contains(path);
-    MenuItem f = Item(fav ? L"Remove from Favorites" : L"Favorite", fav ? "favorite_active" : "favorite", [path] {
+    MenuItem f = Item(fav ? L"Remove from Favorites" : L"Add to Favorites", fav ? "favorite_active" : "favorite", [path] {
         const bool on = TheApp().favorites().Toggle(path);
         Toast(on ? Tr(L"Added to favorites") : Tr(L"Removed from favorites"), on ? "favorite_active" : "favorite");
         TheApp().libraryChanged.Emit();  // Home's Favorites row and the heart marks
@@ -611,16 +666,26 @@ void ShowTextPrompt(const std::wstring& title, const std::wstring& label, const 
     box->SetText(initial);
     f->Footer()->Add<dlg::DButton>(Tr(L"Cancel"), dlg::BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
-    auto ok = [f, box, done] {
-        std::wstring text = box->Text();
+    auto trimmed = [](std::wstring text) {
         while (!text.empty() && iswspace(text.back())) text.pop_back();
         while (!text.empty() && iswspace(text.front())) text.erase(text.begin());
+        return text;
+    };
+    auto ok = [f, box, done, trimmed] {
+        std::wstring text = trimmed(box->Text());
         if (text.empty()) return;
         auto run = done;  // the dialog (and this lambda) is gone after Close()
         f->Close();
         if (run) run(text);
     };
-    f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent)->onClick = ok;
+    auto* okButton = f->Footer()->Add<dlg::DButton>(okText, dlg::BtnStyle::Accent);
+    okButton->onClick = ok;
+    // Greyed while empty, as in New Playlist: an enabled button that does nothing reads as a hang.
+    okButton->enabled = !trimmed(initial).empty();
+    box->onChange = [okButton, trimmed](const std::wstring& t) {
+        okButton->enabled = !trimmed(t).empty();
+        okButton->Invalidate();
+    };
     box->onSubmit = [ok](const std::wstring&) { ok(); };
     f->onSubmit = ok;
     dlg::ShowFrame(w, std::move(frame), box);

@@ -43,6 +43,8 @@ void SetLanguage(Language lang) {
     g_language = lang;
     ui::SetToggleCaptions(Tr(L"ON"), Tr(L"OFF"));
     ui::SetMenuNoMatchCaption(Tr(L"Nothing found"));
+    ui::SetTextMenuCaptions(Tr(L"Cut"), Tr(L"Copy"), Tr(L"Paste"), Tr(L"Select all"));
+    ui::a11y::SetCulture(lang == Language::English ? 0x0409 : 0x0419);  // en-US, ru-RU
 }
 
 Language CurrentLanguage() {

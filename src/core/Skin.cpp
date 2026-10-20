@@ -13,7 +13,7 @@ namespace {
 constexpr const char* kTokenNames[kTokenCount] = {
     "bg.deep", "bg.base", "bg.raised", "bg.panel", "bg.chrome", "bg.card", "bg.selected", "bg.menu",
     "bg.hover", "bg.press",
-    "line.subtle", "line", "line.strong",
+    "line.subtle", "line", "line.strong", "line.control",
     "text.primary", "text.secondary", "text.tertiary", "text.disabled",
     "accent", "accent.mid", "accent.dim", "accent.faint", "on.accent",
     "scrim", "shadow", "danger",
@@ -21,8 +21,10 @@ constexpr const char* kTokenNames[kTokenCount] = {
 
 constexpr const char* kRadiusNames[kRadiusCount] = {"small", "control", "card", "popup", "window"};
 
-constexpr uint32_t kDarkAccents[kAccentTones] = {0xEDEDED, 0xD4D4D4, 0xB5B5B5, 0x8F8F8F, 0x6B6B6B};
-constexpr uint32_t kLightAccents[kAccentTones] = {0x141414, 0x2E2E2E, 0x4A4A4A, 0x666666, 0x808080};
+// Even steps; the last one still reads as text (4.5:1) on bg.base and bg.panel: rows mark the playing
+// item with accent-coloured text.
+constexpr uint32_t kDarkAccents[kAccentTones] = {0xEDEDED, 0xD2D2D2, 0xB7B7B7, 0x9C9C9C, 0x828282};
+constexpr uint32_t kLightAccents[kAccentTones] = {0x141414, 0x2A2A2A, 0x404040, 0x565656, 0x6C6C6C};
 
 // DESIGN.md section 1. The accent family is derived in Resolve().
 Colors BrandColors(bool dark) {
@@ -41,6 +43,7 @@ Colors BrandColors(bool dark) {
         c[kLineSubtle] = Rgba::Hex(0x171717);
         c[kLine] = Rgba::Hex(0x262626);
         c[kLineStrong] = Rgba::Hex(0x404040);
+        c[kLineControl] = Rgba::Hex(0x707070);  // >= 3:1 on every background a field sits on
         c[kTextPrimary] = Rgba::Hex(0xEAEAEA);
         c[kTextSecondary] = Rgba::Hex(0xA8A8A8);
         c[kTextTertiary] = Rgba::Hex(0x8B8B8B);
@@ -61,6 +64,7 @@ Colors BrandColors(bool dark) {
         c[kLineSubtle] = Rgba::Hex(0xE3E3E3);
         c[kLine] = Rgba::Hex(0xD6D6D6);
         c[kLineStrong] = Rgba::Hex(0xBDBDBD);
+        c[kLineControl] = Rgba::Hex(0x808080);
         c[kTextPrimary] = Rgba::Hex(0x141414);
         c[kTextSecondary] = Rgba::Hex(0x424242);
         c[kTextTertiary] = Rgba::Hex(0x616161);
@@ -296,9 +300,46 @@ Colors Resolve(bool dark, int accentTone, const Skin* skin) {
     return c;
 }
 
+Skin FromSystemColors(const SystemColors& sys) {
+    Skin s;
+    s.name = L"Windows contrast theme";
+    s.nameRu = L"Контрастная тема Windows";
+    const bool dark = Luminance(sys.window) < 0.5;
+    s.mode = dark ? Mode::Dark : Mode::Light;
+    auto& c = dark ? s.dark : s.light;
+    auto opaque = [](Rgba x) {
+        x.a = 1;
+        return x;
+    };
+    const Rgba window = opaque(sys.window), text = opaque(sys.windowText), gray = opaque(sys.grayText);
+    for (int t : {kBgDeep, kBgBase, kBgRaised, kBgPanel, kBgMenu}) c[t] = window;
+    c[kBgChrome] = c[kBgCard] = opaque(sys.buttonFace);
+    c[kBgSelected] = Mix(window, text, 0.2f);  // a step the theme's text still reads on
+    c[kHover] = Rgba{text.r, text.g, text.b, 0.14f};
+    c[kPress] = Rgba{text.r, text.g, text.b, 0.24f};
+    c[kLineSubtle] = c[kLine] = gray;
+    c[kLineStrong] = c[kLineControl] = text;
+    c[kTextPrimary] = c[kTextSecondary] = c[kTextTertiary] = text;  // no dimmed greys in a contrast theme
+    c[kTextDisabled] = gray;
+    c[kAccent] = opaque(sys.highlight);
+    c[kOnAccent] = opaque(sys.highlightText);
+    c[kAccentMid] = opaque(sys.hotlight);  // focus rings and selection borders, like links
+    return s;
+}
+
 double Contrast(const Rgba& a, const Rgba& b) {
     const double la = Luminance(a), lb = Luminance(b);
     return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
+namespace {
+constexpr int kBackgrounds[] = {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu};
+}  // namespace
+
+Rgba FocusRing(const Colors& c) {
+    for (int bg : kBackgrounds)
+        if (Contrast(c[kAccent], c[bg]) < 3.0) return c[kTextPrimary];
+    return c[kAccent];
 }
 
 std::vector<ContrastIssue> CheckContrast(const Skin* skin, int accentTone) {
@@ -314,7 +355,10 @@ std::vector<ContrastIssue> CheckContrast(const Skin* skin, int accentTone) {
         {kTextSecondary, {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu}, 4.5},
         {kTextTertiary, {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgCard, kBgSelected, kBgMenu}, 4.5},
         {kAccent, {kBgBase, kBgDeep, kBgChrome}, 3.0},
-        {kOnAccent, {kAccent}, 3.0},
+        {kAccent, {kBgBase, kBgPanel}, 4.5},  // as text: the playing row, "Press a key…"
+        {kOnAccent, {kAccent}, 4.5},          // button and switch labels
+        // Edges of fields, sliders, checkboxes and switches (WCAG 1.4.11).
+        {kLineControl, {kBgBase, kBgDeep, kBgRaised, kBgPanel, kBgChrome, kBgMenu}, 3.0},
     };
     std::vector<ContrastIssue> out;
     for (int m = 0; m < 2; ++m) {
@@ -326,6 +370,12 @@ std::vector<ContrastIssue> CheckContrast(const Skin* skin, int accentTone) {
                 const double r = Contrast(c[p.fg], c[bg]);
                 if (r < p.need) out.push_back({dark, p.fg, bg, r, p.need, p.need < 4.5});
             }
+        // The ring is drawn around controls on any of them.
+        const Rgba ring = FocusRing(c);
+        for (int bg : kBackgrounds) {
+            const double r = Contrast(ring, c[bg]);
+            if (r < 3.0) out.push_back({dark, kFocusRingFg, bg, r, 3.0, true});
+        }
     }
     return out;
 }
@@ -334,7 +384,8 @@ std::string Describe(const ContrastIssue& issue) {
     char buf[160];
     // Rounded down, so 4.497 reads "4.4:1" next to "needs 4.5:1" rather than "4.5:1".
     std::snprintf(buf, sizeof(buf), "%s: %s on %s %.1f:1 (needs %.1f:1)", issue.dark ? "dark" : "light",
-                  TokenName(issue.fg), TokenName(issue.bg), std::floor(issue.ratio * 10) / 10, issue.need);
+                  issue.fg == kFocusRingFg ? "focus ring" : TokenName(issue.fg), TokenName(issue.bg),
+                  std::floor(issue.ratio * 10) / 10, issue.need);
     return buf;
 }
 

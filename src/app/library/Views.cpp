@@ -4,6 +4,8 @@
 #include "Util.h"
 #include "app/Dialogs.h"
 #include "app/I18n.h"
+#include "app/MainWindow.h"
+#include "app/Shell.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
 
@@ -93,10 +95,20 @@ ScanBanner::ScanBanner(bool compact) : compact_(compact) {
     pad = {box_.l, box_.t, box_.r + 4, 0};
     visible = false;
     id = "scan-banner";
-    if (compact)
+    if (compact) {
+        remove_ = Add<IconButton>("remove", Tr(L"Remove"), 28, 16);
+        retry_ = Add<IconButton>("refresh", Tr(L"Retry"), 28, 16);
         hide_ = Add<IconButton>("close", Tr(L"Hide"), 28, 16);
-    else
+    } else {
+        remove_ = Add<Button>(Tr(L"Remove"), ButtonKind::Ghost);
+        retry_ = Add<Button>(Tr(L"Retry"), ButtonKind::Ghost);
         hide_ = Add<Button>(Tr(L"Hide"), ButtonKind::Ghost);
+    }
+    remove_->visible = retry_->visible = false;
+    remove_->id = "missing-remove";
+    remove_->onClick = [this] { RemoveLibraryRoot(missing_); };
+    retry_->id = "missing-retry";
+    retry_->onClick = [] { RescanLibrary(); };
     hide_->id = "scan-hide";
     hide_->onClick = [this] {
         g_bannerHidden = TheApp().library().Generation();
@@ -143,8 +155,24 @@ void ScanBanner::Poll() {
             timer_ = h->StartTimer(kBannerPollMs, [this] { Poll(); }, true);
         }
     }
-    const bool show = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
-    if (show) {
+    const bool scan = following_ && !suppressed_ && g_bannerHidden != lib.Generation() && pr.elapsedMs >= kBannerDelayMs;
+    // An unplugged drive is named even on an empty page: the empty state can't tell why.
+    const auto snap = lib.Current();
+    std::wstring missing = !pr.scanning && !snap->missingRoots.empty() ? snap->missingRoots.front() : std::wstring();
+    if (missing != missing_) {
+        missing_ = std::move(missing);
+        hide_->visible = missing_.empty();
+        remove_->visible = retry_->visible = !missing_.empty();
+        // The name, not the path: a long path would cut off what to do. The tooltip has the path.
+        const std::wstring name = FileNameOf(missing_).empty() ? missing_ : FileNameOf(missing_);
+        text_ = missing_.empty() ? std::wstring()
+                                 : Fmt(Tr(L"Folder “{0}” is unavailable. Connect the drive or remove it from the library."),
+                                       {name});
+        fraction_ = -1;
+        InvalidateLayout();
+    }
+    const bool show = scan || !missing_.empty();
+    if (scan) {
         std::wstring text;
         float fraction = -1;
         const long long total = static_cast<long long>(pr.total);
@@ -164,9 +192,14 @@ void ScanBanner::Poll() {
         }
     }
     if (show != visible) {
+        if (show) a11y::Announce(GetHost(), text_);
         visible = show;
         InvalidateLayout();
     }
+}
+
+float ScanBanner::TextRight() const {
+    return (missing_.empty() ? hide_ : remove_)->rect.x - 8;
 }
 
 Rect ScanBanner::Box() const {
@@ -180,13 +213,14 @@ void ScanBanner::OnLayout() {
 
 void ScanBanner::UpdateTip() {
     const Rect b = Box();
-    const float avail = hide_->rect.x - 8 - (b.x + 36);
+    const float avail = TextRight() - (b.x + 36);
     const float need = gfx::Text::Get().Measure(text_, compact_ ? TextStyle::Small : TextStyle::Body).width;
-    tooltip = hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
+    tooltip = !missing_.empty() ? missing_ : hide_->rect.w > 0 && need > avail ? text_ : std::wstring();
 }
 
 void ScanBanner::DebugInfo(std::string& out) const {
     if (following_) out += " following";
+    if (!missing_.empty()) out += " missing";
     if (timer_) out += " timer";
     if (fraction_ >= 0) out += " value=" + std::to_string(std::round(fraction_ * 100) / 100).substr(0, 4);
 }
@@ -201,10 +235,11 @@ void ScanBanner::Paint(Painter& p) {
     const Rect b = Box();
     p.Fill(b, c.bgPanel, 6);
     p.Stroke(b, c.line, 6);
-    p.Icon("refresh", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
+    p.Icon(missing_.empty() ? "refresh" : "warning", {b.x + 12, b.Cy() - 8, 16, 16}, c.textSecondary);
     const float tx = b.x + 36;
-    p.Text(text_, {tx, b.y, std::max(0.0f, hide_->rect.x - 8 - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
+    p.Text(text_, {tx, b.y, std::max(0.0f, TextRight() - tx), b.h}, compact_ ? TextStyle::Small : TextStyle::Body,
            c.textSecondary);
+    if (!missing_.empty()) return;
     // The progress along the bottom edge, inside the rounded corners.
     p.PushRoundClip(b, 6);
     p.Fill({b.x, b.Bottom() - 2, b.w, 2}, c.line);
@@ -222,6 +257,11 @@ SectionTitle::SectionTitle(std::wstring t, bool compact) : text(std::move(t)), c
     if (compact) width = Length::Grow();
 }
 
+void SectionTitle::Describe(A11y& a) {
+    a.name = text;
+    a.heading = 2;
+}
+
 Size SectionTitle::MeasureContent(float availW, float) {
     const float w = gfx::Text::Get().Measure(text, compact_ ? TextStyle::Body : TextStyle::Section).width;
     return {std::min(availW, w + 5 + 24), compact_ ? 32.0f : 24.0f};
@@ -230,7 +270,9 @@ Size SectionTitle::MeasureContent(float availW, float) {
 void SectionTitle::Paint(Painter& p) {
     const Palette& c = P();
     const bool hot = IsHot();
-    const Color fg = hot ? c.textPrimary : c.textSecondary;
+    // A heading reads primary at rest (VIS-4); hover shows as a plate, as on the compact rows.
+    const Color fg = c.textPrimary;
+    if (!compact_ && hot) p.Fill({rect.x - 8, rect.y - 4, rect.w + 8, rect.h + 8}, c.hover, 6);
     if (compact_) {
         if (hot) p.Fill({rect.x - 8, rect.y, rect.w + 16, rect.h}, c.hover, 6);
         p.Text(text, {rect.x, rect.y, rect.w - 28, rect.h}, TextStyle::Body, fg);
@@ -379,6 +421,7 @@ Page::Page(Route route, bool compact, std::string key) : route_(std::move(route)
     grid_->onDelete = [this](int i) { Delete(i); };
     grid_->onMove = [this](int from, int to) { Move(from, to); };
     grid_->onSort = [this](const std::string& value) { SetSort(value); };
+    grid_->multiSelect = true;
 
     empty_ = Add<EmptyState>();
     empty_->visible = false;
@@ -547,6 +590,7 @@ void Page::Refresh() {
     App& app = TheApp();
     snap_ = app.library().Current();
     folded_ = filter_.empty() ? std::wstring() : library::SearchFold(filter_);
+    grid_->highlight = folded_;
     history_.clear();
     for (const library::HistoryEntry& h : app.history().Entries()) {
         HistoryInfo info;
@@ -603,6 +647,7 @@ void Page::Refresh() {
     grid_->reorderable = Reorderable() && filter_.empty();
     for (int h = 0; h < kHeadCount; ++h) grid_->heads[h] = heads_[h];
     grid_->sort = headSort_;
+    grid_->a11yName = queueName_;  // the list is what "Play All" queues: "Songs", the album, "History"
     grid_->SetEntries(std::move(entries_));
     entries_.clear();
 
@@ -612,13 +657,48 @@ void Page::Refresh() {
     empty_->visible = showEmpty;
     if (showEmpty) {
         if (!filter_.empty())
-            empty_->Set("search", Tr(L"Nothing found"),
-                        Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {ShortQuery(filter_)}));
+            FillNoMatch(*empty_);
         else
             FillEmpty(*empty_);
     }
     InvalidateLayout();
     headerChanged.Emit();
+}
+
+// A tab or folder that has no match is often not where the file is: Music opens on Albums, and
+// "track" names songs. Say what the rest of the library has and go there with the same query (UX-3).
+void Page::FillNoMatch(EmptyState& e) {
+    const std::wstring q = ShortQuery(filter_);
+    const library::MediaKind kind = route_.section == Section::Music    ? library::MediaKind::Audio
+                                    : route_.section == Section::Videos ? library::MediaKind::Video
+                                                                        : library::MediaKind::Other;
+    const size_t all = snap_ && kind != library::MediaKind::Other ? snap_->Search(filter_).size() : 0;
+    if (all == 0) {
+        e.Set("search", Tr(L"Nothing found"),
+              Fmt(Tr(L"No matches for “{0}” here. Try a shorter or different\u00A0word."), {q}));
+        return;
+    }
+    // Posted: the new page replaces this one, and with it the button whose click runs.
+    auto searchIn = [text = filter_](Route r) {
+        return [text, r] {
+            MainWindow* w = TheApp().main();
+            if (!w) return;
+            w->Post([w, text, r] {
+                TheApp().Navigate(r);
+                if (w->library()) w->library()->Search(text);
+            });
+        };
+    };
+    std::vector<EmptyState::Btn> buttons;
+    const size_t songs = kind == library::MediaKind::Audio ? snap_->Search(filter_, kind).size() : 0;
+    const bool toSongs = songs > 0 && route_.path != L"songs";
+    if (toSongs)
+        buttons.push_back({Tr(L"Show in “Songs”"), ButtonKind::Primary, "songs", searchIn(Route{Section::Music, L"songs"})});
+    buttons.push_back({Tr(L"Search the whole library"), toSongs ? ButtonKind::Secondary : ButtonKind::Primary, "search",
+                       searchIn(Route{Section::Home, {}})});
+    const std::wstring found = toSongs ? CountSongs(static_cast<long long>(songs)) : CountFiles(static_cast<long long>(all));
+    e.Set("search", Tr(L"Nothing found here"),
+          Fmt(Tr(L"No matches for “{0}” on this page. In the library: {1}."), {q, found}), std::move(buttons));
 }
 
 void Page::FillEmpty(EmptyState& e) {
@@ -686,14 +766,33 @@ void Page::ShowMenu(int index, Point at) {
     const Entry* e = EntryAt(index);
     if (!e || !GetHost()) return;
     std::vector<MenuItem> items;
-    if (e->kind == EntryKind::Media) {
-        items = MediaMenu(e->path, ShareQueue(queue_), e->ref, queueName_);
-    } else if (e->kind == EntryKind::Folder) {
-        const Route* r = RouteAt(index);
-        const Section sec = r ? r->section : route_.section;
-        items = FolderMenu(e->path, sec == Section::Music ? library::MediaKind::Audio : library::MediaKind::Video, sec);
+    // Several selected files (Ctrl/Shift+click): the menu acts on all of them (UX-11).
+    const std::vector<int> sel = grid_->Selection();
+    std::vector<QueueItem> picked;
+    if (sel.size() > 1)
+        for (int i : sel)
+            if (const Entry* s = EntryAt(i); s && s->kind == EntryKind::Media && s->ref >= 0 && s->ref < static_cast<int>(queue_.size()))
+                picked.push_back(queue_[static_cast<size_t>(s->ref)]);
+    if (picked.size() > 1) {
+        const SharedQueue q = ShareQueue(std::move(picked));
+        const std::wstring name = queueName_;
+        items.push_back(Item(L"Play", "playback", [q, name] { PlayQueue(*q, 0, name); }));
+        items.push_back(Item(L"Play Next", "next_twotone", [q] { PlayNext(*q); }));
+        items.push_back(Item(L"Add to Queue", "queue", [q] { AddToQueue(*q); }));
+        MenuItem pl = Item(L"Add to Playlist", "playlist", nullptr);
+        pl.submenu = AddToPlaylistMenu(q);
+        items.push_back(std::move(pl));
+        ExtraSelectionMenu(sel, items);
+    } else {
+        if (e->kind == EntryKind::Media) {
+            items = MediaMenu(e->path, ShareQueue(queue_), e->ref, queueName_);
+        } else if (e->kind == EntryKind::Folder) {
+            const Route* r = RouteAt(index);
+            const Section sec = r ? r->section : route_.section;
+            items = FolderMenu(e->path, sec == Section::Music ? library::MediaKind::Audio : library::MediaKind::Video, sec);
+        }
+        ExtraMenu(index, items);
     }
-    ExtraMenu(index, items);
     if (!items.empty()) ShowContextMenu(GetHost(), at, std::move(items));
 }
 
@@ -841,6 +940,7 @@ public:
             m.push_back(MenuItem::Separator());
         }
         m.push_back(Item(L"Rescan Library", "refresh", [] { RescanLibrary(); }, !TheApp().library().Scanning()));
+        m.push_back(LibraryFoldersItem());
         MenuItem hidden = Item(L"Show Hidden Files", "view", [] {
             Config& cfg = TheApp().config();
             cfg.SetBool("library.showHidden", !cfg.GetBool("library.showHidden"));
@@ -1069,11 +1169,12 @@ public:
     RecentPage(Route r, bool compact) : Page(r, compact, "recent") {
         modes_ = false;
         list_ = true;
-        queueName_ = Tr(L"History");
-        if (!compact) {
+        queueName_ = Tr(Favorites() ? L"Favorites" : L"History");
+        // Favorites live on the Playlists page (UX-17); the old History route still shows them, without tabs.
+        if (!compact && !Favorites()) {
             // The views as visible tabs, not hidden in "⋯" (the side panel keeps them in its menu).
             int current = 0;
-            for (int i = 0; i < 4; ++i)
+            for (int i = 0; i < static_cast<int>(std::size(kViews)); ++i)
                 if (route_.path == kViews[i].path) current = i;
             std::vector<Choice> choices;
             float widest = 96;  // segments share one width: the longest label sets it
@@ -1083,6 +1184,7 @@ public:
             }
             auto* tabs = toolbar_->Add<Segmented>(std::move(choices), current);
             tabs->segmentWidth = widest;
+            tabs->a11yName = Tr(L"History");
             tabs->onChange = [this](int i) {
                 const std::wstring path = kViews[i].path;
                 // Posted: navigating replaces this page while its control is still handling the click.
@@ -1225,21 +1327,19 @@ protected:
         if (!e || Favorites()) return;  // MediaMenu already offers "Remove from Favorites"
         const std::wstring path = e->path;
         m.push_back(MenuItem::Separator());
-        m.push_back(Item(L"Remove from History", "remove", [path] {
-            TheApp().history().Remove(path);
-            TheApp().libraryChanged.Emit();
-        }));
+        m.push_back(Item(L"Remove from History", "remove", [path] { RemoveFromHistory(path); }));
     }
 
     void Delete(int index) override {
         const Entry* e = EntryAt(index);
         if (!e || e->kind != EntryKind::Media) return;
         const int keep = index;
-        if (Favorites())
+        if (Favorites()) {
             TheApp().favorites().Remove(e->path);
-        else
-            TheApp().history().Remove(e->path);
-        TheApp().libraryChanged.Emit();
+            TheApp().libraryChanged.Emit();
+        } else {
+            RemoveFromHistory(e->path);
+        }
         // Keep the keyboard position on the next row.
         const int n = static_cast<int>(grid_->Entries().size());
         for (int i = std::min(keep, n - 1); i >= 0; --i)
@@ -1256,7 +1356,7 @@ protected:
             e.Set("songs", Tr(L"No music played yet"), Tr(L"Songs you listen to will appear here."));
         else if (Favorites())
             e.Set("favorite", Tr(L"No favorites yet"),
-                  Tr(L"Right-click a video, song or stream and choose “Favorite” to keep it here."));
+                  Tr(L"Right-click a video, song or stream and choose “Add to Favorites” to keep it here."));
         else
             e.Set("recent", Tr(L"No recent items"), Tr(L"Files and streams you play will appear here."),
                   {{Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}});
@@ -1267,8 +1367,8 @@ private:
         const wchar_t* label;
         const wchar_t* path;
     };
-    static constexpr View kViews[4] = {
-        {L"Everything", L""}, {L"Continue Watching", L"continue"}, {L"Listen Again", L"audio"}, {L"Favorites", L"favorites"}};
+    static constexpr View kViews[3] = {
+        {L"Everything", L""}, {L"Continue Watching", L"continue"}, {L"Listen Again", L"audio"}};
 
     bool Favorites() const { return route_.path == L"favorites"; }
 };
@@ -1291,7 +1391,9 @@ std::unique_ptr<LibraryView> CreateLibraryView(const Route& route, bool compact)
         case Section::Videos: return lib::MakeVideosPage(route, compact);
         case Section::Music: return lib::MakeMusicPage(route, compact);
         case Section::Network: return lib::MakeNetworkPage(route, compact);
-        case Section::Playlists: return lib::MakePlaylistsPage(route, compact);
+        case Section::Playlists:
+            if (route.path == L"favorites") return lib::MakeRecentPage(route, compact);  // the pinned Favorites (UX-17)
+            return lib::MakePlaylistsPage(route, compact);
         case Section::Recent: return lib::MakeRecentPage(route, compact);
     }
     return lib::MakeHomePage(compact);

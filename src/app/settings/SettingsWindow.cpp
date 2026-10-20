@@ -4,6 +4,7 @@
 #include "app/App.h"
 #include "app/Dialogs.h"
 #include "app/I18n.h"
+#include "library/MediaTypes.h"
 #include "app/MainWindow.h"
 #include "app/SettingsActions.h"
 #include "app/settings/SettingsUi.h"
@@ -91,6 +92,11 @@ public:
         Invalidate();
     }
     const Category& Cat() const { return cat_; }
+    void Describe(A11y& a) override {
+        a.role = Role::ListItem;
+        a.name = cat_.Label(Lang());
+        a.selected = selected_ ? 1 : 0;
+    }
     void Paint(Painter& p) override {
         const Palette& c = P();
         if (selected_)
@@ -420,7 +426,7 @@ private:
                 sec->AddChild(std::move(editor));
                 if (state_.Open("shortcuts"))
                     if (auto* b = dynamic_cast<Button*>(FindById(sec, "edit-shortcuts")))
-                        b->SetText(Tr(L"Hide Keyboard Shortcuts"));
+                        b->SetText(Tr(L"Hide keyboard shortcuts"));
             }
         }
         if (anyAdvanced) {
@@ -471,6 +477,13 @@ private:
         };
     }
 
+    // The searched words in the row labels (VIS-17); the section titles stay plain.
+    static void Underline(Widget* w, const std::wstring& folded) {
+        if (auto* l = dynamic_cast<Label*>(w); l && l->style == TextStyle::Body && !l->wrap)
+            l->marks = library::MatchRanges(l->Text(), folded);
+        for (auto& c : w->Children()) Underline(c.get(), folded);
+    }
+
     void BuildSearch(Widget* page) {
         const std::vector<const Item*> hits = settings::Search(query_);
         std::set<const Item*> hit(hits.begin(), hits.end());
@@ -479,6 +492,7 @@ private:
         for (const Item* it : hits)
             if (!it->group.empty()) groups.insert(it->category + "/" + it->group);
         bool any = false;
+        const std::wstring folded = library::SearchFold(query_);
         for (const Category& cat : settings::Categories()) {
             std::vector<const Item*> items;
             for (const settings::Section& s : cat.sections)
@@ -490,6 +504,7 @@ private:
             any = true;
             Widget* sec = AddSection(page, cat.Label(Lang()));
             AddItems(sec, items);
+            Underline(sec, folded);
         }
         if (!any) {
             auto* none = page->Add<PadLabel>(Fmt(Tr(L"Nothing found for “{0}”"), {query_}), TextStyle::Body, Tone::Tertiary);
@@ -513,7 +528,7 @@ private:
             state_.open["shortcuts"] = open;
             if (Widget* editor = FindById(Root(), "shortcut-editor")) editor->visible = open;
             if (auto* b = dynamic_cast<Button*>(FindById(Root(), "edit-shortcuts")))
-                b->SetText(open ? std::wstring(Tr(L"Hide Keyboard Shortcuts")) : item.ActionLabel(Lang()));
+                b->SetText(open ? std::wstring(Tr(L"Hide keyboard shortcuts")) : item.ActionLabel(Lang()));
             RequestLayout();
             return;
         }

@@ -372,10 +372,14 @@ void TestSchema() {
                 if (!it.hidden) ++count;
                 const char* k = it.key.c_str();
                 CHECK_MSG(keys.insert(it.key).second, "duplicate key %s", k);
-                // Window behavior moved from Library to Interface keeps its keys (saved values, main.cpp).
-                const bool moved = it.key == "library.singleInstance" || it.key == "library.singleInstanceFileManager" ||
-                                   it.key == "library.enqueue";
-                CHECK_MSG(moved ? c.id == "interface" : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
+                // Rows moved to another page keep their keys (saved values, main.cpp).
+                static const std::map<std::string, std::string> kMoved = {
+                    {"library.singleInstance", "interface"}, {"library.singleInstanceFileManager", "interface"},
+                    {"library.enqueue", "interface"},        {"privacy.rememberPosition", "playback"},
+                    {"general.theme", "interface"},          {"general.accent", "interface"}};
+                const auto moved = kMoved.find(it.key);
+                CHECK_MSG(moved != kMoved.end() ? c.id == moved->second
+                                                : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,
                           "%s outside %s", k, c.id.c_str());
                 CHECK_MSG(it.category == c.id && it.section == s.id, "%s", k);
                 CHECK_MSG(FindItem(it.key) == &it, "%s", k);
@@ -450,7 +454,7 @@ void TestSchema() {
         for (size_t i = 0; i < 5 && i < accent->choices.size(); ++i) CHECK(accent->choices[i].extra == colors[i]);
     }
     const Item* theme = FindItem("general.theme");
-    CHECK(theme && theme->type == ItemType::Segmented && theme->choices.size() == 3 && theme->def.AsString() == "dark");
+    CHECK(theme && theme->type == ItemType::Segmented && theme->choices.size() == 3 && theme->def.AsString() == "system");
     const Item* lang = FindItem("general.language");
     CHECK(lang && lang->def.AsString() == "ru" && lang->FindChoice("en"));
     const Item* hwdec = FindItem("performance.hwdec");
@@ -499,6 +503,14 @@ void TestSchema() {
     for (const Item* it : Search(L"loudness")) foundNormalize = foundNormalize || it->key == "audio.normalize";
     CHECK(foundNormalize);
     CHECK(Search(L"").empty());
+    CHECK(Search(L"  ").empty());
+    // Words in any order, from the page and section titles too.
+    auto online = Search(L"конфиденциальность онлайн");
+    CHECK(online.size() == Search(L"ОНЛАЙН конфиденциальность").size());
+    bool foundLyrics = false;
+    for (const Item* it : online) foundLyrics = foundLyrics || it->key == "privacy.fetchLyrics";
+    CHECK(foundLyrics);
+    CHECK(Search(L"конфиденциальность zzz").empty());
     CHECK(AdvancedOptionsLabel(Lang::Ru) == L"Дополнительные параметры");
 }
 
@@ -507,7 +519,7 @@ void TestSchema() {
 void TestConfigValues() {
     FreshDataDir(L"config-values");
     Config c;
-    CHECK(c.GetString("general.theme") == "dark");
+    CHECK(c.GetString("general.theme") == "system");
     CHECK(c.GetString("general.language") == "ru");
     CHECK(c.GetBool("privacy.saveHistory"));
     CHECK(c.GetDouble("playback.speed") == 1);
@@ -587,7 +599,7 @@ void TestConfigValues() {
     CHECK(c.GetDouble("audio.eqPreamp") == 0);
 
     c.ResetAll();
-    CHECK(c.GetString("general.theme") == "dark");
+    CHECK(c.GetString("general.theme") == "system");
     CHECK(c.GetDouble("audio.eq60") == 0);
     CHECK(c.ToJson().Find("values")->size() == 0);
 }
@@ -644,7 +656,7 @@ void TestConfigPersistence() {
         CHECK(c.FilePath() == file);
         CHECK(c.Flush());  // nothing to save
         CHECK(!FileExists(file));
-        c.SetString("general.theme", "system");
+        c.SetString("general.theme", "light");
         c.SetDouble("audio.targetLevel", -16);
         c.SetWString("subtitles.font", L"Ubuntu Кириллица");
         c.SetBool("privacy.saveHistory", false);
@@ -661,7 +673,7 @@ void TestConfigPersistence() {
     const json::Value* values = doc ? doc->Find("values") : nullptr;
     CHECK(values && values->size() == 3);  // only non-default values
     CHECK(values && values->Find("privacy.saveHistory") == nullptr);
-    CHECK(doc && doc->GetNumber("version") == 1);
+    CHECK(doc && doc->GetNumber("version") == 2);
 
     // Unknown keys survive a round trip; invalid values are dropped on load.
     (*doc)["values"].Set("future.setting", json::Value("keep me"));
@@ -674,7 +686,7 @@ void TestConfigPersistence() {
         CHECK(c.Load());
         CHECK(changed.size() == 3);
         CHECK(!c.Dirty());
-        CHECK(c.GetString("general.theme") == "system");
+        CHECK(c.GetString("general.theme") == "light");
         CHECK(c.GetDouble("audio.targetLevel") == -16);
         CHECK(c.GetWString("subtitles.font") == L"Ubuntu Кириллица");
         CHECK(c.GetString("general.language") == "ru");
@@ -692,13 +704,21 @@ void TestConfigPersistence() {
         CHECK(c.Save());
     }
 
+    // Version 1 files did not store the old default theme, Dark: they keep it; newer ones don't.
+    for (int version : {1, 2}) {
+        WriteFile(file, "{\"version\": " + std::to_string(version) + ", \"values\": {\"audio.targetLevel\": -16}}");
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetString("general.theme") == (version == 1 ? "dark" : "system"));
+    }
+
     // A corrupt file is kept as settings.corrupt-<time>.json, reported once, and defaults are used.
     TakeCorruptFileNotices();
     WriteFile(file, "{ this is not json");
     {
         Config c;
         CHECK(!c.Load());
-        CHECK(c.GetString("general.theme") == "dark");
+        CHECK(c.GetString("general.theme") == "system");
         CHECK(CountFiles(dir, L"settings.corrupt-*.json") == 1);
         const std::vector<std::wstring> notices = TakeCorruptFileNotices();
         CHECK(notices.size() == 1 && notices[0] == L"settings.json");
@@ -718,6 +738,14 @@ void TestConfigPersistence() {
         Config c;
         CHECK(c.Load());
         CHECK(!c.GetBool("video.smoothMotion"));
+    }
+    // Buffering moved from milliseconds to seconds.
+    WriteFile(file, R"({"version":2,"values":{"network.cacheLocal":500,"network.cacheNetwork":90000}})");
+    {
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetDouble("network.cacheLocalSecs") == 0.5);
+        CHECK(c.GetDouble("network.cacheNetworkSecs") == 90);
     }
 }
 
@@ -1096,10 +1124,10 @@ void TestAudioSubtitleOptions() {
     CHECK(FindOption(MpvOptionFor(c, "subtitles.blur"), "sub-blur") == "1.5");
 
     c.SetString("network.buffering", "custom");
-    c.SetDouble("network.cacheLocal", 300);
-    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "0.3");
+    c.SetDouble("network.cacheLocalSecs", 0.3);
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocalSecs"), "demuxer-readahead-secs") == "0.3");
     c.SetString("network.buffering", "normal");
-    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocal"), "demuxer-readahead-secs") == "1");  // reset
+    CHECK(FindOption(MpvOptionFor(c, "network.cacheLocalSecs"), "demuxer-readahead-secs") == "1");  // reset
 
     c.SetDouble("audio.maxVolume", 300);
     CHECK(c.GetDouble("audio.maxVolume") == 200);
@@ -1161,8 +1189,14 @@ void TestHistory() {
         CHECK(!h.RecordPlay(L"C:\\Users\\me\\Private\\x.mkv"));
         CHECK(!h.RecordPlay(L"C:\\clip.SECRET.mkv"));
         CHECK(h.RecordPlay(L"C:\\clip.mkv"));
+        CHECK(h.UpdatePosition(L"C:\\clip.mkv", 30, 100));
+        const library::HistoryEntry removed = *h.Find(L"C:\\clip.mkv");
         CHECK(h.Remove(L"c:\\CLIP.mkv"));
         CHECK(!h.Remove(L"c:\\CLIP.mkv"));
+        // Undo puts the entry (and its resume point) back at its place, once.
+        CHECK(h.Restore(removed, 0) && !h.Restore(removed, 0));
+        CHECK(h.Entries().front().path == L"C:\\clip.mkv" && h.Entries().front().position == 30);
+        CHECK(h.Remove(L"C:\\clip.mkv"));
         CHECK(h.Dirty());
         CHECK(h.Flush());
         CHECK(!h.Dirty());
@@ -1429,8 +1463,12 @@ void TestPlaylists() {
         CHECK(p.RemoveAt(id, 2));
         CHECK(!p.RemoveAt(id, 5));
         CHECK(p.Rename(id, L"Вечер кино"));
+        const library::Playlist deleted = *p.Find(other);
         CHECK(p.Delete(other));
         CHECK(!p.Delete(other));
+        CHECK(p.Restore(deleted, 0) && !p.Restore(deleted, 0));
+        CHECK(p.All().front().id == other && p.All().front().name == deleted.name);
+        CHECK(p.Delete(other));
         CHECK(!p.Rename("nope", L"x"));
         CHECK(p.Flush());
     }
@@ -1546,6 +1584,20 @@ void TestMediaTypes() {
     CHECK(library::StemOf(L".hidden") == L".hidden");
     CHECK(library::PathKey(L"c:/Видео/Ёж.mkv") == library::PathKey(L"C:\\ВИДЕО\\ЁЖ.MKV"));
     CHECK(library::SearchFold(L"ЁЛКА Ёж") == L"елка еж");
+    // Search words: each must appear, in any order and any field; extra spaces are ignored.
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"track 3"));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"artist  3 "));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L""));
+    CHECK(library::FoldedContains(L"01 track number 3\nartist a", L"umber 3"));
+    CHECK(!library::FoldedContains(L"01 track number 3\nartist a", L"track 4"));
+    CHECK(!library::FoldedContains(L"abc", L"abcd"));
+    {
+        using R = std::vector<std::pair<size_t, size_t>>;
+        CHECK((library::MatchRanges(L"Track Number 1", L"number track") == R{{0, 5}, {6, 6}}));
+        CHECK((library::MatchRanges(L"Track Number 1", L"rack ack") == R{{1, 4}}));  // overlaps merge
+        CHECK((library::MatchRanges(L"Ёлка", L"елка") == R{{0, 4}}));
+        CHECK(library::MatchRanges(L"abc", L"").empty());
+    }
     CHECK(library::UnixMsNow() > 1700000000000LL);
 
     // Subtitle matching (Add Subtitles): a prefix whose number goes on is another file.
@@ -1826,6 +1878,8 @@ void TestLibraryScan() {
     CHECK(snap->Search(L"song", library::MediaKind::Video).empty());
     CHECK(snap->Search(L"").size() == 6);
     CHECK(snap->Search(L"zzz").empty());
+    CHECK(snap->Search(L"10 фильм").size() == 1);
+    CHECK(snap->Search(L"фильм ёлок").empty());
 
     auto videos = snap->Videos();
     library::SortItems(videos, library::SortKey::Size, true);
@@ -1923,11 +1977,16 @@ void TestLibraryCacheTags() {
     CHECK(MoveFileW(usb.c_str(), unplugged.c_str()));
     WriteFile(root + L"\\Album\\03 New.mp3", std::string(64, 'z'));  // read now, so the cache is saved
     snap = ScanAndWait(lib);
-    CHECK(snap && snap->stats.metadataFiles >= 1 && !snap->FindItem(usbSong));
+    CHECK(snap && snap->stats.metadataFiles >= 1);
+    // Meanwhile its files stay in the library from the cache, offline, under the root's name.
+    m = snap ? snap->FindItem(usbSong) : nullptr;
+    CHECK(m && m->offline && m->title == L"Away" && m->folder == usb);
+    CHECK(snap && snap->missingRoots.size() == 1 && snap->missingRoots[0] == usb && snap->Folder(usb));
     CHECK(MoveFileW(unplugged.c_str(), usb.c_str()));
     snap = ScanAndWait(lib);
     m = snap ? snap->FindItem(usbSong) : nullptr;
-    CHECK(m && m->title == L"Away");  // from the cache, not the untagged file
+    CHECK(m && m->title == L"Away" && !m->offline);  // from the cache, not the untagged file
+    CHECK(snap && snap->missingRoots.empty());
 
     // Cloud-only files (OneDrive "free up space") are never read; they keep their cached tags and
     // their first-seen time across scans that save the cache.
@@ -3254,8 +3313,8 @@ void TestSkinResolve() {
     CHECK(dark[kOnAccent] == dark[kBgBase]);
     CHECK(dark[kAccentMid] == Mix(dark[kAccent], dark[kBgBase], 0.25f));
     Colors light = Resolve(false, 4, nullptr);
-    CHECK(light[kBgBase].Rgb() == 0xF2F2F2 && light[kAccent].Rgb() == 0x808080);
-    CHECK(Resolve(true, 99, nullptr)[kAccent].Rgb() == 0x6B6B6B);  // tone clamped
+    CHECK(light[kBgBase].Rgb() == 0xF2F2F2 && light[kAccent].Rgb() == 0x6C6C6C);
+    CHECK(Resolve(true, 99, nullptr)[kAccent].Rgb() == 0x828282);  // tone clamped
     Skin empty;
     CHECK(Resolve(true, 2, &empty) == Resolve(true, 2, nullptr));
 
@@ -3292,6 +3351,21 @@ void TestSkinContrast() {
     }
     CHECK(secondary && accent && onAccent);
     CHECK(!anyLight);  // a dark-only skin is not checked in light
+    // The focus ring is the accent where it is 3:1 on every background, else text.primary:
+    // The last tone is kept at 4.5:1 (accent as text), so it also passes as a ring. A dim accent falls back.
+    for (const bool dark : {true, false}) {
+        CHECK(FocusRing(Resolve(dark, 0, nullptr)) == AccentTone(dark, 0));
+        CHECK(FocusRing(Resolve(dark, 4, nullptr)) == AccentTone(dark, 4));
+    }
+    Skin dimAccent = Parse(R"({"mode": "dark", "dark": {"accent": "#4A4A4A"}})").skin;
+    const Colors dimC = Resolve(true, 0, &dimAccent);
+    CHECK(FocusRing(dimC) == dimC[kTextPrimary]);
+    // A ring that fails 3:1 is reported (here text.primary is as dim as the accent).
+    ParseResult dim = Parse(R"({"mode": "dark", "dark": {"text.primary": "#3A3A3A", "accent": "#3A3A3A"}})");
+    bool ring = false;
+    for (const ContrastIssue& i : CheckContrast(&dim.skin, 0)) ring |= i.fg == kFocusRingFg && i.need == 3.0;
+    CHECK(ring);
+    CHECK(Describe({true, kFocusRingFg, kBgCard, 1.45, 3.0, true}) == "dark: focus ring on bg.card 1.4:1 (needs 3.0:1)");
     ContrastIssue sample{true, kTextSecondary, kBgPanel, 3.97, 4.5, false};
     CHECK(Describe(sample) == "dark: text.secondary on bg.panel 3.9:1 (needs 4.5:1)");
     // #8A8A8A on bg.selected #242424 is 4.497:1: reported, and shown as 4.4, not a rounded 4.5.
@@ -3300,6 +3374,28 @@ void TestSkinContrast() {
     for (const ContrastIssue& i : CheckContrast(&edge.skin, 0)) edgeLines.push_back(Describe(i));
     CHECK_MSG(edgeLines.size() == 1 && edgeLines[0] == "dark: text.secondary on bg.selected 4.4:1 (needs 4.5:1)", "%zu %s",
               edgeLines.size(), edgeLines.empty() ? "" : edgeLines[0].c_str());
+}
+
+void TestSystemColorsSkin() {
+    using namespace skin;
+    // Windows 11 "Aquatic" (dark) and "Desert" (light): the palette is the theme's colours only.
+    SystemColors aquatic{Rgba::Hex(0x202020), Rgba::Hex(0xFFFFFF), Rgba::Hex(0x8EE3F0), Rgba::Hex(0x263B50),
+                         Rgba::Hex(0x75E9FC), Rgba::Hex(0xA6A6A6), Rgba::Hex(0x202020)};
+    Skin s = FromSystemColors(aquatic);
+    CHECK(s.mode == Mode::Dark && !s.Empty());
+    Colors c = Resolve(true, 0, &s);
+    CHECK(c[kBgBase].Rgb() == 0x202020 && c[kBgPanel].Rgb() == 0x202020 && c[kTextPrimary].Rgb() == 0xFFFFFF);
+    CHECK(c[kTextTertiary].Rgb() == 0xFFFFFF && c[kTextDisabled].Rgb() == 0xA6A6A6);
+    CHECK(c[kAccent].Rgb() == 0x8EE3F0 && c[kOnAccent].Rgb() == 0x263B50 && c[kAccentMid].Rgb() == 0x75E9FC);
+    CHECK(c[kLineControl].Rgb() == 0xFFFFFF);
+    CHECK(Resolve(true, 4, &s)[kAccent] == c[kAccent]);  // the accent tone setting doesn't apply
+    CHECK_MSG(CheckContrast(&s, 0).empty(), "%s", Describe(CheckContrast(&s, 0)[0]).c_str());
+    SystemColors desert{Rgba::Hex(0xFFFAEF), Rgba::Hex(0x3D3D3D), Rgba::Hex(0x903909), Rgba::Hex(0xFFF5E3),
+                        Rgba::Hex(0x1C5E75), Rgba::Hex(0x676767), Rgba::Hex(0xFFFAEF)};
+    s = FromSystemColors(desert);
+    CHECK(s.mode == Mode::Light && s.light[kBgBase] && !s.dark[kBgBase]);
+    CHECK(Resolve(false, 0, &s)[kTextSecondary].Rgb() == 0x3D3D3D);
+    CHECK_MSG(CheckContrast(&s, 0).empty(), "%s", Describe(CheckContrast(&s, 0)[0]).c_str());
 }
 
 void TestBuiltinSkins() {
@@ -3796,6 +3892,7 @@ const TestCase kTests[] = {
     {"skin_fallback", TestSkinFallback},
     {"skin_resolve", TestSkinResolve},
     {"skin_contrast", TestSkinContrast},
+    {"system_colors_skin", TestSystemColorsSkin},
     {"builtin_skins", TestBuiltinSkins},
     {"movie_hash", TestMovieHash},
     {"guess_video", TestGuessVideo},

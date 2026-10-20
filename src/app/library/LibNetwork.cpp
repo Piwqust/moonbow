@@ -88,16 +88,16 @@ public:
     void Paint(Painter& p) override {
         const Palette& c = P();
         const bool hot = IsHot();
-        p.Fill(rect, c.bgCard, 12);
-        if (hot) p.Fill(rect, IsPressed() ? c.press : c.hover, 12);
+        p.Fill(rect, c.bgCard, kRadiusCard);
+        if (hot) p.Fill(rect, IsPressed() ? c.press : c.hover, kRadiusCard);
         const Rect ic{rect.x + 16, rect.Cy() - 20, 40, 40};
-        p.Fill(ic, c.bgBase, 10);
+        p.Fill(ic, c.bgBase, kRadiusCard);
         p.Icon(icon_, ic.Center(24, 24), hot ? c.textPrimary : c.textSecondary, c.accentMid);
         const float tx = ic.Right() + 14, tw = std::max(0.0f, rect.Right() - 44 - tx);
         p.Text(title_, {tx, rect.Cy() - 20, tw, 20}, TextStyle::BodyMedium, c.textPrimary);
         p.Text(text, {tx, rect.Cy(), tw, 20}, TextStyle::Small, c.textTertiary);
         p.Icon("chevron_right", {rect.Right() - 36, rect.Cy() - 10, 20, 20}, hot ? c.textPrimary : c.textTertiary);
-        PaintFocusRing(p, rect, 12);
+        PaintFocusRing(p, rect, kRadiusCard);
         // A line cut in a narrow window shows whole on hover.
         auto& t = gfx::Text::Get();
         const bool cut = t.Measure(title_, TextStyle::BodyMedium).width > tw + 0.5f || t.Measure(text, TextStyle::Small).width > tw + 0.5f;
@@ -210,10 +210,7 @@ protected:
                 Toast(Tr(L"Saved"), "save");
                 TheApp().libraryChanged.Emit();
             }));
-            m.push_back(Item(L"Remove from History", "remove", [url] {
-                TheApp().history().Remove(url);
-                TheApp().libraryChanged.Emit();
-            }));
+            m.push_back(Item(L"Remove from History", "remove", [url] { RemoveFromHistory(url); }));
         } else {
             m.push_back(Item(L"Rename…", "edit", [url, title, group] {
                 ShowTextPrompt(Tr(L"Rename"), Tr(L"Name"), title, Tr(L"Rename"), [url, group](const std::wstring& name) {
@@ -232,8 +229,7 @@ protected:
         const Entry* e = EntryAt(index);
         if (!e || e->kind != EntryKind::Media) return;
         if (e->key == "history") {
-            TheApp().history().Remove(e->path);
-            TheApp().libraryChanged.Emit();
+            RemoveFromHistory(e->path);
         } else {
             // A saved station or link is gone for good (no undo): ask, as for playlists.
             const std::string group = e->key;

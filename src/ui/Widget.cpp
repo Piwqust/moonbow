@@ -255,7 +255,16 @@ void Widget::PaintTree(Painter& p) {
 }
 
 void Widget::PaintFocusRing(Painter& p, const Rect& r, float radius) const {
-    if (ShowFocusRing()) p.Stroke(r.Inset(-2), P().accentMid, radius + 2, 1.5f);
+    if (!ShowFocusRing()) return;
+    Rect ring = r.Inset(-2);
+    float rr = radius + 2;
+    // At the window's edge (a caption button) the ring goes inside, or its outer sides are cut off.
+    const Size client = GetHost()->ClientSize();
+    if (ring.x < 0 || ring.y < 0 || ring.Right() > client.w || ring.Bottom() > client.h) {
+        ring = r.Inset(2);
+        rr = std::max(0.0f, radius - 2);
+    }
+    p.Stroke(ring, P().focusRing, rr, 2.0f);
 }
 
 Widget* Widget::HitTest(float x, float y) {

@@ -154,8 +154,9 @@ const Category* FindCategory(std::string_view id);
 const Item* FindItem(std::string_view key);
 std::vector<const Item*> AllItems();  // schema order
 
-// Settings search box: case-insensitive substring match on label / description in both
-// languages (so "громк" and "volume" both work). Hidden items are skipped.
+// Settings search box: case-insensitive, in both languages (so "громк" and "volume" both work).
+// Every word of the query must appear in the row's label, description, choices, section or page
+// title. Hidden items are skipped.
 std::vector<const Item*> Search(std::wstring_view query);
 
 // Text of the "Advanced Options" expander.

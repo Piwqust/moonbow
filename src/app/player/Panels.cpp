@@ -162,6 +162,7 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab, bool videoTab) {
                                      {L"Bookmarks", "bookmarks", "bookmarks_twotone"}};
             if (HasChaptersTab()) tabs.push_back({L"Chapters", "chapters", "chapters_twotone"});
             pop->SetTabs(std::move(tabs), tab);
+            pop->a11yName = Tr(L"Queue");  // as the bar's button that opens it
         }
             pop->build = [](int t) {
                 return t == 1 ? BuildBookmarksTab() : t == 2 ? BuildChaptersTab() : BuildQueueTab(false);
@@ -170,7 +171,6 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab, bool videoTab) {
             break;
         case Group::Mini:
             pop->SetTitle(Tr(L"Queue"));
-            pop->radius = 8;
             pop->fill = [] { return P().bgPanel; };
             pop->build = [](int) { return BuildQueueTab(true); };
             pop->place = [] { return PlaceAboveMini(CompactQueueHeight()); };
@@ -182,6 +182,7 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab, bool videoTab) {
             tabs.push_back({L"Audio", "audio-tracks", "audio-tracks_twotone"});
             tabs.push_back({L"Subtitles", "subtitles", "subtitles_twotone"});
             pop->SetTabs(std::move(tabs), ShownTab(g, tab, videoTab));
+            pop->a11yName = Tr(L"Playback settings");
         }
             pop->build = [videoTab](int t) { return BuildSettingsTab(TabOf(Group::Settings, t, videoTab)); };
             pop->place = [] { return PlaceAboveBar(946); };

@@ -1,4 +1,5 @@
 #include "app/FileAssociations.h"
+#include "app/I18n.h"
 #include "ui/Host.h"
 
 #include <windows.h>
@@ -7,6 +8,7 @@
 #include <shlobj.h>
 
 #include <string>
+#include <tuple>
 
 namespace app {
 
@@ -41,9 +43,26 @@ bool SetEmpty(const std::wstring& key, const wchar_t* name) {
 bool WriteProgId(const wchar_t* progId, const wchar_t* friendly, const std::wstring& exe) {
     const std::wstring base = std::wstring(L"Software\\Classes\\") + progId;
     const std::wstring command = L"\"" + exe + L"\" \"%1\"";
+    // Player: Explorer offers the verb for any number of selected files (Document stops at 15).
     return SetValue(base, nullptr, friendly) && SetValue(base + L"\\DefaultIcon", nullptr, L"\"" + exe + L"\",0") &&
            SetValue(base + L"\\shell", nullptr, L"open") && SetValue(base + L"\\shell\\open", L"FriendlyAppName", L"Lumen") &&
+           SetValue(base + L"\\shell\\open", L"MultiSelectModel", L"Player") &&
            SetValue(base + L"\\shell\\open\\command", nullptr, command);
+}
+
+// "Play in Lumen" and "Add to the Lumen queue" under `shell` (a perceived type or Directory):
+// shown whichever player is the default. Each selected item starts a Lumen that hands it to the
+// running one (main.cpp), which joins them into one queue (App::OnCopyData).
+bool WriteVerbs(const std::wstring& shell, const std::wstring& exe) {
+    bool ok = true;
+    for (const auto& [verb, label, args] : {std::tuple{L"Lumen.play", Tr(L"Play in Lumen"), L""},
+                                            std::tuple{L"Lumen.enqueue", Tr(L"Add to the Lumen queue"), L"--enqueue "}}) {
+        const std::wstring key = shell + L"\\" + verb;
+        ok &= SetValue(key, L"MUIVerb", label) && SetValue(key, L"Icon", L"\"" + exe + L"\",0") &&
+              SetValue(key, L"MultiSelectModel", L"Player") &&
+              SetValue(key + L"\\command", nullptr, L"\"" + exe + L"\" " + args + L"\"%1\"");
+    }
+    return ok;
 }
 
 template <size_t N>
@@ -69,6 +88,8 @@ bool RegisterFileAssociations() {
     ok &= SetValue(kCapabilities, L"ApplicationDescription", L"Fast, minimal video and music player");
     ok &= SetValue(kCapabilities, L"ApplicationIcon", L"\"" + exe + L"\",0");
     ok &= WriteTypes(kVideo, kVideoProgId) && WriteTypes(kAudio, kAudioProgId) && WriteTypes(kPlaylists, kPlaylistProgId);
+    for (const wchar_t* shell : {L"SystemFileAssociations\\video\\shell", L"SystemFileAssociations\\audio\\shell", L"Directory\\shell"})
+        ok &= WriteVerbs(std::wstring(L"Software\\Classes\\") + shell, exe);
     ok &= SetValue(L"Software\\RegisteredApplications", L"Lumen", kCapabilities);
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;

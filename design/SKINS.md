@@ -50,7 +50,7 @@
 прозрачными случайно.
 
 **Токены:** `bg.deep`, `bg.base`, `bg.raised`, `bg.panel`, `bg.chrome`, `bg.card`, `bg.selected`,
-`bg.menu`, `bg.hover`, `bg.press`, `line.subtle`, `line`, `line.strong`, `text.primary`,
+`bg.menu`, `bg.hover`, `bg.press`, `line.subtle`, `line`, `line.strong`, `line.control`, `text.primary`,
 `text.secondary`, `text.tertiary`, `text.disabled`, `accent`, `accent.mid`, `accent.dim`, `accent.faint`,
 `on.accent`, `scrim`, `shadow`, `danger`. Значения по умолчанию указаны в DESIGN.md, раздел 1.
 
@@ -80,13 +80,18 @@
 - `text.primary`, `text.secondary` и `text.tertiary` на всех фонах (`bg.base`, `bg.deep`, `bg.raised`,
   `bg.panel`, `bg.chrome`, `bg.card`, `bg.selected`, `bg.menu`) должны давать не меньше **4,5:1**:
   третичным цветом написаны подписи, «осталось 6:00», клавиши в меню и подсказки в полях;
-- `accent` на `bg.base`, `bg.deep` и `bg.chrome`, `on.accent` на `accent` — не меньше **3:1**: это значки
-  и элементы управления;
+- `accent` на `bg.base`, `bg.deep` и `bg.chrome` — не меньше **3:1**: это значки и элементы управления;
+- `accent` на `bg.base` и `bg.panel` и `on.accent` на `accent` — не меньше **4,5:1**: акцентом написан
+  играющий трек, а на акценте — подписи кнопок и переключателей;
+- `line.control` на `bg.base`, `bg.deep`, `bg.raised`, `bg.panel`, `bg.chrome` и `bg.menu` — не меньше
+  **3:1**: это границы полей, ползунков, флажков и переключателей (WCAG 1.4.11);
 - `text.disabled` не проверяется: WCAG не требует контраста от недоступных элементов.
 
 Если пара не проходит, в настройках появляется предупреждение со списком пар в подсказке и кнопка
 «Сбросить», которая возвращает Lumen. Все встроенные скины проходят проверку со всеми тонами акцента:
 это проверяет тест `builtin_skins` в `tests/core_tests.cpp`.
+Те же пары с цифрами печатает `python tools/dev/check-contrast.py` (`-v` — все пары, а не только
+непрошедшие).
 
 ## Встроенные скины
 

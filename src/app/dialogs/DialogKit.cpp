@@ -67,7 +67,7 @@ void DButton::SetText(std::wstring text) {
 Size DButton::MeasureContent(float, float) {
     float w = gfx::Text::Get().Measure(text_, textStyle).width + 32;
     if (!icon.empty()) w += 28;
-    return {std::max(minWidth, std::ceil(w)), 32};
+    return {std::max(minWidth, std::ceil(w)), std::max(32.0f, gfx::Text::Get().LineHeight(textStyle) + 12)};
 }
 
 void DButton::Paint(Painter& p) {
@@ -77,7 +77,7 @@ void DButton::Paint(Painter& p) {
     Color bg, fg;
     switch (style) {
         case BtnStyle::Neutral:
-            bg = down ? c.bgSelected : hot ? Color::Mix(c.bgChrome, c.bgSelected, 0.6f) : c.bgChrome;
+            bg = down ? Color::Mix(c.bgChrome, c.textPrimary, 0.18f) : hot ? Color::Mix(c.bgChrome, c.textPrimary, 0.08f) : c.bgChrome;
             fg = hot ? c.textPrimary : c.textSecondary;
             break;
         case BtnStyle::Accent:  // the primary action: same filled look as ui::Button Primary
@@ -87,7 +87,7 @@ void DButton::Paint(Painter& p) {
             break;
     }
     if (!on) p.PushOpacity(0.5f);
-    p.Fill(rect, bg, 6);
+    p.Fill(rect, bg, ui::kRadiusControl);
     const float tw = gfx::Text::Get().Measure(text_, textStyle).width;
     const float total = tw + (icon.empty() ? 0.0f : 28.0f);
     float x = std::round(rect.Cx() - total / 2);
@@ -97,7 +97,7 @@ void DButton::Paint(Painter& p) {
     }
     p.Text(text_, {x, rect.y, tw + 2, rect.h}, textStyle, fg, HAlign::Leading, VAlign::Center, 0);
     if (!on) p.PopOpacity();
-    PaintFocusRing(p, rect, 6);
+    PaintFocusRing(p, rect, ui::kRadiusControl);
 }
 
 // --- FieldDropdown -----------------------------------------------------------------------
@@ -105,8 +105,9 @@ void DButton::Paint(Painter& p) {
 void FieldDropdown::Paint(Painter& p) {
     const Palette& c = P();
     const bool hot = IsEnabled() && (IsHot() || IsPressed());
-    p.Fill(rect, hot ? Color::Mix(c.bgRaised, c.bgSelected, 0.5f) : c.bgRaised, 6);
-    PaintFocusRing(p, rect, 6);
+    p.Fill(rect, hot ? Color::Mix(c.bgRaised, c.bgSelected, 0.5f) : c.bgRaised, ui::kRadiusControl);
+    if (IsEnabled()) p.Stroke(rect, hot ? c.textTertiary : c.lineControl, ui::kRadiusControl);
+    PaintFocusRing(p, rect, ui::kRadiusControl);
     const int sel = Selected();
     const bool has = sel >= 0 && sel < static_cast<int>(Choices().size());
     const std::wstring& label = has ? Choices()[static_cast<size_t>(sel)].label : placeholder;
@@ -231,14 +232,16 @@ void TextArea::EnsureVisible() {
 
 void TextArea::Paint(Painter& p) {
     const Palette& c = P();
-    p.Fill(rect, c.bgDeep, 6);
-    p.Stroke(rect, IsFocused() ? c.lineStrong : IsHot() ? c.line : c.bgPanel, 6, 2);
+    p.Fill(rect, c.bgDeep, ui::kRadiusControl);
+    p.Stroke(rect, IsFocused() ? c.lineStrong : IsHot() ? c.textTertiary : c.lineControl, ui::kRadiusControl,
+             IsFocused() ? 2.0f : 1.0f);
+    PaintFocusRing(p, rect, ui::kRadiusControl);
     const Rect tr = TextRect();
     p.PushClip(rect.Inset(2));
     const float lh = LineH();
     if (text_.empty()) {
         // A few DIPs in, so the caret at the start doesn't sit on the first letter.
-        p.Text(placeholder, {tr.x + 4, tr.y, tr.w - 4, lh}, TextStyle::Body, c.textDisabled);
+        p.Text(placeholder, {tr.x + 4, tr.y, tr.w - 4, lh}, TextStyle::Body, c.textTertiary);
     } else {
         const auto lines = Lines();
         const size_t a = std::min(caret_, anchor_), b = std::max(caret_, anchor_);
@@ -396,7 +399,7 @@ bool TextArea::OnChar(wchar_t ch) {
 
 namespace {
 
-constexpr float kRadius = 14;
+constexpr float kRadius = ui::kRadiusWindow;
 
 }  // namespace
 
@@ -453,6 +456,8 @@ Widget* Frame::Toolbar() {
         toolbar_->width = Length::Grow();
         toolbar_->height = Length::Px(34);
         toolbar_->gap = 10;
+        // In line with the body's 20 DIP edges (the header band itself is inset 9).
+        toolbar_->pad = {11, 0, 11, 0};
     }
     return toolbar_;
 }

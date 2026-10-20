@@ -9,6 +9,9 @@ Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class LumenCap {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
@@ -44,6 +47,16 @@ $g = [System.Drawing.Graphics]::FromImage($bmp)
 $dc = $g.GetHdc()
 [LumenCap]::PrintWindow($h, $dc, 2) | Out-Null   # PW_RENDERFULLCONTENT
 $g.ReleaseHdc($dc)
+# The client area only: the window's invisible resize band (left, right, bottom) is not part of the
+# UI, and screenshot pixels stay the client pixels input.ps1 and the tree dump use.
+$cr = New-Object LumenCap+RECT; [LumenCap]::GetClientRect($h, [ref]$cr) | Out-Null
+$o = New-Object LumenCap+POINT; [LumenCap]::ClientToScreen($h, [ref]$o) | Out-Null
+$cx = [math]::Max(0, $o.X - $r.L); $cy = [math]::Max(0, $o.Y - $r.T)
+$cw = [math]::Min($cr.R, $w - $cx); $ch = [math]::Min($cr.B, $hh - $cy)
+if ($cw -gt 0 -and $ch -gt 0 -and ($cw -ne $w -or $ch -ne $hh)) {
+  $c = $bmp.Clone((New-Object System.Drawing.Rectangle $cx, $cy, $cw, $ch), $bmp.PixelFormat)
+  $bmp.Dispose(); $bmp = $c; $w = $cw; $hh = $ch
+}
 if ($Scale -ne 1) {
   $o = New-Object System.Drawing.Bitmap ([int]($w * $Scale)), ([int]($hh * $Scale))
   $g2 = [System.Drawing.Graphics]::FromImage($o); $g2.InterpolationMode = 'HighQualityBicubic'

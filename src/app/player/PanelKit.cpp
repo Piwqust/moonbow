@@ -233,6 +233,7 @@ bool TabBar::OnKeyDown(const KeyEvent& e) {
 
 void TabBar::Describe(A11y& a) {
     a.role = Role::Tab;
+    if (Parent()) a.name = Parent()->a11yName;  // the panel's name
     a.items = static_cast<int>(tabs_.size());
     a.item = [this](int i, A11y::Item& it) {
         it.role = Role::TabItem;
@@ -411,6 +412,11 @@ void AddSectionTitle(Widget* page, const std::wstring& text) {
             // Same x as the row labels and controls of the sections (20 DIP).
             p.Text(text_, {rect.x + 20, rect.y + 18, rect.w - 40, 22}, TextStyle::Heading, RowText());
         }
+        void Describe(A11y& a) override {
+            a.role = Role::Text;
+            a.name = text_;
+            a.heading = 2;
+        }
 
     private:
         std::wstring text_;
@@ -576,6 +582,7 @@ void Range::Describe(A11y& a) {
     a.max = max;
     a.now = value_;
     a.step = step;
+    if (format) a.value = format(value_);
     a.setRange = [this](double v) {  // like the arrow keys
         const float s = Snap(static_cast<float>(v));
         if (s == value_) return;

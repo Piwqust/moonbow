@@ -55,9 +55,10 @@ const std::vector<ActionInfo>& Table() {
         {Action::ToggleRepeat, "playback.repeat", L"Repeat", L"Playback", {{'L', kNone}}},
         {Action::ToggleShuffle, "playback.shuffle", L"Shuffle", L"Playback", {{'H', kNone}}},
         {Action::ABLoop, "playback.ab_loop", L"A-B loop", L"Playback", {{'L', kShift}}},
-        {Action::VolumeUp, "audio.volume_up", L"Volume up", L"Audio", {{VK_UP, kNone}, {VK_VOLUME_UP, kNone}}},
-        {Action::VolumeDown, "audio.volume_down", L"Volume down", L"Audio", {{VK_DOWN, kNone}, {VK_VOLUME_DOWN, kNone}}},
-        {Action::Mute, "audio.mute", L"Mute", L"Audio", {{'M', kNone}, {VK_VOLUME_MUTE, kNone}}},
+        // The keyboard's volume keys are Windows' (its flyout), unless audio.volumeKeys (ActionForKey).
+        {Action::VolumeUp, "audio.volume_up", L"Volume up", L"Audio", {{VK_UP, kNone}}},
+        {Action::VolumeDown, "audio.volume_down", L"Volume down", L"Audio", {{VK_DOWN, kNone}}},
+        {Action::Mute, "audio.mute", L"Mute", L"Audio", {{'M', kNone}}},
         {Action::CycleAudio, "audio.cycle", L"Next audio track", L"Audio", {{'A', kNone}, {'B', kNone}}},
         {Action::AudioDelayUp, "audio.delay_up", L"Audio delay +50 ms", L"Audio", {{'K', kNone}}},
         {Action::AudioDelayDown, "audio.delay_down", L"Audio delay −50 ms", L"Audio", {{'J', kNone}}},
@@ -82,14 +83,14 @@ const std::vector<ActionInfo>& Table() {
         {Action::Deinterlace, "video.deinterlace", L"Deinterlace", L"Video", {{'D', kNone}}},
         {Action::ToggleStats, "video.statistics", L"Statistics", L"Video", {{'I', kCtrlShift}}},
         {Action::OpenFile, "media.open_file", L"Open file", L"Media", {{'O', kCtrl}}},
-        {Action::OpenFolder, "media.open_folder", L"Open folder", L"Media", {{'F', kCtrl}}},
+        {Action::OpenFolder, "media.open_folder", L"Open folder", L"Media", {{'O', kCtrlShift}}},
         {Action::OpenNetwork, "media.open_network", L"Open network stream", L"Media", {{'N', kCtrl}}},
-        {Action::OpenSubtitles, "media.open_subtitles", L"Add subtitle file", L"Media", {{'O', kCtrlShift}}},
+        {Action::OpenSubtitles, "media.open_subtitles", L"Add subtitle file", L"Media", {{'L', kCtrlShift}}},
         {Action::CloseMedia, "media.close", L"Close media", L"Media", {{'W', kCtrl}}},
         {Action::GoHome, "media.home", L"Library", L"Media", {{VK_HOME, kAlt}}},
         {Action::ToggleSidebar, "media.sidebar", L"Toggle sidebar", L"Media", {{'B', kCtrl}}},
         {Action::TogglePlaylist, "media.playlist", L"Queue", L"Media", {{'L', kCtrl}}},
-        {Action::Search, "media.search", L"Search", L"Media", {{'K', kCtrl}}},
+        {Action::Search, "media.search", L"Search", L"Media", {{'F', kCtrl}, {'K', kCtrl}}},
         {Action::Back, "media.back", L"Back", L"Media", {{VK_LEFT, kAlt}, {VK_BROWSER_BACK, kNone}}},
         {Action::Forward, "media.forward", L"Forward", L"Media", {{VK_RIGHT, kAlt}, {VK_BROWSER_FORWARD, kNone}}},
         {Action::AddBookmark, "media.bookmark", L"Add bookmark", L"Media", {{'D', kCtrl}}},
@@ -129,7 +130,7 @@ MainWindow* Win() {
     return TheApp().main();
 }
 
-constexpr UINT kToastMs = 1200;
+constexpr UINT kToastMs = 3000;  // time to read it (WCAG 2.2.1); ShowToast keeps no toast shorter
 
 const PlayerState& PS() {
     return TheApp().player().State();
@@ -424,6 +425,11 @@ Action ActionForKey(const KeyEvent& e) {
     for (const ActionInfo& info : Table())
         for (const auto& [vk, mods] : Bindings(info.action))
             if (vk == e.key && SameMods(mods, e.mods)) return info.action;
+    if (TheApp().config().GetBool("audio.volumeKeys")) {
+        if (e.key == VK_VOLUME_UP) return Action::VolumeUp;
+        if (e.key == VK_VOLUME_DOWN) return Action::VolumeDown;
+        if (e.key == VK_VOLUME_MUTE) return Action::Mute;
+    }
     return Action::None;
 }
 
@@ -732,7 +738,7 @@ void Run(Action a) {
             if (app.PlayerShown() && w->playerView())
                 w->playerView()->SetSidePanel(!w->playerView()->SidePanel());
             else if (w->sidebar())
-                w->sidebar()->SetCollapsed(!w->sidebar()->Collapsed());
+                w->sidebar()->Toggle();
             break;
         case Action::TogglePlaylist: TogglePlayerPanel(PanelKind::Queue, {}); break;
         case Action::Search:
@@ -740,8 +746,9 @@ void Run(Action a) {
             app.ShowPlayer(false);
             if (w->library()) w->library()->FocusSearch();
             break;
-        case Action::Back: app.GoBack(); break;
-        case Action::Forward: app.GoForward(); break;
+        // Not under the open player: the library behind it would change pages unseen.
+        case Action::Back: if (!app.PlayerShown()) app.GoBack(); break;
+        case Action::Forward: if (!app.PlayerShown()) app.GoForward(); break;
         case Action::AddBookmark: {
             if (!s.fileLoaded) break;
             const QueueItem* item = app.queue().CurrentItem();
@@ -894,18 +901,28 @@ void ReleaseHeldOsd(bool show) {
 }
 
 void OnPlayerChangeForOsd(unsigned changes) {
+    // Same text as the title bar: the episode, the tag title, or the file name without its extension.
+    auto titleNow = [] {
+        const std::wstring file = FileNameOf(PS().path);
+        std::wstring title = episodes::Title(PS().path);
+        if (title.empty()) title = PS().title.empty() ? file : PS().title;
+        if (_wcsicmp(title.c_str(), file.c_str()) == 0) {
+            const size_t dot = title.find_last_of(L'.');
+            if (dot != std::wstring::npos && dot > 0) title.resize(dot);
+        }
+        return title;
+    };
+    // Screen readers hear the new track as it starts (the title bar changes silently).
+    static uint64_t announced = 0;
+    if ((changes & kChangeFile) && PS().fileLoaded && PS().loadSerial != announced) {
+        announced = PS().loadSerial;
+        ui::a11y::Announce(Win(), titleNow());
+    }
     if ((changes & kChangeFile) && PS().loadSerial != g_toastSerial) {
         // Whatever was pending or on screen was about the previous file.
         g_pendingOsd = PendingOsd::None;
         if (ui::AnimFloat::Now() - g_toastAt < kToastMs) {
-            // Same text as the title bar: the episode, the tag title, or the file name without its extension.
-            const std::wstring file = FileNameOf(PS().path);
-            std::wstring title = episodes::Title(PS().path);
-            if (title.empty()) title = PS().title.empty() ? file : PS().title;
-            if (_wcsicmp(title.c_str(), file.c_str()) == 0) {
-                const size_t dot = title.find_last_of(L'.');
-                if (dot != std::wstring::npos && dot > 0) title.resize(dot);
-            }
+            const std::wstring title = titleNow();
             if (!title.empty()) Toast(title, "play");
             g_toastSerial = PS().loadSerial;
         }

@@ -54,23 +54,45 @@ void DeletePlaylist(const std::string& id, bool leavePage) {
     ShowConfirm(Tr(L"Delete playlist"),
                 Fmt(Tr(L"“{0}” will be deleted. The media files themselves are not touched."), {p->name}), Tr(L"Delete"),
                 [id, leavePage] {
-                    TheApp().playlists().Delete(id);
+                    auto& lists = TheApp().playlists();
+                    const library::Playlist* gone = lists.Find(id);
+                    if (!gone) return;
+                    // Kept for the toast's Undo, as "Remove from playlist" keeps its item.
+                    const library::Playlist copy = *gone;
+                    const size_t index = static_cast<size_t>(gone - lists.All().data());
+                    const std::string cover = TheApp().UiValue("playlist.cover." + id);
+                    lists.Delete(id);
                     TheApp().SetUiValue("playlist.cover." + id, {});
-                    TheApp().playlists().Flush();
+                    lists.Flush();
                     if (leavePage) TheApp().Navigate(Route{Section::Playlists, {}});
                     TheApp().libraryChanged.Emit();
+                    Toast(Tr(L"Playlist deleted"), "remove", Tr(L"Undo"), [copy, index, cover] {
+                        if (!TheApp().playlists().Restore(copy, index)) return;
+                        if (!cover.empty()) TheApp().SetUiValue("playlist.cover." + copy.id, cover);
+                        TheApp().playlists().Flush();
+                        TheApp().libraryChanged.Emit();
+                    });
                 });
 }
 
-// No question first, and no loss either: the toast brings the item back to its place (UX-17).
-void RemoveFromPlaylist(const std::string& id, size_t index) {
+// No question first, and no loss either: the toast brings the items back to their places (UX-17).
+void RemoveFromPlaylist(const std::string& id, std::vector<size_t> indices) {
     const library::Playlist* p = TheApp().playlists().Find(id);
-    if (!p || index >= p->items.size()) return;
-    const library::PlaylistItem item = p->items[index];
-    TheApp().playlists().RemoveAt(id, index);
+    if (!p) return;
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    std::vector<std::pair<size_t, library::PlaylistItem>> removed;
+    for (size_t i : indices)
+        if (i < p->items.size()) removed.emplace_back(i, p->items[i]);
+    if (removed.empty()) return;
+    TheApp().playlists().RemoveIndices(id, indices);
     TheApp().libraryChanged.Emit();
-    Toast(Tr(L"Removed from playlist"), "remove", Tr(L"Undo"), [id, index, item] {
-        if (!TheApp().playlists().Add(id, {item}, static_cast<int>(index))) return;  // the playlist is gone
+    const std::wstring text = removed.size() == 1 ? std::wstring(Tr(L"Removed from playlist"))
+                                                  : Fmt(Tr(L"Removed from playlist: {0}"), static_cast<long long>(removed.size()));
+    Toast(text, "remove", Tr(L"Undo"), [id, removed] {
+        // In ascending order each item lands back at its old index.
+        for (const auto& [index, item] : removed)
+            if (!TheApp().playlists().Add(id, {item}, static_cast<int>(index))) return;  // the playlist is gone
         TheApp().libraryChanged.Emit();
     });
 }
@@ -136,6 +158,8 @@ public:
         Refresh();
     }
 
+    std::wstring CountText(long long n) const override { return CountPlaylists(n); }
+
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;
         SortMenuItems(m, {{L"Title A-Z", "name"},
@@ -157,6 +181,17 @@ protected:
     unsigned RowColumns() const override { return kColDate; }
 
     void Build() override {
+        // Favorites lead the playlists as a list of their own (UX-17), no longer a tab of History.
+        const size_t favs = TheApp().favorites().All().size();
+        if (favs > 0 && Matches(Tr(L"Favorites"))) {
+            Entry f;
+            f.kind = EntryKind::Playlist;
+            f.title = Tr(L"Favorites");
+            f.subtitle = CountItems(static_cast<long long>(favs));
+            f.icon = "favorite";
+            f.count = list_ || compact_ ? static_cast<int>(favs) : -1;
+            AddRoute(std::move(f), Route{Section::Playlists, L"favorites"});
+        }
         Entry create;
         create.kind = EntryKind::Action;
         create.title = Tr(L"Create playlist");
@@ -240,6 +275,7 @@ public:
 
     // "2 items · 1:30" beside the buttons says it; the header doesn't repeat it (UX-15).
     long long ItemCount() const override { return summary_->visible && toolbar_->visible && filter_.empty() ? -1 : count_; }
+    std::wstring CountText(long long n) const override { return songs_ ? CountSongs(n) : CountItems(n); }
 
     std::vector<MenuItem> SortMenu() override {
         std::vector<MenuItem> m;
@@ -277,7 +313,7 @@ protected:
             double duration;
         };
         std::vector<Row> rows;
-        size_t videos = 0;
+        size_t videos = 0, songs = 0;
         double total = 0;
         for (size_t i = 0; i < p->items.size(); ++i) {
             const library::PlaylistItem& it = p->items[i];
@@ -288,9 +324,11 @@ protected:
             const double dur = it.duration > 0 ? it.duration : (m ? m->duration : 0);
             total += dur;
             if (library::KindOf(it.path) == library::MediaKind::Video) ++videos;
+            if (library::KindOf(it.path) == library::MediaKind::Audio) ++songs;
             if (Matches(title + L" " + it.path)) rows.push_back({i, std::move(title), dur});
         }
         videos_ = videos * 2 >= p->items.size() && !p->items.empty();
+        songs_ = songs == p->items.size();
         const std::string sort = SortValue("manual");
         AddColumns(sort, {{kHeadTitle, L"Title", "title"}, {kHeadSubtitle, L"Details", ""}, {kHeadDuration, L"Length", "duration"}});
         if (sort != "manual") {
@@ -330,7 +368,7 @@ protected:
             plIndex_.resize(static_cast<size_t>(at), kNoItem);  // the column titles' row
             plIndex_.push_back(r.index);
         }
-        std::wstring s = CountItems(static_cast<long long>(p->items.size()));
+        std::wstring s = CountText(static_cast<long long>(p->items.size()));
         if (total > 0) s += L" · " + FormatDuration(total);
         summary_->SetText(s);
     }
@@ -347,13 +385,41 @@ protected:
         if (pi == kNoItem) return;
         const std::string plId = id_;
         m.push_back(MenuItem::Separator());
-        m.push_back(Item(L"Remove from Playlist", "remove", [plId, pi] { RemoveFromPlaylist(plId, pi); }));
+        // Keyboard and menu reorder, as in the queue (UX-11); the list must show the playlist's order.
+        if (grid_->reorderable) {
+            const bool up = PlIndex(index - 1) != kNoItem, down = PlIndex(index + 1) != kNoItem;
+            MenuItem u = Item(L"Move up", "arrow_up", [this, index] { Move(index, index - 1); }, up);
+            u.shortcut = L"Alt+↑";
+            m.push_back(std::move(u));
+            MenuItem d = Item(L"Move down", "arrow_down", [this, index] { Move(index, index + 1); }, down);
+            d.shortcut = L"Alt+↓";
+            m.push_back(std::move(d));
+            m.push_back(MenuItem::Separator());
+        }
+        m.push_back(Item(L"Remove from Playlist", "remove", [plId, pi] { RemoveFromPlaylist(plId, {pi}); }));
+    }
+
+    void ExtraSelectionMenu(const std::vector<int>& sel, std::vector<MenuItem>& m) override {
+        std::vector<size_t> picked;
+        for (int i : sel)
+            if (PlIndex(i) != kNoItem) picked.push_back(PlIndex(i));
+        if (picked.empty()) return;
+        const std::string plId = id_;
+        m.push_back(MenuItem::Separator());
+        m.push_back(Item(L"Remove from Playlist", "remove", [plId, picked] { RemoveFromPlaylist(plId, picked); }));
     }
 
     void Delete(int index) override {
         const size_t pi = PlIndex(index);
         if (pi == kNoItem) return;
-        RemoveFromPlaylist(id_, pi);
+        // Delete removes every selected row when several are selected.
+        const std::vector<int> sel = grid_->Marked(index) ? grid_->Selection() : std::vector<int>{index};
+        std::vector<size_t> picked;
+        for (int i : sel)
+            if (PlIndex(i) != kNoItem) picked.push_back(PlIndex(i));
+        if (picked.empty()) picked.push_back(pi);
+        index = std::min(index, sel.front());
+        RemoveFromPlaylist(id_, picked);
         // Keep the keyboard position on the next row.
         const auto& v = grid_->Entries();
         for (int i = std::min(index, static_cast<int>(v.size()) - 1); i >= 0; --i)
@@ -390,6 +456,7 @@ private:
 
     std::string id_;
     bool videos_ = false;
+    bool songs_ = false;  // only songs: counted as songs, not items
     Label* summary_ = nullptr;
     std::vector<size_t> plIndex_;  // grid entry -> playlist position
 };

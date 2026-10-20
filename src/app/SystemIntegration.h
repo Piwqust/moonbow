@@ -8,7 +8,9 @@ namespace app {
 // Windows shell integration for the main window:
 //  - taskbar progress and the previous / play-pause / next thumbnail buttons;
 //  - System Media Transport Controls (media keys, the volume flyout card);
-//  - the notification area icon (interface.trayIcon / minimizeToTray / notifyTrackChange).
+//  - the notification area icon (interface.trayIcon / minimizeToTray / notifyTrackChange);
+//  - the taskbar jump list's recent files.
+// --automation instances get none of it; with LUMEN_TRACE they trace what they would send.
 class SystemIntegration {
 public:
     SystemIntegration();
@@ -24,6 +26,9 @@ public:
     void SettingsChanged();
     // The thumbnail buttons' tooltips follow general.language.
     void LanguageChanged();
+    // A play was recorded or the history cleared: the jump list's recent files and the item the
+    // media keys resume follow it.
+    void HistoryChanged();
 
 private:
     struct Impl;

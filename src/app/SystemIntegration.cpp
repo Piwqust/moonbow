@@ -1,26 +1,40 @@
 #include "app/SystemIntegration.h"
 
+#include "Trace.h"
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/MainWindow.h"
 #include "app/player/NowPlaying.h"
 #include "core/ShellText.h"
 #include "gfx/Gpu.h"
 #include "gfx/Icons.h"
+#include "library/History.h"
+#include "library/Thumbnails.h"
+#include "ui/Anim.h"
 #include "ui/Host.h"
 
 #include <shellapi.h>
+#include <shcore.h>
+#include <shlwapi.h>
+#include <wincodec.h>
 #include <windowsx.h>
 #include <shobjidl.h>
+#include <propkey.h>
+#include <propvarutil.h>
 #include <systemmediatransportcontrolsinterop.h>
 
 #pragma warning(push)
 #pragma warning(disable : 4265 4946 5205 4459 4100)
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
+#include <winrt/Windows.Storage.Streams.h>
 #pragma warning(pop)
 
+#include <chrono>
+#include <functional>
+#include <mutex>
 #include <vector>
 
 namespace app {
@@ -29,14 +43,136 @@ namespace {
 
 constexpr UINT WM_APP_SMTC = WM_APP + 90;
 constexpr UINT WM_APP_TRAY = WM_APP + 91;
+constexpr UINT WM_APP_SMTC_SEEK = WM_APP + 92;  // wParam: milliseconds
 constexpr UINT kTrayId = 1;
 enum TrayCommand : UINT { kTrayShow = 100, kTrayPlay, kTrayPrev, kTrayNext, kTrayQuit };
 constexpr UINT kBtnPrev = 1, kBtnPlay = 2, kBtnNext = 3;
 
 namespace wm = winrt::Windows::Media;
+namespace wss = winrt::Windows::Storage::Streams;
 
-// Renders a design icon into an HICON (white, for the dark taskbar flyout).
-HICON MakeIcon(const char* name, int px) {
+// The cover or video frame of `path` the thumbnail cache holds already (the library and the
+// music view ask for them); null when there is none yet.
+std::shared_ptr<const library::ThumbnailBitmap> CachedCover(const std::wstring& path) {
+    for (int size : {320, 480, 720, 192, 1024, 96})
+        if (auto bmp = TheApp().thumbnails().Cached(path, size); bmp && bmp->width && bmp->height) return bmp;
+    return nullptr;
+}
+
+// CachedCover as a PNG for the media flyout.
+wss::IRandomAccessStream CachedCoverPng(const std::wstring& path) {
+    const auto bmp = CachedCover(path);
+    if (!bmp) return nullptr;
+    gfx::ComPtr<IWICImagingFactory> wic;
+    gfx::ComPtr<IStream> stream;
+    stream.Attach(SHCreateMemStream(nullptr, 0));
+    gfx::ComPtr<IWICBitmapEncoder> encoder;
+    gfx::ComPtr<IWICBitmapFrameEncode> frame;
+    WICPixelFormatGUID format = GUID_WICPixelFormat32bppPBGRA;
+    if (!stream || FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) ||
+        FAILED(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder)) ||
+        FAILED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache)) ||
+        FAILED(encoder->CreateNewFrame(&frame, nullptr)) || FAILED(frame->Initialize(nullptr)) ||
+        FAILED(frame->SetSize(bmp->width, bmp->height)) || FAILED(frame->SetPixelFormat(&format)))
+        return nullptr;
+    // PNG takes straight BGRA: the same bytes for an opaque cover.
+    if (format != GUID_WICPixelFormat32bppPBGRA && format != GUID_WICPixelFormat32bppBGRA) return nullptr;
+    if (FAILED(frame->WritePixels(bmp->height, bmp->width * 4, static_cast<UINT>(bmp->pixels.size()),
+                                  const_cast<BYTE*>(bmp->pixels.data()))) ||
+        FAILED(frame->Commit()) || FAILED(encoder->Commit()))
+        return nullptr;
+    stream->Seek({}, STREAM_SEEK_SET, nullptr);
+    wss::IRandomAccessStream out{nullptr};
+    if (FAILED(CreateRandomAccessStreamOverStream(stream.Get(), BSOS_DEFAULT, winrt::guid_of<wss::IRandomAccessStream>(),
+                                                  winrt::put_abi(out))))
+        return nullptr;
+    return out;
+}
+
+// What media Play starts while nothing is loaded: the queue's current item, or else the newest
+// unfinished history item, as WMP and Spotify continue the last one.
+std::wstring ResumePath() {
+    App& app = TheApp();
+    if (const QueueItem* item = app.queue().CurrentItem()) return item->path;
+    for (const library::HistoryEntry& e : app.history().Entries())
+        if (e.path.find(L"://") == std::wstring::npos && e.Progress() < 0.95) return e.path;
+    return {};
+}
+
+// The taskbar jump list's "Recent": links to Lumen with the newest local files of the history,
+// written off the UI thread (the shell's COM objects take a while to load). A list of our own:
+// the shell's automatic one shows only file types registered to the app, and SHAddToRecentDocs
+// also fills Windows' Recent items, which "Clear history" could only take back by wiping every
+// app's (SHAddToRecentDocs(0, nullptr)).
+struct JumpList {
+    std::wstring exe, category;
+    std::vector<std::pair<std::wstring, std::wstring>> items;  // path, title
+
+    static void CALLBACK Write(PTP_CALLBACK_INSTANCE, void* context) {
+        const std::unique_ptr<JumpList> job(static_cast<JumpList*>(context));
+        static std::mutex one;  // CommitList calls must not interleave
+        const std::lock_guard<std::mutex> lock(one);
+        if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
+        job->Commit();
+        CoUninitialize();
+    }
+
+    void Commit() const {
+        gfx::ComPtr<ICustomDestinationList> list;
+        gfx::ComPtr<IObjectArray> removed;
+        gfx::ComPtr<IObjectCollection> links;
+        UINT slots = 0;
+        if (FAILED(CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&list))) ||
+            FAILED(CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&links))) ||
+            FAILED(list->BeginList(&slots, IID_PPV_ARGS(&removed))))
+            return;
+        // Links the user removed from the list must not come back (AppendCategory refuses them).
+        std::vector<std::wstring> gone;
+        UINT n = 0;
+        removed->GetCount(&n);
+        for (UINT i = 0; i < n; ++i) {
+            gfx::ComPtr<IShellLinkW> link;
+            wchar_t args[MAX_PATH * 2] = {};
+            if (SUCCEEDED(removed->GetAt(i, IID_PPV_ARGS(&link))) && SUCCEEDED(link->GetArguments(args, MAX_PATH * 2)))
+                gone.push_back(args);
+        }
+        UINT added = 0;
+        for (const auto& [path, title] : items) {
+            const std::wstring args = L"\"" + path + L"\"";
+            if (added >= slots || std::find(gone.begin(), gone.end(), args) != gone.end()) continue;
+            gfx::ComPtr<IShellLinkW> link;
+            gfx::ComPtr<IPropertyStore> props;
+            PROPVARIANT name;
+            if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) ||
+                FAILED(link->SetPath(exe.c_str())) || FAILED(link->SetArguments(args.c_str())) ||
+                FAILED(link.As(&props)) || FAILED(InitPropVariantFromString(title.c_str(), &name)))
+                continue;
+            link->SetDescription(path.c_str());  // the tooltip
+            const bool named = SUCCEEDED(props->SetValue(PKEY_Title, name)) && SUCCEEDED(props->Commit());
+            PropVariantClear(&name);
+            if (named && SUCCEEDED(links->AddObject(link.Get()))) ++added;
+        }
+        gfx::ComPtr<IObjectArray> array;
+        if (added && SUCCEEDED(links.As(&array))) list->AppendCategory(category.c_str(), array.Get());
+        list->CommitList();
+    }
+};
+
+winrt::Windows::Foundation::TimeSpan Ticks(double seconds) {
+    return std::chrono::duration_cast<winrt::Windows::Foundation::TimeSpan>(
+        std::chrono::duration<double>(std::max(0.0, seconds)));
+}
+
+// The taskbar's own mode (not the apps' one): the thumbnail buttons sit on its preview flyout.
+bool SystemUsesLightTheme() {
+    DWORD light = 0, size = sizeof(light);
+    return RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS &&
+           light != 0;
+}
+
+// Draws a px x px HICON with Direct2D.
+HICON RenderIcon(int px, const std::function<void(ID2D1DeviceContext5*)>& draw) {
     gfx::Gpu& gpu = gfx::Gpu::Get();
     if (!gpu.Ready()) return nullptr;
     ID2D1DeviceContext5* ctx = gpu.Ctx();
@@ -55,8 +191,7 @@ HICON MakeIcon(const char* name, int px) {
     ctx->SetDpi(96, 96);
     ctx->BeginDraw();
     ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
-    const ui::Color white = ui::Color::Hex(0xFFFFFF);
-    gfx::Icons::Draw(ctx, name, {0, 0, static_cast<float>(px), static_cast<float>(px)}, white, white);
+    draw(ctx);
     const HRESULT hr = ctx->EndDraw();
     ctx->SetTarget(old.Get());
     ctx->SetDpi(dx, dy);
@@ -92,6 +227,28 @@ HICON MakeIcon(const char* name, int px) {
     return icon;
 }
 
+// A design icon for the thumbnail buttons.
+HICON MakeIcon(const char* name, int px, ui::Color glyph) {
+    return RenderIcon(px, [&](ID2D1DeviceContext5* ctx) {
+        gfx::Icons::Draw(ctx, name, {0, 0, static_cast<float>(px), static_cast<float>(px)}, glyph, glyph);
+    });
+}
+
+// A cover cut to a square, for the track notification.
+HICON CoverIcon(const library::ThumbnailBitmap& cover, int px) {
+    return RenderIcon(px, [&](ID2D1DeviceContext5* ctx) {
+        gfx::ComPtr<ID2D1Bitmap> bmp;
+        const D2D1_BITMAP_PROPERTIES props =
+            D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        if (FAILED(ctx->CreateBitmap(D2D1::SizeU(cover.width, cover.height), cover.pixels.data(), cover.width * 4, props, &bmp)))
+            return;
+        const float w = static_cast<float>(cover.width), h = static_cast<float>(cover.height), side = std::min(w, h);
+        const D2D1_RECT_F src{(w - side) / 2, (h - side) / 2, (w + side) / 2, (h + side) / 2};
+        const D2D1_RECT_F dst{0, 0, static_cast<float>(px), static_cast<float>(px)};
+        ctx->DrawBitmap(bmp.Get(), &dst, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, &src, nullptr);
+    });
+}
+
 }  // namespace
 
 struct SystemIntegration::Impl {
@@ -100,14 +257,23 @@ struct SystemIntegration::Impl {
     gfx::ComPtr<ITaskbarList3> taskbar;
     bool buttonsAdded = false;
     HICON prev = nullptr, play = nullptr, pause = nullptr, next = nullptr;
-    bool shownPlaying = false;
+    UINT iconDpi = 0;
+    bool lightIcons = false;
+    bool shownPlaying = false, shownPrev = true, shownNext = true;
     wm::SystemMediaTransportControls smtc{nullptr};
-    winrt::event_token buttonToken{};
+    winrt::event_token buttonToken{}, seekToken{};
+    bool trace = false;      // --automation with LUMEN_TRACE: no shell integration, traces what it would send
+    std::wstring smtcPath;   // the item the media flyout shows (empty: disabled)
+    bool smtcCover = false;  // ...with its picture
+    int smtcFlags = -1;      // previous | next << 1 | shuffle << 2 | repeat << 3, as last sent
+    double timelinePos = 0, timelineAt = 0;
     double lastProgress = -1;
     UINT trayCreated = 0;  // "TaskbarCreated": Explorer restarted, add the icon again
     bool trayAdded = false;
     bool trayV4 = false;  // NOTIFYICON_VERSION_4: callbacks carry the icon's anchor in wParam
     std::wstring trayTip, notifiedPath;
+    std::wstring notifyPath, notifyText;  // a track notification waiting for its cover
+    unsigned notifySerial = 0;
 
     ~Impl() {
         RemoveTray();
@@ -116,19 +282,30 @@ struct SystemIntegration::Impl {
         if (smtc) {
             try {
                 smtc.ButtonPressed(buttonToken);
+                smtc.PlaybackPositionChangeRequested(seekToken);
                 smtc.IsEnabled(false);
             } catch (...) {
             }
         }
     }
 
+    // Glyphs for the taskbar's mode at the window's DPI, made again when either changes.
     bool EnsureIcons() {
-        if (play) return true;
-        const int px = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(hwnd));
-        prev = MakeIcon("previous", px);
-        play = MakeIcon("play", px);
-        pause = MakeIcon("pause", px);
-        next = MakeIcon("next", px);
+        const UINT dpi = GetDpiForWindow(hwnd);
+        const bool light = SystemUsesLightTheme();
+        if (play && dpi == iconDpi && light == lightIcons) return true;
+        const HICON old[] = {prev, play, pause, next};
+        iconDpi = dpi;
+        lightIcons = light;
+        const int px = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+        const ui::Color color = ui::Color::Hex(light ? 0x000000 : 0xFFFFFF);
+        prev = MakeIcon("previous", px, color);
+        play = MakeIcon("play", px, color);
+        pause = MakeIcon("pause", px, color);
+        next = MakeIcon("next", px, color);
+        UpdateButtons();  // the taskbar shows the old handles until then
+        for (HICON i : old)
+            if (i) DestroyIcon(i);
         return play != nullptr;
     }
 
@@ -138,16 +315,17 @@ struct SystemIntegration::Impl {
             UINT id;
             HICON icon;
             const wchar_t* tip;
-        } defs[] = {{kBtnPrev, prev, Tr(L"Previous")},
-                    {kBtnPlay, shownPlaying ? pause : play, shownPlaying ? Tr(L"Pause") : Tr(L"Play")},
-                    {kBtnNext, next, Tr(L"Next")}};
+            bool enabled;
+        } defs[] = {{kBtnPrev, prev, Tr(L"Previous"), shownPrev},
+                    {kBtnPlay, shownPlaying ? pause : play, shownPlaying ? Tr(L"Pause") : Tr(L"Play"), true},
+                    {kBtnNext, next, Tr(L"Next"), shownNext}};
         for (int i = 0; i < 3; ++i) {
             b[i] = {};
             b[i].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
             b[i].iId = defs[i].id;
             b[i].hIcon = defs[i].icon;
             wcsncpy_s(b[i].szTip, defs[i].tip, _TRUNCATE);
-            b[i].dwFlags = THBF_ENABLED;
+            b[i].dwFlags = defs[i].enabled ? THBF_ENABLED : THBF_DISABLED;
         }
     }
 
@@ -165,9 +343,13 @@ struct SystemIntegration::Impl {
         taskbar->ThumbBarUpdateButtons(hwnd, 3, b);
     }
 
-    void UpdatePlayButton(bool playing) {
-        if (playing == shownPlaying) return;
+    // Previous / Next as the player's own buttons: disabled with nothing before / after.
+    void SyncButtons(bool playing) {
+        const bool prevOn = Enabled(Action::Previous), nextOn = Enabled(Action::Next);
+        if (playing == shownPlaying && prevOn == shownPrev && nextOn == shownNext) return;
         shownPlaying = playing;
+        shownPrev = prevOn;
+        shownNext = nextOn;
         UpdateButtons();
     }
 
@@ -222,16 +404,35 @@ struct SystemIntegration::Impl {
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 
-    void NotifyTrack(const std::wstring& text) {
+    // The notification shows the file's cover: it is asked for now and waited for a moment.
+    void NotifyTrack(const std::wstring& path, const std::wstring& text) {
         if (!trayAdded || !TheApp().config().GetBool("interface.notifyTrackChange")) return;
         // Only worth a notification when Lumen isn't what the user is looking at.
         if (GetForegroundWindow() == hwnd && !IsIconic(hwnd)) return;
+        notifyPath = path;
+        notifyText = text;
+        const unsigned serial = ++notifySerial;
+        TheApp().images().Get(path, 320);
+        if (MainWindow* w = TheApp().main())
+            w->StartTimer(1000, [this, serial] {
+                if (serial == notifySerial) SendNotification();
+            });
+        if (CachedCover(path)) SendNotification();
+    }
+
+    void SendNotification() {
+        if (notifyText.empty() || !trayAdded) return;
         NOTIFYICONDATAW nid = TrayData();
         nid.uFlags = NIF_INFO;
         nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND;
         wcscpy_s(nid.szInfoTitle, FitShellText(Tr(L"Now playing"), {}, std::size(nid.szInfoTitle)).c_str());
-        wcscpy_s(nid.szInfo, FitShellText(text, {}, std::size(nid.szInfo)).c_str());
+        wcscpy_s(nid.szInfo, FitShellText(notifyText, {}, std::size(nid.szInfo)).c_str());
+        // Without a cover NIIF_USER shows the tray icon.
+        const auto cover = CachedCover(notifyPath);
+        nid.hBalloonIcon = cover ? CoverIcon(*cover, GetSystemMetricsForDpi(SM_CXICON, GetDpiForWindow(hwnd))) : nullptr;
         Shell_NotifyIconW(NIM_MODIFY, &nid);
+        if (nid.hBalloonIcon) DestroyIcon(nid.hBalloonIcon);
+        notifyText.clear();
     }
 
     void ShowWindowFromTray() const {
@@ -284,8 +485,78 @@ struct SystemIntegration::Impl {
                 // Raised on a worker thread: hand it to the UI thread.
                 PostMessageW(target, WM_APP_SMTC, static_cast<WPARAM>(args.Button()), 0);
             });
+            // A drag of the flyout's position bar (offered by the timeline's seek range).
+            seekToken = smtc.PlaybackPositionChangeRequested(
+                [target](auto&&, const wm::PlaybackPositionChangeRequestedEventArgs& args) {
+                    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(args.RequestedPlaybackPosition());
+                    PostMessageW(target, WM_APP_SMTC_SEEK, static_cast<WPARAM>(std::max<long long>(0, ms.count())), 0);
+                });
         } catch (...) {
             smtc = nullptr;
+        }
+    }
+
+    // Previous / Next as the player's own buttons, shuffle and repeat as the queue has them.
+    void SyncSmtcFlags() {
+        if (smtcPath.empty()) return;
+        const PlayQueue& q = TheApp().queue();
+        const int flags = (Enabled(Action::Previous) ? 1 : 0) | (Enabled(Action::Next) ? 2 : 0) | (q.Shuffle() ? 4 : 0) |
+                          static_cast<int>(q.RepeatMode()) << 3;
+        if (flags == smtcFlags) return;
+        smtcFlags = flags;
+        Trace(("smtc: previous " + std::to_string(flags & 1) + " next " + std::to_string((flags >> 1) & 1) +
+               " shuffle " + std::to_string((flags >> 2) & 1) + " repeat " + std::to_string(flags >> 3))
+                  .c_str());
+        if (!smtc) return;
+        try {
+            smtc.IsPreviousEnabled((flags & 1) != 0);
+            smtc.IsNextEnabled((flags & 2) != 0);
+            smtc.ShuffleEnabled((flags & 4) != 0);
+            smtc.AutoRepeatMode(q.RepeatMode() == Repeat::One   ? wm::MediaPlaybackAutoRepeatMode::Track
+                                : q.RepeatMode() == Repeat::All ? wm::MediaPlaybackAutoRepeatMode::List
+                                                                : wm::MediaPlaybackAutoRepeatMode::None);
+        } catch (...) {
+        }
+    }
+
+    // The flyout moves its position bar on by itself while playing: sent on a file, a pause or
+    // play, and when the position jumps (a seek) or stalls.
+    void SyncTimeline(const PlayerState& s, bool force) {
+        const double now = ui::AnimFloat::Now();
+        const double expected = timelinePos + (s.paused ? 0.0 : (now - timelineAt) / 1000.0 * s.speed);
+        if (!force && std::abs(s.position - expected) < 1.5) return;
+        timelinePos = s.fileLoaded ? s.position : 0;
+        timelineAt = now;
+        const double end = s.fileLoaded ? std::max(0.0, s.duration) : 0;
+        char line[80];
+        snprintf(line, sizeof(line), "smtc: timeline %.1f / %.1f", timelinePos, end);
+        Trace(line);
+        if (!smtc) return;
+        try {
+            wm::SystemMediaTransportControlsTimelineProperties t;
+            t.StartTime(Ticks(0));
+            t.MinSeekTime(Ticks(0));
+            t.EndTime(Ticks(end));
+            t.MaxSeekTime(Ticks(s.seekable ? end : 0));
+            t.Position(Ticks(timelinePos));
+            smtc.UpdateTimelineProperties(t);
+        } catch (...) {
+        }
+    }
+
+    // The flyout's picture of smtcPath, once the thumbnail cache has one.
+    void ShowCover() {
+        if (smtcCover || smtcPath.empty()) return;
+        try {
+            const wss::IRandomAccessStream png = CachedCoverPng(smtcPath);
+            if (!png) return;
+            smtcCover = true;
+            Trace(("smtc: cover, png of " + std::to_string(png.Size()) + " bytes").c_str());
+            if (!smtc) return;
+            auto updater = smtc.DisplayUpdater();
+            updater.Thumbnail(wss::RandomAccessStreamReference::CreateFromStream(png));
+            updater.Update();
+        } catch (...) {
         }
     }
 };
@@ -295,7 +566,14 @@ SystemIntegration::~SystemIntegration() = default;
 
 void SystemIntegration::Attach(HWND window) {
     impl_->hwnd = window;
-    if (ui::Host::Automation()) return;
+    TheApp().images().ready.Connect([this] {  // both live as long as the app
+        impl_->ShowCover();
+        if (!impl_->notifyText.empty() && CachedCover(impl_->notifyPath)) impl_->SendNotification();
+    });
+    if (ui::Host::Automation()) {
+        impl_->trace = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+        return;
+    }
     impl_->taskbarCreated = RegisterWindowMessageW(L"TaskbarButtonCreated");
     impl_->trayCreated = RegisterWindowMessageW(L"TaskbarCreated");
     // Let the (non-elevated or elevated) shell deliver it either way.
@@ -305,6 +583,27 @@ void SystemIntegration::Attach(HWND window) {
     ChangeWindowMessageFilterEx(window, WM_COMMAND, MSGFLT_ALLOW, nullptr);
     impl_->InitSmtc();
     impl_->SyncTray();
+    // Items added to or removed from the queue enable Previous / Next. Both live as long as the app.
+    TheApp().queue().changed.Connect([this] { Update(0); });
+}
+
+void SystemIntegration::HistoryChanged() {
+    auto job = std::make_unique<JumpList>();
+    for (const library::HistoryEntry& e : TheApp().history().Entries()) {
+        if (job->items.size() >= 10) break;
+        if (e.path.find(L"://") == std::wstring::npos) job->items.push_back({e.path, e.title.empty() ? FileNameOf(e.path) : e.title});
+    }
+    Update(kChangeState);
+    if (ui::Host::Automation()) {
+        // Never in a test instance: the list is the owner's.
+        if (impl_->trace) Trace(("jump list: " + std::to_string(job->items.size()) + " recent").c_str());
+        return;
+    }
+    wchar_t exe[MAX_PATH * 2];
+    const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH * 2);
+    job->exe.assign(exe, n);
+    job->category = Tr(L"Recent");
+    if (TrySubmitThreadpoolCallback(JumpList::Write, job.get(), nullptr)) job.release();
 }
 
 void SystemIntegration::LanguageChanged() {
@@ -327,7 +626,8 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
     // or media-key command reaches the player.
     if (TheApp().Quitting()) {
         d.RemoveTray();
-        if (msg == WM_APP_TRAY || msg == WM_APP_SMTC || (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED)) {
+        if (msg == WM_APP_TRAY || msg == WM_APP_SMTC || msg == WM_APP_SMTC_SEEK ||
+            (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED)) {
             *result = 0;
             return true;
         }
@@ -372,6 +672,11 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
         *result = 0;
         return true;
     }
+    if ((msg == WM_SETTINGCHANGE && lp && wcscmp(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0) ||
+        msg == WM_DPICHANGED) {
+        if (d.buttonsAdded) d.EnsureIcons();
+        return false;
+    }
     if (msg == WM_COMMAND && HIWORD(wp) == THBN_CLICKED) {
         switch (LOWORD(wp)) {
             case kBtnPrev: Run(Action::Previous); break;
@@ -384,15 +689,28 @@ bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* r
     }
     if (msg == WM_APP_SMTC) {
         using B = wm::SystemMediaTransportControlsButton;
-        const PlayerState& s = TheApp().player().State();
+        App& app = TheApp();
+        const PlayerState& s = app.player().State();
         switch (static_cast<B>(wp)) {
-            case B::Play: if (s.paused || !s.fileLoaded) Run(Action::PlayPause); break;
+            case B::Play:
+                if (!s.fileLoaded && !app.queue().CurrentItem()) {
+                    if (const std::wstring path = ResumePath(); !path.empty()) app.Open({path});
+                } else if (s.paused || !s.fileLoaded) {
+                    Run(Action::PlayPause);
+                }
+                break;
             case B::Pause: if (!s.paused) Run(Action::PlayPause); break;
             case B::Stop: Run(Action::Stop); break;
             case B::Next: Run(Action::Next); break;
             case B::Previous: Run(Action::Previous); break;
             default: break;
         }
+        *result = 0;
+        return true;
+    }
+    if (msg == WM_APP_SMTC_SEEK) {
+        const PlayerState& s = TheApp().player().State();
+        if (s.fileLoaded && s.seekable) TheApp().player().SeekAbsolute(static_cast<double>(wp) / 1000.0, true);
         *result = 0;
         return true;
     }
@@ -404,7 +722,7 @@ void SystemIntegration::Update(unsigned changes) {
     App& app = TheApp();
     const PlayerState& s = app.player().State();
     if (d.taskbar && !d.buttonsAdded) d.AddButtons();
-    d.UpdatePlayButton(s.fileLoaded && !s.paused);
+    d.SyncButtons(s.fileLoaded && !s.paused);
 
     // Taskbar progress.
     if (d.taskbar && app.config().GetBool("interface.taskbarProgress")) {
@@ -421,6 +739,9 @@ void SystemIntegration::Update(unsigned changes) {
         }
     }
 
+    if (!d.smtcPath.empty() && s.fileLoaded && (changes & kChangeTime)) d.SyncTimeline(s, false);
+    d.SyncSmtcFlags();
+
     if (!(changes & (kChangeState | kChangeFile | kChangeMeta))) return;
     // The tags as the player screens show them (the library's reader first, then mpv's).
     const PlayingTags& tags = CurrentTags();
@@ -429,34 +750,66 @@ void SystemIntegration::Update(unsigned changes) {
 
     // Tray tooltip and track notification (once per file).
     if (changes & (kChangeFile | kChangeMeta)) {
-        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" — Lumen", std::size(NOTIFYICONDATAW{}.szTip))
+        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" вЂ” Lumen", std::size(NOTIFYICONDATAW{}.szTip))
                                                      : L"Lumen");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
-            d.NotifyTrack(tags.artist.empty() ? title : title + L"\n" + tags.artist);
+            d.NotifyTrack(item->path, tags.artist.empty() ? title : title + L"\n" + tags.artist);
         }
     }
 
-    // Media transport controls.
-    if (!d.smtc) return;
+    // Media transport controls. With nothing loaded they offer the item media Play resumes, so
+    // the media keys work from the start.
+    if (!d.smtc && !d.trace) return;
     try {
-        const bool enabled = s.fileLoaded && app.config().GetBool("interface.mediaControls");
-        d.smtc.IsEnabled(enabled);
-        if (!enabled) return;
-        d.smtc.PlaybackStatus(s.paused ? wm::MediaPlaybackStatus::Paused : wm::MediaPlaybackStatus::Playing);
-        if (changes & (kChangeFile | kChangeMeta)) {
-            auto updater = d.smtc.DisplayUpdater();
-            if (s.hasVideo) {
-                updater.Type(wm::MediaPlaybackType::Video);
-                updater.VideoProperties().Title(title);
-            } else {
-                updater.Type(wm::MediaPlaybackType::Music);
-                updater.MusicProperties().Title(title);
-                updater.MusicProperties().Artist(tags.artist);
-                updater.MusicProperties().AlbumTitle(tags.album);
-            }
-            updater.Update();
+        const std::wstring path = s.fileLoaded ? (item ? item->path : s.path) : ResumePath();
+        const bool enabled = !path.empty() && app.config().GetBool("interface.mediaControls");
+        if (d.smtc) d.smtc.IsEnabled(enabled);
+        if (!enabled) {
+            if (!d.smtcPath.empty()) Trace("smtc: disabled");
+            d.smtcPath.clear();
+            d.smtcFlags = -1;
+            return;
         }
+        if (d.smtc)
+            d.smtc.PlaybackStatus(s.fileLoaded && !s.paused ? wm::MediaPlaybackStatus::Playing
+                                                            : wm::MediaPlaybackStatus::Paused);
+        if ((changes & (kChangeFile | kChangeMeta)) || path != d.smtcPath) {
+            std::wstring shown = title, artist = tags.artist, album = tags.album;
+            bool video = s.hasVideo;
+            if (!s.fileLoaded) {
+                const library::HistoryEntry* h = app.history().Find(path);
+                shown = h && !h->title.empty()                              ? h->title
+                        : item && item->path == path && !item->title.empty() ? item->title
+                                                                             : FileNameOf(path);
+                artist.clear();
+                album.clear();
+                video = library::KindOf(path) != library::MediaKind::Audio;
+            }
+            const bool newItem = path != d.smtcPath;
+            d.smtcPath = path;
+            if (newItem) d.smtcCover = false;
+            Trace(("smtc: " + std::string(video ? "video " : "music ") + WideToUtf8(shown) +
+                   (artist.empty() ? "" : " / " + WideToUtf8(artist)) + (s.fileLoaded ? "" : " (to resume)"))
+                      .c_str());
+            if (d.smtc) {
+                auto updater = d.smtc.DisplayUpdater();
+                if (video) {
+                    updater.Type(wm::MediaPlaybackType::Video);
+                    updater.VideoProperties().Title(shown);
+                } else {
+                    updater.Type(wm::MediaPlaybackType::Music);
+                    updater.MusicProperties().Title(shown);
+                    updater.MusicProperties().Artist(artist);
+                    updater.MusicProperties().AlbumTitle(album);
+                }
+                if (newItem) updater.Thumbnail(nullptr);  // not the previous item's picture
+                updater.Update();
+            }
+            d.ShowCover();
+            d.SyncSmtcFlags();
+        }
+        d.SyncTimeline(s, true);
     } catch (...) {
     }
 }

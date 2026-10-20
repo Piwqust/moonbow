@@ -26,9 +26,16 @@ std::wstring Grouped(long long n);
 // "12 songs" / "12 песен", "3 plays" / "3 прослушивания", "5 albums" / "5 альбомов".
 std::wstring CountSongs(long long n);
 std::wstring CountPlays(long long n);
+std::wstring CountFiles(long long n);  // "12 files" / "12 файлов"
 std::wstring CountAlbums(long long n);
 std::wstring CountStations(long long n);  // "5 станций"
 std::wstring CountEpisodes(long long n);  // "1 выпуск"
+// The header counts with the page's noun (UX-19): "3 альбома", "2 сериала", "5 плейлистов".
+std::wstring CountArtists(long long n);
+std::wstring CountGenres(long long n);
+std::wstring CountMovies(long long n);
+std::wstring CountShows(long long n);
+std::wstring CountPlaylists(long long n);
 // Tag labels for untagged songs: "Unknown artist" / "Unknown album".
 std::wstring ArtistLabel(const std::wstring& artist);
 std::wstring AlbumLabel(const std::wstring& album);
@@ -80,13 +87,16 @@ void AddToQueue(std::vector<QueueItem> items);
 // --- library roots ----------------------------------------------------------------------
 // Folder picker; adds the folder as a library root, saves and rescans.
 void AddFolderToLibrary();
-void RemoveLibraryRoot(const std::wstring& folder);
+// With an Undo toast in `toastHost` (the main window when null).
+void RemoveLibraryRoot(const std::wstring& folder, ui::Host* toastHost = nullptr);
 // A folder dropped on the window: added to the library when no root covers it yet, then opened
 // as a page (Music when it holds more songs than videos) to sort and pick from.
 void ShowFolderInLibrary(const std::wstring& folder);
 void RescanLibrary();
 // Forgets the history, saved positions, per-file settings and what the online services sent.
 void ClearHistory();
+// One entry (and its resume point), with an Undo toast.
+void RemoveFromHistory(const std::wstring& path);
 
 // --- shell ------------------------------------------------------------------------------
 void ShowInExplorer(const std::wstring& path);
@@ -101,6 +111,8 @@ SharedQueue ShareQueue(std::vector<QueueItem> items);
 // "Add to playlist" submenu: existing playlists + "New playlist…".
 std::vector<ui::MenuItem> AddToPlaylistMenu(SharedQueue items);
 ui::MenuItem Item(const wchar_t* label, const char* icon, std::function<void()> action, bool enabled = true);
+// "Library Folders…" for the pages' "More" menus: Settings › Library, where roots are listed.
+ui::MenuItem LibraryFoldersItem();
 
 // Standard menu for media files (Play, Play next, Add to queue, Add to playlist, Watched,
 // Favorite, Show in Explorer, Go to folder). `queue`/`index` are what "Play" starts.

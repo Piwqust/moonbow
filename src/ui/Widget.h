@@ -96,6 +96,8 @@ public:
     bool focusable = false;    // reachable with Tab, receives keys
     NcRole ncRole = NcRole::None;
     std::wstring tooltip;
+    std::wstring helpText;  // UI Automation HelpText; empty = the tooltip
+    std::wstring a11yName;  // what screen readers call it when no text it paints or label before it says so
     bool tooltipBeside = false;  // show the tooltip to the right (icon rails), not below
     LPCWSTR cursor = IDC_ARROW;
     std::string id;  // for debugging and tests
@@ -146,7 +148,14 @@ public:
     virtual void OnClick();
 
     std::function<void()> onClick;
+    // A right click, and the Menu key or Shift+F10 on the focused widget or one inside it (at
+    // MenuPoint). Only for a menu: the keyboard opens it without a click.
     std::function<void(const MouseEvent&)> onContextMenu;
+    // Where the Menu key opens it: the entry the keyboard is on. False: no entry, no menu.
+    virtual bool MenuPoint(Point& at) const {
+        at = {rect.Cx(), rect.Cy()};
+        return true;
+    }
     std::function<void()> onDoubleClick;
 
     // --- debugging --------------------------------------------------------------

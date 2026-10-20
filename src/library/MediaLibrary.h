@@ -52,7 +52,7 @@ struct MediaItem {
     // When the scanner first found the file (Unix ms); 0 = before the library kept this (and the
     // whole first scan of a folder), so a new library doesn't call everything new.
     int64_t firstSeen = 0;
-    std::wstring searchKey;  // SearchFold(name + title + artist + album)
+    std::wstring searchKey;  // SearchFold(name + title + artist + album + genre)
 
     // Title tag when present, else the file name.
     const std::wstring& DisplayTitle() const { return title.empty() ? name : title; }
@@ -86,6 +86,8 @@ public:
     uint64_t generation = 0;
     bool complete = false;  // metadata pass done (or disabled)
     std::vector<std::wstring> roots;
+    // Roots that were not reachable: their files are the cached ones, offline (a drive unplugged).
+    std::vector<std::wstring> missingRoots;
     std::vector<MediaItem> items;
     std::vector<FolderNode> folders;
     ScanStats stats;
@@ -95,12 +97,13 @@ public:
     const FolderNode* Folder(std::wstring_view path) const;
     const MediaItem* FindItem(std::wstring_view path) const;
 
-    std::vector<const FolderNode*> Roots() const;  // library roots that exist
+    std::vector<const FolderNode*> Roots() const;  // library roots with files (or cached ones)
     std::vector<const FolderNode*> Children(std::wstring_view folder) const;
     std::vector<const MediaItem*> ItemsIn(std::wstring_view folder, bool recursive) const;
     std::vector<const MediaItem*> Videos() const;
     std::vector<const MediaItem*> Music() const;
-    // Case-insensitive (Cyrillic-aware, "ё" = "е") substring search in names and tags.
+    // Case-insensitive (Cyrillic-aware, "ё" = "е") search in names and tags: every word of the
+    // query must appear (FoldedContains).
     // kind = Other searches everything.
     std::vector<const MediaItem*> Search(std::wstring_view query, MediaKind kind = MediaKind::Other) const;
 
@@ -171,6 +174,9 @@ public:
     const std::vector<std::wstring>& Roots() const { return roots_; }
     bool AddRoot(const std::wstring& folder);     // false if missing or already covered
     bool RemoveRoot(const std::wstring& folder);  // false if not a root
+    // Undo of RemoveRoot: back at `index`, also when the folder is unreachable now (an unplugged
+    // drive removed by mistake). False if it is a root already.
+    bool RestoreRoot(const std::wstring& folder, size_t index);
     void SetRoots(std::vector<std::wstring> folders);
 
     void SetOptions(const ScanOptions& options) { options_ = options; }

@@ -126,8 +126,8 @@ public:
     }
 };
 
-// Read-only key field: dark pill, the keys centred as in the Settings editor, "—" for an empty
-// slot, and an "open" arrow: a click opens the editor in Settings.
+// Read-only key field: each binding as a keycap centred as in the Settings editor, "—" for an
+// empty slot, and an "open" arrow on hover: a click opens the editor in Settings.
 class KeyField : public Widget {
 public:
     KeyField(std::wstring text, std::function<void()> edit) : text_(std::move(text)) {
@@ -135,20 +135,51 @@ public:
         height = Length::Px(33);
         tooltip = text_.empty() ? std::wstring(Tr(L"Edit in Settings")) : text_ + L"\n" + Tr(L"Edit in Settings");
         onClick = std::move(edit);
+        for (size_t at = 0; !text_.empty();) {
+            const size_t comma = text_.find(L", ", at);
+            keys_.push_back(text_.substr(at, comma == std::wstring::npos ? std::wstring::npos : comma - at));
+            if (comma == std::wstring::npos) break;
+            at = comma + 2;
+        }
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
-        p.Fill(rect, IsHot() ? Color::Mix(c.bgDeep, c.bgSelected, 0.35f) : c.bgDeep, 6);
+        const bool hot = IsHot();
+        if (hot) p.Fill(rect, c.hover, kRadiusControl);
         const Rect box{rect.x + kKeyInset, rect.y, rect.w - kKeyInset - kKeyIconRoom, rect.h};
-        if (text_.empty())
+        if (text_.empty()) {
             p.Text(L"—", box, TextStyle::Body, c.textDisabled, HAlign::Center);
-        else
-            p.Text(text_, box, TextStyle::Mono, SoftText(), HAlign::Center);
-        p.Icon("open", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, IsHot() ? c.textPrimary : c.textTertiary);
+        } else {
+            constexpr float kPad = 10, kGap = 6, kCapH = 26;
+            std::vector<float> widths;
+            float total = -kGap;
+            for (const std::wstring& k : keys_) {
+                widths.push_back(p.Measure(k, TextStyle::Mono).width + 2 * kPad);
+                total += widths.back() + kGap;
+            }
+            // Too many keys for the column: one cap with the whole list, cut with an ellipsis.
+            const bool one = total > box.w;
+            float x = std::round(box.Cx() - std::min(total, box.w) / 2);
+            for (size_t i = 0; i < (one ? 1 : keys_.size()); ++i) {
+                const Rect cap{x, std::round(rect.Cy() - kCapH / 2), one ? box.w : widths[i], kCapH};
+                p.Fill(cap.Offset(0, 1), c.lineControl.Fade(0.5f), kRadiusControl);  // key depth
+                p.Fill(cap, c.bgDeep, kRadiusControl);
+                p.Stroke(cap, c.line, kRadiusControl);
+                p.Text(one ? text_ : keys_[i], cap.Inset(Insets{kPad, 0, kPad, 0}), TextStyle::Mono, SoftText(),
+                       HAlign::Center, VAlign::Center, gfx::kTextEllipsis);
+                x += cap.w + kGap;
+            }
+        }
+        // The arrow only on the hovered field: on every row it was ~40 identical icons of noise.
+        if (hot) p.Icon("open", {rect.Right() - 29, rect.Cy() - 12, 24, 24}, c.textPrimary);
     }
+    // "Stop: S", not a bare "S": the action is in another column.
+    void Describe(A11y& a) override { a.name = action + L": " + (text_.empty() ? L"—" : text_); }
+    std::wstring action;
 
 private:
     std::wstring text_;
+    std::vector<std::wstring> keys_;
 };
 
 class ShortcutsList : public Widget {
@@ -215,8 +246,8 @@ public:
                     f->Close();
                     TheApp().OpenSettings("controls");
                 };
-                row->Add<KeyField>(k1, edit);
-                row->Add<KeyField>(k2, edit);
+                row->Add<KeyField>(k1, edit)->action = label;
+                row->Add<KeyField>(k2, edit)->action = label;
                 ++shown;
             }
         }
@@ -347,7 +378,7 @@ public:
             p.Image(bmp, rect.Inset(2), 5, true);
         } else {
             const Rect plus = rect.Center(30, 30);
-            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, 5);
+            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, kRadiusCard);
             p.Icon("add", plus.Inset(3), IsHot() ? c.textPrimary : c.textSecondary);
         }
         p.Stroke(rect, IsHot() ? c.line : c.bgPanel, 6, 2);
@@ -434,12 +465,13 @@ public:
             p.Text(Tr(L"Drag files into the box or click here to select files."), {rect.x, rect.y + 52, rect.w, 24},
                    TextStyle::Body, IsHot() ? c.textTertiary : c.textDisabled, HAlign::Center);
             const Rect plus{rect.Cx() - 42, rect.y + 96, 84, 30};
-            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, 5);
+            p.Fill(plus, IsHot() ? c.bgSelected : c.bgChrome, kRadiusCard);
             p.Icon("add", plus.Center(24, 24), IsHot() ? c.textPrimary : c.textSecondary);
             return;
         }
         p.PushClip(rect.Inset(2));
         const Rect area = ListRect();
+        const auto snap = TheApp().library().Current();  // songs by their title tag, as in the library
         for (size_t i = 0; i < files.size(); ++i) {
             const Rect r{area.x, area.y + i * kRowH - scroll_, area.w, kRowH};
             if (r.Bottom() < rect.y || r.y > rect.Bottom()) continue;
@@ -447,7 +479,8 @@ public:
             if (hot) p.Fill(r, c.hover, 4);
             p.Icon(library::KindOf(files[i]) == library::MediaKind::Audio ? "music" : "video",
                    {r.x + 6, r.Cy() - 10, 20, 20}, c.textTertiary);
-            p.Text(library::FileNameOf(files[i]), {r.x + 34, r.y, r.w - 74, r.h}, TextStyle::Body, SoftText());
+            const library::MediaItem* item = snap->FindItem(files[i]);
+            p.Text(item ? item->DisplayTitle() : library::FileNameOf(files[i]), {r.x + 34, r.y, r.w - 74, r.h}, TextStyle::Body, SoftText());
             if (hot) p.Icon("close", {r.Right() - 28, r.Cy() - 10, 20, 20}, hoverRemove_ ? c.textPrimary : c.textTertiary);
         }
         p.PopClip();
@@ -711,8 +744,8 @@ private:
         visible = true;
         if (!net::online::MetadataOn()) {
             auto* l = Add<Label>(net::online::MetadataKeyRejected()
-                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy.")
-                                     : Tr(L"Paste your TMDB API key in Settings › Privacy to see posters and descriptions."),
+                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy › Online services.")
+                                     : Tr(L"Paste your TMDB API key in Settings › Privacy › Online services to see posters and descriptions."),
                                  TextStyle::Body, Tone::Tertiary);
             l->wrap = true;
             l->width = Length::Grow();
@@ -807,6 +840,7 @@ void ShowKeyboardShortcutsDialog() {
         std::vector<Choice>{{Tr(L"All Fields"), "all"}, {Tr(L"Action"), "action"}, {Tr(L"Hotkey"), "key"}}, 0);
     mode->width = Length::Px(200);
     mode->height = Length::Px(34);
+    mode->a11yName = Tr(L"Search in");
 
     Widget* body = f->Body();
     body->pad = {20, shortWindow ? 10.0f : 20.0f, 20, 0};
@@ -903,44 +937,34 @@ void ShowNetworkStreamDialog() {
         }
     }
 
-    AddSeparator(body);
-    AddFieldHeader(body, Tr(L"Playlist name"), Tr(L"The playlist will be saved and displayed with this title."),
-                   Tr(L"(optional)"));
-    auto* name = body->Add<TextBox>(Tr(L"e.g., Favorite TV Channels"));
+    // One link just plays; several can be kept as a playlist, named only when that is asked for.
+    auto* save = body->Add<Checkbox>(Tr(L"Save as playlist"));
+    save->visible = false;
+    auto* name = body->Add<TextBox>(Tr(L"Playlist name"));
     name->width = Length::Grow();
     name->height = Length::Px(37);
+    name->visible = false;
 
-    // Buffering (Settings > Network) right here: streams are where it matters. Same
-    // heading + description scale as the two fields above.
-    AddSeparator(body);
-    auto* buf = body->Add<SideRow>();
-    Widget* bl = AddFieldHeader(
-        buf, Tr(L"Buffering"),
-        Tr(L"More buffering survives a slow connection but starts later. Applies to all streams."));
-    bl->width = Length::Grow();
-    std::vector<Choice> modes = {{Tr(L"Low"), "low"}, {Tr(L"Normal"), "normal"}, {Tr(L"High"), "high"}};
-    const std::string current = TheApp().config().GetString("network.buffering");
-    if (current == "custom") modes.push_back({Tr(L"Custom"), "custom"});
-    int sel = 1;
-    for (size_t i = 0; i < modes.size(); ++i)
-        if (modes[i].value == current) sel = static_cast<int>(i);
-    auto* dd = buf->Add<FieldDropdown>(modes, sel);
-    dd->width = Length::Px(200);
-    dd->height = Length::Px(34);
-    dd->onChange = [dd](int i) {
-        if (i >= 0) TheApp().config().SetString("network.buffering", dd->Choices()[static_cast<size_t>(i)].value);
-    };
+    // Buffering applies to every stream, so it is a setting, not a choice in this dialog.
+    auto* buffering = body->Add<LinkButton>(Tr(L"Buffering settings…"), TextStyle::Small);
+    buffering->onClick = [] { TheApp().OpenSettings("network"); };
 
     f->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();
     auto* open = f->Footer()->Add<DButton>(Tr(L"Open"), BtnStyle::Accent);
     open->enabled = false;
 
-    auto validate = [urls, hint, hintIcon, open] {
+    auto validate = [body, urls, hint, hintIcon, open, save, name] {
         int bad = 0;
         const std::wstring text = urls->Text();
         const auto links = ParseLinks(text, &bad);
-        open->enabled = bad == 0 && !links.empty();
+        const bool many = links.size() > 1;
+        if (save->visible != many || name->visible != (many && save->Value())) {
+            save->visible = many;
+            name->visible = many && save->Value();
+            body->InvalidateLayout();
+        }
+        open->enabled = bad == 0 && !links.empty() && !(name->visible && Trim(name->Text()).empty());
         // The line being typed isn't an error yet ("h", "http", "rtsp:/"): only once it is long
         // enough to have a scheme, or another line follows it.
         if (bad != 0) {
@@ -959,7 +983,7 @@ void ShowNetworkStreamDialog() {
             hint->SetText(Fmt(Tr(L"Line {0} is not a link. Links look like https://, rtsp:// or udp://"),
                               {std::to_wstring(bad)}));
         else if (site && !SiteLinksPlayable())
-            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings > Network)."));
+            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings › Network)."));
         else if (site && links.size() == 1)
             hint->SetText(Tr(L"The video page opens through yt-dlp."));
         else if (links.size() > 1)
@@ -969,11 +993,17 @@ void ShowNetworkStreamDialog() {
         open->Invalidate();
     };
     urls->onChange = [validate](const std::wstring&) { validate(); };
+    name->onChange = [validate](const std::wstring&) { validate(); };
+    save->onChange = [validate, name](bool on) {
+        validate();
+        if (Host* h = name->GetHost(); on && h) h->SetFocus(name);
+    };
     auto submit = [f, urls, name] {
         int bad = 0;
         const auto links = ParseLinks(urls->Text(), &bad);
         if (bad || links.empty()) return;
-        const std::wstring listName = Trim(name->Text());
+        const std::wstring listName = name->visible ? Trim(name->Text()) : std::wstring();
+        if (name->visible && listName.empty()) return;  // asked to save: a playlist needs a name
         f->Close();
         if (!listName.empty()) {
             const std::string id = TheApp().playlists().Create(listName);
@@ -1017,7 +1047,7 @@ void ShowNewPlaylistDialog(std::function<void(const std::string&)> done, std::ve
     left->dir = Dir::Column;
     left->width = Length::Grow();
     left->gap = 20;
-    AddFieldHeader(left, Tr(L"Playlist Details"),
+    AddFieldHeader(left, Tr(L"Name"),
                    Tr(L"The playlist will be saved and displayed with this title and thumbnail."));
     auto* name = left->Add<TextBox>(Tr(L"e.g., Evening"));
     name->width = Length::Grow();

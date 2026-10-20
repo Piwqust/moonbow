@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace library {
 
@@ -33,10 +35,20 @@ std::wstring StemOf(std::wstring_view path);        // "a"
 
 // Folding for search: linguistic lower case (Cyrillic included) and "ё" -> "е".
 std::wstring SearchFold(std::wstring_view text);
-// Case-insensitive substring test on already folded strings.
+// Search match on already folded strings: every space-separated word of the query is a substring
+// of the text, in any order, so "artist song" and "song 3" find what people mean.
 inline bool FoldedContains(const std::wstring& foldedText, const std::wstring& foldedQuery) {
-    return foldedText.find(foldedQuery) != std::wstring::npos;
+    for (size_t i = 0, end = 0; i < foldedQuery.size(); i = end + 1) {
+        end = foldedQuery.find(L' ', i);
+        if (end == std::wstring::npos) end = foldedQuery.size();
+        if (end > i && foldedText.find(foldedQuery.data() + i, 0, end - i) == std::wstring::npos) return false;
+    }
+    return true;
 }
+
+// Where the words of a folded query occur in `text` (every occurrence, merged and sorted), as
+// {start, length}: what a result list underlines. Empty when folding changes the text length.
+std::vector<std::pair<size_t, size_t>> MatchRanges(std::wstring_view text, const std::wstring& foldedQuery);
 
 // "Show S01E02", "Show.1x02", "s1e2 Title" -> show "Show", season 1, episode 2. The show is the
 // text before the marker with dots/underscores read as spaces (empty when the name starts with it).

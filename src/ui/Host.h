@@ -33,6 +33,9 @@ enum class Place : uint8_t { Below, Above, Right, Left, Center, At, BelowRight, 
 
 struct PopupOptions {
     Rect anchor;  // window DIPs; for Place::At only x/y are used
+    // Place::At: where the popup of this size goes, asked again at every layout (a toast moves
+    // beside a panel opened after it). Unset: anchor's x/y.
+    std::function<Point(Size)> at;
     Place place = Place::Below;
     float offset = 4;
     bool modal = false;              // blocks input to the window underneath
@@ -41,6 +44,7 @@ struct PopupOptions {
     bool dismissOnEscape = true;
     bool focusContent = true;        // move keyboard focus into the popup
     bool passthrough = false;        // ignores the mouse entirely (tooltips, toasts)
+    bool ownsAbove = true;           // closing it closes the popups opened after it (its submenus)
     bool animate = true;             // short fade/slide in (never when opened from the keyboard)
     // A click outside that lands on another enabled control (a bar button, the sidebar, a caption
     // button) closes the popup and also presses it. A click on a plain surface (the video) or on
@@ -91,6 +95,8 @@ public:
     Point MousePos() const { return mouse_; }
     bool MouseInside() const { return mouseInside_; }
     void SetCursorHidden(bool hidden);
+    // Shows w's tooltip under it at once, until the focus moves (Enter on an "i" icon).
+    void ShowTooltip(Widget* w);
 
     // --- rendering -------------------------------------------------------------------
     void RequestRender();
@@ -99,6 +105,9 @@ public:
     float Scale() const { return static_cast<float>(dpi_) / 96.0f * ScaleOverride(); }
     UINT Dpi() const { return dpi_; }  // the monitor's real DPI (window frame metrics)
     Size ClientSize() const;
+    // Pixels the window is larger than its client area: the invisible resize band Windows keeps
+    // on the left and right (cx each) and at the bottom (cy) of a resizable window.
+    SIZE FrameBand() const;
     // Called when the shared GPU device becomes available.
     void OnDeviceReady();
     // Pass to gfx::Gpu::CreateDeviceAsync: the host that receives it finishes the
@@ -179,9 +188,12 @@ public:
     static void SetScaleOverride(float factor);
     static float ScaleOverride();
     // Windows high contrast is on (SPI_GETHIGHCONTRAST). onHighContrastChanged runs when it
-    // changes (WM_SETTINGCHANGE), once for all windows.
+    // changes (WM_SETTINGCHANGE) or its colours do (WM_SYSCOLORCHANGE); it may run once per window.
     static bool HighContrast();
     static std::function<void()> onHighContrastChanged;
+    // Windows Settings > Accessibility > Text size, 1 to 2.25 (gfx::Text applies it; the windows
+    // lay out again when it changes).
+    static float TextScale();
     // Brings a window forward, except in --automation runs.
     static void Activate(HWND hwnd);
     // Native windows (file/folder pickers, the colour dialog, Explorer, the browser) can't be
@@ -208,6 +220,8 @@ protected:
     // background; the content fades in from it with the first frame that is ready, or
     // ContentCapMs after the show at the latest, so a slow disk never hides it.
     virtual bool ContentReady() { return true; }
+    // The part of the window that fades in at ContentShown; around it is drawn from the first frame.
+    virtual Rect FadeRect() { return {0, 0, ClientSize().w, ClientSize().h}; }
     virtual UINT ContentCapMs() { return 400; }
     void Reveal();
     void ShowContent();
@@ -242,10 +256,12 @@ private:
     void OnMouseButton(UINT msg, WPARAM wp, LPARAM lp);
     void CancelPress();
     void AfterPress(float x, float y);
-    void OnKey(UINT vk, bool down, bool repeat);
+    bool OnKey(UINT vk, bool down, bool repeat);  // true: something used the key
+    bool OpenContextMenu();
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();
+    void ArmTooltip(Widget* target, bool forFocus, bool now);
     void HideTooltip();
     bool ClicksThrough(const Popup& popup, float x, float y) const;
     Mods CurrentMods() const;
@@ -273,6 +289,7 @@ private:
     // is that widget, and mouse_ follows WM_NCMOUSEMOVE until it leaves.
     bool ncHover_ = false;
     bool cursorHidden_ = false;
+    bool altSpaceMenu_ = false;  // the last Alt+Space was no shortcut: its WM_SYSCHAR opens the window menu
     bool active_ = true;
     Widget* wheeled_ = nullptr;  // took the last wheel notch; hover is re-hit while it scrolls
 
@@ -290,6 +307,7 @@ private:
 
     // Tooltip state.
     Widget* tooltipFor_ = nullptr;
+    bool tooltipForFocus_ = false;  // tooltipFor_ is the keyboard focus, not the widget under the pointer
     Widget* tooltipWidget_ = nullptr;
     UINT_PTR tooltipTimer_ = 0;
     std::wstring tooltipText_;  // what the bubble (or its timer) shows: a change re-arms it

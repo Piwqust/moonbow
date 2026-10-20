@@ -3,11 +3,13 @@
 #include "Trace.h"
 #include "gfx/Text.h"
 #include "ui/Accessibility.h"
+#include "ui/Controls.h"
 #include "ui/Theme.h"
 
 #include <dwmapi.h>
 #include <imm.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <windowsx.h>
 
 #include <oleidl.h>
@@ -24,7 +26,10 @@ namespace {
 
 constexpr wchar_t kHostClass[] = L"LumenHost";
 constexpr UINT WM_APP_POST = WM_APP + 41;
-constexpr float kResizeBorder = 6.0f;
+// The resize band along the top, inside the title bar (the frame Windows keeps is on the other
+// sides, outside the visible edge); over a button only its top pixel.
+constexpr float kResizeTop = 4.0f;
+constexpr float kResizeCorner = 16.0f;  // the corner zones' length along each edge
 constexpr UINT kTooltipDelayMs = 550;
 // Moving on from a shown tooltip within this time shows the next one at once, without the fade.
 constexpr double kTooltipWarmMs = 400;
@@ -32,20 +37,34 @@ constexpr double kTooltipWarmMs = 400;
 bool g_automation = false;
 bool g_inKey = false;  // a key message is being handled: popups it opens don't animate
 bool g_highContrast = false;
+float g_textScale = 1.0f;
 bool g_systemRead = false;
 
-// Windows "Animation effects" and high contrast. --automation runs can't switch them (system
-// settings): the variables LUMEN_TEST_NO_ANIMATION / LUMEN_TEST_HIGH_CONTRAST stand in there.
+// Windows "Animation effects", high contrast and "Text size". --automation runs can't switch them
+// (system settings): the variables LUMEN_TEST_NO_ANIMATION / LUMEN_TEST_HIGH_CONTRAST /
+// LUMEN_TEST_TEXT_SCALE (1.5, or 150) stand in there.
 void ReadSystemSettings() {
     g_systemRead = true;
     BOOL animations = TRUE;
     if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0)) animations = TRUE;
     HIGHCONTRASTW hc{sizeof(hc)};
     g_highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) && (hc.dwFlags & HCF_HIGHCONTRASTON);
+    // UISettings.TextScaleFactor keeps its value here, as a percentage (100 to 225).
+    DWORD percent = 100, size = sizeof(percent);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Accessibility", L"TextScaleFactor", RRF_RT_REG_DWORD,
+                     nullptr, &percent, &size) != ERROR_SUCCESS)
+        percent = 100;
+    float textScale = static_cast<float>(percent) / 100.0f;
     if (g_automation) {
         if (GetEnvironmentVariableW(L"LUMEN_TEST_NO_ANIMATION", nullptr, 0)) animations = FALSE;
         if (GetEnvironmentVariableW(L"LUMEN_TEST_HIGH_CONTRAST", nullptr, 0)) g_highContrast = true;
+        wchar_t v[16] = {};
+        if (GetEnvironmentVariableW(L"LUMEN_TEST_TEXT_SCALE", v, 16)) {
+            textScale = wcstof(v, nullptr);
+            if (textScale > 4.0f) textScale /= 100.0f;
+        }
     }
+    g_textScale = std::clamp(textScale, 1.0f, 2.25f);
     AnimFloat::SetReducedMotion(!animations);
 }
 
@@ -74,11 +93,33 @@ private:
     std::wstring text_;
 };
 
+// A link dragged from a browser (the address bar, a link on a page): http(s) only.
+std::wstring UrlFrom(IDataObject* data) {
+    for (const UINT cf : {RegisterClipboardFormatW(CFSTR_INETURLW), static_cast<UINT>(CF_UNICODETEXT)}) {
+        FORMATETC fmt{static_cast<CLIPFORMAT>(cf), nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+        STGMEDIUM medium{};
+        if (FAILED(data->GetData(&fmt, &medium))) continue;
+        std::wstring text;
+        if (auto* p = static_cast<const wchar_t*>(GlobalLock(medium.hGlobal))) {
+            text.assign(p, wcsnlen(p, GlobalSize(medium.hGlobal) / sizeof(wchar_t)));
+            GlobalUnlock(medium.hGlobal);
+        }
+        ReleaseStgMedium(&medium);
+        text.erase(0, text.find_first_not_of(L" \t\r\n"));
+        text.resize(std::min(text.size(), text.find_first_of(L" \t\r\n")));
+        if (_wcsnicmp(text.c_str(), L"http://", 7) == 0 || _wcsnicmp(text.c_str(), L"https://", 8) == 0) return text;
+    }
+    return {};
+}
+
 std::vector<std::wstring> FilesFrom(IDataObject* data) {
     std::vector<std::wstring> files;
     FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
     STGMEDIUM medium{};
-    if (FAILED(data->GetData(&fmt, &medium))) return files;
+    if (FAILED(data->GetData(&fmt, &medium))) {
+        if (std::wstring url = UrlFrom(data); !url.empty()) files.push_back(std::move(url));
+        return files;
+    }
     if (auto drop = static_cast<HDROP>(GlobalLock(medium.hGlobal))) {
         const UINT n = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
         for (UINT i = 0; i < n; ++i) {
@@ -111,7 +152,7 @@ constexpr wchar_t kRevealedProp[] = L"LumenRevealed";
 // Keeps a window's normal rect inside its monitor's work area (minus `margin` px), centred when
 // it had to shrink or stood off the screen; never below the minimum size. A first run at 200 %
 // on a 1440p screen asks for 2560x1560 px, a saved rect may come from a larger screen.
-void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
+void FitToWorkArea(HWND hwnd, int minW, int minH, int margin, SIZE band) {
     WINDOWPLACEMENT wp{sizeof(wp)};
     if (!GetWindowPlacement(hwnd, &wp)) return;
     MONITORINFO mi{sizeof(mi)};
@@ -121,7 +162,8 @@ void FitToWorkArea(HWND hwnd, int minW, int minH, int margin) {
     const LONG dx = tool ? 0 : mi.rcWork.left - mi.rcMonitor.left, dy = tool ? 0 : mi.rcWork.top - mi.rcMonitor.top;
     RECT r = wp.rcNormalPosition;
     OffsetRect(&r, dx, dy);
-    const RECT& work = mi.rcWork;
+    // The invisible resize band may stand off the work area, as on any window snapped to its edge.
+    const RECT work{mi.rcWork.left - band.cx, mi.rcWork.top, mi.rcWork.right + band.cx, mi.rcWork.bottom + band.cy};
     const int workW = work.right - work.left, workH = work.bottom - work.top;
     const int w = std::max(minW, std::min<int>(r.right - r.left, workW - margin));
     const int h = std::max(minH, std::min<int>(r.bottom - r.top, workH - margin));
@@ -151,6 +193,11 @@ std::function<void()> Host::onHighContrastChanged;
 bool Host::HighContrast() {
     if (!g_systemRead) ReadSystemSettings();
     return g_highContrast;
+}
+
+float Host::TextScale() {
+    if (!g_systemRead) ReadSystemSettings();
+    return g_textScale;
 }
 
 void Host::SetScaleOverride(float factor) {
@@ -184,10 +231,17 @@ void Host::Activate(HWND hwnd) {
     SetForegroundWindow(hwnd);
 }
 
-// OLE drop target: shows the overlay while files hover and hands them over on drop.
+// OLE drop target: shows the overlay while files or a link hover and hands them over on drop.
+// The shell's drag image (IDropTargetHelper) stays under the cursor over the window.
 class DropTarget : public IDropTarget {
 public:
-    explicit DropTarget(Host* host) : host_(host) {}
+    explicit DropTarget(Host* host) : host_(host) {
+        if (FAILED(CoCreateInstance(CLSID_DragDropHelper, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&helper_))))
+            helper_ = nullptr;
+    }
+    ~DropTarget() {
+        if (helper_) helper_->Release();
+    }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** out) override {
         if (riid == IID_IUnknown || riid == IID_IDropTarget) {
             *out = static_cast<IDropTarget*>(this);
@@ -203,28 +257,36 @@ public:
         if (!r) delete this;
         return r;
     }
-    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL, DWORD* effect) override {
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
         FORMATETC fmt{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-        accepts_ = host_->onDropFiles && data->QueryGetData(&fmt) == S_OK;
-        *effect = accepts_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        accepts_ = host_->onDropFiles && (data->QueryGetData(&fmt) == S_OK || !UrlFrom(data).empty());
+        *effect = Effect(*effect);
         if (accepts_) host_->SetDragOver(true);
+        POINT p{pt.x, pt.y};
+        if (helper_) helper_->DragEnter(host_->Hwnd(), data, &p, *effect);
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL, DWORD* effect) override {
-        *effect = accepts_ ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* effect) override {
+        *effect = Effect(*effect);
+        POINT p{pt.x, pt.y};
+        if (helper_) helper_->DragOver(&p, *effect);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE DragLeave() override {
         host_->SetDragOver(false);
+        if (helper_) helper_->DragLeave();
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL, DWORD* effect) override {
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
         host_->SetDragOver(false);
+        const DWORD allowed = *effect;
         *effect = DROPEFFECT_NONE;
+        POINT p{pt.x, pt.y};
+        if (helper_) helper_->Drop(data, &p, accepts_ ? Effect(allowed) : DROPEFFECT_NONE);
         if (!accepts_) return S_OK;
         auto files = FilesFrom(data);
         if (!files.empty() && host_->onDropFiles) {
-            *effect = DROPEFFECT_COPY;
+            *effect = Effect(allowed);
             Host::Activate(host_->Hwnd());
             // Run after the drag source returns (opening files may show dialogs).
             Host* host = host_;
@@ -236,7 +298,13 @@ public:
     }
 
 private:
+    // Copy where the source allows it (Explorer); a browser's link may offer only Link.
+    DWORD Effect(DWORD allowed) const {
+        if (!accepts_) return DROPEFFECT_NONE;
+        return (allowed & DROPEFFECT_COPY) ? DROPEFFECT_COPY : (allowed & DROPEFFECT_LINK) ? DROPEFFECT_LINK : DROPEFFECT_NONE;
+    }
     Host* host_;
+    IDropTargetHelper* helper_ = nullptr;
     ULONG refs_ = 1;
     bool accepts_ = false;
 };
@@ -357,6 +425,9 @@ bool Host::Create(const HostOptions& options) {
         h = std::max(static_cast<int>(std::lround(options.minHeight * Scale())),
                      std::min(static_cast<int>(std::lround(options.height * Scale())),
                               static_cast<int>(work.bottom - work.top) - margin));
+        const SIZE band = FrameBand();  // the size asked for is the client area's
+        w += 2 * band.cx;
+        h += band.cy;
         if (!options.center) return;
         RECT ref = work;
         if (options.owner) GetWindowRect(options.owner, &ref);
@@ -474,6 +545,12 @@ void Host::SetRoot(std::unique_ptr<Widget> root) {
     RequestLayout();
 }
 
+SIZE Host::FrameBand() const {
+    if (!options_.customFrame || !options_.resizable || fullscreen_) return {0, 0};
+    const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
+    return {GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad, GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad};
+}
+
 Size Host::ClientSize() const {
     RECT rc;
     GetClientRect(hwnd_, &rc);
@@ -576,7 +653,8 @@ void Host::ClosePopup(Widget* content) {
 void Host::ClosePopupAt(size_t index) {
     if (index >= popups_.size()) return;
     // Close anything stacked above it first (submenus).
-    while (popups_.size() > index + 1) ClosePopupAt(popups_.size() - 1);
+    if (popups_[index].options.ownsAbove)
+        while (popups_.size() > index + 1) ClosePopupAt(popups_.size() - 1);
     Popup popup = std::move(popups_[index]);
     popups_.erase(popups_.begin() + static_cast<std::ptrdiff_t>(index));
     Widget* restore = popup.previousFocus;
@@ -638,6 +716,11 @@ void Host::PlacePopup(Popup& popup) {
             y = (client.h - s.h) / 2;
             break;
         case Place::At:
+            if (o.at) {
+                const Point at = o.at(s);
+                x = at.x;
+                y = at.y;
+            }
             break;
     }
     x = std::clamp(x, 8.0f, std::max(8.0f, client.w - 8 - s.w));
@@ -657,6 +740,21 @@ void Host::SetFocus(Widget* w, bool fromKeyboard) {
     focus_ = w;
     if (old) old->OnFocusChanged(false);
     if (focus_) focus_->OnFocusChanged(true);
+    if (fromKeyboard && w) {
+        // Tab onto a control below the fold scrolls to it, or the ring is nowhere on screen. A
+        // list taller than the view that is partly on screen keeps its place (it scrolls its rows).
+        for (Widget* a = w->Parent(); a; a = a->Parent())
+            if (auto* sv = dynamic_cast<ScrollView*>(a)) {
+                if (w->rect.h <= sv->rect.h || !w->rect.Intersects(sv->rect)) sv->ScrollIntoView(w->rect);
+                break;
+            }
+        // Icon buttons name themselves only in a tooltip: the keyboard gets it too. Not lists and
+        // grids, whose tooltip belongs to the item under the pointer.
+        if (!w->tooltip.empty() && w->rect.w < 80) {
+            HideTooltip();
+            ArmTooltip(w, true, false);
+        }
+    }
     RequestRender();
     a11y::FocusChanged(this);
 }
@@ -798,12 +896,31 @@ void Host::Render() {
         // Drawn unseen until ContentShown: its layout runs and its images are asked for. A layer,
         // not the painter's opacity: the whole frame fades as one, overlapping parts don't show through.
         const float appear = contentAppear_.Get();
+        const Size client = ClientSize();
+        // What lies around FadeRect (the main window's title bar and sidebar) is there from the
+        // first frame, its buttons working (OnMouseButton): only the rest fades in.
+        const Rect fade = appear < 1 ? FadeRect() : Rect{0, 0, client.w, client.h};
+        if (appear < 1 && root_) {
+            const Rect around[] = {{0, 0, client.w, fade.y},
+                                   {0, fade.Bottom(), client.w, client.h - fade.Bottom()},
+                                   {0, fade.y, fade.x, fade.h},
+                                   {fade.Right(), fade.y, client.w - fade.Right(), fade.h}};
+            for (const Rect& r : around)
+                if (r.w > 0 && r.h > 0) {
+                    p.PushClip(r);
+                    root_->PaintTree(p);
+                    p.PopClip();
+                }
+        }
         if (appear < 1)
             ctx->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                                                   D2D1::IdentityMatrix(), appear),
                            nullptr);
-        if (root_) root_->PaintTree(p);
-        const Size client = ClientSize();
+        if (root_) {
+            if (appear < 1) p.PushClip(fade);
+            root_->PaintTree(p);
+            if (appear < 1) p.PopClip();
+        }
         for (Popup& popup : popups_) {
             const float k = popup.appear ? popup.appear->Get() : 1.0f;
             if (popup.options.scrim) p.Fill({0, 0, client.w, client.h}, P().scrim.Fade(k));
@@ -818,7 +935,7 @@ void Host::Render() {
         if (appear < 1) ctx->PopLayer();
     }
     OnFramePainted();
-    if (texts) a11y::TextsPainted(*texts);
+    if (texts) a11y::TextsPainted(this, *texts);
     const double t2 = AnimFloat::Now();
     if (surface_.End()) {
         if (!gpuPainted_) Trace("first frame");
@@ -882,19 +999,26 @@ LRESULT Host::NcHitTest(LPARAM lp) {
     ScreenToClient(hwnd_, &pt);
     RECT rc;
     GetClientRect(hwnd_, &rc);
-    if (options_.resizable && !fullscreen_ && !IsWindowMaximized()) {
-        const int b = static_cast<int>(std::lround(kResizeBorder * Scale()));
-        const bool left = pt.x < b, right = pt.x >= rc.right - b, top = pt.y < b, bottom = pt.y >= rc.bottom - b;
-        if (top && left) return HTTOPLEFT;
-        if (top && right) return HTTOPRIGHT;
-        if (bottom && left) return HTBOTTOMLEFT;
-        if (bottom && right) return HTBOTTOMRIGHT;
-        if (left) return HTLEFT;
-        if (right) return HTRIGHT;
-        if (bottom) return HTBOTTOM;
-        if (top) return HTTOP;
-    }
     const float x = pt.x / Scale(), y = pt.y / Scale();
+    if (options_.resizable && !fullscreen_ && !IsWindowMaximized()) {
+        // Left, right and bottom: the frame outside the client area (WM_NCCALCSIZE), so the scroll
+        // bar, the sidebar's edge and the control bar stay what they look like.
+        const bool left = pt.x < 0, right = pt.x >= rc.right, bottom = pt.y >= rc.bottom;
+        bool top = pt.y < 1;
+        if (!top && pt.y < std::lround(kResizeTop * Scale())) {
+            top = true;
+            for (Widget* w = root_ ? root_->HitTest(x, y) : nullptr; w && top; w = w->Parent()) top = !w->interactive;
+        }
+        if (left || right || top || bottom) {
+            const int c = static_cast<int>(std::lround(kResizeCorner * Scale()));
+            const bool nearL = pt.x < c, nearR = pt.x >= rc.right - c, nearT = pt.y < c, nearB = pt.y >= rc.bottom - c;
+            if ((top && nearL) || (left && nearT)) return HTTOPLEFT;
+            if ((top && nearR) || (right && nearT)) return HTTOPRIGHT;
+            if ((bottom && nearL) || (left && nearB)) return HTBOTTOMLEFT;
+            if ((bottom && nearR) || (right && nearB)) return HTBOTTOMRIGHT;
+            return left ? HTLEFT : right ? HTRIGHT : bottom ? HTBOTTOM : HTTOP;
+        }
+    }
     for (const Popup& p : popups_)
         if (p.options.modal || (!p.options.passthrough && p.content->rect.Contains(x, y))) return HTCLIENT;
     Widget* hit = root_ ? root_->HitTest(x, y) : nullptr;
@@ -934,9 +1058,9 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     if (down) {
-        // Before the first screen fades in the window shows only its background: a press there
+        // Before the first screen fades in the window shows only its background there: a press
         // must not reach the buttons laid out under it (at most 400-700 ms after start).
-        if (!contentShown_) return;
+        if (!contentShown_ && FadeRect().Contains(x, y)) return;
         HideTooltip();
         // Clicking outside popups closes them (topmost first). Like a Windows menu, the click
         // that closes one is used up: it doesn't also pause the video or press the button under
@@ -1004,8 +1128,12 @@ void Host::OnMouseButton(UINT msg, WPARAM wp, LPARAM lp) {
                 if (w->interactive && w->IsEnabled() && w->OnMouseDown(e)) break;
             }
         } else {
-            for (Widget* w = target; w; w = w->Parent())
-                if (w->interactive && w->OnMouseDown(e)) break;
+            bool used = false;
+            for (Widget* w = target; w && !used; w = w->Parent()) used = w->interactive && w->OnMouseDown(e);
+            // The mouse's Back and Forward buttons, where nothing under the pointer uses them (the
+            // video: previous / next file), are the keys of the same name: library history.
+            if (!used && (e.button == MouseButton::X1 || e.button == MouseButton::X2))
+                OnKey(e.button == MouseButton::X1 ? VK_BROWSER_BACK : VK_BROWSER_FORWARD, true, false);
         }
     } else if (e.button == MouseButton::Left) {
         Widget* t = capture_ ? capture_ : pressed_;
@@ -1109,70 +1237,109 @@ void Host::MoveFocus(bool backwards) {
     SetFocus(list[i], true);
 }
 
-void Host::OnKey(UINT vk, bool down, bool repeat) {
-    if (!down) return;
+bool Host::OnKey(UINT vk, bool down, bool repeat) {
+    if (!down) return false;
     KeyEvent e{vk, CurrentMods(), repeat};
+    // Shift+F10 is the Menu key: widgets see only VK_APPS.
+    if (vk == VK_F10 && e.mods.shift && !e.mods.ctrl && !e.mods.alt) e.key = vk = VK_APPS;
     HideTooltip();
     if (vk == VK_ESCAPE && capture_) {  // Esc drops a drag, as in Windows: a second one does the rest
         CancelPress();
-        return;
+        return true;
     }
 
-    for (Widget* w = focus_; w; w = w->Parent())
+    // The focus can stay on a hidden widget (the library's grid behind the player): it opens no
+    // menu, the window's own does (the video's).
+    bool hiddenFocus = false;
+    for (Widget* w = vk == VK_APPS ? focus_ : nullptr; w && !hiddenFocus; w = w->Parent()) hiddenFocus = !w->visible;
+    for (Widget* w = hiddenFocus ? nullptr : focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
             RequestRender();
-            return;
+            return true;
         }
 
     if (vk == VK_TAB && !e.mods.ctrl && !e.mods.alt) {
         MoveFocus(e.mods.shift);
-        return;
+        return true;
     }
     if (vk == VK_ESCAPE && !popups_.empty()) {
         for (size_t i = popups_.size(); i-- > 0;)
             if (!popups_[i].options.passthrough && popups_[i].options.dismissOnEscape) {
                 ClosePopupAt(i);
-                return;
+                return true;
             }
     }
+    if (vk == VK_APPS && !hiddenFocus && OpenContextMenu()) return true;
     // Space/Enter press the focused control only when it was reached with the
     // keyboard: after a mouse click Space stays the window's shortcut (play/pause).
-    if ((vk == VK_RETURN || vk == VK_SPACE) && focusVisible_ && focus_ && focus_->interactive &&
+    if ((vk == VK_RETURN || vk == VK_SPACE) && !e.mods.alt && focusVisible_ && focus_ && focus_->interactive &&
         focus_->IsEnabled() && !focus_->WantsTextInput()) {
         focus_->OnClick();
         RequestRender();
-        return;
+        return true;
     }
     // Keyboard shortcuts of the window are suspended while a modal popup is open.
     for (const Popup& p : popups_)
-        if (p.options.modal) return;
-    if (onKey) onKey(e);
+        if (p.options.modal) return true;
+    return onKey && onKey(e);
+}
+
+// The Menu key: the context menu of the focused widget, or of the nearest one around it that has
+// one (a row's list), at the entry the keyboard is on.
+bool Host::OpenContextMenu() {
+    for (Widget* w = focus_; w; w = w->Parent())
+        if (w->onContextMenu && w->IsEnabled()) {
+            Point at;
+            if (focus_->MenuPoint(at)) w->onContextMenu({at.x, at.y, MouseButton::Right, CurrentMods()});
+            RequestRender();
+            return true;
+        }
+    return false;
 }
 
 // --- tooltip -----------------------------------------------------------------------------
 
 void Host::UpdateTooltip() {
     Widget* target = hot_ && !hot_->tooltip.empty() ? hot_ : nullptr;
+    // The keyboard focus's bubble stays while the pointer is on nothing with a tooltip of its own.
+    if (!target && tooltipForFocus_ && tooltipFor_ && tooltipFor_ == focus_ && !focus_->tooltip.empty())
+        target = focus_;
     // A widget that paints many items (a grid) changes its tooltip as the pointer moves between
     // them, and one whose tooltip was cleared (the expanded rail) or that moved loses the bubble.
     const bool moved = tooltipFor_ && (tooltipFor_->rect.x != tooltipRect_.x || tooltipFor_->rect.y != tooltipRect_.y ||
                                        tooltipFor_->rect.w != tooltipRect_.w || tooltipFor_->rect.h != tooltipRect_.h);
     if (target == tooltipFor_ && !moved && (!target || target->tooltip == tooltipText_) && (target || !tooltipWidget_))
         return;
+    const bool forFocus = tooltipForFocus_ && target == tooltipFor_;
     HideTooltip();
     if (!target || pressed_) return;
+    ArmTooltip(target, forFocus, false);
+}
+
+void Host::ShowTooltip(Widget* w) {
+    HideTooltip();
+    if (w && !w->tooltip.empty()) ArmTooltip(w, true, true);
+}
+
+// forFocus: the bubble belongs to the keyboard focus (under it, until the focus moves), not to
+// the widget under the pointer.
+void Host::ArmTooltip(Widget* target, bool forFocus, bool now) {
     tooltipFor_ = target;
+    tooltipForFocus_ = forFocus;
     tooltipText_ = target->tooltip;
     tooltipRect_ = target->rect;
-    const bool warm = AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
+    const bool warm = now || AnimFloat::Now() - tooltipHiddenAt_ < kTooltipWarmMs;
     tooltipTimer_ = StartTimer(warm ? USER_TIMER_MINIMUM : kTooltipDelayMs, [this, warm] {
         tooltipTimer_ = 0;
-        if (!tooltipFor_ || hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
+        if (!tooltipFor_) return;
+        if (tooltipForFocus_ ? tooltipFor_ != focus_ : hot_ == nullptr || !(mouseInside_ || ncHover_)) return;
         PopupOptions o;
         o.anchor = {mouse_.x, mouse_.y + 18, 0, 0};
         const Rect& r = tooltipFor_->rect;
-        // Prefer centering under small controls (icon buttons), like native tooltips.
-        if (r.w < 80) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
+        // Prefer centering under small controls (icon buttons), like native tooltips; the
+        // keyboard's bubble always goes under its control.
+        const bool under = r.w < 80 || tooltipForFocus_;
+        if (under) o.anchor = {r.Cx(), r.Bottom() + 6, 0, 0};
         o.place = Place::At;
         if (tooltipFor_->tooltipBeside) {
             o.anchor = {r.x, r.Cy() - 14, r.w, 28};
@@ -1185,15 +1352,17 @@ void Host::UpdateTooltip() {
         o.animate = !warm;
         auto bubble = std::make_unique<TooltipBubble>(tooltipText_);
         Size s = bubble->Measure(400, 200);
-        if (r.w < 80 && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
+        if (under && !tooltipFor_->tooltipBeside) {  // a beside-tooltip is already placed
             o.anchor.x -= s.w / 2;
             // Controls along the bottom edge (the player bar): above them, not over the buttons.
             if (r.Bottom() + 6 + s.h > ClientSize().h - 8) o.anchor.y = r.y - 6 - s.h;
         }
         Widget* target = tooltipFor_;
         std::wstring text = tooltipText_;
+        const bool forFocus = tooltipForFocus_;
         tooltipWidget_ = ShowPopup(std::move(bubble), o);  // (ShowPopup hides any tooltip first)
         tooltipFor_ = target;
+        tooltipForFocus_ = forFocus;
         tooltipText_ = std::move(text);
         tooltipRect_ = target->rect;
     });
@@ -1205,6 +1374,7 @@ void Host::HideTooltip() {
         tooltipTimer_ = 0;
     }
     tooltipFor_ = nullptr;
+    tooltipForFocus_ = false;
     tooltipText_.clear();
     if (tooltipWidget_) {
         Widget* w = tooltipWidget_;
@@ -1446,26 +1616,28 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 SetPropW(hwnd_, kFittedProp, reinterpret_cast<HANDLE>(1));
                 Post([this] {
                     if (!hwnd_ || fullscreen_) return;
-                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())),
-                                  static_cast<int>(std::lround(options_.minHeight * Scale())),
-                                  static_cast<int>(std::lround(24 * Scale())));
+                    const SIZE band = FrameBand();
+                    FitToWorkArea(hwnd_, static_cast<int>(std::lround(options_.minWidth * Scale())) + 2 * band.cx,
+                                  static_cast<int>(std::lround(options_.minHeight * Scale())) + band.cy,
+                                  static_cast<int>(std::lround(24 * Scale())), band);
                 });
             }
             break;
 
         case WM_NCCALCSIZE:
-            // Also the wp == FALSE call during CreateWindowExW: the whole window is client area
-            // from the start, without a SWP_FRAMECHANGED round trip afterwards.
+            // No caption: the client area runs to the top edge. Windows keeps its frame on the
+            // other sides, invisible outside the visible edge: the resize band of a Windows 11
+            // window (Windows Terminal does the same). Maximized, the frame is off screen on every
+            // side. Also the wp == FALSE call during CreateWindowExW, so no SWP_FRAMECHANGED round
+            // trip follows. Fullscreen and fixed-size windows are client area throughout.
             if (options_.customFrame) {
-                if (wp == TRUE && !fullscreen_ && IsZoomed(hwnd_)) {
-                    auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
-                    const int pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
-                    const int fx = GetSystemMetricsForDpi(SM_CXFRAME, dpi_) + pad;
-                    const int fy = GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad;
-                    params->rgrc[0].left += fx;
-                    params->rgrc[0].right -= fx;
-                    params->rgrc[0].top += fy;
-                    params->rgrc[0].bottom -= fy;
+                if (!fullscreen_ && (options_.resizable || IsZoomed(hwnd_))) {
+                    RECT* r = reinterpret_cast<RECT*>(lp);  // NCCALCSIZE_PARAMS::rgrc[0] when wp is TRUE
+                    const LONG top = r->top;
+                    DefWindowProcW(hwnd_, msg, wp, lp);
+                    r->top = top;
+                    if (IsZoomed(hwnd_))
+                        r->top += GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
                 }
                 return 0;
             }
@@ -1643,16 +1815,29 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
+        case WM_SYSKEYDOWN: {
             if (msg == WM_SYSKEYDOWN && wp == VK_F4) break;
             g_inKey = true;
-            OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
+            const bool used = OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
             g_inKey = false;
+            if (msg == WM_SYSKEYDOWN && wp == VK_SPACE) altSpaceMenu_ = !used;
             if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
+            // DefWindowProc turns an unused volume key into WM_APPCOMMAND: Windows' volume.
+            if (!used && wp >= VK_VOLUME_MUTE && wp <= VK_VOLUME_UP) break;
             return 0;
+        }
 
         case WM_SYSCHAR:
-            if (wp == VK_RETURN || wp == VK_SPACE) return 0;
+            // Alt+Enter is a shortcut, not a beep. Alt+Space opens the window menu (Move, Size,
+            // Minimize) unless a shortcut took it.
+            if (wp == VK_RETURN || (wp == VK_SPACE && !altSpaceMenu_)) return 0;
+            break;
+
+        case WM_SYSCOMMAND:
+            // Keyboard menu mode only for Alt+Space. A lone Alt or F10 tap (lParam 0) would enter it
+            // on the hidden window menu and eat the next key (Space = play), Alt+letter would beep.
+            // Test runs never open the native menu.
+            if ((wp & 0xFFF0) == SC_KEYMENU && (lp != VK_SPACE || g_automation)) return 0;
             break;
 
         case WM_CHAR:
@@ -1691,8 +1876,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_GETMINMAXINFO: {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
-            mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale());
-            mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale());
+            const SIZE band = FrameBand();
+            mmi->ptMinTrackSize.x = static_cast<LONG>(options_.minWidth * Scale()) + 2 * band.cx;
+            mmi->ptMinTrackSize.y = static_cast<LONG>(options_.minHeight * Scale()) + band.cy;
             // Maximized = the monitor's work area (plus the frame WM_NCCALCSIZE takes off), so the
             // window never covers the taskbar, whatever the style (tool windows, custom frame).
             MONITORINFO mi{sizeof(mi)};
@@ -1724,8 +1910,20 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const bool was = g_highContrast;
             ReadSystemSettings();
             if (g_highContrast != was && onHighContrastChanged) onHighContrastChanged();
+            if (g_textScale != gfx::Text::Get().Scale()) {
+                gfx::Text::Get().SetScale(g_textScale);
+                for (Host* h : Registry()) {
+                    InvalidateRect(h->hwnd_, nullptr, FALSE);
+                    h->RequestLayout();
+                }
+            }
             break;
         }
+
+        case WM_SYSCOLORCHANGE:
+            // Another contrast theme (Aquatic -> Desert): high contrast stays on, its colours change.
+            if (HighContrast() && onHighContrastChanged) onHighContrastChanged();
+            break;
 
         case WM_ERASEBKGND:
             return 1;

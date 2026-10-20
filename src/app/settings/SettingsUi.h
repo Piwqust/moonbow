@@ -182,6 +182,8 @@ private:
 
 std::unique_ptr<ui::Widget> MakeEqualizer(const std::vector<const settings::Item*>& items, PageHost& page);
 std::unique_ptr<ui::Widget> MakeAddonsList(const settings::Item& item, PageHost& page);
+// Settings > Library: the library roots with Remove / Show in File Explorer (SettingsLibrary.cpp).
+std::unique_ptr<ui::Widget> MakeLibraryFolders(const settings::Item& item, PageHost& page);
 // Sample line drawn with the current subtitle style (SettingsSubtitlePreview.cpp).
 std::unique_ptr<ui::Widget> MakeSubtitlePreview(const settings::Item& item);
 // Shader files in <data>\shaders with a toggle each (video.shaders), and "Open folder".
@@ -196,7 +198,7 @@ std::unique_ptr<ui::Widget> MakeShortcutEditor(PageHost& page);
 // Folder / file pickers (IFileOpenDialog / IFileSaveDialog). Empty when cancelled.
 std::wstring PickPath(HWND owner, settings::PathKind kind, const std::wstring& current);
 
-// Confirmation dialog in the settings window; skipped when general.showDialogs is off.
+// Confirmation dialog in the settings window. Always shown: what it guards cannot be undone.
 void Confirm(ui::Host* host, std::wstring title, std::wstring text, std::wstring okText, std::function<void()> ok);
 
 }  // namespace app::sui

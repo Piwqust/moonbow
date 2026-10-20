@@ -31,7 +31,8 @@ constexpr UINT kChromeHideMs = 2200;
 // Lays out the library layer, the player and the floating mini player.
 class ShellBody : public Widget {
 public:
-    ShellBody(Widget* library, PlayerView* player, MiniPlayer* mini) : library_(library), player_(player), mini_(mini) {
+    ShellBody(Widget* library, NavSidebar* nav, PlayerView* player, MiniPlayer* mini)
+        : library_(library), nav_(nav), player_(player), mini_(mini) {
         dir = Dir::None;
         width = Length::Grow();
         height = Length::Grow();
@@ -53,12 +54,16 @@ public:
         }
         if (Host* h = GetHost()) h->floatingCard = card;
         if (playerShown || pending) player_->Arrange(rect);
-        if (!playerShown) library_->Arrange(rect);
+        if (!playerShown) {
+            nav_->FitWindow(rect.w);
+            library_->Arrange(rect);
+        }
         if (mini_->visible) mini_->Arrange(card);
     }
 
 private:
     Widget* library_;
+    NavSidebar* nav_;
     PlayerView* player_;
     MiniPlayer* mini_;
 };
@@ -128,6 +133,9 @@ bool MainWindow::Create() {
             if (mini_ && mini_->visible && mini_->rect.x < (ClientSize().w + 600) / 2) bottom = mini_->rect.y - 12;
             return bottom - h;
         }
+        float top = -1;
+        player_->ToastBand(&top);  // the music view puts it under the cover
+        if (top >= 0) return top;
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
     toastBand = [this] { return TheApp().PlayerShown() ? player_->ToastBand() : Rect{0, 0, ClientSize().w, 0}; };
@@ -138,6 +146,16 @@ bool MainWindow::Create() {
     });
 
     onKey = [this](const KeyEvent& e) {
+        // The Menu key (Shift+F10) where the focus has no menu of its own: the video's, as a right
+        // click in its middle would open it.
+        if (e.key == VK_APPS && TheApp().PlayerShown()) {
+            const Rect v = player_->VideoRect();
+            for (Widget* w = Root()->HitTest(v.Cx(), v.Cy()); w; w = w->Parent())
+                if (w->onContextMenu) {
+                    w->onContextMenu({v.Cx(), v.Cy(), MouseButton::Right, e.mods});
+                    return true;
+                }
+        }
         const bool arrow = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_LEFT || e.key == VK_RIGHT;
         if (arrow && !TheApp().PlayerShown() && !Focus() && !e.mods.ctrl && !e.mods.alt && library_ && library_->View())
             if (Widget* first = library_->View()->InitialFocus()) {
@@ -220,7 +238,7 @@ void MainWindow::BuildUi() {
     auto mini = std::make_unique<MiniPlayer>(this);
     mini_ = mini.get();
 
-    auto* body = root->Add<ShellBody>(libraryLayer_, player_, mini_);
+    auto* body = root->Add<ShellBody>(libraryLayer_, sidebar_, player_, mini_);
     body->AddChild(std::move(library));
     body->AddChild(std::move(player));
     body->AddChild(std::move(mini));
@@ -260,6 +278,10 @@ void MainWindow::SetPictureInPicture(bool on) {
             GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
             const LONG pw = static_cast<LONG>(480 * s), ph = static_cast<LONG>(270 * s), m = static_cast<LONG>(24 * s);
             r = {mi.rcWork.right - pw - m, mi.rcWork.bottom - ph - m, mi.rcWork.right - m, mi.rcWork.bottom - m};
+            const SIZE band = FrameBand();  // invisible, around the 16:9 client area
+            r.left -= band.cx;
+            r.right += band.cx;
+            r.bottom += band.cy;
         }
         pip_ = true;
         SetWindowPos(hwnd, HWND_TOPMOST, r.left, r.top, r.right - r.left, r.bottom - r.top,
@@ -272,7 +294,9 @@ void MainWindow::SetPictureInPicture(bool on) {
             TheApp().SetUiValue("pip.rect", buf);
         }
         pip_ = false;
-        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        // Back to "Keep window above other windows" as it is set, not always off (App::ApplyWindowOptions).
+        SetWindowPos(hwnd, TheApp().config().GetBool("interface.alwaysOnTop") ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
+                     0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         SetWindowPlacement(hwnd, &pipRestore_);
     }
     chrome_.Set(1);
@@ -352,10 +376,12 @@ void MainWindow::PokeChrome() {
         chromeTimer_ = 0;
         if (!BarOverlays()) return;
         // Keep the controls while the pointer is on them or drags one (the seek bar held still above
-        // the bar), or a menu or panel is open (toasts don't count).
+        // the bar), the keyboard is on one of them, or a menu or panel is open (toasts don't count).
         Widget* hot = Pressed() ? Pressed() : Hot();
-        const bool overBar = hot && player_ && player_->Bar() && player_->Bar()->IsAncestorOf(hot);
-        if (HasInteractivePopup() || overBar || TheApp().player().State().paused) {
+        const Widget* bar = player_ ? player_->Bar() : nullptr;
+        const bool overBar = hot && bar && bar->IsAncestorOf(hot);
+        const bool keyboardOnBar = FocusVisible() && bar && bar->IsAncestorOf(Focus());
+        if (HasInteractivePopup() || overBar || keyboardOnBar || TheApp().player().State().paused) {
             PokeChrome();
             return;
         }
@@ -374,6 +400,16 @@ void MainWindow::OnFramePainted() {
 
 bool MainWindow::ContentReady() {
     return TheApp().FirstScreenReady();
+}
+
+// A big library takes a while to its first screen: meanwhile the title bar and the sidebar are
+// there (and work), only the page fades in. A file opened at start fades in whole: the player
+// comes instead of the library.
+ui::Rect MainWindow::FadeRect() {
+    const Size c = ClientSize();
+    if (!library_ || library_->rect.w <= 0 || TheApp().OpensFileAtStart() || TheApp().PlayerShown() || Immersive())
+        return {0, 0, c.w, c.h};
+    return library_->rect;
 }
 
 UINT MainWindow::ContentCapMs() {
@@ -542,6 +578,24 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
                                                                   static_cast<LONG>(144 * Scale())};
             *result = 0;
             return true;
+        case WM_SIZING: {
+            // PiP keeps the picture's shape while its edges are dragged (no black bars), like Chrome's.
+            // shortcut: the decoded aspect only, not an aspect override or a rotation; use mpv's
+            // video-out-params dw/dh if those should count.
+            const PlayerState& s = TheApp().player().State();
+            if (!pip_ || s.videoW <= 0 || s.videoH <= 0) return false;
+            RECT& r = *reinterpret_cast<RECT*>(lp);
+            const double aspect = static_cast<double>(s.videoW) / static_cast<double>(s.videoH);
+            if (wp == WMSZ_TOP || wp == WMSZ_BOTTOM) {
+                r.right = r.left + static_cast<LONG>(std::lround((r.bottom - r.top) * aspect));
+            } else {
+                const LONG h = static_cast<LONG>(std::lround((r.right - r.left) / aspect));
+                if (wp == WMSZ_TOPLEFT || wp == WMSZ_TOPRIGHT) r.top = r.bottom - h;
+                else r.bottom = r.top + h;
+            }
+            *result = TRUE;
+            return true;
+        }
         case WM_NCRBUTTONUP:
             // In PiP the video is the caption (drag to move): a right click there would open the
             // Windows system menu; show the player's PiP menu instead.
@@ -568,6 +622,15 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             if (lp && lstrcmpW(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0 &&
                 TheApp().config().GetString("general.theme") == "system")
                 TheApp().ApplyTheme();
+            return false;
+        case WM_KEYDOWN:
+            // Tab over the hidden floating bar brings it back first, so the focus can move into it
+            // (Host moves it right after this; the next layout keeps the bar, PlayerView::OnLayout).
+            if (wp == VK_TAB && BarOverlays() && !FullscreenWithoutControls(this) && !HasInteractivePopup() && player_ &&
+                player_->Bar() && !pip_) {
+                PokeChrome();
+                player_->Bar()->visible = true;
+            }
             return false;
         case WM_SIZE:
             if (titleBar_) titleBar_->Refresh();

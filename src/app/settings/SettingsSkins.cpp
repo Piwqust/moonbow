@@ -1,4 +1,4 @@
-// Settings > Interface > Skin: the built-in skins with a small preview each, then "Custom file…",
+// Settings › Interface › Appearance: the built-in skins with a small preview each, then "Custom file…",
 // and below them what is wrong with the active skin (file warnings, low contrast) with Reset.
 // Writes interface.skin / customSkin / skinFile; app/Skins.cpp applies them.
 #include "app/I18n.h"
@@ -31,7 +31,7 @@ std::wstring FileName(const std::wstring& path) {
 
 const wchar_t* Caption(const std::string& id) {
     if (id == "lumen") return Tr(L"Monochrome, the default");
-    if (id == "oled") return Tr(L"Black page, dark theme only");
+    if (id == "oled") return Tr(L"Black page, always the dark theme");
     if (id == "contrast") return Tr(L"Brighter text and lines");
     if (id == "sepia") return Tr(L"Warm tones, softer corners");
     return L"";
@@ -140,7 +140,6 @@ public:
         }
         const auto& builtins = Skins::Get().Builtins();
         if (index < 0 || index >= static_cast<int>(builtins.size())) return;
-        c.SetBool("interface.skinPicked", true);
         c.SetString("interface.skin", builtins[static_cast<size_t>(index)].id);
         c.SetBool("interface.customSkin", false);
     }

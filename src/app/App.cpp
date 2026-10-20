@@ -338,6 +338,11 @@ void App::RestoreWindowPlacement() {
     wp.showCmd = ui::Host::Automation() ? SW_SHOWNOACTIVATE : max ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
     wp.flags = 0;
     SetWindowPlacement(main_->Hwnd(), &wp);
+    // Onto a monitor scaled unlike the one it was made on, WM_DPICHANGED resized it by the scale
+    // ratio (Host applies the suggested rect). It is on that monitor now: once more, at the saved size.
+    WINDOWPLACEMENT now{sizeof(now)};
+    if (GetWindowPlacement(main_->Hwnd(), &now) && !EqualRect(&now.rcNormalPosition, &rc))
+        SetWindowPlacement(main_->Hwnd(), &wp);
 }
 
 void App::FlushStores() {
@@ -520,6 +525,7 @@ void App::OnPlayerReady(bool ok) {
         Open(files);
     }
     playerChanged.Emit(kChangeState | kChangeVolume);
+    system_.Update(kChangeState);  // the media keys can resume the last item from the start
 }
 
 void App::OnPlayerEvents() {
@@ -549,7 +555,7 @@ void App::OnPlayerEvents() {
     if ((changes & kChangeFile) && queue_.CurrentItem() && s.fileLoaded && s.loadSerial != recordedSerial_ &&
         config_.GetBool("privacy.saveHistory")) {
         recordedSerial_ = s.loadSerial;
-        history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration);
+        if (history_.RecordPlay(queue_.CurrentItem()->path, s.title, s.duration)) system_.HistoryChanged();
     }
     if ((changes & kChangeTime) && s.fileLoaded) {
         const double now = ui::AnimFloat::Now();
@@ -632,6 +638,9 @@ void App::FitWindowToVideo() {
     int h = static_cast<int>(std::lround(static_cast<double>(s.videoH) * f + chromeH));
     w = std::max(w, static_cast<int>(760 * scale));
     h = std::max(h, static_cast<int>(440 * scale));
+    const SIZE band = main_->FrameBand();  // the window's invisible resize band around the client area
+    w += 2 * band.cx;
+    h += band.cy;
     RECT cur;
     GetWindowRect(main_->Hwnd(), &cur);
     int x = (cur.left + cur.right) / 2 - w / 2, y = (cur.top + cur.bottom) / 2 - h / 2;
@@ -993,10 +1002,17 @@ void App::Navigate(Route r) {
     routeChanged.Emit();
 }
 
+// Back and Forward step over the pages of playlists deleted since: they would only say
+// "Playlist not found" (UX-9). The last page of the history is kept even then.
+bool App::DeadRoute(const Route& r) const {
+    return r.section == Section::Playlists && !r.path.empty() && !playlists_.Find(WideToUtf8(r.path));
+}
+
 void App::GoBack() {
     if (!CanGoBack()) return;
     routeLeaving.Emit();
     --historyPos_;
+    while (historyPos_ > 0 && DeadRoute(route())) --historyPos_;
     routeChanged.Emit();
 }
 
@@ -1004,6 +1020,7 @@ void App::GoForward() {
     if (!CanGoForward()) return;
     routeLeaving.Emit();
     ++historyPos_;
+    while (CanGoForward() && DeadRoute(route())) ++historyPos_;
     routeChanged.Emit();
 }
 
@@ -1086,8 +1103,10 @@ void App::OnCopyData(const std::wstring& payload) {
         if (end > start) files.push_back(payload.substr(start, end - start));
         start = end + 1;
     }
+    // Explorer's "Add to the Lumen queue". With nothing playing yet the files open as below.
+    const bool enqueue = std::erase(files, L"--enqueue") > 0;
     if (files.empty()) return;
-    if (config_.GetBool("library.enqueue") && player_.State().fileLoaded) {
+    if ((enqueue || config_.GetBool("library.enqueue")) && player_.State().fileLoaded) {
         Enqueue(files);
         return;
     }
