@@ -31,7 +31,7 @@
 {L"Reassign", L"Переназначить"},
 {L"{0} is already used by “{1}”.", L"{0} уже используется для «{1}»."},
 {L"Restore the default shortcut", L"Вернуть сочетание по умолчанию"},
-{L"Hide Keyboard Shortcuts", L"Скрыть сочетания клавиш"},
+{L"Hide keyboard shortcuts", L"Скрыть сочетания клавиш"},
 {L"Reset all shortcuts?", L"Сбросить все сочетания клавиш?"},
 {L"Every keyboard shortcut returns to its default.", L"Все сочетания клавиш вернутся к стандартным."},
 {L"Shortcuts reset", L"Сочетания клавиш сброшены"},

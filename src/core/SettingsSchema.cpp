@@ -873,7 +873,7 @@ void BuildApp(Builder& b) {
               L"Файлы, открытые в запущенном окне, добавляются в конец плейлиста.")
         .When("library.singleInstance", "true");
 
-    b.Sec("controls", L"Playback Controls", L"Панель управления");
+    b.Sec("controls", L"Playback controls", L"Панель управления");
     b.Toggle("interface.compactMode", L"Start in compact mode", L"Запускать в компактном режиме", false)
         .Desc(L"Open with a small window and the minimal control bar.",
               L"Открываться в маленьком окне с минимальной панелью управления.")
@@ -907,7 +907,7 @@ void BuildApp(Builder& b) {
         .Desc(L"Show a thin progress line along the bottom of the video while the controls are hidden.",
               L"Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.");
 
-    b.Sec("notifications", L"Notifications and System Tray", L"Уведомления и системный трей");
+    b.Sec("notifications", L"Notifications and system tray", L"Уведомления и системный трей");
     b.inferred = true;
     b.Toggle("interface.osdMessages", L"Show on-screen messages", L"Сообщения поверх видео", true)
         .Desc(L"Briefly show volume, speed and track changes over the video.",
@@ -1029,8 +1029,8 @@ void BuildApp(Builder& b) {
     // ===== Controls =====
     b.Cat("controls", "app", "hotkeys", L"Controls", L"Управление");
 
-    b.Sec("shortcuts", L"Keyboard Shortcuts", L"Сочетания клавиш");
-    b.Button("controls.editShortcuts", L"Shortcut list", L"Список сочетаний", "edit-shortcuts", L"Edit Keyboard Shortcuts",
+    b.Sec("shortcuts", L"Keyboard shortcuts", L"Сочетания клавиш");
+    b.Button("controls.editShortcuts", L"Shortcut list", L"Список сочетаний", "edit-shortcuts", L"Edit keyboard shortcuts",
              L"Изменить сочетания клавиш");
     b.Button("controls.resetShortcuts", L"Reset all shortcuts", L"Сбросить все сочетания", "reset-shortcuts", L"Reset",
              L"Сбросить");
@@ -1040,7 +1040,7 @@ void BuildApp(Builder& b) {
         .Desc(L"Overrides of the default shortcuts, edited in the Keyboard Shortcuts dialog.",
               L"Изменённые сочетания клавиш; редактируются в окне «Сочетания клавиш».");
 
-    b.Sec("skip", L"Skip Amounts", L"Шаг перемотки");
+    b.Sec("skip", L"Skip amounts", L"Шаг перемотки");
     b.Number("controls.skipVeryShort", L"Very short skip", L"Очень короткий", 1, 3600, 1, 3).Unit(L"s", L"с");
     b.Number("controls.skipShort", L"Short skip", L"Короткий", 1, 3600, 1, 10).Unit(L"s", L"с");
     b.Number("controls.skipMedium", L"Medium skip", L"Средний", 1, 3600, 1, 60).Unit(L"s", L"с");
@@ -1142,7 +1142,7 @@ void BuildMedia(Builder& b) {
     b.advanced = false;
 
     // app/player/LiveState (library/FileSettings): restored through loadfile options.
-    b.Sec("perFile", L"Per-File Settings", L"Настройки для каждого файла");
+    b.Sec("perFile", L"Per-file settings", L"Настройки для каждого файла");
     b.Toggle("playback.perFile", L"Remember settings for each file", L"Запоминать настройки для каждого файла", true)
         .Desc(L"The audio and subtitle tracks you pick and their delays come back the next time the file opens.",
               L"Выбранные аудиодорожка и субтитры и их задержки вернутся, когда файл откроется снова.");
@@ -1237,7 +1237,7 @@ void BuildMedia(Builder& b) {
     b.inferred = false;
 
     b.inferred = true;
-    b.Sec("quality", L"Image Quality", L"Качество изображения");
+    b.Sec("quality", L"Image quality", L"Качество изображения");
     {
         auto q = b.Pick("video.quality", L"Preset", L"Пресет",
                         {{"fast", L"Fast", L"Быстро"},
@@ -1801,7 +1801,7 @@ void BuildMedia(Builder& b) {
     // ===== Subtitles =====
     b.Cat("subtitles", "media", "subtitles", L"Subtitles", L"Субтитры");
 
-    b.Sec("tracks", L"Tracks & Languages", L"Дорожки и языки");
+    b.Sec("tracks", L"Tracks and languages", L"Дорожки и языки");
     b.Toggle("subtitles.enabled", L"Enable subtitles", L"Показывать субтитры", true)
         .Desc(L"Show subtitles when a file has them. You can still turn them on from the player.",
               L"Показывать субтитры, если они есть. Их всегда можно включить в плеере.")
@@ -1830,7 +1830,7 @@ void BuildMedia(Builder& b) {
               L"Кодировка текстовых файлов субтитров. Смените, если вместо букв «кракозябры».")
         .Mpv("sub-codepage");
 
-    b.Sec("loading", L"Loading Subtitles", L"Загрузка субтитров");
+    b.Sec("loading", L"Loading subtitles", L"Загрузка субтитров");
     b.Toggle("subtitles.autoLoad", L"Load subtitle files automatically", L"Подключать файлы субтитров автоматически", true)
         .Desc(L"Load .srt, .ass and other subtitle files found next to the video.",
               L"Подключать файлы .srt, .ass и другие, лежащие рядом с видео.")
@@ -1942,7 +1942,7 @@ void BuildMedia(Builder& b) {
         .MpvBool("sub-ass-override", "force", "scale");
 
     // Read by app/player/SubWords.cpp. The links open in the browser only on a click.
-    b.Sec("words", L"Words in Subtitles", L"Слова в субтитрах");
+    b.Sec("words", L"Words in subtitles", L"Слова в субтитрах");
     b.Toggle("subtitles.wordPicker", L"Pick words on pause", L"Выбор слов на паузе", true)
         .Desc(L"On pause, a click on a word in the subtitles copies it or looks it up in a dictionary or a translator. "
               L"Shift-click or drag to pick several words; W does it from the keyboard.",
@@ -1961,7 +1961,7 @@ void BuildMedia(Builder& b) {
     // ===== Library =====
     b.Cat("library", "media", "folder", L"Library", L"Медиатека");
 
-    b.Sec("opening", L"Opening Files", L"Открытие файлов");
+    b.Sec("opening", L"Opening files", L"Открытие файлов");
     b.Pick("library.openFolder", L"When opening a folder", L"При открытии папки",
            {{"subfolders", L"Include subfolders", L"Вместе с вложенными папками"},
             {"folder", L"This folder only", L"Только эта папка"}},
@@ -1972,7 +1972,7 @@ void BuildMedia(Builder& b) {
         .Desc(L"Include hidden and system files in the library and folder playlists.",
               L"Включать скрытые и системные файлы в медиатеку и плейлисты папок.");
 
-    b.Sec("metadata", L"Metadata & Artwork", L"Метаданные и обложки");
+    b.Sec("metadata", L"Metadata and artwork", L"Метаданные и обложки");
     b.Pick("library.metadata", L"Fetch titles and artwork", L"Названия и обложки",
            {{"file", L"From the file only", L"Только из файла"},
             {"internet", L"From the file and the internet (TMDB)", L"Из файла и из интернета (TMDB)"}},
@@ -2030,7 +2030,7 @@ void BuildSystem(Builder& b) {
         .Hidden();  // not implemented yet
 
     // On the main page: people who paste a YouTube link look here first.
-    b.Sec("web", L"Web Videos", L"Видео с сайтов");
+    b.Sec("web", L"Web videos", L"Видео с сайтов");
     b.inferred = true;
     {
         const std::wstring& ytdlp = YtDlpPath();
@@ -2135,7 +2135,7 @@ void BuildSystem(Builder& b) {
               L"Потоки процессора для программного декодирования. 0 — автоматически.")
         .MpvBuild("vd-lavc-threads", BuildDecodeThreads);
 
-    b.Sec("smooth", L"Smooth Playback", L"Плавное воспроизведение");
+    b.Sec("smooth", L"Smooth playback", L"Плавное воспроизведение");
     b.Toggle("performance.frameDrop", L"Drop frames when the system can't keep up", L"Пропускать кадры при нехватке ресурсов",
              true)
         .MpvBool("framedrop", "vo", "no");
@@ -2400,7 +2400,7 @@ std::vector<const Item*> Search(std::wstring_view query) {
 }
 
 const std::wstring& AdvancedOptionsLabel(Lang lang) {
-    static const std::wstring en = L"Advanced Options", ru = L"Дополнительные параметры";
+    static const std::wstring en = L"Advanced options", ru = L"Дополнительные параметры";
     return lang == Lang::Ru ? ru : en;
 }
 
