@@ -8,6 +8,8 @@
 #   add -Out x.txt to also write the tree to a file (UTF-8), -Max N to stop after N elements.
 # Line format:
 #   <indent>Type "Name" [x,y wxh] [off] [disabled] [focus] {Patterns} value=... toggle=... range=v/min..max
+#   [selected] [Expanded|Collapsed] help=... keys=<AcceleratorKey> sel=<from>..<to> (Text pattern)
+#   (windows: culture=). HeadingLevel is newer than this .NET client: not shown.
 #   Rects are screen pixels.
 param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Invoke = "", [string]$Out = "", [int]$Max = 5000)
 $ErrorActionPreference = "Stop"
@@ -57,7 +59,18 @@ function Describe($e, [int]$depth) {
     $line += " range={0:0.##}/{1:0.##}..{2:0.##}" -f $o.Current.Value, $o.Current.Minimum, $o.Current.Maximum
   }
   if ($e.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$o) -and $o.Current.IsSelected) { $line += " selected" }
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$o)) { $line += " " + $o.Current.ExpandCollapseState }
   if ($c.HelpText) { $line += ' help="' + $c.HelpText + '"' }
+  if ($c.AcceleratorKey) { $line += ' keys="' + $c.AcceleratorKey + '"' }
+  if ($e.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$o)) {
+    $doc = $o.DocumentRange
+    $sel = @($o.GetSelection())
+    if ($sel.Count) {
+      $from = $sel[0].CompareEndpoints("Start", $doc, "Start")
+      $line += " sel=$from.." + ($from + $sel[0].GetText(-1).Length)
+    }
+  }
+  if ($depth -eq 0) { $line += " culture=" + $e.GetCurrentPropertyValue($A::CultureProperty) }
   return $line
 }
 

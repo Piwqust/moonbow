@@ -633,6 +633,7 @@ void LibraryPane::RefreshHeader() {
         // The box says where it searches (UX-9): Home searches the whole library, a page only itself.
         searchHint_ = route_.section == Section::Home || crumbs.empty() ? std::wstring(Tr(L"Search library"))
                                                                         : Fmt(Tr(L"Search in “{0}”"), {crumbs.back().label});
+        if (search_) search_->a11yName = searchHint_;  // the count label before it is no label of it
         static_cast<CrumbBar*>(crumbs_)->Set(std::move(crumbs), compact_);
         const long long n = view_->ItemCount();
         // The side panel is too narrow for crumbs and a count side by side.

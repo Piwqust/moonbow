@@ -71,6 +71,7 @@ class Button : public Widget {
 public:
     Button(std::wstring text, ButtonKind kind = ButtonKind::Secondary, std::string icon = {});
     void SetText(std::wstring text);
+    const std::wstring& Text() const { return text_; }
     ButtonKind kind;
     std::string icon;
     TextStyle style = TextStyle::BodyStrong;
@@ -138,6 +139,7 @@ public:
     Checkbox(std::wstring text, bool checked = false);
     bool Value() const { return checked_; }
     void SetValue(bool v) { checked_ = v; Invalidate(); }
+    const std::wstring& Text() const { return text_; }
     std::function<void(bool)> onChange;
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
@@ -264,6 +266,7 @@ public:
     bool WantsTextInput() const override { return true; }
     Rect CaretRect() const override;
     bool MenuPoint(Point& at) const override;
+    void Describe(A11y& a) override;
 
 private:
     Rect TextRect() const;
@@ -415,8 +418,9 @@ private:
 Dialog* ShowDialog(Host* host, std::unique_ptr<Dialog> dialog);
 
 // Transient message at the top center of the window. With an action ("Open folder") the toast
-// takes clicks on its button; without one the mouse passes through it.
-void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 1600, std::wstring actionLabel = {},
+// takes clicks on its button; without one the mouse passes through it. Screen readers say it
+// (a11y::Announce), and it stays at least 3 s.
+void ShowToast(Host* host, std::wstring text, std::string icon = {}, UINT ms = 3000, std::wstring actionLabel = {},
                std::function<void()> action = {});
 // Closes the toast on screen, if any (e.g. when the file it was about is replaced).
 void DismissToast(Host* host);

@@ -711,6 +711,21 @@ bool TextBox::MenuPoint(Point& at) const {
     return true;
 }
 
+// The Text pattern: screen readers read the character, word or selection at the caret.
+void TextBox::Describe(A11y& a) {
+    if (password) return;
+    a.caret = caret_;
+    a.anchor = anchor_;
+    a.select = [this](size_t from, size_t to) {
+        anchor_ = std::min(from, text_.size());
+        MoveCaret(to, true);
+    };
+    a.textRect = [this](size_t from, size_t to) {
+        const float x1 = XOf(from), x2 = XOf(to);
+        return Rect{TextRect().x + x1 - scroll_, rect.Cy() - 10, std::max(1.0f, x2 - x1), 20};
+    };
+}
+
 TextBox::~TextBox() {
     // A focused box can be destroyed with its popup or page: stop the caret timer,
     // unless its host is already gone.
@@ -1428,8 +1443,10 @@ public:
             }
             it.role = m.note ? Role::Text : Role::MenuItem;
             it.name = m.label;
+            it.keys = m.shortcut;
             it.rect = ItemRect(i);
             it.enabled = m.enabled || m.note;
+            if (!m.submenu.empty()) it.expanded = child_ && i == highlight_ ? 1 : 0;
             if (hasChecks_ || m.checked) it.toggle = m.checked ? 1 : 0;
         };
         a.invokeItem = [this](int k) { Activate(visible_[static_cast<size_t>(k)]); };
@@ -1799,6 +1816,7 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
             host->Post([host] { DismissToast(host); });
         };
     }
+    const std::wstring spoken = actionLabel.empty() ? text : text + L". " + actionLabel;
     auto bubble = std::make_unique<ToastBubble>(std::move(text), std::move(icon), std::move(actionLabel), std::move(action));
     const Rect band = host->toastBand ? host->toastBand() : Rect{0, 0, host->ClientSize().w, 0};
     bubble->maxW = std::max(240.0f, band.w - 32);  // the popup measures again with the window's width
@@ -1819,8 +1837,9 @@ void ShowToast(Host* host, std::wstring text, std::string icon, UINT ms, std::ws
         if (it != Toasts().end() && it->second.id == id) Toasts().erase(it);
     };
     Toasts()[host] = {host->ShowPopup(std::move(bubble), o), id};
-    // A toast with a button (Undo, Open) stays long enough to read it and reach the button.
-    CloseToastAfter(host, id, clickable ? std::max<UINT>(ms, 8000) : ms);
+    a11y::Announce(host, spoken);
+    // Long enough to read (3 s at least); one with a button (Undo, Open) also to reach the button.
+    CloseToastAfter(host, id, std::max<UINT>(ms, clickable ? 8000 : 3000));
 }
 
 void DismissToast(Host* host) {

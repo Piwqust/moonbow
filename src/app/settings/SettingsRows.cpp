@@ -129,6 +129,7 @@ public:
     }
     // Width the label needs to show its whole text.
     float NaturalWidth() { return std::ceil(label_->Measure(kInf, kInf).w) + (info_ ? 28.0f : 0.0f); }
+    void Describe(A11y& a) override { a.name = label_->Text(); }  // the "Turn on …" tooltip is help
     Size MeasureContent(float availW, float) override {
         const Size l = label_->Measure(availW, kInf);
         return {l.w + (info_ ? 28.0f : 0.0f), std::max(l.h, 18.0f)};
@@ -861,6 +862,7 @@ void TickSlider::Describe(A11y& a) {
     a.max = item.max;
     a.now = value_;
     a.step = item.step;
+    a.value = FormatValue(item, value_);
     a.setRange = [this](double v) { Change(v, true); };
 }
 

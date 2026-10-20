@@ -90,6 +90,7 @@ public:
     void OnLayout() override;
     void Paint(ui::Painter& p) override;
     void PaintOver(ui::Painter& p) override;
+    void Describe(ui::A11y& a) override;
     float opacity = 1;      // fades in fullscreen, the whole bar with its controls
     bool floating = false;  // set by the player view: drawn as a rounded panel over the video
     float BarHeight() const { return minimal_ ? 40.0f : 56.0f; }

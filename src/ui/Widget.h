@@ -97,6 +97,7 @@ public:
     NcRole ncRole = NcRole::None;
     std::wstring tooltip;
     std::wstring helpText;  // UI Automation HelpText; empty = the tooltip
+    std::wstring a11yName;  // what screen readers call it when no text it paints or label before it says so
     bool tooltipBeside = false;  // show the tooltip to the right (icon rails), not below
     LPCWSTR cursor = IDC_ARROW;
     std::string id;  // for debugging and tests

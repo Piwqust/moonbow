@@ -573,6 +573,7 @@ private:
         }
         tabs_ = row->Add<Segmented>(std::move(choices), selected);
         tabs_->segmentWidth = widest;
+        tabs_->a11yName = Tr(L"Music");
         tabs_->onChange = [this](int i) {
             const std::wstring path = kMusicTabs[i].path;
             // Posted: navigating replaces this page while its control is still handling the click.

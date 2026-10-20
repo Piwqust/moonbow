@@ -207,8 +207,16 @@ void ItemGrid::Describe(ui::A11y& a) {
     a.items = static_cast<int>(entries_.size());
     a.item = [this](int i, ui::A11y::Item& it) {
         const Entry& e = entries_[static_cast<size_t>(i)];
-        it.role = IsLabel(e.kind) ? ui::Role::Text : ui::Role::ListItem;
-        it.name = e.subtitle.empty() ? e.title : e.title + L", " + e.subtitle;
+        // Only what is laid out: a home shelf shows one row, and an entry without a place can't
+        // be opened (its section title leads to the rest). Column titles have no text of their own.
+        const bool placed = static_cast<size_t>(i) < slots_.size() && slots_[static_cast<size_t>(i)].w > 0;
+        it.role = !placed || e.kind == EntryKind::Columns ? ui::Role::Skip
+                  : IsLabel(e.kind)                       ? ui::Role::Text
+                                                          : ui::Role::ListItem;
+        // What the row or card shows: track number, title, artist or info, length.
+        it.name = (e.track > 0 ? std::to_wstring(e.track) + L". " : L"") + e.title;
+        if (!e.subtitle.empty()) it.name += L", " + e.subtitle;
+        if (e.kind == EntryKind::Media && e.duration > 0) it.name += L", " + FormatDuration(e.duration);
         it.rect = ItemRect(i);
         it.selected = i == selected_;
     };
