@@ -367,6 +367,206 @@ bool Load(HWND hwnd, Widget* w, int serial, int item, Ctx& c) {
     return true;
 }
 
+// --- Text pattern of a field ------------------------------------------------------------------
+
+bool WordChar(wchar_t c) {
+    return iswalnum(c) || c == L'_';
+}
+
+bool WordStart(const std::wstring& t, size_t i) {
+    return i == 0 || (i < t.size() && WordChar(t[i]) && !WordChar(t[i - 1]));
+}
+
+// `at` moved by `count` units inside `t` (a single line: lines, paragraphs and pages are all of
+// it); `moved` gets the units crossed.
+size_t MoveBy(const std::wstring& t, size_t at, TextUnit unit, int count, int* moved) {
+    *moved = 0;
+    if (unit == TextUnit_Character || unit == TextUnit_Word) {
+        for (; count > 0 && at < t.size(); --count, ++*moved)
+            do ++at; while (unit == TextUnit_Word && at < t.size() && !WordStart(t, at));
+        for (; count < 0 && at > 0; ++count, --*moved)
+            do --at; while (unit == TextUnit_Word && at > 0 && !WordStart(t, at));
+    } else if (count > 0 && at < t.size()) {
+        at = t.size();
+        *moved = 1;
+    } else if (count < 0 && at > 0) {
+        at = 0;
+        *moved = -1;
+    }
+    return at;
+}
+
+// A span of an Edit's text: [from, to) as UTF-16 offsets, checked against the field on every call.
+class TextRange final : public ITextRangeProvider {
+public:
+    TextRange(HWND hwnd, Widget* w, int serial, size_t from, size_t to)
+        : hwnd_(hwnd), w_(w), serial_(serial), from_(from), to_(to) {}
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG n = InterlockedDecrement(&refs_);
+        if (n == 0) delete this;
+        return n;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (iid != __uuidof(IUnknown) && iid != __uuidof(ITextRangeProvider)) return E_NOINTERFACE;
+        *out = static_cast<ITextRangeProvider*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Clone(ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = new TextRange(hwnd_, w_, serial_, from_, to_);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Compare(ITextRangeProvider* other, BOOL* out) override {
+        if (!other || !out) return E_POINTER;
+        const auto* o = static_cast<TextRange*>(other);  // UI Automation hands back only ranges of this provider
+        *out = o->w_ == w_ && o->from_ == from_ && o->to_ == to_;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE CompareEndpoints(TextPatternRangeEndpoint end, ITextRangeProvider* other,
+                                               TextPatternRangeEndpoint otherEnd, int* out) override {
+        if (!other || !out) return E_POINTER;
+        const auto* o = static_cast<TextRange*>(other);
+        *out = static_cast<int>(At(end)) - static_cast<int>(o->At(otherEnd));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE ExpandToEnclosingUnit(TextUnit unit) override {
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        if (unit == TextUnit_Character || unit == TextUnit_Word) {
+            from_ = std::min(from_, t.empty() ? 0 : t.size() - 1);
+            while (unit == TextUnit_Word && !WordStart(t, from_)) --from_;
+            int moved = 0;
+            to_ = MoveBy(t, from_, unit, 1, &moved);
+        } else {
+            from_ = 0;
+            to_ = t.size();
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE FindAttribute(TEXTATTRIBUTEID, VARIANT, BOOL, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE FindText(BSTR what, BOOL backward, BOOL ignoreCase, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        const size_t n = what ? SysStringLen(what) : 0;
+        if (n == 0 || to_ - from_ < n) return S_OK;
+        for (size_t k = 0; k <= to_ - from_ - n; ++k) {
+            const size_t i = backward ? to_ - n - k : from_ + k;
+            if (CompareStringOrdinal(t.data() + i, static_cast<int>(n), what, static_cast<int>(n), ignoreCase) == CSTR_EQUAL) {
+                *out = new TextRange(hwnd_, w_, serial_, i, i + n);
+                break;
+            }
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetAttributeValue(TEXTATTRIBUTEID, VARIANT* out) override {
+        if (!out) return E_POINTER;
+        out->vt = VT_UNKNOWN;
+        return UiaGetReservedNotSupportedValue(&out->punkVal);
+    }
+    HRESULT STDMETHODCALLTYPE GetBoundingRectangles(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        const Rect r = c.a.textRect ? c.a.textRect(from_, to_) : c.w->rect;
+        POINT o{0, 0};
+        ClientToScreen(hwnd_, &o);
+        const double s = c.host->Scale();
+        const double box[4] = {o.x + r.x * s, o.y + r.y * s, r.w * s, r.h * s};
+        *out = SafeArrayCreateVector(VT_R8, 0, 4);
+        if (!*out) return E_OUTOFMEMORY;
+        for (LONG i = 0; i < 4; ++i) SafeArrayPutElement(*out, &i, const_cast<double*>(&box[i]));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetEnclosingElement(IRawElementProviderSimple** out) override;
+    HRESULT STDMETHODCALLTYPE GetText(int maxLength, BSTR* out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        std::wstring part = t.substr(std::min(from_, t.size()), to_ - from_);
+        if (maxLength >= 0 && part.size() > static_cast<size_t>(maxLength)) part.resize(static_cast<size_t>(maxLength));
+        *out = SysAllocStringLen(part.data(), static_cast<UINT>(part.size()));
+        return *out ? S_OK : E_OUTOFMEMORY;
+    }
+    HRESULT STDMETHODCALLTYPE Move(TextUnit unit, int count, int* moved) override {
+        if (!moved) return E_POINTER;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        const bool caret = from_ == to_;
+        from_ = to_ = MoveBy(t, from_, unit, count, moved);
+        return caret ? S_OK : ExpandToEnclosingUnit(unit);
+    }
+    HRESULT STDMETHODCALLTYPE MoveEndpointByUnit(TextPatternRangeEndpoint end, TextUnit unit, int count,
+                                                 int* moved) override {
+        if (!moved) return E_POINTER;
+        std::wstring t;
+        if (!Text(t)) return UIA_E_ELEMENTNOTAVAILABLE;
+        Set(end, MoveBy(t, At(end), unit, count, moved));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE MoveEndpointByRange(TextPatternRangeEndpoint end, ITextRangeProvider* other,
+                                                  TextPatternRangeEndpoint otherEnd) override {
+        if (!other) return E_POINTER;
+        Set(end, static_cast<TextRange*>(other)->At(otherEnd));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Select() override {
+        Ctx c;
+        if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+        c.a.select(from_, to_);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE AddToSelection() override { return UIA_E_INVALIDOPERATION; }
+    HRESULT STDMETHODCALLTYPE RemoveFromSelection() override { return UIA_E_INVALIDOPERATION; }
+    HRESULT STDMETHODCALLTYPE ScrollIntoView(BOOL) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE GetChildren(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = SafeArrayCreateVector(VT_UNKNOWN, 0, 0);
+        return *out ? S_OK : E_OUTOFMEMORY;
+    }
+
+private:
+    ~TextRange() = default;
+    bool Load(Ctx& c) const { return a11y::Load(hwnd_, w_, serial_, -1, c) && c.w && c.a.select; }
+    bool Text(std::wstring& t) {
+        Ctx c;
+        if (!Load(c)) return false;
+        t = c.a.value;
+        to_ = std::min(to_, t.size());  // the text may have got shorter since
+        from_ = std::min(from_, to_);
+        return true;
+    }
+    size_t At(TextPatternRangeEndpoint end) const { return end == TextPatternRangeEndpoint_Start ? from_ : to_; }
+    void Set(TextPatternRangeEndpoint end, size_t at) {
+        if (end == TextPatternRangeEndpoint_Start) {
+            from_ = at;
+            to_ = std::max(to_, at);
+        } else {
+            to_ = at;
+            from_ = std::min(from_, at);
+        }
+    }
+
+    LONG refs_ = 1;
+    HWND hwnd_;
+    Widget* w_;  // checked against Serials() before every use, never dereferenced unchecked
+    int serial_;
+    size_t from_, to_;
+};
+
 class Node final : public IRawElementProviderSimple,
                    public IRawElementProviderFragment,
                    public IRawElementProviderFragmentRoot,
@@ -375,7 +575,8 @@ class Node final : public IRawElementProviderSimple,
                    public IValueProvider,
                    public IRangeValueProvider,
                    public ISelectionItemProvider,
-                   public IExpandCollapseProvider {
+                   public IExpandCollapseProvider,
+                   public ITextProvider {
 public:
     Node(HWND hwnd, const Ref& r) : hwnd_(hwnd), w_(r.w), item_(r.item) {
         if (w_) serial_ = Serials().try_emplace(w_, ++g_nextSerial).first->second;
@@ -411,6 +612,8 @@ public:
             *out = static_cast<ISelectionItemProvider*>(this);
         else if (iid == __uuidof(IExpandCollapseProvider))
             *out = static_cast<IExpandCollapseProvider*>(this);
+        else if (iid == __uuidof(ITextProvider))
+            *out = static_cast<ITextProvider*>(this);
         else
             return E_NOINTERFACE;
         AddRef();
@@ -447,6 +650,7 @@ public:
                 yes = c.item >= 0 && c.a.selectItem && (r == Role::ListItem || r == Role::TabItem);
                 break;
             case UIA_ExpandCollapsePatternId: yes = c.item >= 0 && c.it.expanded >= 0; break;
+            case UIA_TextPatternId: yes = c.item < 0 && r == Role::Edit && c.a.select; break;
             default: break;
         }
         if (yes) {
@@ -734,6 +938,49 @@ public:
         return S_OK;
     }
 
+    // ITextProvider (fields): one line, one selection (the caret when empty).
+    HRESULT STDMETHODCALLTYPE GetSelection(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        return OneRange(out, std::min(c.a.caret, c.a.anchor), std::max(c.a.caret, c.a.anchor));
+    }
+    HRESULT STDMETHODCALLTYPE GetVisibleRanges(SAFEARRAY** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        return OneRange(out, 0, c.a.value.size());
+    }
+    HRESULT STDMETHODCALLTYPE RangeFromChild(IRawElementProviderSimple*, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        return E_INVALIDARG;  // a field has no child elements
+    }
+    HRESULT STDMETHODCALLTYPE RangeFromPoint(UiaPoint, ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        // shortcut: the caret, not the character under the point; hit-test the text if a client needs it.
+        *out = new TextRange(hwnd_, w_, serial_, c.a.caret, c.a.caret);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_DocumentRange(ITextRangeProvider** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        Ctx c;
+        if (!Load(c) || !c.w || !c.a.select) return UIA_E_ELEMENTNOTAVAILABLE;
+        *out = new TextRange(hwnd_, w_, serial_, 0, c.a.value.size());
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_SupportedTextSelection(SupportedTextSelection* out) override {
+        if (!out) return E_POINTER;
+        *out = SupportedTextSelection_Single;
+        return S_OK;
+    }
+
 private:
     ~Node() = default;
 
@@ -758,6 +1005,16 @@ private:
             }
         });
         return S_OK;
+    }
+
+    HRESULT OneRange(SAFEARRAY** out, size_t from, size_t to) const {
+        *out = SafeArrayCreateVector(VT_UNKNOWN, 0, 1);
+        if (!*out) return E_OUTOFMEMORY;
+        auto* range = new TextRange(hwnd_, w_, serial_, from, to);
+        LONG i = 0;
+        const HRESULT hr = SafeArrayPutElement(*out, &i, static_cast<IUnknown*>(range));  // the array holds its own reference
+        range->Release();
+        return hr;
     }
 
     template <class F>
@@ -786,6 +1043,15 @@ private:
     int serial_ = 0;
     int item_;
 };
+
+HRESULT TextRange::GetEnclosingElement(IRawElementProviderSimple** out) {
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    Ctx c;
+    if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
+    *out = static_cast<IRawElementProviderSimple*>(Node::Make(hwnd_, {w_, -1}));
+    return S_OK;
+}
 
 }  // namespace
 

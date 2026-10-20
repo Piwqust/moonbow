@@ -263,6 +263,7 @@ public:
     void OnFocusChanged(bool focused) override;
     bool WantsTextInput() const override { return true; }
     Rect CaretRect() const override;
+    void Describe(A11y& a) override;
 
 private:
     Rect TextRect() const;

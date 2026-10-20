@@ -680,6 +680,21 @@ Rect TextBox::CaretRect() const {
     return {tr.x + XOf(caret_) - scroll_, rect.Cy() - 9, 1, 18};
 }
 
+// The Text pattern: screen readers read the character, word or selection at the caret.
+void TextBox::Describe(A11y& a) {
+    if (password) return;
+    a.caret = caret_;
+    a.anchor = anchor_;
+    a.select = [this](size_t from, size_t to) {
+        anchor_ = std::min(from, text_.size());
+        MoveCaret(to, true);
+    };
+    a.textRect = [this](size_t from, size_t to) {
+        const float x1 = XOf(from), x2 = XOf(to);
+        return Rect{TextRect().x + x1 - scroll_, rect.Cy() - 10, std::max(1.0f, x2 - x1), 20};
+    };
+}
+
 TextBox::~TextBox() {
     // A focused box can be destroyed with its popup or page: stop the caret timer,
     // unless its host is already gone.
