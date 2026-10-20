@@ -186,6 +186,7 @@ Range* AddBoxRange(SyncPage* page, Widget* section, const std::wstring& label, c
     r->labels = spec.labels;
     r->trackH = 21;
     r->format = [fmt](float v) { return fmt(v); };
+    r->a11yName = label;  // the row above holds the value box too
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(14);
     r->onChange = [set](float v) { set(v); };
