@@ -242,7 +242,7 @@ private:
     void OnMouseButton(UINT msg, WPARAM wp, LPARAM lp);
     void CancelPress();
     void AfterPress(float x, float y);
-    void OnKey(UINT vk, bool down, bool repeat);
+    bool OnKey(UINT vk, bool down, bool repeat);  // true: something used the key
     void MoveFocus(bool backwards);
     void CollectFocusable(Widget* w, std::vector<Widget*>& out) const;
     void UpdateTooltip();

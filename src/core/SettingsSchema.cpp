@@ -1553,6 +1553,9 @@ void BuildMedia(Builder& b) {
         .Unit(L"%", L"%")
         .Desc(L"How much the wheel and the arrow keys change the volume.",
               L"На сколько меняют громкость колесо мыши и стрелки.");
+    b.Toggle("audio.volumeKeys", L"Volume keys control Lumen", L"Клавиши громкости управляют Lumen", false)
+        .Desc(L"While Lumen is active, the keyboard's volume keys change its volume instead of the Windows volume.",
+              L"Пока Lumen активен, клавиши громкости на клавиатуре меняют его громкость, а не громкость Windows.");
 
     b.Sec("loudness", L"Loudness", L"Выравнивание громкости");
     b.Toggle("audio.normalize", L"Normalize loudness", L"Выравнивать громкость", false)

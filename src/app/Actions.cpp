@@ -55,9 +55,10 @@ const std::vector<ActionInfo>& Table() {
         {Action::ToggleRepeat, "playback.repeat", L"Repeat", L"Playback", {{'L', kNone}}},
         {Action::ToggleShuffle, "playback.shuffle", L"Shuffle", L"Playback", {{'H', kNone}}},
         {Action::ABLoop, "playback.ab_loop", L"A-B loop", L"Playback", {{'L', kShift}}},
-        {Action::VolumeUp, "audio.volume_up", L"Volume up", L"Audio", {{VK_UP, kNone}, {VK_VOLUME_UP, kNone}}},
-        {Action::VolumeDown, "audio.volume_down", L"Volume down", L"Audio", {{VK_DOWN, kNone}, {VK_VOLUME_DOWN, kNone}}},
-        {Action::Mute, "audio.mute", L"Mute", L"Audio", {{'M', kNone}, {VK_VOLUME_MUTE, kNone}}},
+        // The keyboard's volume keys are Windows' (its flyout), unless audio.volumeKeys (ActionForKey).
+        {Action::VolumeUp, "audio.volume_up", L"Volume up", L"Audio", {{VK_UP, kNone}}},
+        {Action::VolumeDown, "audio.volume_down", L"Volume down", L"Audio", {{VK_DOWN, kNone}}},
+        {Action::Mute, "audio.mute", L"Mute", L"Audio", {{'M', kNone}}},
         {Action::CycleAudio, "audio.cycle", L"Next audio track", L"Audio", {{'A', kNone}, {'B', kNone}}},
         {Action::AudioDelayUp, "audio.delay_up", L"Audio delay +50 ms", L"Audio", {{'K', kNone}}},
         {Action::AudioDelayDown, "audio.delay_down", L"Audio delay −50 ms", L"Audio", {{'J', kNone}}},
@@ -424,6 +425,11 @@ Action ActionForKey(const KeyEvent& e) {
     for (const ActionInfo& info : Table())
         for (const auto& [vk, mods] : Bindings(info.action))
             if (vk == e.key && SameMods(mods, e.mods)) return info.action;
+    if (TheApp().config().GetBool("audio.volumeKeys")) {
+        if (e.key == VK_VOLUME_UP) return Action::VolumeUp;
+        if (e.key == VK_VOLUME_DOWN) return Action::VolumeDown;
+        if (e.key == VK_VOLUME_MUTE) return Action::Mute;
+    }
     return Action::None;
 }
 

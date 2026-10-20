@@ -1153,30 +1153,30 @@ void Host::MoveFocus(bool backwards) {
     SetFocus(list[i], true);
 }
 
-void Host::OnKey(UINT vk, bool down, bool repeat) {
-    if (!down) return;
+bool Host::OnKey(UINT vk, bool down, bool repeat) {
+    if (!down) return false;
     KeyEvent e{vk, CurrentMods(), repeat};
     HideTooltip();
     if (vk == VK_ESCAPE && capture_) {  // Esc drops a drag, as in Windows: a second one does the rest
         CancelPress();
-        return;
+        return true;
     }
 
     for (Widget* w = focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
             RequestRender();
-            return;
+            return true;
         }
 
     if (vk == VK_TAB && !e.mods.ctrl && !e.mods.alt) {
         MoveFocus(e.mods.shift);
-        return;
+        return true;
     }
     if (vk == VK_ESCAPE && !popups_.empty()) {
         for (size_t i = popups_.size(); i-- > 0;)
             if (!popups_[i].options.passthrough && popups_[i].options.dismissOnEscape) {
                 ClosePopupAt(i);
-                return;
+                return true;
             }
     }
     // Space/Enter press the focused control only when it was reached with the
@@ -1185,12 +1185,12 @@ void Host::OnKey(UINT vk, bool down, bool repeat) {
         focus_->IsEnabled() && !focus_->WantsTextInput()) {
         focus_->OnClick();
         RequestRender();
-        return;
+        return true;
     }
     // Keyboard shortcuts of the window are suspended while a modal popup is open.
     for (const Popup& p : popups_)
-        if (p.options.modal) return;
-    if (onKey) onKey(e);
+        if (p.options.modal) return true;
+    return onKey && onKey(e);
 }
 
 // --- tooltip -----------------------------------------------------------------------------
@@ -1690,9 +1690,13 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SYSKEYDOWN:
             if (msg == WM_SYSKEYDOWN && wp == VK_F4) break;
             g_inKey = true;
-            OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
-            g_inKey = false;
-            if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
+            {
+                const bool handled = OnKey(static_cast<UINT>(wp), true, (lp & (1 << 30)) != 0);
+                g_inKey = false;
+                if (msg == WM_SYSKEYDOWN && wp == VK_MENU) break;
+                // DefWindowProc turns an unused volume key into WM_APPCOMMAND: Windows' volume.
+                if (!handled && wp >= VK_VOLUME_MUTE && wp <= VK_VOLUME_UP) break;
+            }
             return 0;
 
         case WM_SYSCHAR:
