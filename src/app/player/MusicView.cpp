@@ -498,9 +498,11 @@ private:
             capture_ = std::make_unique<audio::LoopbackCapture>(GetHost()->Hwnd(), ui::Host::kRepaintMessage);
         bool show = false;
         if (capture_) {
+            // Windows' "Animation effects" off: the first frame with sound in it stays, still (WCAG 2.3.3).
+            const bool still = AnimFloat::ReducedMotion() && frame_.level > 0.05f;
             capture_->SetGain(TheApp().player().OutputGain());
-            capture_->SetRunning(playing);
-            capture_->Take(frame_);
+            capture_->SetRunning(playing && !still);
+            if (!still) capture_->Take(frame_);
             show = playing && !capture_->Failed();
         }
         const float target = show ? 1.0f : 0.0f;
@@ -973,7 +975,9 @@ private:
             ctx->GetTransform(&old);
             if (grow != 1)
                 ctx->SetTransform(D2D1::Matrix3x2F::Scale(grow, grow, {k.center ? r.Cx() : r.x, r.Cy()}) * old);
-            if (synced && k.fill && static_cast<int>(i) == current_) {
+            // Reduced motion: the sung line lights up whole, as the column jumps line by line
+            // (AnimFloat::To does not glide then).
+            if (synced && k.fill && static_cast<int>(i) == current_ && !AnimFloat::ReducedMotion()) {
                 const double sung = lyrics_.SungFraction(current_, SmoothTime());
                 filling = sung < 1;
                 PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), white.Fade(k.ahead), a, shown);
