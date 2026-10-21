@@ -1,0 +1,2 @@
+1,0,Default,,0000,0000,0000,,Hello {\a6}world
+2,0,Default,,0,0,0,,{\pos(10,20)}Second\Nline

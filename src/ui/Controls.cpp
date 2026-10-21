@@ -117,6 +117,15 @@ Size Label::MeasureContent(float availW, float) {
 
 void Label::Paint(Painter& p) {
     const Color c = color ? color() : (IsEnabled() ? ToneColor(tone) : P().textDisabled);
+    if (wrap && maxLines > 0) {
+        // Only maxLines fit: DirectWrite trims the last one with "…". Without the cap a long unbroken
+        // name (a 40 000-character file name) spilled over the whole window.
+        Rect box = rect;
+        box.h = std::min(box.h, gfx::Text::Get().LineHeight(style) * static_cast<float>(maxLines));
+        box.y = valign == VAlign::Top ? rect.y : valign == VAlign::Center ? rect.Cy() - box.h / 2 : rect.y + rect.h - box.h;
+        p.Text(text_, box, style, c, halign, valign, gfx::kTextWrap | gfx::kTextEllipsis);
+        return;
+    }
     p.Text(text_, rect, style, c, halign, valign, wrap ? gfx::kTextWrap : gfx::kTextEllipsis);
     if (!wrap) PaintTextMarks(p, text_, rect, style, halign, marks);
 }

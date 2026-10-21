@@ -40,6 +40,10 @@ set "LFLAGS=%LFLAGS% /DELAYLOAD:d3d11.dll /DELAYLOAD:d2d1.dll /DELAYLOAD:dwrite.
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /Od /Zi /MTd /D_DEBUG"
     set "LFLAGS=%LFLAGS% /DEBUG"
+) else if /i "%CONFIG%"=="asan" (
+    rem AddressSanitizer, for test runs; needs the C++ AddressSanitizer component of Visual Studio.
+    set "CFLAGS=%CFLAGS% /O1 /Zi /MT /DNDEBUG /fsanitize=address"
+    set "LFLAGS=%LFLAGS% /DEBUG /INCREMENTAL:NO"
 ) else (
     rem /Zi and /DEBUG only add Lumen.pdb, which crash dumps need; /OPT:REF,ICF keep the exe as small.
     set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG /Zi"
@@ -52,4 +56,5 @@ rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
 cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 copy /y "%ROOT%third_party\mpv\libmpv-2.dll" "%OUT%\" >nul || exit /b 1
+if /i "%CONFIG%"=="asan" copy /y "%VCToolsInstallDir%bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll" "%OUT%\" >nul
 echo Built %OUT%\Lumen.exe (%CONFIG%)

@@ -319,7 +319,7 @@ h2.t:focus { outline: none; }
 <div class="wrap">
   <header class="top">
     <span class="mark"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v7l5.5-3.5z" fill="currentColor"/></svg>Lumen</span>
-    <span>17.10 → 21.10.2026 · 30 глав</span>
+    <span>17.10 → 21.10.2026 · 31 глава</span>
   </header>
 
   <section class="hero grid" id="now" aria-labelledby="h1">
@@ -328,7 +328,7 @@ h2.t:focus { outline: none; }
     <aside class="now" aria-labelledby="now-h">
       <h2 id="now-h">Где проект сейчас, 21.10</h2>
       <dl>
-        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи: <a href="#ch-29">глава 29</a>. Все ветки собраны в одну <code>main</code>. Для бета-тестеров: журнал и отчёты о сбоях, <a href="#ch-30">глава 30</a>.</dd></div>
+        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи: <a href="#ch-29">глава 29</a>. Все ветки собраны в одну <code>main</code>. Для бета-тестеров: журнал и отчёты о сбоях, <a href="#ch-30">глава 30</a>. Фаззинг и плохие файлы: <a href="#ch-31">глава 31</a>.</dd></div>
         <div><dt>Открыто</dt><dd>Частично: размер текста Windows 200 % и заголовок первой страницы знакомства. Отложено: серый фон под белой обложкой.</dd></div>
         <div><dt>Проверить вам руками</dt><dd>Alt+Space, изменение размера мышью за край, живой Narrator, медиа-карточка Windows и недавние файлы на панели задач, размер текста 150-200 %.</dd></div>
         <div><dt>Решения, которые можно поменять</dt><dd>Тема «Как в системе» по умолчанию, Ctrl+F для поиска, клавиши громкости у Windows, «Избранное» первым в плейлистах.</dd></div>
@@ -345,6 +345,45 @@ h2.t:focus { outline: none; }
 </div>
 
 <main id="chapters" class="wrap" tabindex="-1">
+
+<!-- 31 -->
+<article class="ch grid flip" id="ch-31" data-n="31" data-date="21.10" aria-labelledby="t31">
+  <div class="meta"><span class="num">31</span><span class="date">21.10.2026</span><span class="tag">Надёжность</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t31" tabindex="-1">Сотни миллионов испорченных файлов</h2>
+    <p class="say">Lumen читает файлы, которые писал кто угодно. Теперь программа сама портит образцы тегов, JSON, текстов песен, субтитров и плейлистов миллионами способов и смотрит, не сломается ли разбор. Отдельно есть набор настоящих «плохих» файлов, которые Lumen открывает по одному.</p>
+    <ul>
+      <li>Фаззер нашёл одну ошибку: обрезанный файл Ogg уводил чтение за конец буфера. Исправлено, вход сохранён как регрессия.</li>
+      <li>Набор плохих файлов: пустые, мусорные, обрезанные, с чужим расширением, с ломаными тегами, видео 1×1 и 8000×16, 48 дорожек, 300 глав, папка-петля. Сбоев и зависаний нет.</li>
+      <li>Имя файла в 40 000 символов в карточке ошибки закрывало всё окно. Теперь текст обрезается на второй строке.</li>
+      <li>Прогон 375 состояний интерфейса в отладочной сборке, которая проверяет каждое обращение к массивам, прошёл без сбоев.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>~220 млн</dd><dt>испорченных входов</dt></div>
+      <div><dd>102 из 102</dd><dt>плохих файлов без сбоя</dt></div>
+      <div><dd>2</dd><dt>ошибки найдено и исправлено</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6л; <a href="../tests/fuzz/fuzz.cpp">tests/fuzz</a>, <a href="../qa/bad-media/make-bad-media.py">qa/bad-media</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,76;20,264" viewBox="0 0 480 300" role="img" aria-label="Прогоны фаззера по разборщикам на логарифмической шкале; одна ошибка найдена в разборе тегов">
+        <text class="tm" x="40" y="58" style="fill:var(--ink)">прогонов за 5 минут</text><text class="t" x="440" y="58" text-anchor="end">шкала логарифмическая</text>
+        <text class="t" x="40" y="88">LRC</text><rect class="ms" x="120" y="78" width="207" height="12" rx="2"/><text class="t" x="336" y="88">28 млн</text>
+        <text class="t" x="40" y="112">JSON</text><rect class="ms" x="120" y="102" width="196" height="12" rx="2"/><text class="t" x="325" y="112">19 млн</text>
+        <text class="t" x="40" y="136">имена серий</text><rect class="ms" x="120" y="126" width="182" height="12" rx="2"/><text class="t" x="311" y="136">11 млн</text>
+        <text class="t" x="40" y="160" style="fill:var(--ink)">теги</text><rect class="ac" x="120" y="150" width="178" height="12" rx="2"/><text class="t" x="307" y="160" style="fill:var(--ink)">9 млн, 1 ошибка</text>
+        <text class="t" x="40" y="184">ASS</text><rect class="ms" x="120" y="174" width="159" height="12" rx="2"/><text class="t" x="288" y="184">4,5 млн</text>
+        <text class="t" x="40" y="208">скины</text><rect class="ms" x="120" y="198" width="157" height="12" rx="2"/><text class="t" x="286" y="208">4,2 млн</text>
+        <text class="t" x="40" y="232">M3U</text><rect class="ms" x="120" y="222" width="33" height="12" rx="2"/><text class="t" x="162" y="232">35 тыс., через диск</text>
+        <path class="ln" d="M40 252H440"/>
+        <text class="t" x="40" y="272">ни одного сбоя после исправления</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Каждый разборщик получал миллионы испорченных копий настоящих файлов</li><li data-k="2">Единственная найденная ошибка исправлена, повторные круги чистые</li></ol>
+    <figcaption>Рис. 31. Фаззинг разборщиков, второй круг</figcaption>
+  </figure>
+</article>
 
 <!-- 30 -->
 <article class="ch grid wide" id="ch-30" data-n="30" data-date="21.10" aria-labelledby="t30">
@@ -1630,14 +1669,14 @@ h2.t:focus { outline: none; }
 
 <nav class="bar" aria-label="Главы">
   <button class="nb prev" type="button" aria-label="Глава раньше"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h2v12H5zM16 4v12l-8-6z" fill="currentColor"/></svg></button>
-  <span class="pill" aria-hidden="true">30</span>
+  <span class="pill" aria-hidden="true">31</span>
   <button class="nb next" type="button" aria-label="Глава позже"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12l8-6zM13 4h2v12h-2z" fill="currentColor"/></svg></button>
   <p class="cur" aria-hidden="true">Сейчас<span>20.10</span></p>
   <div class="seek">
     <div class="trk"></div><div class="fill"></div><div class="ticks"></div><div class="hd"></div>
-    <input type="range" min="1" max="30" step="1" value="30" aria-label="Глава">
+    <input type="range" min="1" max="31" step="1" value="31" aria-label="Глава">
   </div>
-  <span class="total">из 30</span>
+  <span class="total">из 31</span>
   <div class="pv" aria-hidden="true"><div class="pv-img live"></div><div class="pv-t"></div></div>
 </nav>
 

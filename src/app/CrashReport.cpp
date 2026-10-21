@@ -4,6 +4,7 @@
 
 #include <windows.h>
 
+#include <crtdbg.h>
 #include <dbghelp.h>
 
 #include <algorithm>
@@ -23,6 +24,7 @@ constexpr size_t kKeep = 5;
 // Filled at install: the handler must not allocate (the heap may be what broke).
 wchar_t g_dir[MAX_PATH * 2];
 wchar_t g_version[32];
+char g_note[512];  // the failed check's message (debug builds), empty otherwise
 EXCEPTION_POINTERS* g_ep = nullptr;
 DWORD g_thread = 0;
 
@@ -63,11 +65,12 @@ DWORD WINAPI WriteReport(void*) {
     char text[512];
     snprintf(text, sizeof text,
              "Lumen %ls crashed.\r\n"
-             "Exception 0x%08lX%s at %ls+0x%llX, thread %lu.\r\n"
+             "Exception 0x%08lX%s at %ls+0x%llX, thread %lu.\r\n%s%s"
              "The .dmp file next to this one has the stacks; open it in WinDbg with Lumen.pdb of this build.\r\n",
              g_version, code, code == kAbort ? " (std::terminate, abort or a CRT check)" : "",
              slash ? slash + 1 : modulePath,
-             static_cast<unsigned long long>(static_cast<BYTE*>(at) - reinterpret_cast<BYTE*>(module)), g_thread);
+             static_cast<unsigned long long>(static_cast<BYTE*>(at) - reinterpret_cast<BYTE*>(module)), g_thread,
+             g_note[0] ? "Check: " : "", g_note);
     swprintf_s(path, L"%s\\%s.txt", g_dir, name);
     WriteText(path, text);
 
@@ -105,9 +108,15 @@ void Abort() {
 }  // namespace
 
 void InstallCrashHandler(const std::wstring& version) {
+#ifdef __SANITIZE_ADDRESS__
+    return;  // AddressSanitizer reports crashes itself (ASAN_OPTIONS=log_path=...)
+#endif
     const std::wstring dir = LogDir();
     if (dir.empty()) return;
     wcsncpy_s(g_dir, dir.c_str(), _TRUNCATE);
+    // Test runs that wipe their data folders (tools\dev\sweep.ps1) collect reports elsewhere.
+    if (wchar_t custom[MAX_PATH]; GetEnvironmentVariableW(L"LUMEN_CRASH_DIR", custom, MAX_PATH) - 1u < MAX_PATH - 1u)
+        wcsncpy_s(g_dir, custom, _TRUNCATE);
     wcsncpy_s(g_version, version.c_str(), _TRUNCATE);
     SetUnhandledExceptionFilter(OnCrash);
     std::set_terminate([] { Abort(); });
@@ -115,6 +124,16 @@ void InstallCrashHandler(const std::wstring& version) {
     _set_invalid_parameter_handler([](const wchar_t*, const wchar_t*, const wchar_t*, unsigned, uintptr_t) { Abort(); });
     signal(SIGABRT, [](int) { Abort(); });
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#ifdef _DEBUG
+    // A failed CRT or STL check (index out of range, heap corruption) becomes a crash report with its
+    // message instead of a dialog that nobody sees in a test run.
+    _CrtSetReportHook2(_CRT_RPTHOOK_INSTALL, [](int type, char* message, int*) -> int {
+        if (type == _CRT_WARN) return FALSE;
+        strncpy_s(g_note, message ? message : "", _TRUNCATE);
+        Abort();
+        return TRUE;
+    });
+#endif
 }
 
 std::wstring TakeCrashNotice() {

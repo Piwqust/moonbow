@@ -1,0 +1,9 @@
+﻿#EXTM3U
+#EXTINF:123,Artist - Title
+music\song.mp3
+#EXTINF:-1,Radio
+https://example.org/stream
+C:\Media\film.mkv
+..\..\up.flac
+\\server\share\x.mp4
+file:///C:/Media/a%20b.mp3

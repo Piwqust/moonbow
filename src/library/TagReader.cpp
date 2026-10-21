@@ -1007,7 +1007,9 @@ bool ParseOgg(Reader& r, TagInfo& t, const TagOptions& o) {
             for (int i = 0; i < h[26] && packet < 2; ++i) {
                 std::vector<uint8_t>& p = packets[packet];
                 const size_t take = std::min<size_t>(seg[i], page.size() > off ? page.size() - off : 0);
-                if (p.size() + take <= cap) p.insert(p.end(), page.begin() + static_cast<ptrdiff_t>(off), page.begin() + static_cast<ptrdiff_t>(off + take));
+                // take is 0 once `off` is past a cut-off page, and page.begin() + off would point past its end.
+                if (take > 0 && p.size() + take <= cap)
+                    p.insert(p.end(), page.begin() + static_cast<ptrdiff_t>(off), page.begin() + static_cast<ptrdiff_t>(off + take));
                 off += seg[i];
                 if (seg[i] < 255) ++packet;  // the packet ends here
             }

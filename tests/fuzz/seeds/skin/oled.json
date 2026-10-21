@@ -1,0 +1,21 @@
+{
+  "lumenSkin": 1,
+  "name": {"en": "OLED black", "ru": "Чёрный OLED"},
+  "_comment": "True black for OLED screens: the dark theme with every background at or near #000.",
+  "mode": "dark",
+  "dark": {
+    "bg.deep": "#121212",
+    "bg.base": "#000000",
+    "bg.raised": "#0A0A0A",
+    "bg.panel": "#0E0E0E",
+    "bg.chrome": "#000000",
+    "bg.card": "#141414",
+    "bg.selected": "#1C1C1C",
+    "bg.menu": "#161616",
+    "line.subtle": "#101010",
+    "line": "#1F1F1F",
+    "line.strong": "#3A3A3A",
+    "line.control": "#6E6E6E",
+    "text.disabled": "#5E5E5E"
+  }
+}

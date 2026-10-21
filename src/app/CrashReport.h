@@ -10,7 +10,8 @@
 
 namespace app {
 
-// After --data-dir is applied.
+// After --data-dir is applied. The LUMEN_CRASH_DIR environment variable (an existing folder)
+// redirects the reports, for test runs.
 void InstallCrashHandler(const std::wstring& version);
 
 // The .txt of a crash in an earlier session, once, or empty. Also keeps only the 5 newest reports.
