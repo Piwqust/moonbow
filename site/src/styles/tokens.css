@@ -1,0 +1,40 @@
+/* Tokens: values from the player's own design/DESIGN.md. Monochrome on purpose: colour on this
+   site exists only inside screenshots, as in Lumen it exists only in the film. */
+:root {
+  --c-bg: #090909;        /* bg.deep */
+  --c-raised: #121212;
+  --c-fg: #eaeaea;        /* text.primary */
+  --c-muted: #8b8b8b;     /* text.tertiary, AA on bg */
+  --c-dim: #646464;       /* only for non-text marks */
+  --c-line: #262626;      /* line */
+  --c-line-strong: #404040;
+  --c-accent: #ededed;    /* accent «Белый» */
+  --c-on-accent: #0e0e0e;
+  --c-curtain: #000;
+
+  --f-display: 'Onest', system-ui, sans-serif;
+  --f-body: 'Onest', system-ui, sans-serif;
+  --f-time: 'JB Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  --t-mega: clamp(3.1rem, 0.6rem + 12.4vw, 13.5rem);
+  --t-xl: clamp(2.25rem, 1.3rem + 4vw, 5rem);
+  --t-l: clamp(1.6rem, 1.15rem + 1.9vw, 2.9rem);
+  --t-m: clamp(1.2rem, 1.08rem + 0.5vw, 1.5rem);
+  --t-body: clamp(1rem, 0.96rem + 0.18vw, 1.125rem);
+  --t-s: 0.875rem;
+  --t-xs: 0.8125rem;
+
+  --u: clamp(0.5rem, 0.35rem + 0.6vw, 1rem);
+  --gutter: clamp(1rem, 0.6rem + 1.6vw, 2.5rem);
+  --header-h: 4rem;
+
+  --r-window: 8px;   /* Windows 11 window corner */
+  --r-pill: 999px;   /* Lumen's Play button */
+
+  --ease-soft: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --z-content: 1;
+  --z-header: 50;
+  --z-curtain: 90;
+}

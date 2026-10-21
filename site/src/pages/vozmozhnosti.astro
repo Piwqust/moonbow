@@ -1,0 +1,83 @@
+---
+import Base from '../layouts/Base.astro';
+import Shot from '../components/Shot.astro';
+import { features, download } from '../data/site';
+
+const shots: Record<string, { name: string; alt: string; caption: string }> = {
+  pleer: { name: 'player-seek-preview', alt: 'Превью кадра над полосой перемотки Lumen', caption: 'Превью кадра появляется, как только курсор касается полосы.' },
+  muzyka: { name: 'music-album', alt: 'Страница альбома «Огни» в медиатеке Lumen: обложка, диски и треки', caption: 'Альбом с шапкой, дисками и треками.' },
+  mediateka: { name: 'library-series', alt: 'Сериал «Тихий берег» в медиатеке Lumen, серии разложены по сезонам', caption: 'Сериал сам собрался по сезонам из папок.' },
+  zvuk: { name: 'music-visualizer', alt: 'Экран музыки Lumen с визуализацией спектра', caption: 'Визуализация: спектр, круг, осциллограф или волна.' },
+};
+---
+<Base title="Возможности" description="Всё, что умеет Lumen: перемотка с превью кадров, главы и следующая серия, обработка видео на видеокарте, объёмный звук, тексты песен, медиатека с сезонами.">
+  <div class="wrap page-head grid">
+    <h1 class="display head__title" data-split="lines" data-intro>Возможности</h1>
+    <p class="lead head__lead" data-reveal="fade" data-intro data-delay="0.2">Полный список, разложенный так же, как настройки в самом плеере. Ничего из этого не включено поверх картинки без спроса.</p>
+  </div>
+
+  <nav class="wrap toc" aria-label="Разделы">
+    <ol>
+      {features.map((g, i) => (
+        <li><a class="seek" href={`#${g.id}`}><span class="time">{String(i + 1).padStart(2, '0')}</span> {g.title}</a></li>
+      ))}
+    </ol>
+  </nav>
+
+  <div class="groups">
+    {features.map((g) => (
+      <section class="group wrap grid" id={g.id} aria-labelledby={`${g.id}-h`}>
+        <div class="group__head">
+          <h2 class="group__title" id={`${g.id}-h`} data-split="lines">{g.title}</h2>
+          <p class="group__lead">{g.lead}</p>
+        </div>
+        <ul class="group__items">
+          {g.items.map((it) => <li data-reveal="fade">{it}</li>)}
+        </ul>
+        {shots[g.id] && (
+          <Shot class="group__shot" name={shots[g.id].name} alt={shots[g.id].alt} caption={shots[g.id].caption} sizes="(max-width: 767px) 100vw, 45vw" />
+        )}
+      </section>
+    ))}
+  </div>
+
+  <section class="wrap end">
+    <p class="end__text">Всё это: один Lumen.exe и libmpv рядом с ним.</p>
+    <a class="btn" href={download.url}>
+      <span class="btn__fill" aria-hidden="true"></span>
+      <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
+      Скачать для Windows
+    </a>
+  </section>
+</Base>
+
+<style>
+  .head__title { grid-column: 1 / -1; }
+  .head__lead { grid-column: 7 / span 5; margin-top: calc(var(--u) * 4); color: var(--c-muted); }
+  .toc { position: sticky; top: 0; z-index: 3; background: rgb(9 9 9 / 0.94); border-block: 1px solid var(--c-line); transition: top 0.5s var(--ease-out); }
+  :global(html:not(.frame-away)) .toc { top: var(--header-h); }
+  .toc ol { display: flex; gap: 0 1.75rem; overflow-x: auto; scrollbar-width: none; font-size: var(--t-s); }
+  .toc a { white-space: nowrap; }
+  .toc .time { font-size: 0.75rem; margin-right: 0.3rem; }
+  .group { padding-block: calc(var(--u) * 9); border-bottom: 1px solid var(--c-line); row-gap: calc(var(--u) * 4); scroll-margin-top: calc(var(--header-h) + 3.5rem); }
+  .group__head { grid-column: 1 / span 4; }
+  .group__title { font-size: var(--t-xl); font-weight: 300; letter-spacing: -0.05em; line-height: 0.95; margin-left: -0.04em; }
+  .group__lead { margin-top: 1.25rem; color: var(--c-muted); max-width: 26ch; }
+  .group__items { grid-column: 6 / -1; counter-reset: it; }
+  .group__items li {
+    position: relative; padding: 0.95rem 0 0.95rem 2.5rem; border-top: 1px solid var(--c-line);
+    font-size: var(--t-m); line-height: 1.35; letter-spacing: -0.015em;
+  }
+  .group__items li::before {
+    counter-increment: it; content: counter(it, decimal-leading-zero);
+    position: absolute; left: 0; top: 1.25rem; font-family: var(--f-time); font-size: 0.75rem; color: var(--c-muted);
+  }
+  .group__shot { grid-column: 6 / -1; margin-top: calc(var(--u) * 3); }
+  .end { padding-block: calc(var(--u) * 12); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2rem; }
+  .end__text { font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.1; max-width: 22ch; }
+  @media (max-width: 767px) {
+    .head__lead, .group__head, .group__items, .group__shot { grid-column: 1 / -1; }
+    .group__items li { font-size: var(--t-body); padding-left: 2.1rem; }
+    .toc ol { padding-right: var(--gutter); }
+  }
+</style>

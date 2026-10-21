@@ -1,0 +1,111 @@
+---
+import Base from '../layouts/Base.astro';
+import { keyGroups } from '../data/site';
+const total = keyGroups.reduce((n, g) => n + g.keys.length, 0);
+const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'действие' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'действия' : 'действий');
+---
+<Base title="Горячие клавиши" description="Горячие клавиши Lumen: перемотка, кадры, дорожки, субтитры, окно и медиатека. Любую клавишу можно переназначить в настройках.">
+  <div class="wrap page-head grid">
+    <h1 class="display head__title" data-split="lines" data-intro>Клавиши</h1>
+    <div class="head__side" data-reveal="fade" data-intro data-delay="0.2">
+      <p class="lead">Плеером можно управлять, не касаясь мыши. Любую клавишу переназначают в «Настройки, Управление», есть раскладка «как в YouTube».</p>
+      <label class="filter">
+        <span class="label">Найти действие</span>
+        <input type="search" data-key-filter placeholder="например, субтитры" autocomplete="off" />
+      </label>
+      <p class="label" data-key-count aria-live="polite">{total} {plural(total)}</p>
+    </div>
+  </div>
+
+  <div class="wrap keys">
+    {keyGroups.map((g) => (
+      <section class="kgroup" aria-labelledby={`k-${g.title}`} data-key-group>
+        <h2 class="kgroup__title" id={`k-${g.title}`}>{g.title}</h2>
+        <dl>
+          {g.keys.map((k) => (
+            <div class="krow" data-key-row>
+              <dt>{k.action}</dt>
+              <dd>
+                {k.keys.map((chord, ci) => (
+                  <>
+                    {ci > 0 && <span class="or">или</span>}
+                    <span class="chord">{chord.map((c) => <kbd>{c}</kbd>)}</span>
+                  </>
+                ))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    ))}
+    <p class="empty label" data-key-empty hidden>Такого действия нет. В самом плеере полный список открывается по F1.</p>
+  </div>
+</Base>
+
+<style>
+  .head__title { grid-column: 1 / span 7; }
+  .head__side { grid-column: 8 / -1; align-self: end; display: grid; gap: 1.25rem; }
+  .head__side .lead { font-size: var(--t-body); color: var(--c-muted); }
+  .filter { display: grid; gap: 0.4rem; }
+  .filter input {
+    width: 100%; padding: 0.8rem 1rem; border-radius: var(--r-pill);
+    background: var(--c-raised); border: 1px solid #707070; color: var(--c-fg);
+    transition: border-color 0.2s;
+  }
+  .filter input::placeholder { color: var(--c-muted); }
+  .filter input:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; border-color: var(--c-accent); }
+  .keys { columns: 2 28rem; column-gap: calc(var(--gutter) * 2); padding-bottom: calc(var(--u) * 12); }
+  .kgroup { break-inside: avoid; padding-bottom: calc(var(--u) * 5); }
+  .kgroup[hidden] { display: none; }
+  .kgroup__title { font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; padding-bottom: 0.75rem; }
+  .krow { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid var(--c-line); }
+  .krow[hidden] { display: none; }
+  .krow dt { color: var(--c-fg); }
+  .krow dd { display: flex; flex-wrap: wrap; justify-content: end; align-items: center; gap: 0.35rem 0.5rem; flex: none; max-width: 55%; }
+  .chord { display: inline-flex; gap: 0.25rem; }
+  kbd {
+    display: inline-grid; place-items: center; min-width: 2rem; height: 2rem; padding: 0 0.55rem;
+    font-family: var(--f-time); font-size: 0.8125rem; color: var(--c-fg);
+    background: var(--c-raised); border: 1px solid var(--c-line-strong); border-bottom-width: 2px; border-radius: 6px;
+    transition: translate 0.15s var(--ease-soft), border-bottom-width 0.15s;
+  }
+  @media (hover: hover) { .krow:hover kbd { translate: 0 1px; border-bottom-width: 1px; } }
+  .or { font-size: var(--t-xs); color: var(--c-muted); }
+  @media (max-width: 767px) {
+    .head__title, .head__side { grid-column: 1 / -1; }
+    .head__side { margin-top: calc(var(--u) * 3); }
+    .krow { flex-direction: column; align-items: start; gap: 0.5rem; }
+    .krow dd { justify-content: start; max-width: none; }
+  }
+</style>
+
+<script>
+  import { onPage } from '../engine';
+  onPage(() => {
+    const input = document.querySelector<HTMLInputElement>('[data-key-filter]');
+    if (!input) return;
+    const groups = [...document.querySelectorAll<HTMLElement>('[data-key-group]')];
+    const count = document.querySelector<HTMLElement>('[data-key-count]')!;
+    const empty = document.querySelector<HTMLElement>('[data-key-empty]')!;
+    const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'действие' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'действия' : 'действий');
+    // Typing filters the list, like Lumen's own menus do.
+    const run = () => {
+      const q = input.value.trim().toLowerCase();
+      let shown = 0;
+      for (const g of groups) {
+        let inGroup = 0;
+        for (const row of g.querySelectorAll<HTMLElement>('[data-key-row]')) {
+          const hit = !q || row.textContent!.toLowerCase().includes(q) || g.querySelector('h2')!.textContent!.toLowerCase().includes(q);
+          row.hidden = !hit;
+          if (hit) inGroup++;
+        }
+        g.hidden = !inGroup;
+        shown += inGroup;
+      }
+      count.textContent = `${shown} ${plural(shown)}`;
+      empty.hidden = shown > 0;
+    };
+    input.addEventListener('input', run);
+    return () => input.removeEventListener('input', run);
+  });
+</script>
