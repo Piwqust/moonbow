@@ -7,6 +7,7 @@
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/LiveState.h"
+#include "core/Log.h"
 #include "core/Paths.h"
 #include "net/Online.h"
 #include "ui/Controls.h"
@@ -48,6 +49,10 @@ bool RunSettingsAction(const std::string& action) {
         live.SetZoomMode("fit");  // video-zoom 0, video-unscaled no
         live.SetAspect("auto");
         toast(L"Picture reset", "video");
+        return true;
+    }
+    if (action == "open-logs-folder") {
+        ui::Host::ShellOpen(nullptr, L"open", LogDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return true;
     }
     if (action == "open-scripts-folder" || action == "open-data-folder" || action == "open-shaders-folder") {

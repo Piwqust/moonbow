@@ -1,6 +1,7 @@
 #include "SettingsSchema.h"
 
 #include "Config.h"
+#include "Log.h"
 #include "Paths.h"
 #include "../audio/LoopbackSupport.h"
 #include "../library/MediaTypes.h"
@@ -135,9 +136,9 @@ std::optional<std::string> BuildLogFile(const Config& c) {
     if (!c.GetBool("general.saveLog")) return std::nullopt;
     std::string file = c.GetString("general.logFile");
     if (file.empty()) {
-        std::wstring def = DataFilePath(L"lumen.log");
-        if (def.empty()) return std::nullopt;
-        file = json::ToUtf8(def);
+        const std::wstring dir = LogDir();
+        if (dir.empty()) return std::nullopt;
+        file = json::ToUtf8(dir + L"\\mpv.log");
     }
     return file;
 }
@@ -747,14 +748,22 @@ void BuildApp(Builder& b) {
     b.Toggle("general.developerMode", L"Playback statistics", L"Статистика воспроизведения", false)
         .Desc(L"Show technical details over the video: decoder, zero-copy, frame drops, bitrate, cache and A/V sync (Ctrl+Shift+I).",
               L"Показывать технические подробности поверх видео: декодер, работа без копирования, пропуски кадров, битрейт, кэш и синхронизацию (Ctrl+Shift+I).");
-    b.Toggle("general.saveLog", L"Save a log", L"Сохранять журнал", false)
-        .Desc(L"Write playback messages to a log file. Useful when reporting a problem.",
-              L"Записывать сообщения воспроизведения в файл. Пригодится, если нужно сообщить о проблеме.")
+    b.Button("general.openLogs", L"Logs and crash reports", L"Журналы и отчёты о сбоях", "open-logs-folder",
+             L"Open folder", L"Открыть папку")
+        .Inferred()
+        .Desc(L"Lumen keeps a short log and, after a crash, a report on this computer. Nothing is sent. "
+              L"To report a problem, send the files from this folder.",
+              L"Lumen ведёт короткий журнал, а после сбоя сохраняет отчёт. Всё остаётся на этом компьютере "
+              L"и никуда не отправляется. Чтобы сообщить о проблеме, пришлите файлы из этой папки.");
+    b.Toggle("general.saveLog", L"Detailed playback log", L"Подробный журнал воспроизведения", false)
+        .Desc(L"Also write everything mpv reports to mpv.log. Useful when a file plays wrong; costs a little CPU.",
+              L"Дополнительно записывать всё, что сообщает mpv, в mpv.log. Пригодится, если файл играет "
+              L"неправильно; немного нагружает процессор.")
         .MpvBuild("log-file", BuildLogFile);
     b.Path("general.logFile", L"Log file", L"Файл журнала", PathKind::SaveFile)
-        .Desc(L"Where the log is written. Leave empty to use lumen.log in the Lumen data folder.",
-              L"Куда записывать журнал. Если пусто — lumen.log в папке данных Lumen.")
-        .Hint(DataFileDisplayPath(L"lumen.log"), DataFileDisplayPath(L"lumen.log"))
+        .Desc(L"Where the detailed log is written. Leave empty to use mpv.log in the logs folder.",
+              L"Куда записывать подробный журнал. Если пусто — mpv.log в папке журналов.")
+        .Hint(DataFileDisplayPath(L"logs\\mpv.log"), DataFileDisplayPath(L"logs\\mpv.log"))
         .When("general.saveLog", "true")
         .MpvBuild("log-file", BuildLogFile);
     b.Pick("general.logLevel", L"Log details", L"Подробность журнала",

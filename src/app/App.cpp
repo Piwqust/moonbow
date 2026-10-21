@@ -4,12 +4,14 @@
 #include "Trace.h"
 #include "Util.h"
 #include "app/Actions.h"
+#include "app/CrashReport.h"
 #include "app/Dialogs.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/SeekPreview.h"
 #include "core/Json.h"
+#include "core/Log.h"
 #include "core/Paths.h"
 #include "library/MediaTypes.h"
 #include "ui/Theme.h"
@@ -17,6 +19,7 @@
 #include "app/MainWindow.h"
 #include "app/Shell.h"
 #include "app/Skins.h"
+#include "app/SettingsActions.h"
 #include "app/player/PlayerView.h"
 #include "app/settings/ShortcutStore.h"
 #include "core/SettingsSchema.h"
@@ -491,6 +494,11 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         ShowToast(main_.get(),
                   Fmt(Tr(L"Damaged file replaced: {0}. A backup is in the data folder."), {names}),
                   "info", 8000);
+    }
+    if (const std::wstring crash = TakeCrashNotice(); !crash.empty()) {
+        Log("the previous session crashed: " + json::ToUtf8(crash));
+        ShowToast(main_.get(), Tr(L"Lumen crashed last time."), "info", 10000, Tr(L"Show report"),
+                  [] { RunSettingsAction("open-logs-folder"); });
     }
     if (UiValue("onboarded") != "1") {
         app::ShowOnboarding([this] {

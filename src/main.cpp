@@ -1,10 +1,13 @@
 #include "Trace.h"
 #include "app/App.h"
+#include "app/CrashReport.h"
 #include "app/Gallery.h"
 #include "app/MainWindow.h"
+#include "core/Log.h"
 #include "core/Paths.h"
 #include "gfx/Gpu.h"
 #include "gfx/Text.h"
+#include "net/Http.h"
 #include "ui/Host.h"
 
 #include <objbase.h>
@@ -110,6 +113,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (args[i] == L"--automation") ui::Host::SetAutomation(true);
         if (args[i] == L"--data-dir" && i + 1 < args.size()) SetDataDirForTests(args[i + 1]);
     }
+    app::InstallCrashHandler(net::AppVersion());
     // --scale <factor> (--automation only): lay out as if at factor x the monitor's scale;
     // 1.5 or 150 both mean 150 % on a 100 % screen.
     for (size_t i = 0; i + 1 < args.size(); ++i)
@@ -147,6 +151,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
     // Always, also with --new-instance: two writers on one data folder wipe each other's saves.
     if (!gallery) ClaimDataDir();
+    if (!gallery) OpenLog(net::AppVersion());
+    if (ui::Host::Automation())
+        for (const std::wstring& a : args)
+            if (a == L"--crash-test" || a == L"--crash-test-terminate") app::CrashForTest(a == L"--crash-test-terminate");
 
     // The GPU driver takes ~150 ms to load: start it now, alongside OLE, fonts, settings and the
     // window, instead of after the window is shown.
@@ -163,5 +171,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     OleUninitialize();
     if (mutex) CloseHandle(mutex);
     Trace("close: wWinMain returns");
+    Log("exit");
+    CloseLog();
     return code;
 }

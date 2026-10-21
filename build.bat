@@ -36,16 +36,17 @@ for /r "%ROOT%src" %%f in (*.cpp) do echo "%%f">>"%RSP%"
 set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /permissive- /Zc:__cplusplus /MP /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /I"%ROOT%src" /I"%ROOT%third_party\mpv\include""
 set "LFLAGS=/SUBSYSTEM:WINDOWS /MANIFEST:NO /DYNAMICBASE /NXCOMPAT"
 rem Graphics, codecs, shell, network and UI Automation DLLs load on first use, not before wWinMain (faster first paint).
-set "LFLAGS=%LFLAGS% /DELAYLOAD:d3d11.dll /DELAYLOAD:d2d1.dll /DELAYLOAD:dwrite.dll /DELAYLOAD:dcomp.dll /DELAYLOAD:propsys.dll /DELAYLOAD:oleaut32.dll /DELAYLOAD:imm32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:winhttp.dll /DELAYLOAD:crypt32.dll /DELAYLOAD:uiautomationcore.dll"
+set "LFLAGS=%LFLAGS% /DELAYLOAD:d3d11.dll /DELAYLOAD:d2d1.dll /DELAYLOAD:dwrite.dll /DELAYLOAD:dcomp.dll /DELAYLOAD:propsys.dll /DELAYLOAD:oleaut32.dll /DELAYLOAD:imm32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:winhttp.dll /DELAYLOAD:crypt32.dll /DELAYLOAD:uiautomationcore.dll /DELAYLOAD:dbghelp.dll"
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /Od /Zi /MTd /D_DEBUG"
     set "LFLAGS=%LFLAGS% /DEBUG"
 ) else (
-    set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG"
-    set "LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF"
+    rem /Zi and /DEBUG only add Lumen.pdb, which crash dumps need; /OPT:REF,ICF keep the exe as small.
+    set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG /Zi"
+    set "LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF /DEBUG"
 )
 rem uiautomationcore.lib comes before windowsapp.lib, whose API-set imports of it would load at startup.
-set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib uiautomationcore.lib windowsapp.lib winhttp.lib crypt32.lib delayimp.lib"
+set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib uiautomationcore.lib windowsapp.lib winhttp.lib crypt32.lib dbghelp.lib delayimp.lib"
 
 rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
 cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1

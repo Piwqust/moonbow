@@ -4,6 +4,7 @@
 
 #include "../src/core/Config.h"
 #include "../src/core/Json.h"
+#include "../src/core/Log.h"
 #include "../src/core/Paths.h"
 #include "../src/core/SettingsSchema.h"
 #include "../src/core/ShellText.h"
@@ -3708,6 +3709,28 @@ void TestSecretSettings() {
     SetDataDirForTests(g_temp + L"\\data");
 }
 
+// lumen.log: a header line, the previous session kept as lumen.1.log, the 4 MB cap.
+void TestLogFile() {
+    const std::wstring dir = FreshDataDir(L"log") + L"\\logs";
+    Log("before open");  // dropped
+    OpenLog(L"9.9.9");
+    Log("first session");
+    CloseLog();
+    OpenLog(L"9.9.9");
+    const std::string big(1000, 'x');
+    for (int i = 0; i < 5000; ++i) Log(big);
+    CloseLog();
+    std::string first, second;
+    CHECK(json::ReadFileUtf8(dir + L"\\lumen.1.log", &first));
+    CHECK(first.find("Lumen 9.9.9, Windows ") != std::string::npos);
+    CHECK(first.find("first session") != std::string::npos && first.find("before open") == std::string::npos);
+    CHECK(json::ReadFileUtf8(dir + L"\\lumen.log", &second));
+    CHECK(second.find("first session") == std::string::npos);
+    CHECK(second.size() > (4u << 20) && second.size() < (4u << 20) + 2000);
+    CHECK(second.find("4 MB reached") != std::string::npos);
+    SetDataDirForTests(g_temp + L"\\data");
+}
+
 // The async client without the internet: refused URLs, a refused local port (offline state)
 // and an answer from the disk cache, all delivered through the message loop.
 void TestHttpClient() {
@@ -3900,6 +3923,7 @@ const TestCase kTests[] = {
     {"online_json", TestOnlineJson},
     {"secret_settings", TestSecretSettings},
     {"http_client", TestHttpClient},
+    {"log_file", TestLogFile},
 };
 
 }  // namespace

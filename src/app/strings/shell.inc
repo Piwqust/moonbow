@@ -72,6 +72,8 @@
 {L"Now playing", L"Сейчас играет"},
 {L"File not found: {0}", L"Файл не найден: {0}"},
 {L"Couldn't read the playlist {0}", L"Не удалось прочитать плейлист {0}"},
+{L"Lumen crashed last time.", L"Lumen закрылся из-за сбоя."},
+{L"Show report", L"Показать отчёт"},
 {L"Damaged file replaced: {0}. A backup is in the data folder.",
  L"Повреждённый файл заменён: {0}. Копия — в папке данных."},
 {L"watch history", L"история просмотра"},

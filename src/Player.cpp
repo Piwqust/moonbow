@@ -6,6 +6,7 @@
 #include "audio/Crossfader.h"
 #include "app/player/Lyrics.h"
 #include "core/Json.h"
+#include "core/Log.h"
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
 #include "library/MediaTypes.h"
@@ -236,8 +237,12 @@ bool Player::InitOnWorker(int64_t wid) {
     Trace("mpv initialized");
     if (err < 0) {
         error_ = L"mpv_initialize: " + Utf8ToWide(api_.mpv_error_string(err));
+        Log("mpv: " + WideToUtf8(error_));
         return false;
     }
+    // Warnings and errors go to Lumen's log. Not verbose: that makes every mpv module format its
+    // verbose lines (+2% of a core at 1080p).
+    if (requestLog_) requestLog_(mpv_, "warn");
     // A .lrc next to a song is its lyrics (the music view shows them), not a subtitle track.
     const char* noLrc[] = {"change-list", "sub-auto-exts", "remove", "lrc", nullptr};
     api_.mpv_command(mpv_, noLrc);
@@ -320,6 +325,7 @@ unsigned Player::ProcessEvents() {
             }
             case MPV_EVENT_START_FILE: {
                 settledSerial_ = 0;
+                mpvLogLines_ = 0;
                 // Another file before the fade began (mpv went on by itself): the plan is void.
                 if (crossfader_ && !crossfader_->Switched()) CancelCrossfade();
                 // Forget the previous file's size, so window fitting waits for this one's.
@@ -393,7 +399,14 @@ unsigned Player::ProcessEvents() {
                 // verbose lines (+2% of a core at 1080p), so wait for the error just before it instead.
                 // mpv falls back in the same call, before it reads these commands.
                 const auto* m = static_cast<const mpv_event_log_message*>(ev->data);
-                if (std::strcmp(m->prefix, "ao") == 0 &&
+                // A broken file can repeat a warning every frame: 50 lines per file are enough.
+                if (++mpvLogLines_ <= 50) {
+                    std::string text = m->text;
+                    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+                    Log(std::string("mpv [") + m->prefix + "] " + m->level + ": " + text);
+                    if (mpvLogLines_ == 50) Log("mpv: further messages for this file are not logged");
+                }
+                if (spdif_ && std::strcmp(m->prefix, "ao") == 0 &&
                     std::strncmp(m->text, "Failed to initialize audio driver", 33) == 0) {
                     Trace("passthrough unsupported, audio decoded instead");
                     if (const std::string af = GetPropertyString("af"); !af.empty()) {
@@ -413,6 +426,9 @@ unsigned Player::ProcessEvents() {
                 if (end->reason == MPV_END_FILE_REASON_ERROR) {
                     state_.lastError = Utf8ToWide(api_.mpv_error_string(end->error));
                     state_.failedPath = startedPath_;
+                    const size_t slash = startedPath_.find_last_of(L"\\/");
+                    Log("playback error: " + WideToUtf8(state_.lastError) + " (" +
+                        WideToUtf8(slash == std::wstring::npos ? startedPath_ : startedPath_.substr(slash + 1)) + ")");
                     // The previous file's "loaded" must not outlive it: opened after a playing file,
                     // the path change would otherwise count as a load and clear the error at once.
                     state_.fileLoaded = false;
@@ -480,12 +496,7 @@ unsigned Player::OnProperty(const mpv_event_property* prop, uint64_t id) {
         case kPropHwdec: state_.hwdec = str(); return kChangeState;
         case kPropVolumeMax: volumeMax_ = has ? dbl() : 100.0; return 0;
         case kPropSpdif: {
-            // Only passthrough needs mpv's messages (see MPV_EVENT_LOG_MESSAGE).
-            const bool on = has && !str().empty();
-            if (on != spdifLog_ && requestLog_) {
-                spdifLog_ = on;
-                requestLog_(mpv_, on ? "error" : "no");
-            }
+            spdif_ = has && !str().empty();  // see MPV_EVENT_LOG_MESSAGE
             return 0;
         }
         case kPropAbLoopA:
@@ -935,7 +946,7 @@ void Player::CheckCrossfade() {
     };
     if (state_.hasVideo || !isSong(state_.path) || !isSong(queuedNext_)) return;
     // Exclusive mode and passthrough give the device to one stream.
-    if (exclusive_ || spdifLog_) return;
+    if (exclusive_ || spdif_) return;
     audio::CrossfadePlan plan;
     plan.outgoing = state_.path;
     plan.incoming = queuedNext_;

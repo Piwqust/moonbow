@@ -1,8 +1,10 @@
 #include "gfx/Gpu.h"
 
 #include "Trace.h"
+#include "core/Log.h"
 
 #include <algorithm>
+#include <cstdio>
 
 namespace gfx {
 
@@ -111,6 +113,12 @@ bool Gpu::CreateDeviceObjects() {
     if (FAILED(d3d_.As(&dxgiDevice_)) || FAILED(dxgiDevice_->GetAdapter(&adapter)) ||
         FAILED(adapter->GetParent(IID_PPV_ARGS(&dxgi_))))
         return false;
+    if (DXGI_ADAPTER_DESC desc; SUCCEEDED(adapter->GetDesc(&desc))) {
+        char line[200];
+        snprintf(line, sizeof line, "gpu: %ls, %llu MB, vendor %04X", desc.Description,
+                 static_cast<unsigned long long>(desc.DedicatedVideoMemory >> 20), desc.VendorId);
+        Log(line);
+    }
     // One queued frame: Present waits for vsync instead of letting frames pile up,
     // so what is on screen is at most one frame behind the latest input.
     ComPtr<IDXGIDevice1> dxgi1;
@@ -135,6 +143,10 @@ void Gpu::ReleaseDeviceObjects(bool keepComposition) {
 }
 
 bool Gpu::RecreateDevice() {
+    char line[64];
+    snprintf(line, sizeof line, "gpu: device lost (0x%08lX), recreating",
+             d3d_ ? static_cast<unsigned long>(d3d_->GetDeviceRemovedReason()) : 0ul);
+    Log(line);
     ReleaseDeviceObjects();
     return CreateDeviceObjects();
 }

@@ -319,16 +319,16 @@ h2.t:focus { outline: none; }
 <div class="wrap">
   <header class="top">
     <span class="mark"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v7l5.5-3.5z" fill="currentColor"/></svg>Lumen</span>
-    <span>17.10 → 20.10.2026 · 29 глав</span>
+    <span>17.10 → 21.10.2026 · 30 глав</span>
   </header>
 
   <section class="hero grid" id="now" aria-labelledby="h1">
     <h1 id="h1">Lumen,<br>глава за главой</h1>
     <p class="lede"><strong>Lumen</strong>: минималистичный видео- и аудиоплеер для Windows с медиатекой, на C++20, Direct2D и libmpv, в монохроме «белый на графите». Здесь всё, что с ним произошло за четыре дня, по раундам правок. Внизу экрана полоса перемотки, как в самом плеере: каждая засечка это глава. Листайте вниз, и вы перематываете назад, к первой сборке.</p>
     <aside class="now" aria-labelledby="now-h">
-      <h2 id="now-h">Где проект сейчас, 20.10</h2>
+      <h2 id="now-h">Где проект сейчас, 21.10</h2>
       <dl>
-        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи пока не закоммичен: <a href="#ch-29">глава 29</a>.</dd></div>
+        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи: <a href="#ch-29">глава 29</a>. Все ветки собраны в одну <code>main</code>. Для бета-тестеров: журнал и отчёты о сбоях, <a href="#ch-30">глава 30</a>.</dd></div>
         <div><dt>Открыто</dt><dd>Частично: размер текста Windows 200 % и заголовок первой страницы знакомства. Отложено: серый фон под белой обложкой.</dd></div>
         <div><dt>Проверить вам руками</dt><dd>Alt+Space, изменение размера мышью за край, живой Narrator, медиа-карточка Windows и недавние файлы на панели задач, размер текста 150-200 %.</dd></div>
         <div><dt>Решения, которые можно поменять</dt><dd>Тема «Как в системе» по умолчанию, Ctrl+F для поиска, клавиши громкости у Windows, «Избранное» первым в плейлистах.</dd></div>
@@ -346,9 +346,62 @@ h2.t:focus { outline: none; }
 
 <main id="chapters" class="wrap" tabindex="-1">
 
+<!-- 30 -->
+<article class="ch grid wide" id="ch-30" data-n="30" data-date="21.10" aria-labelledby="t30">
+  <div class="meta"><span class="num">30</span><span class="date">21.10.2026</span><span class="tag">Бета</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t30" tabindex="-1">Журнал и отчёты о сбоях для тестировщиков</h2>
+    <p class="say">Lumen готовится к публичному выпуску. Раньше ошибки искали только агенты на одном компьютере, теперь о них могут рассказать живые люди: всё нужное для отчёта собирается в одной папке, и ничего не отправляется само.</p>
+    <ul>
+      <li>Журнал ведётся всегда: версия Windows, видеокарта, сбой видеодрайвера, файлы, которые не открылись, предупреждения mpv. Журнал прошлого запуска сохраняется.</li>
+      <li>При сбое Lumen сохраняет отчёт с состоянием программы и закрывается без окна Windows. При следующем запуске он предлагает показать отчёт.</li>
+      <li>Отчёт с этой сборки раскрывается до функции в коде: release-сборка теперь даёт файл символов.</li>
+      <li>В настройках, в разделе «Диагностика», кнопка открывает папку с журналами и отчётами.</li>
+      <li>Один скрипт собирает архив для тестировщиков с памяткой и сохраняет символы этой сборки.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>~60 КБ</dd><dt>отчёт о сбое</dt></div>
+      <div><dd>+20 КБ</dd><dt>к размеру Lumen.exe</dt></div>
+      <div><dd>0</dd><dt>байт отправлено без вас</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6к; <a href="../tools/beta/README-BETA.txt">памятка тестировщику</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,66;340,66;660,66" viewBox="0 0 960 300" role="img" aria-label="Путь отчёта: сбой у тестировщика, папка журналов с файлами, разбор с файлом символов до функции в коде">
+        <text class="tm" x="40" y="70" style="fill:var(--ink)">сбой</text>
+        <rect class="pn" x="40" y="86" width="260" height="150" rx="6"/><rect class="dp" x="56" y="102" width="228" height="70" rx="3"/>
+        <path class="ld" d="M160 127l20 20M180 127l-20 20"/>
+        <rect class="cd" x="56" y="182" width="228" height="42" rx="8"/><text class="t" x="70" y="199">Lumen закрылся из-за сбоя.</text><text class="t" x="270" y="216" text-anchor="end" style="fill:var(--ink)">Показать отчёт</text>
+        <text class="tm" x="360" y="70" style="fill:var(--ink)">папка logs</text>
+        <rect class="pn" x="360" y="86" width="260" height="150" rx="6"/>
+        <text class="t" x="376" y="112">lumen.log</text><text class="t" x="604" y="112" text-anchor="end">этот запуск</text>
+        <text class="t" x="376" y="136">lumen.1.log</text><text class="t" x="604" y="136" text-anchor="end">прошлый запуск</text>
+        <rect class="ac" x="368" y="148" width="244" height="22" rx="3" opacity=".25"/>
+        <text class="t" x="376" y="163" style="fill:var(--ink)">crash-20261021.txt</text><text class="t" x="604" y="163" text-anchor="end">что и где</text>
+        <text class="t" x="376" y="190">crash-20261021.dmp</text><text class="t" x="604" y="190" text-anchor="end">стеки, 60 КБ</text>
+        <text class="t" x="376" y="218">mpv.log</text><text class="t" x="604" y="218" text-anchor="end">по желанию</text>
+        <path class="ln" d="M300 160H360M620 160H680"/>
+        <text class="tm" x="680" y="70" style="fill:var(--ink)">разбор</text>
+        <rect class="pn" x="680" y="86" width="240" height="150" rx="6"/>
+        <text class="t" x="696" y="112">Exception 0xC0000005</text>
+        <text class="t" x="696" y="136">Lumen.exe+0x33FA</text>
+        <path class="ln" d="M696 150H904"/>
+        <text class="t" x="696" y="172">+ Lumen.pdb этой сборки</text>
+        <rect class="ac" x="688" y="186" width="224" height="26" rx="3" opacity=".25"/>
+        <text class="tm" x="696" y="204" style="fill:var(--ink)">wWinMain + 0xa6a</text>
+        <path class="ln" d="M40 262H920"/>
+        <text class="t" x="40" y="282">файлы не покидают компьютер, пока тестировщик сам их не пришлёт</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Сбой: Lumen пишет отчёт и закрывается, при следующем запуске предлагает его показать</li><li data-k="2">Одна папка: журналы двух запусков, отчёт о сбое и по желанию подробный журнал mpv</li><li data-k="3">Разбор: адрес из отчёта с файлом символов этой сборки превращается в функцию в коде</li></ol>
+    <figcaption>Рис. 30. Путь отчёта о сбое от тестировщика до строки кода</figcaption>
+  </figure>
+</article>
+
 <!-- 29 -->
 <article class="ch grid" id="ch-29" data-n="29" data-date="20.10" aria-labelledby="t29">
-  <div class="meta"><span class="num">29</span><span class="date">20.10.2026</span><span class="tag">Окно</span><span class="state">не закоммичено</span></div>
+  <div class="meta"><span class="num">29</span><span class="date">20.10.2026</span><span class="tag">Окно</span><span class="state">в main</span></div>
   <div class="body">
     <h2 class="t" id="t29" tabindex="-1">Полноэкранный режим без дрожи</h2>
     <p class="say">При выходе из полноэкранного режима окно уже было маленьким, а внутри ещё 4-7 кадров стояла старая картинка, обрезанная по новому окну. Теперь новый размер и новая картинка приходят в одном кадре.</p>
@@ -1577,14 +1630,14 @@ h2.t:focus { outline: none; }
 
 <nav class="bar" aria-label="Главы">
   <button class="nb prev" type="button" aria-label="Глава раньше"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h2v12H5zM16 4v12l-8-6z" fill="currentColor"/></svg></button>
-  <span class="pill" aria-hidden="true">29</span>
+  <span class="pill" aria-hidden="true">30</span>
   <button class="nb next" type="button" aria-label="Глава позже"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12l8-6zM13 4h2v12h-2z" fill="currentColor"/></svg></button>
   <p class="cur" aria-hidden="true">Сейчас<span>20.10</span></p>
   <div class="seek">
     <div class="trk"></div><div class="fill"></div><div class="ticks"></div><div class="hd"></div>
-    <input type="range" min="1" max="29" step="1" value="29" aria-label="Глава">
+    <input type="range" min="1" max="30" step="1" value="30" aria-label="Глава">
   </div>
-  <span class="total">из 29</span>
+  <span class="total">из 30</span>
   <div class="pv" aria-hidden="true"><div class="pv-img live"></div><div class="pv-t"></div></div>
 </nav>
 
