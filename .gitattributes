@@ -2,3 +2,5 @@
 *.bat text eol=crlf
 *.png binary
 *.ico binary
+tests/fuzz/seeds/** -text
+tests/fuzz/regressions/** -text
