@@ -23,7 +23,8 @@ class ImageCache {
 public:
     explicit ImageCache(library::Thumbnails& thumbs);
 
-    // `sizePx` is the longest side wanted in physical pixels (rounded up to a bucket).
+    // `sizePx` is the longest side wanted in physical pixels (rounded up to a bucket). While that
+    // size is on its way, the picture at another size if there is one.
     ID2D1Bitmap* Get(const std::wstring& path, int sizePx);
     bool Missing(const std::wstring& path, int sizePx) const;  // the file has no thumbnail
     // Asked for and on its way: draw the plain card surface, not the "no picture" icon.
@@ -54,6 +55,8 @@ private:
     static int Bucket(int sizePx);
     static std::wstring Key(const std::wstring& path, int bucket);
     void NoteMissing(const std::wstring& key);
+    // The file's picture already decoded at another bucket, or nullptr.
+    ID2D1Bitmap* OtherSize(const std::wstring& path, int bucket) const;
 
     library::Thumbnails& thumbs_;
     std::unordered_map<std::wstring, Entry> entries_;

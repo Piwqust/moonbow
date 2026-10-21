@@ -45,6 +45,15 @@ float ImageCache::Appear(const std::wstring& path, int sizePx) const {
     return it != fades_.end() ? it->second->Get() : 1.0f;
 }
 
+ID2D1Bitmap* ImageCache::OtherSize(const std::wstring& path, int bucket) const {
+    for (int b : {1024, 720, 480, 320, 192, 96}) {
+        if (b == bucket) continue;
+        auto it = entries_.find(Key(path, b));
+        if (it != entries_.end() && it->second.generation == gfx::Gpu::Get().Generation()) return it->second.bitmap.Get();
+    }
+    return nullptr;
+}
+
 void ImageCache::NoteMissing(const std::wstring& key) {
     if (missing_.size() >= kMaxMissing) missing_.clear();
     missing_.insert(key);
@@ -107,7 +116,9 @@ ID2D1Bitmap* ImageCache::Get(const std::wstring& path, int sizePx) {
     } else {
         wanted_.insert(p->second);
     }
-    return nullptr;
+    // Meanwhile the picture at another size (the window or the grid changed size), scaled: a
+    // cover doesn't vanish and fade in again; the sharper one takes its place without a fade.
+    return OtherSize(path, bucket);
 }
 
 void ImageCache::EndFrame() {
@@ -138,7 +149,8 @@ void ImageCache::OnCompleted() {
         cookies_.erase(c);
         pending_.erase(key);
         if (!r.bitmap) NoteMissing(key);
-        if (onScreen) {
+        const size_t bar = key.find(L'|');
+        if (onScreen && !(r.bitmap && OtherSize(key.substr(bar + 1), std::stoi(key.substr(0, bar))))) {
             auto& fade = fades_[key];
             fade = std::make_unique<ui::AnimFloat>(0.0f);
             fade->To(1.0f, 140, ui::Ease::Out);

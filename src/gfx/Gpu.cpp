@@ -165,16 +165,17 @@ void Surface::Drop() {
     oldSwap_.Reset();
     switchFrames_ = 0;
     dcomp_.Reset();
+    ahead_.Reset();
+    aheadTarget_.Reset();
 }
 
-bool Surface::Build() {
-    Gpu& gpu = Gpu::Get();
-    if (!gpu.Ready() || !hwnd_) return false;
-    generation_ = gpu.Generation();
+namespace {
 
+ComPtr<IDXGISwapChain1> NewSwapChain(UINT width, UINT height) {
+    Gpu& gpu = Gpu::Get();
     DXGI_SWAP_CHAIN_DESC1 desc{};
-    desc.Width = width_;
-    desc.Height = height_;
+    desc.Width = width;
+    desc.Height = height;
     desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     desc.SampleDesc.Count = 1;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -182,8 +183,31 @@ bool Surface::Build() {
     desc.Scaling = DXGI_SCALING_STRETCH;
     desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-    ComPtr<IDXGISwapChain1> fresh;
-    if (FAILED(gpu.Dxgi()->CreateSwapChainForComposition(gpu.D3D(), &desc, nullptr, &fresh))) return false;
+    ComPtr<IDXGISwapChain1> swap;
+    if (FAILED(gpu.Dxgi()->CreateSwapChainForComposition(gpu.D3D(), &desc, nullptr, &swap))) return nullptr;
+    return swap;
+}
+
+ComPtr<ID2D1Bitmap1> TargetFor(IDXGISwapChain1* swap, float dpi) {
+    ComPtr<IDXGISurface> surface;
+    if (FAILED(swap->GetBuffer(0, IID_PPV_ARGS(&surface)))) return nullptr;
+    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), dpi, dpi);
+    ComPtr<ID2D1Bitmap1> target;
+    if (FAILED(Gpu::Get().Ctx()->CreateBitmapFromDxgiSurface(surface.Get(), &props, &target))) return nullptr;
+    return target;
+}
+
+}  // namespace
+
+bool Surface::Build() {
+    Gpu& gpu = Gpu::Get();
+    if (!gpu.Ready() || !hwnd_) return false;
+    generation_ = gpu.Generation();
+
+    ComPtr<IDXGISwapChain1> fresh = NewSwapChain(width_, height_);
+    if (!fresh) return false;
     // A new device under the same composition (WARP → hardware): the old swap chain stays on
     // screen until the new one has presented (End). Rebuilding the target would show the
     // window's bare GDI background for a frame, a grey flash over the player.
@@ -205,29 +229,65 @@ bool Surface::Build() {
 }
 
 bool Surface::BuildTarget() {
-    ComPtr<IDXGISurface> surface;
-    if (FAILED(swap_->GetBuffer(0, IID_PPV_ARGS(&surface)))) return false;
-    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), dpi_, dpi_);
-    return SUCCEEDED(Gpu::Get().Ctx()->CreateBitmapFromDxgiSurface(surface.Get(), &props, &target_));
+    target_ = TargetFor(swap_.Get(), dpi_);
+    return target_ != nullptr;
 }
 
-void Surface::Resize(UINT width, UINT height) {
+ID2D1DeviceContext5* Surface::BeginAhead(UINT width, UINT height) {
+    Gpu& gpu = Gpu::Get();
+    ahead_.Reset();
+    aheadTarget_.Reset();
+    if (!gpu.Ready() || !visual_ || generation_ != gpu.Generation() || switchFrames_ > 0) return nullptr;
+    ahead_ = NewSwapChain(std::max(1u, width), std::max(1u, height));
+    if (ahead_) aheadTarget_ = TargetFor(ahead_.Get(), dpi_);
+    if (!aheadTarget_) {
+        ahead_.Reset();
+        return nullptr;
+    }
+    aheadW_ = std::max(1u, width);
+    aheadH_ = std::max(1u, height);
+    ID2D1DeviceContext5* ctx = gpu.Ctx();
+    ctx->SetTarget(aheadTarget_.Get());
+    ctx->SetDpi(dpi_, dpi_);
+    ctx->BeginDraw();
+    ctx->SetTransform(D2D1::Matrix3x2F::Identity());
+    ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
+    drawing_ = drawingAhead_ = true;
+    return ctx;
+}
+
+void Surface::DropAhead() {
+    ahead_.Reset();
+    aheadTarget_.Reset();
+}
+
+bool Surface::Resize(UINT width, UINT height) {
     width = std::max(1u, width);
     height = std::max(1u, height);
-    if (width == width_ && height == height_) return;
+    // The frame drawn ahead for this size takes the old one's place in a single commit. Another
+    // size first (a restore on the way): it waits for its own.
+    if (ahead_ && width == aheadW_ && height == aheadH_ && SUCCEEDED(visual_->SetContent(ahead_.Get())) &&
+        SUCCEEDED(Gpu::Get().DComp()->Commit())) {
+        if (Gpu::Get().Ctx()) Gpu::Get().Ctx()->SetTarget(nullptr);
+        swap_ = std::move(ahead_);
+        target_ = std::move(aheadTarget_);
+        width_ = width;
+        height_ = height;
+        return true;
+    }
+    if (width == width_ && height == height_) return false;
     width_ = width;
     height_ = height;
-    if (!swap_) return;
+    if (!swap_) return false;
     if (Gpu::Get().Ctx()) Gpu::Get().Ctx()->SetTarget(nullptr);
     target_.Reset();
     if (FAILED(swap_->ResizeBuffers(0, width_, height_, DXGI_FORMAT_UNKNOWN, 0))) {
         Drop();
         Build();
-        return;
+        return false;
     }
     BuildTarget();
+    return false;
 }
 
 void Surface::SetDpi(float dpi) {
@@ -270,13 +330,24 @@ ID2D1DeviceContext5* Surface::Begin() {
     return ctx;
 }
 
-bool Surface::End() {
+bool Surface::End(bool now) {
     if (!drawing_) return true;
     drawing_ = false;
     Gpu& gpu = Gpu::Get();
+    if (drawingAhead_) {
+        drawingAhead_ = false;
+        HRESULT hr = gpu.Ctx()->EndDraw();
+        gpu.Ctx()->SetTarget(nullptr);
+        if (SUCCEEDED(hr)) hr = ahead_->Present(0, 0);
+        if (FAILED(hr)) {
+            ahead_.Reset();
+            aheadTarget_.Reset();
+        }
+        return SUCCEEDED(hr);
+    }
     HRESULT hr = gpu.Ctx()->EndDraw();
     gpu.Ctx()->SetTarget(nullptr);
-    if (SUCCEEDED(hr)) hr = swap_->Present(1, 0);
+    if (SUCCEEDED(hr)) hr = swap_->Present(now ? 0 : 1, 0);
     if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         Drop();
         gpu.RecreateDevice();

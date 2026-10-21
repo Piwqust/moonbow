@@ -48,3 +48,27 @@ VIS-1), and the music view's stand-in art was a pale card on its black stage (VI
   its own says so with the comment `on a plate`. Add a file to the list when it starts painting
   over the video.
 - Capture the change in the light theme over a bright and over a dark video, not only in dark.
+
+## 3. A window change shows its new size and its new picture in the same frame
+
+**The rule.** Anything that changes the window's size or state (fullscreen, Picture in Picture,
+fit to video, restore after PiP) goes through `Host::ChangeSizeAhead` or the same steps in
+`Host::SetFullscreen`: the frame for the new client size is drawn first, the change starts right
+after a composition (`DwmFlush`), DWM's min/max animation is off for it, and the window's frame
+style never changes (DWM attributes switch corners, border and shadow instead).
+
+**Why.** DWM shows a new window size at once, but a frame drawn in `WM_SIZE` arrives a composition
+later about one time in two, and taking `WS_OVERLAPPEDWINDOW` off and back on made DWM rebuild the
+frame for 4-7 frames. The owner saw it as fullscreen "wobbling" (2026-10-20). Leaving fullscreen
+for a maximized window restored and maximized it again, with Windows' animation in between.
+
+**How to find it.**
+- `tools/dev/wincap.ps1` captures the cloaked test window as DWM composes it (60 frames/s), and
+  `python tools/dev/wincap-stale.py <dir>` counts frames of a wrong picture per switch.
+  `frames.ps1` (PrintWindow) can't see these faults at all.
+- Measure switches that shrink the window (start in fullscreen with
+  `-Settings '{"video.startFullscreen":true}'`): when the window grows past its size at the start,
+  the capture itself smears 1-2 frames.
+- Repeat 8-10 times: a race shows in some runs only.
+- A real-screen recording (ffmpeg `ddagrab`) only with the owner's OK in the current request,
+  only as many as allowed, the window topmost (`interface.alwaysOnTop`) and only its rect.

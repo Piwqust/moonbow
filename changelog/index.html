@@ -319,7 +319,7 @@ h2.t:focus { outline: none; }
 <div class="wrap">
   <header class="top">
     <span class="mark"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v7l5.5-3.5z" fill="currentColor"/></svg>Lumen</span>
-    <span>17.10 → 20.10.2026 · 28 глав</span>
+    <span>17.10 → 20.10.2026 · 29 глав</span>
   </header>
 
   <section class="hero grid" id="now" aria-labelledby="h1">
@@ -328,7 +328,7 @@ h2.t:focus { outline: none; }
     <aside class="now" aria-labelledby="now-h">
       <h2 id="now-h">Где проект сейчас, 20.10</h2>
       <dl>
-        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>.</dd></div>
+        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи пока не закоммичен: <a href="#ch-29">глава 29</a>.</dd></div>
         <div><dt>Открыто</dt><dd>Частично: размер текста Windows 200 % и заголовок первой страницы знакомства. Отложено: серый фон под белой обложкой.</dd></div>
         <div><dt>Проверить вам руками</dt><dd>Alt+Space, изменение размера мышью за край, живой Narrator, медиа-карточка Windows и недавние файлы на панели задач, размер текста 150-200 %.</dd></div>
         <div><dt>Решения, которые можно поменять</dt><dd>Тема «Как в системе» по умолчанию, Ctrl+F для поиска, клавиши громкости у Windows, «Избранное» первым в плейлистах.</dd></div>
@@ -345,6 +345,43 @@ h2.t:focus { outline: none; }
 </div>
 
 <main id="chapters" class="wrap" tabindex="-1">
+
+<!-- 29 -->
+<article class="ch grid" id="ch-29" data-n="29" data-date="20.10" aria-labelledby="t29">
+  <div class="meta"><span class="num">29</span><span class="date">20.10.2026</span><span class="tag">Окно</span><span class="state">не закоммичено</span></div>
+  <div class="body">
+    <h2 class="t" id="t29" tabindex="-1">Полноэкранный режим без дрожи</h2>
+    <p class="say">При выходе из полноэкранного режима окно уже было маленьким, а внутри ещё 4-7 кадров стояла старая картинка, обрезанная по новому окну. Теперь новый размер и новая картинка приходят в одном кадре.</p>
+    <ul>
+      <li>Стиль рамки окна больше не снимается и не возвращается: из-за этого Windows каждый раз заново строила рамку. Углы, граница и тень выключаются атрибутами.</li>
+      <li>Кадр нового размера рисуется заранее, а переключение начинается сразу после кадра композиции.</li>
+      <li>Развёрнутое окно возвращается развёрнутым одним движением, без анимации «восстановить, развернуть».</li>
+      <li>Так же переключаются «картинка в картинке» (теперь и прямо из полноэкранного режима) и подгонка окна под видео.</li>
+      <li>Обложки и миниатюры при смене размера больше не пропадают и не проявляются заново.</li>
+      <li>Новый инструмент снимает невидимое тестовое окно так, как его компонует Windows, и видит такие кадры.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>2-4 → 0</dd><dt>кадров мусора при выходе</dt></div>
+      <div><dd>8 из 8</dd><dt>выходов чистые</dt></div>
+      <div><dd>4</dd><dt>записи экрана с вашего разрешения</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6и; <a href="../qa/visual-rules.md">visual-rules.md</a>, раздел 3</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,92;20,204" viewBox="0 0 480 300" role="img" aria-label="Выход из полноэкранного режима по кадрам: раньше четыре кадра обрезанной старой картинки, теперь сразу правильное окно">
+        <text class="tm" x="40" y="60" style="fill:var(--ink)">было</text><text class="t" x="424" y="60" text-anchor="end">4 кадра старой картинки</text>
+        <rect class="cd" x="40" y="72" width="56" height="40" rx="2"/><rect class="ms" x="44" y="76" width="48" height="28" rx="1"/><rect class="dp" x="104" y="72" width="56" height="40" rx="2"/><rect class="ms" x="114" y="80" width="34" height="24" rx="1"/><rect class="ms" x="114" y="80" width="34" height="24" rx="1" opacity=".55"/><path class="ld" d="M114 104L148 80" stroke-dasharray="2 2"/><rect class="ls" x="114.5" y="80.5" width="33" height="23" rx="1" stroke-dasharray="2 2"/><rect class="dp" x="168" y="72" width="56" height="40" rx="2"/><rect class="ms" x="178" y="80" width="34" height="24" rx="1"/><rect class="ms" x="178" y="80" width="34" height="24" rx="1" opacity=".55"/><path class="ld" d="M178 104L212 80" stroke-dasharray="2 2"/><rect class="ls" x="178.5" y="80.5" width="33" height="23" rx="1" stroke-dasharray="2 2"/><rect class="dp" x="232" y="72" width="56" height="40" rx="2"/><rect class="ms" x="242" y="80" width="34" height="24" rx="1"/><rect class="ms" x="242" y="80" width="34" height="24" rx="1" opacity=".55"/><path class="ld" d="M242 104L276 80" stroke-dasharray="2 2"/><rect class="ls" x="242.5" y="80.5" width="33" height="23" rx="1" stroke-dasharray="2 2"/><rect class="dp" x="296" y="72" width="56" height="40" rx="2"/><rect class="ms" x="306" y="80" width="34" height="24" rx="1"/><rect class="ms" x="306" y="80" width="34" height="24" rx="1" opacity=".55"/><path class="ld" d="M306 104L340 80" stroke-dasharray="2 2"/><rect class="ls" x="306.5" y="80.5" width="33" height="23" rx="1" stroke-dasharray="2 2"/><rect class="dp" x="360" y="72" width="56" height="40" rx="2"/><rect class="cd" x="370" y="80" width="34" height="24" rx="1"/><rect class="ms" x="372" y="82" width="30" height="15" rx="1"/><rect class="ms" x="372" y="99" width="30" height="3" rx="1"/>
+        <text class="tm" x="40" y="172" style="fill:var(--ink)">стало</text><text class="t" x="424" y="172" text-anchor="end">сразу новое окно</text>
+        <rect class="cd" x="40" y="184" width="56" height="40" rx="2"/><rect class="ms" x="44" y="188" width="48" height="28" rx="1"/><rect class="dp" x="104" y="184" width="56" height="40" rx="2"/><rect class="cd" x="114" y="192" width="34" height="24" rx="1"/><rect class="ac" x="116" y="194" width="30" height="15" rx="1"/><rect class="ms" x="116" y="211" width="30" height="3" rx="1"/><rect class="lk" x="114.5" y="192.5" width="33" height="23" rx="1" fill="none" stroke-width="1.5"/>
+        <path class="ln" d="M40 252H424"/>
+        <text class="t" x="40" y="270">кадры по 1/60 с, слева направо: последний полноэкранный и следующие</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Раньше: окно уже маленькое, а внутри обрезанный старый кадр, пока Windows заново строит рамку</li><li data-k="2">Теперь: кадр нового размера готов заранее и приходит вместе с размером</li></ol>
+    <figcaption>Рис. 29. Выход из полноэкранного режима, кадр за кадром</figcaption>
+  </figure>
+</article>
 
 <!-- 28 -->
 <article class="ch grid flip" id="ch-28" data-n="28" data-date="20.10" aria-labelledby="t28">
@@ -380,7 +417,7 @@ h2.t:focus { outline: none; }
         <path class="ln" d="M40 222H440M40 218v8M120 218v8M200 218v8M280 218v8M360 218v8M440 218v8"/>
         <text class="t" x="40" y="242">0</text><text class="t" x="120" y="242" text-anchor="middle">100</text><text class="t" x="200" y="242" text-anchor="middle">200</text><text class="t" x="280" y="242" text-anchor="middle">300</text><text class="t" x="360" y="242" text-anchor="middle">400</text><text class="t" x="440" y="242" text-anchor="end">500 мс</text>
         <g class="ph"><path class="lk" d="M40 64V200" stroke-width="1.5"/></g>
-        <text class="tB" x="40" y="284">−205 мс</text><text class="t" x="160" y="278">до рамки плеера, кадр видео</text><text class="t" x="160" y="292">приходит в то же время</text>
+        <text class="tB" x="40" y="284">−205 мс</text><text class="t" x="160" y="274">до рамки плеера, кадр видео</text><text class="t" x="160" y="292">приходит в то же время</text>
       </svg>
     </div>
     <ol class="keys"><li data-k="1">Было: 0,2 с пустого окна, потом картинка и панели проявлялись вместе за 140 мс</li><li data-k="2">Стало: заголовок, панель и чёрная область картинки с первого кадра окна, на 81 мс</li><li data-k="3">Картинка проявляется из чёрного за 200 мс, рамка вокруг уже стоит</li></ol>
@@ -1540,14 +1577,14 @@ h2.t:focus { outline: none; }
 
 <nav class="bar" aria-label="Главы">
   <button class="nb prev" type="button" aria-label="Глава раньше"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h2v12H5zM16 4v12l-8-6z" fill="currentColor"/></svg></button>
-  <span class="pill" aria-hidden="true">28</span>
+  <span class="pill" aria-hidden="true">29</span>
   <button class="nb next" type="button" aria-label="Глава позже"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12l8-6zM13 4h2v12h-2z" fill="currentColor"/></svg></button>
   <p class="cur" aria-hidden="true">Сейчас<span>20.10</span></p>
   <div class="seek">
     <div class="trk"></div><div class="fill"></div><div class="ticks"></div><div class="hd"></div>
-    <input type="range" min="1" max="28" step="1" value="28" aria-label="Глава">
+    <input type="range" min="1" max="29" step="1" value="29" aria-label="Глава">
   </div>
-  <span class="total">из 28</span>
+  <span class="total">из 29</span>
   <div class="pv" aria-hidden="true"><div class="pv-img live"></div><div class="pv-t"></div></div>
 </nav>
 

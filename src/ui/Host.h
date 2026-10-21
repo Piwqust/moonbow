@@ -143,6 +143,18 @@ public:
     // --- window state ------------------------------------------------------------------
     bool IsWindowMaximized() const;
     bool IsFullscreen() const { return fullscreen_; }
+    // A frame for the size the window is about to get is being drawn (SwitchSizeAhead): the layout
+    // must not move child windows yet.
+    bool DrawingAhead() const { return aheadPx_.cx > 0; }
+    // Runs `change` (a move, a placement) that gives the window this client size, with the frame
+    // for it drawn first and no DWM animation: the new size and its picture appear together.
+    void ChangeSizeAhead(SIZE clientPx, const std::function<void()>& change);
+    // The client size of a normal (not maximized, not fullscreen) window with this window rect.
+    SIZE ClientSizeFor(const RECT& window) const;
+    // Fullscreen ends without a move (Picture in Picture moves the window itself).
+    void LeaveFullscreenInPlace();
+    // The window's placement before fullscreen.
+    const WINDOWPLACEMENT& PlacementBeforeFullscreen() const { return placement_; }
     // `primaryScreen` = fullscreen on the primary monitor instead of the current one.
     void SetFullscreen(bool on, bool primaryScreen = false);
     void ToggleMaximize();
@@ -238,6 +250,8 @@ private:
         bool above = false;  // flipped above the anchor (slide direction)
     };
     void ApplyDwmAttributes();
+    void MarkFullscreen(bool on);
+    void SwitchSizeAhead(SIZE px);
     float RenderDpi() const { return Scale() * 96.0f; }  // DPI of the Direct2D surface
     void SetDragOver(bool over);
     void PaintDropOverlay(Painter& p);
@@ -304,6 +318,11 @@ private:
     bool layoutDirty_ = true;
     bool fullscreen_ = false;
     WINDOWPLACEMENT placement_{sizeof(WINDOWPLACEMENT)};
+    RECT windowedRect_{};  // the window's rect before fullscreen (maximized or not)
+    RECT fullscreenRect_{};  // the monitor it is fullscreen on
+    RECT windowedClient_{};  // the client rect before fullscreen
+    SIZE aheadPx_{};         // SwitchSizeAhead: the size ClientSize reports while drawing ahead
+    bool sizing_ = false;  // Render inside WM_SIZE: its frame is presented at once
 
     // Tooltip state.
     Widget* tooltipFor_ = nullptr;

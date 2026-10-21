@@ -85,6 +85,7 @@ private:
     uint64_t subMarginToken_ = 0;
     bool videoWanted_ = false;
     RECT appliedVideo_{-1, -1, -1, -1};
+    RECT aheadVideo_{};  // where mpv's window goes with the size a frame is drawn ahead for
     bool uiHidden_ = false;
     bool pip_ = false;
     WINDOWPLACEMENT pipRestore_{sizeof(WINDOWPLACEMENT)};

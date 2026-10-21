@@ -261,11 +261,16 @@ void MainWindow::SetPictureInPicture(bool on) {
     HWND hwnd = Hwnd();
     if (on) {
         if (!TheApp().player().State().fileLoaded) return;
-        if (IsFullscreen()) SetFullscreen(false);
         if (!TheApp().PlayerShown()) TheApp().ShowPlayer(true);
         CloseAllPopups();
-        GetWindowPlacement(hwnd, &pipRestore_);
-        if (IsZoomed(hwnd) || IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+        // From fullscreen straight to the small window, not back to the windowed one first; leaving
+        // PiP then restores the window as it was before fullscreen.
+        if (IsFullscreen()) {
+            pipRestore_ = PlacementBeforeFullscreen();
+            LeaveFullscreenInPlace();
+        } else {
+            GetWindowPlacement(hwnd, &pipRestore_);
+        }
         // Last PiP rect (physical pixels) if it is still on a monitor, else bottom-right.
         const float s = Scale();
         RECT r{};
@@ -284,8 +289,11 @@ void MainWindow::SetPictureInPicture(bool on) {
             r.bottom += band.cy;
         }
         pip_ = true;
-        SetWindowPos(hwnd, HWND_TOPMOST, r.left, r.top, r.right - r.left, r.bottom - r.top,
-                     SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+        ChangeSizeAhead(ClientSizeFor(r), [&] {
+            if (IsZoomed(hwnd) || IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+            SetWindowPos(hwnd, HWND_TOPMOST, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                         SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+        });
     } else {
         RECT r;
         if (GetWindowRect(hwnd, &r)) {
@@ -294,10 +302,17 @@ void MainWindow::SetPictureInPicture(bool on) {
             TheApp().SetUiValue("pip.rect", buf);
         }
         pip_ = false;
-        // Back to "Keep window above other windows" as it is set, not always off (App::ApplyWindowOptions).
-        SetWindowPos(hwnd, TheApp().config().GetBool("interface.alwaysOnTop") ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
-                     0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        SetWindowPlacement(hwnd, &pipRestore_);
+        // A maximized window's client area is the work area (WM_GETMINMAXINFO, WM_NCCALCSIZE).
+        SIZE client = ClientSizeFor(pipRestore_.rcNormalPosition);
+        MONITORINFO mi{sizeof(mi)};
+        if (pipRestore_.showCmd == SW_SHOWMAXIMIZED && GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi))
+            client = {mi.rcWork.right - mi.rcWork.left, mi.rcWork.bottom - mi.rcWork.top};
+        ChangeSizeAhead(client, [&] {
+            // Back to "Keep window above other windows" as it is set, not always off (App::ApplyWindowOptions).
+            SetWindowPos(hwnd, TheApp().config().GetBool("interface.alwaysOnTop") ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0,
+                         0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            SetWindowPlacement(hwnd, &pipRestore_);
+        });
     }
     chrome_.Set(1);
     PokeChrome();
@@ -442,7 +457,7 @@ void MainWindow::UpdateSubtitleLift() {
 }
 
 void MainWindow::OnLayoutDone() {
-    UpdateSubtitleLift();
+    if (!DrawingAhead()) UpdateSubtitleLift();
     // Where should the video be this frame?
     Rect target{};
     if ((TheApp().PlayerShown() || TheApp().PlayerPending()) && player_)
@@ -456,6 +471,10 @@ void MainWindow::OnLayoutDone() {
     RECT r{static_cast<LONG>(std::lround(videoRect_.x * s)), static_cast<LONG>(std::lround(videoRect_.y * s)),
            static_cast<LONG>(std::lround(videoRect_.Right() * s)), static_cast<LONG>(std::lround(videoRect_.Bottom() * s))};
     if (!show) r = {0, 0, 0, 0};
+    // A frame drawn ahead of a size change (Host::SwitchSizeAhead): mpv's window moves with the
+    // size, its hole is painted where it will be.
+    aheadVideo_ = r;
+    if (DrawingAhead()) return;
     if (memcmp(&r, &appliedVideo_, sizeof(RECT)) == 0) return;
     appliedVideo_ = r;
     if (show) {
@@ -472,7 +491,8 @@ void MainWindow::PaintBackground(Painter& p) {
     const Size client = ClientSize();
     const Color bg = P().bgBase;
     const float s = Scale();
-    if (appliedVideo_.right <= appliedVideo_.left || appliedVideo_.bottom <= appliedVideo_.top ||
+    const RECT& hole = DrawingAhead() ? aheadVideo_ : appliedVideo_;
+    if (hole.right <= hole.left || hole.bottom <= hole.top ||
         TheApp().PlayerPending()) {
         p.Fill({0, 0, client.w, client.h}, bg);
         // A file given at launch: the picture area is black from the first frame and the player's
@@ -480,8 +500,8 @@ void MainWindow::PaintBackground(Painter& p) {
         if (ContentAppear() < 1 && TheApp().PlayerShown() && player_) p.Fill(player_->PictureRect(), P().videoBg);
         return;
     }
-    const float l = appliedVideo_.left / s, t = appliedVideo_.top / s, r = appliedVideo_.right / s,
-                b = appliedVideo_.bottom / s;
+    const float l = hole.left / s, t = hole.top / s, r = hole.right / s,
+                b = hole.bottom / s;
     p.Fill({0, 0, client.w, t}, bg);
     p.Fill({0, b, client.w, client.h - b}, bg);
     p.Fill({0, t, l, b - t}, bg);

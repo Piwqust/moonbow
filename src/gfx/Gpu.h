@@ -92,13 +92,20 @@ class Surface {
 public:
     bool Attach(HWND hwnd, float dpi);
     void Detach();
-    void Resize(UINT width, UINT height);
+    // True when a frame drawn ahead for this size (BeginAhead) is now shown: nothing to redraw.
+    bool Resize(UINT width, UINT height);
     void SetDpi(float dpi);
 
     // nullptr when there is nothing to draw (no device yet, zero size).
     ID2D1DeviceContext5* Begin();
-    // false when the device was lost; the caller should simply redraw.
-    bool End();
+    // false when the device was lost; the caller should simply redraw. `now`: shown at the next
+    // composition, not after the next vblank (a frame for a new window size, which DWM shows at once).
+    bool End(bool now = false);
+    // Draws a frame for a size the window is about to get, before it gets it (Host::SwitchSizeAhead):
+    // Resize to that size then shows it in the same commit as the new size, never a frame late.
+    // End presents it unseen. nullptr when it can't (no device, no visual yet, a device switch).
+    ID2D1DeviceContext5* BeginAhead(UINT width, UINT height);
+    void DropAhead();  // the size it was drawn for never came
     // A new device's swap chain waits for its second frame before it replaces the old one on
     // screen: the caller draws again soon.
     bool Switching() const { return switchFrames_ > 0; }
@@ -123,6 +130,10 @@ private:
     ComPtr<IDCompositionDevice> dcomp_;     // the device visual_ belongs to
     ComPtr<IDXGISwapChain1> oldSwap_;       // still on screen while switchFrames_ > 0
     int switchFrames_ = 0;                  // frames to present before swap_ replaces oldSwap_
+    ComPtr<IDXGISwapChain1> ahead_;         // BeginAhead's frame, waiting for its size
+    ComPtr<ID2D1Bitmap1> aheadTarget_;
+    UINT aheadW_ = 0, aheadH_ = 0;
+    bool drawingAhead_ = false;
 };
 
 }  // namespace gfx

@@ -471,13 +471,15 @@ bool Host::Create(const HostOptions& options) {
 void Host::ApplyDwmAttributes() {
     BOOL dark = Theme::Get().Mode() == ThemeMode::Dark;
     DwmSetWindowAttribute(hwnd_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-    DWM_WINDOW_CORNER_PREFERENCE corners = options_.roundCorners ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
+    // Fullscreen keeps the window's frame style (SetFullscreen): no corners, border or shadow then
+    // (the shadow would fall on a neighbouring monitor).
+    DWM_WINDOW_CORNER_PREFERENCE corners = options_.roundCorners && !fullscreen_ ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
     DwmSetWindowAttribute(hwnd_, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
     COLORREF border = P().line.Rgb();
-    border = RGB((border >> 16) & 0xFF, (border >> 8) & 0xFF, border & 0xFF);
+    border = fullscreen_ ? DWMWA_COLOR_NONE : RGB((border >> 16) & 0xFF, (border >> 8) & 0xFF, border & 0xFF);
     DwmSetWindowAttribute(hwnd_, DWMWA_BORDER_COLOR, &border, sizeof(border));
     if (options_.customFrame) {
-        MARGINS margins{0, 0, 1, 0};
+        MARGINS margins{0, 0, fullscreen_ ? 0 : 1, 0};  // the 1 DIP of frame is what casts the shadow
         DwmExtendFrameIntoClientArea(hwnd_, &margins);
     }
 }
@@ -530,6 +532,53 @@ void Host::ShowContent() {
     if (options_.mainWindow) Trace(contentDue_ ? "content shown (cap reached)" : "content shown");
 }
 
+void Host::ChangeSizeAhead(SIZE clientPx, const std::function<void()>& change) {
+    SwitchSizeAhead(clientPx);
+    // No minimize/maximize animation either: it would scale the old picture to the new size.
+    BOOL off = TRUE;
+    DwmSetWindowAttribute(hwnd_, DWMWA_TRANSITIONS_FORCEDISABLED, &off, sizeof(off));
+    change();
+    off = FALSE;
+    DwmSetWindowAttribute(hwnd_, DWMWA_TRANSITIONS_FORCEDISABLED, &off, sizeof(off));
+    surface_.DropAhead();
+}
+
+SIZE Host::ClientSizeFor(const RECT& window) const {
+    const SIZE band = FrameBand();
+    return {window.right - window.left - 2 * band.cx, window.bottom - window.top - band.cy};
+}
+
+void Host::LeaveFullscreenInPlace() {
+    if (!fullscreen_) return;
+    fullscreen_ = false;
+    ApplyDwmAttributes();
+    MarkFullscreen(false);
+}
+
+// The frame for the size the window is about to get is drawn first (3-5 ms); the size change then
+// starts right after a composition, so the new size and that frame (one commit in WM_SIZE) reach
+// DWM in the same frame. Rendered in WM_SIZE instead, the frame missed the size's composition
+// about one switch in two: 1-2 frames of the old picture cut to the new size.
+void Host::SwitchSizeAhead(SIZE px) {
+    if (gfx::Gpu::Get().Ready() && !IsIconic(hwnd_) && px.cx > 0 && px.cy > 0) {
+        aheadPx_ = px;
+        layoutDirty_ = true;
+        Render();
+        aheadPx_ = {0, 0};
+        layoutDirty_ = true;
+    }
+    DwmFlush();
+}
+
+// The taskbar steps back for the fullscreen window even though it has a frame style.
+void Host::MarkFullscreen(bool on) {
+    if (g_automation) return;
+    gfx::ComPtr<ITaskbarList2> taskbar;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbar))) &&
+        SUCCEEDED(taskbar->HrInit()))
+        taskbar->MarkFullscreenWindow(hwnd_, on);
+}
+
 void Host::Close() {
     PostMessageW(hwnd_, WM_CLOSE, 0, 0);
 }
@@ -552,6 +601,7 @@ SIZE Host::FrameBand() const {
 }
 
 Size Host::ClientSize() const {
+    if (aheadPx_.cx > 0) return {aheadPx_.cx / Scale(), aheadPx_.cy / Scale()};  // SwitchSizeAhead
     RECT rc;
     GetClientRect(hwnd_, &rc);
     return {(rc.right - rc.left) / Scale(), (rc.bottom - rc.top) / Scale()};
@@ -575,31 +625,49 @@ void Host::SetTitle(const std::wstring& title) {
 
 void Host::SetFullscreen(bool on, bool primaryScreen) {
     if (on == fullscreen_) return;
-    const DWORD style = static_cast<DWORD>(GetWindowLongW(hwnd_, GWL_STYLE));
+    // The frame style stays: taking WS_OVERLAPPEDWINDOW off and putting it back made DWM rebuild
+    // the window's frame, and leaving fullscreen showed the old picture, cut to the new size, for
+    // 4-7 frames. WM_NCCALCSIZE makes it all client area; DWM attributes drop corners and border.
     if (on) {
         MONITORINFO mi{sizeof(mi)};
-        if (!GetWindowPlacement(hwnd_, &placement_) ||
+        if (!GetWindowPlacement(hwnd_, &placement_) || !GetWindowRect(hwnd_, &windowedRect_) ||
             !GetMonitorInfoW(primaryScreen ? MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY)
                                            : MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY),
                              &mi))
             return;
+        GetClientRect(hwnd_, &windowedClient_);
         fullscreen_ = true;
-        SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style & ~WS_OVERLAPPEDWINDOW));
+        fullscreenRect_ = mi.rcMonitor;
+        SwitchSizeAhead({mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top});
+        ApplyDwmAttributes();
         SetWindowPos(hwnd_, g_automation ? HWND_BOTTOM : HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
                      mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
                      SWP_NOOWNERZORDER | SWP_FRAMECHANGED | (g_automation ? SWP_NOACTIVATE : 0u));
+        surface_.DropAhead();
+        MarkFullscreen(true);
     } else {
         fullscreen_ = false;
-        SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style | WS_OVERLAPPEDWINDOW));
-        // A window that was maximized is restored to its normal rect first and maximized again, so
-        // Windows computes the maximized rect for the captioned style.
-        const bool maximized = placement_.showCmd == SW_SHOWMAXIMIZED;
-        WINDOWPLACEMENT normal = placement_;
-        if (maximized) normal.showCmd = g_automation ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL;
-        SetWindowPlacement(hwnd_, &normal);
-        SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-        if (maximized) ShowWindow(hwnd_, SW_MAXIMIZE);
+        // Back to the rect it had, in one move: a maximized window stays maximized (WS_MAXIMIZE was
+        // kept), so neither a restore-then-maximize animation nor three resizes, each a frame late.
+        if (MonitorFromRect(&windowedRect_, MONITOR_DEFAULTTONULL) == MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONULL)) {
+            SwitchSizeAhead({windowedClient_.right, windowedClient_.bottom});
+            ApplyDwmAttributes();
+            SetWindowPos(hwnd_, nullptr, windowedRect_.left, windowedRect_.top, windowedRect_.right - windowedRect_.left,
+                         windowedRect_.bottom - windowedRect_.top,
+                         SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+            surface_.DropAhead();
+        } else {
+            ApplyDwmAttributes();
+            // Moved to another monitor meanwhile: the placement, maximized again for that monitor.
+            const bool maximized = placement_.showCmd == SW_SHOWMAXIMIZED;
+            WINDOWPLACEMENT normal = placement_;
+            if (maximized) normal.showCmd = g_automation ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL;
+            SetWindowPlacement(hwnd_, &normal);
+            SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+            if (maximized) ShowWindow(hwnd_, SW_MAXIMIZE);
+        }
+        MarkFullscreen(false);
     }
     RequestLayout();
 }
@@ -881,7 +949,7 @@ void Host::Render() {
     const double t1 = AnimFloat::Now();
 
     const uint32_t generation = gfx::Gpu::Get().Generation();
-    ID2D1DeviceContext5* ctx = surface_.Begin();
+    ID2D1DeviceContext5* ctx = aheadPx_.cx > 0 ? surface_.BeginAhead(aheadPx_.cx, aheadPx_.cy) : surface_.Begin();
     if (!ctx) {
         RedrawAllIfDeviceChanged(generation);
         return;
@@ -937,7 +1005,7 @@ void Host::Render() {
     OnFramePainted();
     if (texts) a11y::TextsPainted(this, *texts);
     const double t2 = AnimFloat::Now();
-    if (surface_.End()) {
+    if (surface_.End(sizing_)) {
         if (!gpuPainted_) Trace("first frame");
         gpuPainted_ = true;
         // Posted startup work (the fit into the work area) runs first: no resize after the reveal.
@@ -1839,6 +1907,9 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             // on the hidden window menu and eat the next key (Space = play), Alt+letter would beep.
             // Test runs never open the native menu.
             if ((wp & 0xFFF0) == SC_KEYMENU && (lp != VK_SPACE || g_automation)) return 0;
+            // Fullscreen keeps the frame style, so Alt+Space offers these: they would leave it half way.
+            if (fullscreen_ && ((wp & 0xFFF0) == SC_SIZE || (wp & 0xFFF0) == SC_MOVE || (wp & 0xFFF0) == SC_MAXIMIZE))
+                return 0;
             break;
 
         case WM_CHAR:
@@ -1858,10 +1929,17 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_SIZE:
             if (wp != SIZE_MINIMIZED) {
-                surface_.Resize(LOWORD(lp), HIWORD(lp));
+                const bool drawnAhead = surface_.Resize(LOWORD(lp), HIWORD(lp));
                 layoutDirty_ = true;
                 OnResize();
-                Render();
+                if (drawnAhead) {
+                    DoLayout();  // places mpv's window for the frame that is up
+                    RequestRender();
+                } else {
+                    sizing_ = true;
+                    Render();
+                    sizing_ = false;
+                }
             }
             return 0;
 
@@ -1890,6 +1968,14 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 const int fy = GetSystemMetricsForDpi(SM_CYFRAME, dpi_) + pad;
                 mmi->ptMaxPosition = {mi.rcWork.left - mi.rcMonitor.left - fx, mi.rcWork.top - mi.rcMonitor.top - fy};
                 mmi->ptMaxSize = {mi.rcWork.right - mi.rcWork.left + 2 * fx, mi.rcWork.bottom - mi.rcWork.top + 2 * fy};
+                mmi->ptMaxTrackSize = {std::max(mmi->ptMaxTrackSize.x, mmi->ptMaxSize.x),
+                                       std::max(mmi->ptMaxTrackSize.y, mmi->ptMaxSize.y)};
+            }
+            // Fullscreen entered from maximized keeps WS_MAXIMIZE: a restore from minimized comes back
+            // to the "maximized" rect, which is the whole monitor then.
+            if (fullscreen_) {
+                mmi->ptMaxPosition = {0, 0};
+                mmi->ptMaxSize = {fullscreenRect_.right - fullscreenRect_.left, fullscreenRect_.bottom - fullscreenRect_.top};
                 mmi->ptMaxTrackSize = {std::max(mmi->ptMaxTrackSize.x, mmi->ptMaxSize.x),
                                        std::max(mmi->ptMaxTrackSize.y, mmi->ptMaxSize.y)};
             }

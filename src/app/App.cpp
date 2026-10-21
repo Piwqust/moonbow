@@ -664,7 +664,8 @@ void App::FitWindowToVideo() {
     x = std::clamp(x, static_cast<int>(work.left), std::max<int>(work.left, work.right - w));
     y = std::clamp(y, static_cast<int>(work.top), std::max<int>(work.top, work.bottom - h));
     if (IsRectEmpty(&preFitRect_)) preFitRect_ = cur;
-    SetWindowPos(main_->Hwnd(), nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+    main_->ChangeSizeAhead(main_->ClientSizeFor(RECT{x, y, x + w, y + h}),
+                           [&] { SetWindowPos(main_->Hwnd(), nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE); });
     fittedOnce_ = true;
 }
 
@@ -1083,9 +1084,13 @@ void App::ShowPlayer(bool show) {
     if (show && main_) main_->SetFocus(nullptr);
     // Back in the library: undo the video-sized window.
     if (!show && main_ && !IsRectEmpty(&preFitRect_)) {
-        if (!main_->IsWindowMaximized() && !IsIconic(main_->Hwnd()))
-            SetWindowPos(main_->Hwnd(), nullptr, preFitRect_.left, preFitRect_.top, preFitRect_.right - preFitRect_.left,
-                         preFitRect_.bottom - preFitRect_.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        if (!main_->IsWindowMaximized() && !IsIconic(main_->Hwnd())) {
+            const RECT r = preFitRect_;
+            main_->ChangeSizeAhead(main_->ClientSizeFor(r), [&] {
+                SetWindowPos(main_->Hwnd(), nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            });
+        }
         preFitRect_ = {};
     }
     if (main_) main_->UpdateScreen();
