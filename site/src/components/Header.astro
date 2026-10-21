@@ -1,0 +1,17 @@
+---
+import Logo from './Logo.astro';
+import { nav } from '../data/site';
+const path = Astro.url.pathname;
+---
+<header class="site-header">
+  <a class="brand" href="/" aria-label="Lumen, на главную" aria-current={path === '/' ? 'page' : undefined}>
+    <Logo /> Lumen
+  </a>
+  <nav aria-label="Основная">
+    <ul class="nav">
+      {nav.map((n) => (
+        <li><a class="seek" href={n.href} aria-current={path.startsWith(n.href) ? 'page' : undefined}>{n.label}</a></li>
+      ))}
+    </ul>
+  </nav>
+</header>

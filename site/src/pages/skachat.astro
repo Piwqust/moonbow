@@ -1,0 +1,105 @@
+---
+import Base from '../layouts/Base.astro';
+import { download, dataFiles, credits, source } from '../data/site';
+---
+<Base title="Скачать" description="Как скачать или собрать Lumen для Windows 10 и 11: требования, сборка из исходников за два шага, где хранятся данные и что плеер отправляет в сеть.">
+  <div class="wrap page-head grid">
+    <h1 class="display head__title" data-split="lines" data-intro>Скачать</h1>
+    <div class="head__side" data-reveal="fade" data-intro data-delay="0.2">
+      <p class="lead">Lumen для Windows 10 и 11, 64 бит. Установщик не нужен: распакуйте папку и откройте Lumen.exe.</p>
+      <a class="btn btn--solid" href="#sborka">
+        <span class="btn__fill" aria-hidden="true"></span>
+        <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
+        Собрать Lumen {download.version}
+      </a>
+      <p class="label">Готовой сборки на сайте пока нет. Собрать её можно за три шага, ниже. <a class="link" href={source.url}>{source.label}</a>.</p>
+    </div>
+  </div>
+
+  <section class="wrap block grid" id="sborka" aria-labelledby="build-h">
+    <h2 class="block__title" id="build-h">Собрать из исходников</h2>
+    <ol class="steps">
+      <li data-reveal="fade">
+        <p class="steps__n time">1</p>
+        <div>
+          <h3>Visual Studio 2022</h3>
+          <p class="prose">С компонентом «Разработка классических приложений на C++». CMake не нужен.</p>
+        </div>
+      </li>
+      <li data-reveal="fade">
+        <p class="steps__n time">2</p>
+        <div>
+          <h3>libmpv, один раз</h3>
+          <p class="prose">Около 30 МБ, сборка shinchiro/mpv-winbuild-cmake.</p>
+          <pre><code>powershell -ExecutionPolicy Bypass -File tools\fetch-libmpv.ps1</code></pre>
+        </div>
+      </li>
+      <li data-reveal="fade">
+        <p class="steps__n time">3</p>
+        <div>
+          <h3>Сборка</h3>
+          <p class="prose">Результат: build\Lumen.exe и рядом libmpv-2.dll. Отладочная сборка: <code>build.bat debug</code>.</p>
+          <pre><code>build.bat</code></pre>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="wrap block grid" aria-labelledby="data-h">
+    <h2 class="block__title" id="data-h">Где лежат ваши данные</h2>
+    <div class="block__body">
+      <p class="prose">Всё хранится в <code>%APPDATA%\Lumen</code>, обычными JSON-файлами. Файлы с фильмами и музыкой Lumen не перемещает и не меняет никогда.</p>
+      <dl class="files">
+        {dataFiles.map(([f, d]) => (
+          <div><dt class="time">{f}</dt><dd>{d}</dd></div>
+        ))}
+      </dl>
+    </div>
+  </section>
+
+  <section class="wrap block grid" aria-labelledby="net-h">
+    <h2 class="block__title" id="net-h">Что уходит в сеть</h2>
+    <div class="block__body">
+      <p class="prose">Тексты песен из LRCLIB, субтитры из OpenSubtitles и постеры из TMDB работают, только если вы их включите. Ключи для OpenSubtitles и TMDB вводятся свои и хранятся зашифрованными средствами Windows. Ссылки на YouTube и другие сайты открываются, если рядом с Lumen лежит <code>yt-dlp.exe</code>; сам Lumen ничего не скачивает.</p>
+    </div>
+  </section>
+
+  <section class="wrap block grid" id="avtory" aria-labelledby="cred-h">
+    <h2 class="block__title" id="cred-h">Откуда кадры на скриншотах</h2>
+    <div class="block__body">
+      <p class="prose">Скриншоты сняты с настоящего Lumen. Фильм «Вечер у воды», сериал «Тихий берег» и альбомы Савы Ветрова сделаны для демонстрации: это фотографии с Unsplash, превращённые в видео и обложки.</p>
+      <ul class="credits">
+        {credits.map((c) => (
+          <li><span>{c.what}</span> <a class="link" href={c.href} rel="noopener">{c.who}</a></li>
+        ))}
+      </ul>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .head__title { grid-column: 1 / span 6; }
+  .head__side { grid-column: 7 / -1; align-self: end; display: grid; gap: 1.5rem; justify-items: start; }
+  .head__side .lead { font-size: var(--t-m); }
+  .block { padding-block: calc(var(--u) * 7); border-top: 1px solid var(--c-line); row-gap: calc(var(--u) * 3); scroll-margin-top: var(--header-h); }
+  .block__title { grid-column: 1 / span 4; font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; }
+  .block__body, .steps { grid-column: 6 / -1; }
+  .steps { display: grid; gap: calc(var(--u) * 4); }
+  .steps li { display: grid; grid-template-columns: 3rem 1fr; gap: 1rem; }
+  .steps__n { font-size: var(--t-l); font-weight: 200; line-height: 1; color: var(--c-muted); }
+  .steps h3 { font-size: var(--t-m); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.4rem; }
+  pre { margin-top: 0.9rem; padding: 0.9rem 1.1rem; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-window); overflow-x: auto; }
+  code { font-family: var(--f-time); font-size: 0.875em; color: var(--c-fg); }
+  .files { margin-top: calc(var(--u) * 3); }
+  .files div { display: grid; grid-template-columns: minmax(10rem, 14rem) 1fr; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid var(--c-line); }
+  .files dt { font-size: 0.875rem; }
+  .files dd { color: var(--c-muted); }
+  .credits { margin-top: calc(var(--u) * 3); display: grid; gap: 0.6rem; }
+  .credits span { color: var(--c-muted); }
+  .credits a { display: inline-block; padding-block: 0.15rem; }
+  @media (max-width: 767px) {
+    .head__title, .head__side, .block__title, .block__body, .steps { grid-column: 1 / -1; }
+    .head__side { margin-top: calc(var(--u) * 3); }
+    .files div { grid-template-columns: 1fr; gap: 0.2rem; }
+  }
+</style>
