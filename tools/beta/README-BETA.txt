@@ -24,8 +24,15 @@ Lumen — бета-версия для тестирования
   (стеки потоков и список модулей), без содержимого ваших видео и музыки.
 Lumen ничего не отправляет сам: файлы остаются на вашем компьютере, пока вы их не пришлёте.
 
-Настройки и медиатека хранятся в %APPDATA%\Lumen. Чтобы удалить Lumen полностью, удалите эту
-папку и папку, куда распаковали архив.
+КАК ОБНОВИТЬ
+Само Lumen пока не обновляется: новую сборку вы получите архивом.
+1. Закройте Lumen.
+2. Распакуйте новый архив поверх старой папки с заменой файлов (или в новую папку, а старую удалите).
+Настройки и медиатека хранятся отдельно, в %APPDATA%\Lumen, и при обновлении не теряются.
+Когда сообщаете о проблеме, назовите имя архива (вида Lumen-0.1.0-beta-1a2b3c4): по нему видно,
+какая это сборка.
+
+Чтобы удалить Lumen полностью, удалите папку %APPDATA%\Lumen и папку, куда распаковали архив.
 
 Lumen распространяется по лицензии GPL-3.0-or-later. Воспроизведение работает на libmpv (mpv.io).
 
@@ -39,3 +46,5 @@ folder", and send every file from there together with a few words on what you di
 happened. For a file that plays wrong, turn on "Detailed playback log", play it again and send
 mpv.log too. Nothing is sent automatically; crash dumps hold thread stacks and the module list,
 not your media. Settings and the library live in %APPDATA%\Lumen.
+To update: close Lumen and unzip the new build over the old folder; settings and the library stay.
+When reporting, name the zip you run (like Lumen-0.1.0-beta-1a2b3c4).
