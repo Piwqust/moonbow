@@ -311,40 +311,41 @@ void SetTextMenuCaptions(std::wstring cut, std::wstring copy, std::wstring paste
 
 Size Toggle::MeasureContent(float, float) {
     const float s = gfx::Text::Get().Scale();
-    return {48 * s, 32 * s};  // a bigger target than the 40×20 track
+    return {48 * s, 32 * s};  // a bigger target than the 40×22 track
 }
 
+// After shadcn/ui and Apple's switches: a filled pill and a large round thumb that nearly fills
+// it. Off is a grey pill with a light thumb (dark theme) or a white one (light theme), on is the
+// accent pill with a thumb in the accent's ink. The thumb is >= 3:1 on its track in both states,
+// and its side says the state, not only the color.
 void Toggle::Paint(Painter& p) {
     const Palette& c = P();
     const float k = knob_.Get();
     const float s = gfx::Text::Get().Scale();
-    const Rect box = rect.Center(40 * s, 20 * s);
+    const Rect box = rect.Center(40 * s, 22 * s);
     const float r = box.h / 2;
     const bool live = IsEnabled();
     const bool hot = live && IsHot(), down = live && IsPressed();
-    // ON is a filled accent pill, OFF an outlined neutral one (iOS, Fluent): the state reads from
-    // the fill and the knob's side in both themes.
-    if (live) {
-        const Color onFill = down ? Color::Mix(c.accent, c.bgBase, 0.22f) : hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent;
-        const Color offFill = down ? c.bgSelected : hot ? Color::Mix(c.bgCard, c.textPrimary, 0.06f) : c.bgCard;
-        p.Fill(box, Color::Mix(offFill, onFill, k), r);
-        if (k < 1) p.Stroke(box, (hot ? c.textSecondary : c.lineControl).Fade(1 - k), r);
-    } else {
-        p.Fill(box, DisabledFill(), r);  // flatter than a live track, no border
-    }
+    const bool dark = Theme::Get().Mode() == ThemeMode::Dark;
+    const Color offTrack = Color::Mix(c.bgBase, c.textPrimary, (dark ? 0.24f : 0.44f) + (hot ? 0.06f : 0.0f));
+    const Color onTrack = hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent;
+    const Color offThumb = dark ? c.textPrimary : Color::Hex(0xFFFFFF);
+    if (live)
+        p.Fill(box, Color::Mix(offTrack, onTrack, k), r);
+    else
+        p.Fill(box, DisabledFill(), r);
     PaintFocusRing(p, box, r);
 
-    // The knob grows under the pointer and stretches while pressed (Windows 11).
-    const float d = (hot ? 14.0f : 12.0f) * s, kw = d + (down ? 4 * s : 0);
+    // The thumb stretches towards the far side while pressed (iOS, Windows 11).
+    const float d = 18 * s, kw = d + (down ? 4 * s : 0);
     const float inset = (box.h - d) / 2;
     const Rect knob{box.x + inset + (box.w - 2 * inset - kw) * k, box.y + inset, kw, d};
-    // Live off: a knob at >= 3:1 on the track in both themes. Disabled: an outlined knob in the
-    // disabled tone, so it reads as unusable rather than off.
-    const Color knobOff = Color::Mix(c.textTertiary, c.textSecondary, 0.4f);
-    if (live)
-        p.Fill(knob, Color::Mix(knobOff, c.onAccent, k), d / 2);
-    else
+    if (!live) {
         p.Stroke(knob.Inset(0.75f), c.textDisabled, d / 2, 1.5f);
+        return;
+    }
+    if (!dark) p.Shadow(knob, d / 2, 3, 1, 0.22f);
+    p.Fill(knob, Color::Mix(offThumb, c.onAccent, k), d / 2);
 }
 
 // --- Checkbox -------------------------------------------------------------------------------
@@ -521,10 +522,14 @@ void Dropdown::Paint(Painter& p) {
     const bool open = menu_ && GetHost() && GetHost()->IsPopupOpen(menu_);
     const bool live = IsEnabled();
     if (live) {
-        p.Fill(rect, Color::Mix(c.bgPanel, c.textPrimary, IsHot() || open ? 0.08f : 0.035f), kRadiusControl);
-        p.Stroke(rect, IsHot() || open ? c.textTertiary : c.lineControl, kRadiusControl);
-        // Open: an accent line along the bottom ties the field to its menu (Fluent).
-        if (open) p.Fill({rect.x + 6, rect.Bottom() - 2, rect.w - 12, 2}, c.accent, 1);
+        const bool dark = Theme::Get().Mode() == ThemeMode::Dark;
+        if (!dark) p.Shadow(rect, kRadiusControl, 2, 1, 0.08f);
+        // Dark: a faint veil over whatever the field sits on (page or panel); light: a white field.
+        const Color white = Color::Hex(0xFFFFFF);
+        p.Fill(rect, dark ? c.textPrimary.Fade(IsHot() || open ? 0.09f : 0.05f)
+                          : (IsHot() || open ? Color::Mix(white, c.textPrimary, 0.04f) : white),
+               kRadiusControl);
+        p.Stroke(rect, open ? c.textTertiary : IsHot() ? c.lineStrong : c.lineControl, kRadiusControl);
     } else {
         p.Fill(rect, DisabledFill(), kRadiusControl);
     }
@@ -532,7 +537,7 @@ void Dropdown::Paint(Painter& p) {
     const bool has = selected_ >= 0 && selected_ < static_cast<int>(choices_.size());
     const std::wstring& label = has ? choices_[static_cast<size_t>(selected_)].label : placeholder;
     const Color fg = !live ? c.textDisabled : has ? c.textPrimary : c.textTertiary;
-    const Rect box{rect.x + 14, rect.y, rect.w - 46, rect.h};
+    const Rect box{rect.x + 12, rect.y, rect.w - 40, rect.h};
     // A value cut by the ellipsis can be read in full in the tooltip (unless the owner set one).
     if (tooltip.empty() || autoTooltip_) {
         const bool cut = !label.empty() && p.Measure(label, TextStyle::Body).width > box.w;
@@ -541,8 +546,8 @@ void Dropdown::Paint(Painter& p) {
         else if (!cut && !tooltip.empty()) tooltip.clear();
     }
     p.Text(label, box, TextStyle::Body, fg);
-    p.Icon(open ? "chevron_up" : "chevron_down", {rect.Right() - 30, rect.Cy() - 9, 18, 18},
-           !live ? c.textDisabled : IsHot() || open ? c.textPrimary : c.textSecondary);
+    p.Icon(open ? "chevron_up" : "chevron_down", {rect.Right() - 28, rect.Cy() - 8, 16, 16},
+           !live ? c.textDisabled : IsHot() || open ? c.textSecondary : c.textTertiary);
 }
 
 void Dropdown::OnClick() {
