@@ -70,6 +70,13 @@ bool WriteVerbs(const std::wstring& shell, const std::wstring& exe) {
     return ok;
 }
 
+template <typename F>
+void ForEachType(F&& f) {
+    for (const wchar_t* ext : kVideo) f(ext, kVideoProgId);
+    for (const wchar_t* ext : kAudio) f(ext, kAudioProgId);
+    for (const wchar_t* ext : kPlaylists) f(ext, kPlaylistProgId);
+}
+
 template <size_t N>
 bool WriteTypes(const wchar_t* const (&exts)[N], const wchar_t* progId) {
     bool ok = true;
@@ -82,7 +89,22 @@ bool WriteTypes(const wchar_t* const (&exts)[N], const wchar_t* progId) {
 }
 
 constexpr wchar_t kFileExts[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\";
+// The apps that were the defaults before Lumen took over, by extension ("" = Windows' own default).
+constexpr wchar_t kPreviousDefaults[] = L"Software\\Lumen\\PreviousDefaults";
 constexpr uint64_t kMinute = 600000000;  // FILETIME ticks
+
+// ProgId of the user's current choice for ext, "" when there is none.
+std::wstring CurrentChoice(const wchar_t* ext) {
+    wchar_t got[256];
+    DWORD n = sizeof(got);
+    const std::wstring key = std::wstring(kFileExts) + ext + L"\\UserChoice";
+    return RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"ProgId", RRF_RT_REG_SZ, nullptr, got, &n) == ERROR_SUCCESS ? got
+                                                                                                                    : L"";
+}
+
+bool IsLumen(const std::wstring& progId) {
+    return _wcsnicmp(progId.c_str(), L"Lumen.", 6) == 0;
+}
 
 uint64_t Ticks(FILETIME ft) {
     return (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
@@ -165,33 +187,28 @@ bool UnregisterFileAssociations() {
     auto gone = [](LSTATUS s) { return s == ERROR_SUCCESS || s == ERROR_FILE_NOT_FOUND; };
     auto removeTree = [&](const std::wstring& key) { return gone(RegDeleteTreeW(HKEY_CURRENT_USER, key.c_str())); };
     bool ok = true;
+    // First, while the backup still exists: types that still open in Lumen go back to the app they
+    // had before; a type the user moved elsewhere since is theirs and stays.
+    const std::wstring sid = UserSid();
+    ForEachType([&](const wchar_t* ext, const wchar_t*) {
+        if (!IsLumen(CurrentChoice(ext))) return;
+        wchar_t prev[256];
+        DWORD n = sizeof(prev);
+        if (RegGetValueW(HKEY_CURRENT_USER, kPreviousDefaults, ext, RRF_RT_REG_SZ, nullptr, prev, &n) == ERROR_SUCCESS &&
+            prev[0] && !sid.empty())
+            ok &= WriteUserChoice(ext, prev, sid);
+        else  // Windows' own default, or Windows then asks which app to use
+            ok &= gone(RegDeleteKeyW(HKEY_CURRENT_USER, (std::wstring(kFileExts) + ext + L"\\UserChoice").c_str()));
+    });
     for (const wchar_t* key : {L"Software\\Classes\\Lumen.Video", L"Software\\Classes\\Lumen.Audio",
                                L"Software\\Classes\\Lumen.Playlist", L"Software\\Classes\\Applications\\Lumen.exe", L"Software\\Lumen"})
         ok &= removeTree(key);
     for (const wchar_t* shell : {L"SystemFileAssociations\\video\\shell", L"SystemFileAssociations\\audio\\shell", L"Directory\\shell"})
         for (const wchar_t* verb : {L"Lumen.play", L"Lumen.enqueue"})
             ok &= removeTree(std::wstring(L"Software\\Classes\\") + shell + L"\\" + verb);
-    auto removeProgIds = [&](const auto& exts, const wchar_t* progId) {
-        for (const wchar_t* ext : exts)
-            ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), progId));
-    };
-    removeProgIds(kVideo, kVideoProgId);
-    removeProgIds(kAudio, kAudioProgId);
-    removeProgIds(kPlaylists, kPlaylistProgId);
-    // Our own default choices go too: Windows then asks which app to use instead of failing to start Lumen.
-    auto removeChoices = [&](const auto& exts, const wchar_t* progId) {
-        for (const wchar_t* ext : exts) {
-            const std::wstring key = std::wstring(kFileExts) + ext + L"\\UserChoice";
-            wchar_t got[128];
-            DWORD n = sizeof(got);
-            if (RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"ProgId", RRF_RT_REG_SZ, nullptr, got, &n) == ERROR_SUCCESS &&
-                _wcsicmp(got, progId) == 0)
-                ok &= gone(RegDeleteKeyW(HKEY_CURRENT_USER, key.c_str()));
-        }
-    };
-    removeChoices(kVideo, kVideoProgId);
-    removeChoices(kAudio, kAudioProgId);
-    removeChoices(kPlaylists, kPlaylistProgId);
+    ForEachType([&](const wchar_t* ext, const wchar_t* progId) {
+        ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), progId));
+    });
     ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Lumen"));
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;
@@ -201,12 +218,11 @@ bool SetDefaultPlayer() {
     const std::wstring sid = UserSid();
     if (sid.empty()) return false;
     bool ok = true;
-    auto set = [&](const auto& exts, const wchar_t* progId) {
-        for (const wchar_t* ext : exts) ok &= WriteUserChoice(ext, progId, sid);
-    };
-    set(kVideo, kVideoProgId);
-    set(kAudio, kAudioProgId);
-    set(kPlaylists, kPlaylistProgId);
+    ForEachType([&](const wchar_t* ext, const wchar_t* progId) {
+        // A type already on Lumen keeps its backup: pressing the button twice must not save Lumen as "before".
+        if (const std::wstring prev = CurrentChoice(ext); !IsLumen(prev)) ok &= SetValue(kPreviousDefaults, ext, prev);
+        ok &= WriteUserChoice(ext, progId, sid);
+    });
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     // Builds that moved to UserChoiceLatest take the write but keep opening the old app.
     return ok && OpensWith(L".mp4", kVideoProgId) && OpensWith(L".mp3", kAudioProgId);

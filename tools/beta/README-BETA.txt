@@ -43,7 +43,8 @@ Lumen ничего не отправляет сам: файлы остаются
 - Другой плеер по умолчанию: Параметры Windows → Приложения → Приложения по умолчанию, выберите
   формат (например .mp4) и прежний плеер. Внизу там же есть «Сбросить» для всех форматов.
 - Удалить Lumen: Параметры Windows → Приложения → Установленные приложения → Lumen → Удалить.
-  Lumen уберёт себя из «Открыть с помощью» и спросит, удалять ли настройки и медиатеку.
+  Lumen уберёт себя из «Открыть с помощью», вернёт для видео и музыки те программы, что открывали
+  их до Lumen, и спросит, удалять ли настройки и медиатеку.
 - Версия из архива: удалите её папку и папку %APPDATA%\Lumen.
 
 Lumen распространяется по лицензии GPL-3.0-or-later. Воспроизведение работает на libmpv (mpv.io).
@@ -61,5 +62,6 @@ mpv.log too. Nothing is sent automatically; crash dumps hold thread stacks and t
 not your media. Settings and the library live in %APPDATA%\Lumen.
 To update: run the new setup (or unzip over the old folder); settings and the library stay.
 To undo: pick another player in Settings → Apps → Default apps, or uninstall Lumen in Settings →
-Apps → Installed apps: it removes its file types and asks whether to delete its data.
+Apps → Installed apps: it removes its file types, gives each type back the app it had before
+Lumen, and asks whether to delete its data.
 When reporting, name the build you run (like Lumen-0.1.0-beta-1a2b3c4).

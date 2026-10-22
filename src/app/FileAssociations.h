@@ -8,7 +8,8 @@ namespace app {
 // let apps take defaults themselves, so OpenDefaultAppsSettings() opens the
 // page where the user confirms.
 bool RegisterFileAssociations();
-// Removes everything RegisterFileAssociations() and SetDefaultPlayer() wrote (the uninstaller runs it).
+// Removes everything RegisterFileAssociations() and SetDefaultPlayer() wrote (the uninstaller runs it);
+// types that still open in Lumen get back the app they had before SetDefaultPlayer().
 bool UnregisterFileAssociations();
 // Makes Lumen the default for every registered type by writing Windows' own per-user choice
 // (core/UserChoice.h), as SetUserFTA does. The owner chose this over Settings knowing Windows
