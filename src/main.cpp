@@ -124,7 +124,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return app::RegisterFileAssociations() ? 0 : 1;
     }
     if (!args.empty() && args[0] == L"--unregister-file-types") return app::UnregisterFileAssociations() ? 0 : 1;
-    // The installer's "Make Lumen the default player" tick; where Windows refuses, its Settings page.
+    // The installer's "default video player" tick; where Windows refuses, its Settings page.
     if (!args.empty() && args[0] == L"--set-default-player") {
         if (app::SetDefaultPlayer()) return 0;
         app::OpenDefaultAppsSettings();

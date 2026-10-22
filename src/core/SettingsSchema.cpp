@@ -738,11 +738,11 @@ void BuildApp(Builder& b) {
         .Desc(L"Look for a new version of Lumen once a day. Nothing else is sent.",
               L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.")
         .Hidden();  // not implemented yet
-    b.Button("general.fileAssociations", L"Make Lumen the default player", L"Сделать Lumen плеером по умолчанию",
+    b.Button("general.fileAssociations", L"Make Lumen the default video player", L"Открывать видео в Lumen по умолчанию",
              "file-associations", L"Set up", L"Настроить")
         .Inferred()
-        .Desc(L"Open video, music and playlists with Lumen. If Windows doesn't allow it, its Default apps page opens.",
-              L"Открывать видео, музыку и плейлисты в Lumen. Если Windows не разрешит, откроются «Приложения по умолчанию».");
+        .Desc(L"Videos open in Lumen; music stays with your music app. If Windows doesn't allow it, its Default apps page opens.",
+              L"Видео будут открываться в Lumen, музыка останется в прежней программе. Если Windows не разрешит, откроются «Приложения по умолчанию».");
 
     b.Sec("diagnostics", L"Diagnostics", L"Диагностика");
     b.Toggle("general.developerMode", L"Playback statistics", L"Статистика воспроизведения", false)

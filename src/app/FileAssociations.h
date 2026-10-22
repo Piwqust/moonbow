@@ -11,9 +11,9 @@ bool RegisterFileAssociations();
 // Removes everything RegisterFileAssociations() and SetDefaultPlayer() wrote (the uninstaller runs it);
 // types that still open in Lumen get back the app they had before SetDefaultPlayer().
 bool UnregisterFileAssociations();
-// Makes Lumen the default for every registered type by writing Windows' own per-user choice
-// (core/UserChoice.h), as SetUserFTA does. The owner chose this over Settings knowing Windows
-// may stop accepting it; false when Explorer still opens .mp4/.mp3 elsewhere afterwards.
+// Makes Lumen the default for the video types (music stays as it is) by writing Windows' own
+// per-user choice (core/UserChoice.h), as SetUserFTA does. The owner chose this over Settings knowing
+// Windows may stop accepting it; false when Explorer still opens .mp4/.mkv elsewhere afterwards.
 // Call after RegisterFileAssociations().
 bool SetDefaultPlayer();
 void OpenDefaultAppsSettings();

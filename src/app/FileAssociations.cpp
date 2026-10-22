@@ -218,14 +218,15 @@ bool SetDefaultPlayer() {
     const std::wstring sid = UserSid();
     if (sid.empty()) return false;
     bool ok = true;
-    ForEachType([&](const wchar_t* ext, const wchar_t* progId) {
+    // Video only (the owner's call): music and playlists stay with the user's music app.
+    for (const wchar_t* ext : kVideo) {
         // A type already on Lumen keeps its backup: pressing the button twice must not save Lumen as "before".
         if (const std::wstring prev = CurrentChoice(ext); !IsLumen(prev)) ok &= SetValue(kPreviousDefaults, ext, prev);
-        ok &= WriteUserChoice(ext, progId, sid);
-    });
+        ok &= WriteUserChoice(ext, kVideoProgId, sid);
+    }
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     // Builds that moved to UserChoiceLatest take the write but keep opening the old app.
-    return ok && OpensWith(L".mp4", kVideoProgId) && OpensWith(L".mp3", kAudioProgId);
+    return ok && OpensWith(L".mp4", kVideoProgId) && OpensWith(L".mkv", kVideoProgId);
 }
 
 void OpenDefaultAppsSettings() {

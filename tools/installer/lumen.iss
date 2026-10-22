@@ -1,5 +1,5 @@
 ﻿; Lumen installer for one user, no admin rights: %LOCALAPPDATA%\Programs\Lumen, a Start menu
-; shortcut, file types via Lumen.exe --register-file-types, a ticked "default player" box on the
+; shortcut, file types via Lumen.exe --register-file-types, a ticked "default video player" box on the
 ; last page (--set-default-player). Uninstall runs --unregister-file-types
 ; and offers to delete %APPDATA%\Lumen. A newer setup installs over the old one, data kept.
 ; Built by tools\package-beta.ps1 with Inno Setup 6:
@@ -47,8 +47,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 ru.Registering=Регистрация видео и аудио форматов…
 en.Registering=Registering video and audio types…
-ru.DefaultPlayer=Сделать Lumen плеером по умолчанию для видео и музыки
-en.DefaultPlayer=Make Lumen the default player for video and music
+ru.DefaultPlayer=Открывать видео в Lumen по умолчанию
+en.DefaultPlayer=Open videos in Lumen by default
 ru.RemoveData=Удалить также настройки, медиатеку, журналы и отчёты о сбоях Lumen (папка %APPDATA%\Lumen)?%n%nЕсли собираетесь поставить Lumen снова, выберите «Нет».
 en.RemoveData=Also delete Lumen's settings, library, logs and crash reports (the %APPDATA%\Lumen folder)?%n%nChoose No if you plan to install Lumen again.
 
