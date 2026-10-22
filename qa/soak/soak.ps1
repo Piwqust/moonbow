@@ -6,7 +6,8 @@
 # Usage: powershell -File qa\soak\soak.ps1 -Exe <Lumen.exe> -Out <folder in %TEMP%> [-Hours 8]
 #        [-Library %TEMP%\lumen-qa\media] [-WarmupMinutes 30]
 #   or only the report of an earlier run: soak.ps1 -Out <folder> -ReportOnly
-# Writes <Out>\samples.csv, events.log (crashes, hangs, failed steps), report.txt. Only --automation
+# Writes <Out>\samples.csv, events.log (crashes, hangs, failed steps), handles-<round>.txt (HandleTypes.cs),
+# report.txt. Only --automation
 # instances (tools\dev\launch.ps1): nothing on screen, no sound, the real mouse untouched.
 param([string]$Exe = "", [Parameter(Mandatory = $true)][string]$Out, [double]$Hours = 8,
       [string]$Library = (Join-Path $env:TEMP "lumen-qa\media"),
@@ -33,6 +34,16 @@ function Write-Report {
     $flag = if ($slope -gt $metrics[$m]) { "SUSPICIOUS" } else { "ok" }
     $lines += "{0,-13} start {1,8:N1}  after warm-up {2,8:N1} .. {3,8:N1}  slope {4,8:N2}/h  (limit {5}/h)  {6}" -f $m, $first, $min, $max, $slope, $metrics[$m], $flag
   }
+  $from = Join-Path $Out "handles-$($after[0].round).txt"; $to = Join-Path $Out "handles-$($rows[-1].round).txt"
+  if ((Test-Path $from) -and (Test-Path $to)) {
+    $tally = { param($f) $g = @{}; foreach ($s in Get-Content -Encoding UTF8 $f) { $g[$s] = 1 + [int]$g[$s] }; $g }
+    $a = & $tally $from; $b = & $tally $to
+    $lines += "", "Handles by type and name, threads by start address (round $($after[0].round) -> $($rows[-1].round)):"
+    foreach ($k in @($a.Keys) + @($b.Keys) | Sort-Object -Unique) {
+      $d = [int]$b[$k] - [int]$a[$k]
+      if ($d -ne 0) { $lines += "  {0,5}  {1}" -f $d, $k }
+    }
+  }
   $lines += ""
   $lines += if (Test-Path $events) { @("Events:") + @(Get-Content $events) } else { "Events: none (no crash, hang or failed step)" }
   $lines | Set-Content -Encoding UTF8 (Join-Path $Out "report.txt")
@@ -43,6 +54,7 @@ if ($ReportOnly) { Write-Report; return }
 Add-Type -Namespace Soak -Name Native -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetGuiResources(IntPtr process, uint flags);
 '@
+Add-Type -Path (Join-Path $PSScriptRoot "HandleTypes.cs")
 $ownCrashes = Join-Path $Out "crashes"
 New-Item -ItemType Directory -Force $ownCrashes | Out-Null
 $env:LUMEN_CRASH_DIR = (Resolve-Path $ownCrashes).Path
@@ -88,6 +100,8 @@ function Hover-SeekBar {
 function Sample {
   $p = Get-Process -Id $script:id -ErrorAction SilentlyContinue
   if (-not $p) { return }
+  [HandleTypes]::Snap($script:id) + [HandleTypes]::ThreadStarts($script:id) |
+    Set-Content -Encoding UTF8 (Join-Path $Out "handles-$($script:round).txt")
   "{0:HH:mm:ss},{1:F1},{2},{3:F1},{4:F1},{5},{6},{7},{8},{9:F1},{10}" -f (Get-Date), ((Get-Date) - $t0).TotalMinutes, $script:round,
     ($p.PrivateMemorySize64 / 1MB), ($p.WorkingSet64 / 1MB), $p.HandleCount,
     [Soak.Native]::GetGuiResources($p.Handle, 0), [Soak.Native]::GetGuiResources($p.Handle, 1),
