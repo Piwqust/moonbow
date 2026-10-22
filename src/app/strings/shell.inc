@@ -62,6 +62,7 @@
 {L"Picture reset", L"Изображение сброшено"},
 {L"Lumen is registered. Pick it in Default apps.", L"Lumen зарегистрирован. Выберите его в «Приложениях по умолчанию»."},
 {L"Couldn't register file types", L"Не удалось зарегистрировать типы файлов"},
+{L"Lumen is now the default player", L"Теперь Lumen — плеер по умолчанию"},
 {L"Play in Lumen", L"Воспроизвести в Lumen"},
 {L"Add to the Lumen queue", L"Добавить в очередь Lumen"},
 {L"Rescanning the library…", L"Обновляю медиатеку…"},

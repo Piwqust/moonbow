@@ -70,11 +70,13 @@ bool RunSettingsAction(const std::string& action) {
             toast(L"Couldn't register file types", "info");
             return true;
         }
-        if (RegisterFileAssociations()) {
+        if (!RegisterFileAssociations()) {
+            toast(L"Couldn't register file types", "info");
+        } else if (SetDefaultPlayer()) {
+            toast(L"Lumen is now the default player", "check_selected");
+        } else {
             OpenDefaultAppsSettings();
             toast(L"Lumen is registered. Pick it in Default apps.", "check_selected");
-        } else {
-            toast(L"Couldn't register file types", "info");
         }
         return true;
     }

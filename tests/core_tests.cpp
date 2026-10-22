@@ -9,6 +9,7 @@
 #include "../src/core/SettingsSchema.h"
 #include "../src/core/ShellText.h"
 #include "../src/core/Skin.h"
+#include "../src/core/UserChoice.h"
 #include "../src/app/player/Lyrics.h"
 #include "../src/library/Bookmarks.h"
 #include "../src/library/FileSettings.h"
@@ -3731,6 +3732,14 @@ void TestLogFile() {
     SetDataDirForTests(g_temp + L"\\data");
 }
 
+// Vectors from a script that matched all 228 UserChoice hashes Windows wrote on a real PC.
+void TestUserChoiceHash() {
+    const wchar_t sid[] = L"S-1-5-21-1000-2000-3000-1001";
+    CHECK(UserChoiceHash(L".mp4", sid, L"Lumen.Video", 0x01d9f5a3b2c4e000ull) == L"8qvu2BJB1c8=");
+    CHECK(UserChoiceHash(L".flac", sid, L"Lumen.Audio", 0x01d9f5a3b2c4e000ull) == L"MrIw3mlJ0Gw=");
+    CHECK(UserChoiceHash(L".MP4", sid, L"LUMEN.VIDEO", 0x01d9f5a3b2c4e000ull) == L"8qvu2BJB1c8=");  // case-blind
+}
+
 // The async client without the internet: refused URLs, a refused local port (offline state)
 // and an answer from the disk cache, all delivered through the message loop.
 void TestHttpClient() {
@@ -3924,6 +3933,7 @@ const TestCase kTests[] = {
     {"secret_settings", TestSecretSettings},
     {"http_client", TestHttpClient},
     {"log_file", TestLogFile},
+    {"user_choice_hash", TestUserChoiceHash},
 };
 
 }  // namespace

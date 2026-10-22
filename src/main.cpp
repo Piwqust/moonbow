@@ -124,6 +124,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return app::RegisterFileAssociations() ? 0 : 1;
     }
     if (!args.empty() && args[0] == L"--unregister-file-types") return app::UnregisterFileAssociations() ? 0 : 1;
+    // The installer's "Make Lumen the default player" tick; where Windows refuses, its Settings page.
+    if (!args.empty() && args[0] == L"--set-default-player") {
+        if (app::SetDefaultPlayer()) return 0;
+        app::OpenDefaultAppsSettings();
+        return 1;
+    }
     // --scale <factor> (--automation only): lay out as if at factor x the monitor's scale;
     // 1.5 or 150 both mean 150 % on a 100 % screen.
     for (size_t i = 0; i + 1 < args.size(); ++i)

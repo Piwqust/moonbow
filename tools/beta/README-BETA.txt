@@ -9,9 +9,10 @@ Lumen — бета-версия для тестирования
    «Выполнить в любом случае».
 2. Установщик положит Lumen в %LOCALAPPDATA%\Programs\Lumen, добавит его в меню «Пуск» и в
    «Открыть с помощью» для видео, музыки и плейлистов.
-3. Оставьте галочку «Сделать Lumen плеером по умолчанию»: откроются параметры Windows, выберите там
-   Lumen. Windows не даёт программам делать это самим, поэтому последний шаг за вами.
-   Позже то же самое: в Lumen Настройки → Общие → «Сделать Lumen плеером по умолчанию».
+3. Оставьте галочку «Сделать Lumen плеером по умолчанию для видео и музыки»: видео, музыка и
+   плейлисты сразу начнут открываться в Lumen. Если Windows этого не позволит, откроются её
+   «Приложения по умолчанию», выберите там Lumen. То же самое потом делает кнопка в Lumen:
+   Настройки → Общие → «Сделать Lumen плеером по умолчанию».
 4. Пользуйтесь как обычным плеером: смотрите свои видео, слушайте музыку, добавьте папки в медиатеку.
 Без установки: распакуйте .zip в любую папку и запустите Lumen.exe.
 
@@ -52,7 +53,7 @@ Lumen — beta for testers (English)
 ----------------------------------
 Run Lumen-...-setup.exe (no admin rights; or unzip the .zip and run Lumen.exe). The build is not
 signed yet: on the SmartScreen warning choose "More info" → "Run anyway". Keep "Make Lumen the
-default player" ticked and pick Lumen in Windows Settings: Windows lets only you change defaults.
+default player" ticked: video and music then open in Lumen (or Windows' Default apps opens if it refuses).
 If something goes wrong: Settings → General → Diagnostics → "Logs and crash reports" → "Open
 folder", and send every file from there together with a few words on what you did and what
 happened. For a file that plays wrong, turn on "Detailed playback log", play it again and send

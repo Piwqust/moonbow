@@ -741,8 +741,8 @@ void BuildApp(Builder& b) {
     b.Button("general.fileAssociations", L"Make Lumen the default player", L"Сделать Lumen плеером по умолчанию",
              "file-associations", L"Set up", L"Настроить")
         .Inferred()
-        .Desc(L"Register Lumen for video and audio files, then pick it in Windows Default apps.",
-              L"Зарегистрировать Lumen для видео- и аудиофайлов и выбрать его в разделе «Приложения по умолчанию».");
+        .Desc(L"Open video, music and playlists with Lumen. If Windows doesn't allow it, its Default apps page opens.",
+              L"Открывать видео, музыку и плейлисты в Lumen. Если Windows не разрешит, откроются «Приложения по умолчанию».");
 
     b.Sec("diagnostics", L"Diagnostics", L"Диагностика");
     b.Toggle("general.developerMode", L"Playback statistics", L"Статистика воспроизведения", false)

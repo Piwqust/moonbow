@@ -1,5 +1,6 @@
 ﻿; Lumen installer for one user, no admin rights: %LOCALAPPDATA%\Programs\Lumen, a Start menu
-; shortcut, file types via Lumen.exe --register-file-types. Uninstall runs --unregister-file-types
+; shortcut, file types via Lumen.exe --register-file-types, a ticked "default player" box on the
+; last page (--set-default-player). Uninstall runs --unregister-file-types
 ; and offers to delete %APPDATA%\Lumen. A newer setup installs over the old one, data kept.
 ; Built by tools\package-beta.ps1 with Inno Setup 6:
 ;   ISCC /DAppVersion=0.1.0 /DBuild=<commit> /DSrc=<folder with the files> /DOut=<output folder> lumen.iss
@@ -46,8 +47,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 ru.Registering=Регистрация видео и аудио форматов…
 en.Registering=Registering video and audio types…
-ru.DefaultPlayer=Сделать Lumen плеером по умолчанию (откроются параметры Windows)
-en.DefaultPlayer=Make Lumen the default player (opens Windows Settings)
+ru.DefaultPlayer=Сделать Lumen плеером по умолчанию для видео и музыки
+en.DefaultPlayer=Make Lumen the default player for video and music
 ru.RemoveData=Удалить также настройки, медиатеку, журналы и отчёты о сбоях Lumen (папка %APPDATA%\Lumen)?%n%nЕсли собираетесь поставить Lumen снова, выберите «Нет».
 en.RemoveData=Also delete Lumen's settings, library, logs and crash reports (the %APPDATA%\Lumen folder)?%n%nChoose No if you plan to install Lumen again.
 
@@ -62,7 +63,8 @@ Name: "{autoprograms}\Lumen"; Filename: "{app}\Lumen.exe"
 [Run]
 ; Also on updates: the registration points at this folder's Lumen.exe.
 Filename: "{app}\Lumen.exe"; Parameters: "--register-file-types"; StatusMsg: "{cm:Registering}"; Flags: runhidden waituntilterminated
-Filename: "ms-settings:defaultapps?registeredAppUser=Lumen"; Description: "{cm:DefaultPlayer}"; Flags: postinstall shellexec skipifsilent
+; Writes Windows' per-user choice (src/app/FileAssociations.h); opens Default apps where Windows refuses it.
+Filename: "{app}\Lumen.exe"; Parameters: "--set-default-player"; Description: "{cm:DefaultPlayer}"; Flags: postinstall runhidden waituntilterminated skipifsilent
 Filename: "{app}\Lumen.exe"; Description: "{cm:LaunchProgram,Lumen}"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
