@@ -31,9 +31,9 @@ if /i "%CONFIG%"=="debug" (
 ) else (
     set "CFLAGS=%CFLAGS% /O2 /MT /DNDEBUG"
 )
-set "LIBS=user32.lib gdi32.lib shell32.lib shlwapi.lib ole32.lib propsys.lib uuid.lib"
+set "LIBS=user32.lib gdi32.lib shell32.lib shlwapi.lib ole32.lib propsys.lib uuid.lib advapi32.lib"
 
-cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" "%ROOT%tests\core_tests.cpp" "%ROOT%src\core\*.cpp" "%ROOT%src\library\*.cpp" "%ROOT%src\app\player\Lyrics.cpp" "%ROOT%src\app\PlayQueue.cpp" "%ROOT%src\net\Cache.cpp" "%ROOT%src\net\Http.cpp" "%ROOT%src\net\OnlineData.cpp" "%ROOT%src\net\Secret.cpp" /Fe"%OUT%\core_tests.exe" /link %LFLAGS% %LIBS% || exit /b 1
+cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" "%ROOT%tests\core_tests.cpp" "%ROOT%src\core\*.cpp" "%ROOT%src\library\*.cpp" "%ROOT%src\app\player\Lyrics.cpp" "%ROOT%src\app\PlayQueue.cpp" "%ROOT%src\net\Cache.cpp" "%ROOT%src\net\Http.cpp" "%ROOT%src\net\OnlineData.cpp" "%ROOT%src\net\Secret.cpp" "%ROOT%src\setup\Package.cpp" "%ROOT%src\setup\Installer.cpp" /Fe"%OUT%\core_tests.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 "%OUT%\core_tests.exe" %2
 exit /b %errorlevel%

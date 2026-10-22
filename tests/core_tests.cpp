@@ -29,6 +29,8 @@
 #include "../src/net/Http.h"
 #include "../src/net/OnlineData.h"
 #include "../src/net/Secret.h"
+#include "../src/setup/Installer.h"
+#include "../src/setup/Package.h"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -3891,6 +3893,171 @@ void TestHttpClient() {
     WSACleanup();
 }
 
+// --- setup (src/setup) -----------------------------------------------------------------------
+
+void TestSetupVersions() {
+    using setup::CompareVersions;
+    CHECK(CompareVersions(L"0.1.0", L"0.1.0") == 0);
+    CHECK(CompareVersions(L"0.1.0", L"0.2.0") < 0);
+    CHECK(CompareVersions(L"0.10.0", L"0.9.2") > 0);
+    CHECK(CompareVersions(L"1.0", L"1.0.0") == 0);
+    CHECK(CompareVersions(L"1.0.1", L"1.0") > 0);
+    CHECK(setup::Classify(L"", L"0.1.0") == setup::Action::Install);
+    CHECK(setup::Classify(L"0.1.0", L"0.2.0") == setup::Action::Update);
+    CHECK(setup::Classify(L"0.2.0", L"0.1.0") == setup::Action::Rollback);
+    CHECK(setup::Classify(L"0.2.0", L"0.2.0") == setup::Action::Reinstall);
+}
+
+std::string ReadAll(const std::wstring& path) {
+    std::string data;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return data;
+    char buf[65536];
+    DWORD got = 0;
+    while (ReadFile(f, buf, sizeof(buf), &got, nullptr) && got) data.append(buf, got);
+    CloseHandle(f);
+    return data;
+}
+
+// A stand-in Lumen.exe of version 0.<minor>.0: cmd.exe with its VS_FIXEDFILEINFO rewritten.
+std::wstring FakeLumen(int minor) {
+    wchar_t sys[MAX_PATH];
+    GetSystemDirectoryW(sys, MAX_PATH);
+    std::string exe = ReadAll(std::wstring(sys) + L"\\cmd.exe");
+    for (size_t at = 0; (at = exe.find("\xBD\x04\xEF\xFE", at)) != std::string::npos; at += 4) {
+        const DWORD ms = static_cast<DWORD>(minor), ls = 0;
+        memcpy(&exe[at + 8], &ms, 4);
+        memcpy(&exe[at + 12], &ls, 4);
+    }
+    const std::wstring path = g_temp + L"\\fake-lumen-" + std::to_wstring(minor) + L".exe";
+    WriteFile(path, exe);
+    return path;
+}
+
+// A Setup.exe of version 0.<minor>.0 with the given files (name, contents).
+setup::Package MakeSetup(int minor, const std::vector<std::pair<std::wstring, std::string>>& files) {
+    const std::wstring src = MakeDir(L"setup-src-" + std::to_wstring(minor));
+    std::vector<std::wstring> paths;
+    for (const auto& [name, data] : files) {
+        WriteFile(src + L"\\" + name, data);
+        paths.push_back(src + L"\\" + name);
+    }
+    const std::wstring out = g_temp + L"\\Lumen-0." + std::to_wstring(minor) + L".0-setup.exe";
+    std::wstring error;
+    CHECK_MSG(setup::WritePackage(FakeLumen(minor), paths, out, &error), "%s", U8(error).c_str());
+    setup::Package p;
+    CHECK(setup::OpenPackage(out, &p));
+    return p;
+}
+
+DWORD LinkCount(const std::wstring& path) {
+    HANDLE f = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, 0, nullptr);
+    BY_HANDLE_FILE_INFORMATION info{};
+    const bool ok = f != INVALID_HANDLE_VALUE && GetFileInformationByHandle(f, &info);
+    if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+    return ok ? info.nNumberOfLinks : 0;
+}
+
+void TestSetupPackage() {
+    setup::Package none;
+    CHECK(!setup::OpenPackage(FakeLumen(1), &none));
+    std::string big(3 << 20, '\0');
+    for (size_t i = 0; i < big.size(); ++i) big[i] = static_cast<char>((i * 7) ^ (i >> 9));
+    const setup::Package p = MakeSetup(1, {{L"libmpv-2.dll", big}, {L"README-BETA.txt", "hello"}});
+    CHECK(p.version == L"0.1.0");
+    CHECK(p.files.size() == 3 && p.files[0].name == L"Lumen.exe" && p.files[1].name == L"libmpv-2.dll");
+    CHECK(p.files.size() == 3 && p.files[1].packedSize < p.files[1].size);
+    std::vector<uint8_t> data;
+    std::wstring error;
+    CHECK(p.files.size() == 3 && setup::ReadPackedFile(p, p.files[1], &data, &error) &&
+          std::string(data.begin(), data.end()) == big);
+    CHECK(p.files.size() == 3 && setup::ReadPackedFile(p, p.files[0], &data, &error) &&
+          std::string(data.begin(), data.end()) == ReadAll(FakeLumen(1)));
+    // A setup is never packed into another one.
+    CHECK(!setup::WritePackage(p.path, {}, g_temp + L"\\twice.exe", &error));
+}
+
+void TestSetupInstallSwitch() {
+    const std::wstring dir = MakeDir(L"install") + L"\\Lumen";
+    const setup::Target target{dir, false};
+    const std::wstring data = FreshDataDir(L"setup");
+    const std::string mpv(1 << 20, 'm');
+    std::wstring error;
+
+    const setup::Package a = MakeSetup(1, {{L"libmpv-2.dll", mpv}, {L"README-BETA.txt", "a"}});
+    double last = 0;
+    CHECK_MSG(setup::Install(a, target, [&](double f) { last = f; }, &error), "%s", U8(error).c_str());
+    CHECK(last == 1.0);
+    CHECK(setup::InstalledVersion(dir) == L"0.1.0");
+    CHECK(ReadAll(dir + L"\\README-BETA.txt") == "a");
+    WriteFile(dir + L"\\yt-dlp.exe", "mine");  // the user's file: stays through everything
+    WriteFile(data + L"\\settings.json", "{\"v\":1}");
+
+    // Update: libmpv is one file in both versions, README goes, a new dll comes.
+    const setup::Package b = MakeSetup(2, {{L"libmpv-2.dll", mpv}, {L"extra.dll", "b"}});
+    CHECK_MSG(setup::Install(b, target, nullptr, &error), "%s", U8(error).c_str());
+    CHECK(setup::InstalledVersion(dir) == L"0.2.0");
+    CHECK(!FileExists(dir + L"\\README-BETA.txt") && ReadAll(dir + L"\\extra.dll") == "b");
+    CHECK(LinkCount(dir + L"\\versions\\0.2.0\\libmpv-2.dll") >= 3);  // current, 0.1.0, 0.2.0
+    CHECK(setup::StoredVersions(dir) == (std::vector<std::wstring>{L"0.2.0", L"0.1.0"}));
+    CHECK(setup::HasDataSnapshot(L"0.1.0"));
+
+    // Back to the kept version; its settings come back only on request.
+    WriteFile(data + L"\\settings.json", "{\"v\":2}");
+    CHECK_MSG(setup::SwitchVersion(target, L"0.1.0", &error), "%s", U8(error).c_str());
+    CHECK(setup::InstalledVersion(dir) == L"0.1.0");
+    CHECK(ReadAll(dir + L"\\README-BETA.txt") == "a" && !FileExists(dir + L"\\extra.dll"));
+    CHECK(ReadAll(data + L"\\settings.json") == "{\"v\":2}");
+    CHECK(setup::RestoreData(L"0.1.0") && ReadAll(data + L"\\settings.json") == "{\"v\":1}");
+    CHECK(ReadAll(data + L"\\backups\\0.2.0\\settings.json") == "{\"v\":2}");
+    CHECK(!setup::SwitchVersion(target, L"0.9.0", &error));
+
+    // Forward again by setup; two old versions are kept besides the current one.
+    const setup::Package c = MakeSetup(3, {{L"libmpv-2.dll", mpv}});
+    const setup::Package d = MakeSetup(4, {{L"libmpv-2.dll", mpv}});
+    CHECK(setup::Install(c, target, nullptr, &error) && setup::Install(d, target, nullptr, &error));
+    CHECK(setup::StoredVersions(dir) == (std::vector<std::wstring>{L"0.4.0", L"0.3.0", L"0.2.0"}));
+    CHECK(setup::Install(d, target, nullptr, &error) && setup::InstalledVersion(dir) == L"0.4.0");  // reinstall
+    // An older setup over a newer install: back to a version that is no longer kept.
+    CHECK_MSG(setup::Install(a, target, nullptr, &error), "%s", U8(error).c_str());
+    CHECK(setup::InstalledVersion(dir) == L"0.1.0" && ReadAll(dir + L"\\README-BETA.txt") == "a");
+
+    // A damaged setup changes nothing.
+    {
+        std::string bytes = ReadAll(b.path);
+        bytes[static_cast<size_t>(b.files[1].offset) + 40] ^= 0x5A;
+        const std::wstring bad = g_temp + L"\\damaged-setup.exe";
+        WriteFile(bad, bytes);
+        setup::Package damaged;
+        CHECK(setup::OpenPackage(bad, &damaged));
+        CHECK(!setup::Install(damaged, target, nullptr, &error));
+        CHECK(setup::InstalledVersion(dir) == L"0.1.0" && ReadAll(dir + L"\\libmpv-2.dll") == mpv);
+    }
+
+    CHECK_MSG(setup::Uninstall(target, false, &error), "%s", U8(error).c_str());
+    CHECK(!FileExists(dir + L"\\Lumen.exe") && !FileExists(dir + L"\\libmpv-2.dll") && !FileExists(dir + L"\\versions"));
+    CHECK(ReadAll(dir + L"\\yt-dlp.exe") == "mine");
+    CHECK(FileExists(data + L"\\settings.json"));
+}
+
+// The Inno beta's folder: plain files, no versions\. They are kept as a version of their own.
+void TestSetupFromInno() {
+    const std::wstring dir = MakeDir(L"inno") + L"\\Lumen";
+    WriteFile(dir + L"\\Lumen.exe", ReadAll(FakeLumen(1)));
+    WriteFile(dir + L"\\libmpv-2.dll", "old mpv");
+    WriteFile(dir + L"\\README-BETA.txt", "old");
+    WriteFile(dir + L"\\yt-dlp.exe", "mine");
+    std::wstring error;
+    const setup::Package b = MakeSetup(2, {{L"libmpv-2.dll", "new mpv"}});
+    CHECK_MSG(setup::Install(b, {dir, false}, nullptr, &error), "%s", U8(error).c_str());
+    CHECK(setup::InstalledVersion(dir) == L"0.2.0" && ReadAll(dir + L"\\libmpv-2.dll") == "new mpv");
+    CHECK(!FileExists(dir + L"\\README-BETA.txt"));
+    CHECK(FileExists(dir + L"\\versions\\0.1.0\\Lumen.exe") && !FileExists(dir + L"\\versions\\0.1.0\\yt-dlp.exe"));
+    CHECK(setup::SwitchVersion({dir, false}, L"0.1.0", &error) && ReadAll(dir + L"\\libmpv-2.dll") == "old mpv");
+    CHECK(ReadAll(dir + L"\\yt-dlp.exe") == "mine");
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -3950,6 +4117,10 @@ const TestCase kTests[] = {
     {"http_client", TestHttpClient},
     {"log_file", TestLogFile},
     {"user_choice_hash", TestUserChoiceHash},
+    {"setup_versions", TestSetupVersions},
+    {"setup_package", TestSetupPackage},
+    {"setup_install_switch", TestSetupInstallSwitch},
+    {"setup_from_inno", TestSetupFromInno},
 };
 
 }  // namespace

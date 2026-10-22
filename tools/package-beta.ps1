@@ -1,6 +1,7 @@
 # Builds a beta for testers from the current commit:
 #   dist\Lumen-<version>-beta-<commit>.zip       Lumen.exe, libmpv-2.dll, README-BETA.txt
 #   dist\Lumen-<version>-beta-<commit>-setup.exe the same files as an installer (needs Inno Setup 6)
+#   dist\Lumen-<version>-beta-<commit>-lumen-setup.exe  Lumen's own setup: update, roll back, uninstall
 #   dist\symbols\<version>-<commit>\             Lumen.exe + Lumen.pdb, to read the testers' crash dumps
 # Usage: powershell -ExecutionPolicy Bypass -File tools\package-beta.ps1
 # Reading a dump: open crash-*.dmp in WinDbg, .sympath+ dist\symbols\<version>-<commit>, then !analyze -v.
@@ -30,6 +31,9 @@ if ($iscc) {
   & $iscc /Q "/DAppVersion=$version" "/DBuild=$commit" "/DSrc=$stage" "/DOut=$dist" "$PSScriptRoot\installer\lumen.iss"
   if ($LASTEXITCODE) { throw "ISCC failed" }
 } else { Write-Host "Inno Setup 6 not found: zip only" }
+# Lumen's own setup (src/setup): this Lumen.exe with the other files appended. A GUI exe: wait for it.
+$own = Start-Process "$build\Lumen.exe" -ArgumentList "--make-setup", "`"$dist\$name-lumen-setup.exe`"", "`"$stage\libmpv-2.dll`"", "`"$stage\README-BETA.txt`"" -Wait -PassThru -WindowStyle Hidden
+if ($own.ExitCode) { throw "Lumen.exe --make-setup failed" }
 Remove-Item -Recurse -Force $stage
 
 $symbols = Join-Path $dist "symbols\$version-$commit"

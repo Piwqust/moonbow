@@ -10,6 +10,7 @@
 #include "gfx/Gpu.h"
 #include "gfx/Text.h"
 #include "net/Http.h"
+#include "setup/SetupMain.h"
 #include "ui/Host.h"
 
 #include <objbase.h>
@@ -29,7 +30,9 @@ std::vector<std::wstring> Arguments() {
     std::vector<std::wstring> args;
     for (int i = 1; argv && i < argc; ++i) {
         std::wstring a = argv[i];
-        const bool value = i > 1 && wcscmp(argv[i - 1], L"--scale") == 0;  // a number, not a file
+        // A number or a version, not a file.
+        const bool value = i > 1 && (wcscmp(argv[i - 1], L"--scale") == 0 || wcscmp(argv[i - 1], L"--wait-pid") == 0 ||
+                                     wcscmp(argv[i - 1], L"--switch-version") == 0);
         if (!a.empty() && a[0] != L'-' && a.find(L"://") == std::wstring::npos && !value) {
             wchar_t full[MAX_PATH * 4];
             const DWORD n = GetFullPathNameW(a.c_str(), static_cast<DWORD>(std::size(full)), full, nullptr);
@@ -116,6 +119,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (args[i] == L"--data-dir" && i + 1 < args.size()) SetDataDirForTests(args[i + 1]);
     }
     app::InstallCrashHandler(net::AppVersion());
+    // Setup.exe (this exe with a package appended), uninstall and version switches: no player.
+    if (int code = 0; setup::RunSetupMode(args, &code)) return code;
     // The installer's hooks (tools/installer/lumen.iss): file types for this user, no window.
     if (!args.empty() && args[0] == L"--register-file-types") {
         // Explorer's verb labels are written once, so in the language a first run would pick.

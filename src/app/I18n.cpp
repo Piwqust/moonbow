@@ -22,6 +22,7 @@ const Pair kRussian[] = {
 #include "app/strings/dialogs.inc"
 #include "app/strings/onboarding.inc"
 #include "app/strings/online.inc"
+#include "app/strings/setup.inc"
     {nullptr, nullptr},
 };
 

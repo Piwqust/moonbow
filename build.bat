@@ -36,7 +36,7 @@ for /r "%ROOT%src" %%f in (*.cpp) do echo "%%f">>"%RSP%"
 set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /permissive- /Zc:__cplusplus /MP /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /I"%ROOT%src" /I"%ROOT%third_party\mpv\include""
 set "LFLAGS=/SUBSYSTEM:WINDOWS /MANIFEST:NO /DYNAMICBASE /NXCOMPAT"
 rem Graphics, codecs, shell, network and UI Automation DLLs load on first use, not before wWinMain (faster first paint).
-set "LFLAGS=%LFLAGS% /DELAYLOAD:d3d11.dll /DELAYLOAD:d2d1.dll /DELAYLOAD:dwrite.dll /DELAYLOAD:dcomp.dll /DELAYLOAD:propsys.dll /DELAYLOAD:oleaut32.dll /DELAYLOAD:imm32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:winhttp.dll /DELAYLOAD:crypt32.dll /DELAYLOAD:uiautomationcore.dll /DELAYLOAD:dbghelp.dll"
+set "LFLAGS=%LFLAGS% /DELAYLOAD:d3d11.dll /DELAYLOAD:d2d1.dll /DELAYLOAD:dwrite.dll /DELAYLOAD:dcomp.dll /DELAYLOAD:propsys.dll /DELAYLOAD:oleaut32.dll /DELAYLOAD:imm32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:winhttp.dll /DELAYLOAD:crypt32.dll /DELAYLOAD:uiautomationcore.dll /DELAYLOAD:dbghelp.dll /DELAYLOAD:cabinet.dll /DELAYLOAD:version.dll"
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /Od /Zi /MTd /D_DEBUG"
     set "LFLAGS=%LFLAGS% /DEBUG"
