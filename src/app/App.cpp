@@ -24,6 +24,8 @@
 #include "app/settings/ShortcutStore.h"
 #include "core/SettingsSchema.h"
 #include "gfx/Gpu.h"
+#include "net/Http.h"
+#include "setup/Installer.h"
 #include "ui/Controls.h"
 
 #include <exdisp.h>
@@ -505,6 +507,13 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
             SetUiValue("onboarded", "1");
             FlushStores();
         });
+    }
+    // Once after an update: what the new version brings. Not on a first start (onboarding) or after
+    // going back to an older version.
+    if (const std::string last = UiValue("lastVersion"), now = json::ToUtf8(net::AppVersion()); last != now) {
+        if (!last.empty() && UiValue("onboarded") == "1" && setup::CompareVersions(Utf8ToWide(last), net::AppVersion()) < 0)
+            ShowWhatsNew(Utf8ToWide(last));
+        SetUiValue("lastVersion", now);
     }
 
     MSG msg;

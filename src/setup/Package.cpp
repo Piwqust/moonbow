@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <compressapi.h>
 
+#include <algorithm>
 #include <cstring>
 
 #pragma comment(lib, "cabinet.lib")
@@ -11,7 +12,9 @@
 namespace setup {
 namespace {
 
-constexpr char kMagic[8] = {'L', 'U', 'M', 'E', 'N', 'P', 'K', '1'};
+constexpr char kMagic[8] = {'L', 'U', 'M', 'E', 'N', 'P', 'K', '2'};
+// Files are packed in blocks: the setup's progress moves through libmpv (121 MB) instead of jumping.
+constexpr size_t kBlock = 8u << 20;
 constexpr size_t kFooterSize = 8 + 4 + 8;
 
 struct File {
@@ -63,6 +66,13 @@ bool ReadWhole(const std::wstring& path, std::vector<uint8_t>* out) {
     return f.ReadAt(0, out->data(), out->size());
 }
 
+// FNV-1a: LZMS has no checksum of its own, so a damaged download could unpack into wrong bytes.
+uint64_t Checksum(const uint8_t* p, size_t n) {
+    uint64_t h = 14695981039346656037ull;
+    for (size_t i = 0; i < n; ++i) h = (h ^ p[i]) * 1099511628211ull;
+    return h;
+}
+
 std::wstring BaseName(const std::wstring& path) {
     const size_t slash = path.find_last_of(L"\\/");
     return slash == std::wstring::npos ? path : path.substr(slash + 1);
@@ -100,7 +110,7 @@ bool OpenPackage(const std::wstring& exe, Package* out) {
     Package p;
     p.path = exe;
     p.version = FileVersion(exe);
-    p.files.push_back({L"Lumen.exe", first, first, 0, true});
+    p.files.push_back({L"Lumen.exe", first, first, 0, 0, true});
     uint64_t at = first;
     for (uint32_t i = 0; i < count; ++i) {
         uint16_t nameLen = 0;
@@ -108,11 +118,11 @@ bool OpenPackage(const std::wstring& exe, Package* out) {
         PackedFile e;
         e.name.resize(nameLen);
         if (!f.ReadAt(at + 2, e.name.data(), nameLen * 2ull) || !f.ReadAt(at + 2 + nameLen * 2ull, &e.size, 8) ||
-            !f.ReadAt(at + 10 + nameLen * 2ull, &e.packedSize, 8))
+            !f.ReadAt(at + 10 + nameLen * 2ull, &e.packedSize, 8) || !f.ReadAt(at + 18 + nameLen * 2ull, &e.checksum, 8))
             return false;
         // A name is a plain file name: never a path out of the install folder.
         if (e.name.find_first_of(L"\\/:") != std::wstring::npos || e.name == L"." || e.name == L"..") return false;
-        e.offset = at + 18 + nameLen * 2ull;
+        e.offset = at + 26 + nameLen * 2ull;
         if (e.offset + e.packedSize > size - kFooterSize) return false;
         at = e.offset + e.packedSize;
         p.files.push_back(std::move(e));
@@ -139,19 +149,28 @@ bool WritePackage(const std::wstring& exe, const std::vector<std::wstring>& file
             ok = false;
             break;
         }
-        // Buffer mode can come out a little larger than the input on data that does not compress.
-        std::vector<uint8_t> packed(data.size() + data.size() / 8 + 65536);
-        SIZE_T packedSize = 0;
-        if (!Compress(c, data.data(), data.size(), packed.data(), packed.size(), &packedSize)) {
+        // Blocks: u32 size, u32 packed size, LZMS data.
+        std::vector<uint8_t> blocks;
+        for (size_t at = 0; ok && at < data.size(); at += kBlock) {
+            const uint32_t raw = static_cast<uint32_t>(std::min(kBlock, data.size() - at));
+            // Buffer mode can come out a little larger than the input on data that does not compress.
+            std::vector<uint8_t> packed(raw + raw / 8 + 65536);
+            SIZE_T n = 0;
+            ok = Compress(c, data.data() + at, raw, packed.data(), packed.size(), &n) != 0;
+            const uint32_t n32 = static_cast<uint32_t>(n);
+            blocks.insert(blocks.end(), reinterpret_cast<const uint8_t*>(&raw), reinterpret_cast<const uint8_t*>(&raw) + 4);
+            blocks.insert(blocks.end(), reinterpret_cast<const uint8_t*>(&n32), reinterpret_cast<const uint8_t*>(&n32) + 4);
+            blocks.insert(blocks.end(), packed.begin(), packed.begin() + n);
+        }
+        if (!ok) {
             *error = L"cannot compress " + path;
-            ok = false;
             break;
         }
         const std::wstring name = BaseName(path);
         const uint16_t nameLen = static_cast<uint16_t>(name.size());
-        const uint64_t size = data.size(), packedSize64 = packedSize;
+        const uint64_t size = data.size(), packedSize = blocks.size(), sum = Checksum(data.data(), data.size());
         ok = f.Write(&nameLen, 2) && f.Write(name.data(), nameLen * 2ull) && f.Write(&size, 8) &&
-             f.Write(&packedSize64, 8) && f.Write(packed.data(), packedSize);
+             f.Write(&packedSize, 8) && f.Write(&sum, 8) && f.Write(blocks.data(), blocks.size());
     }
     CloseCompressor(c);
     const uint32_t count = static_cast<uint32_t>(files.size());
@@ -160,20 +179,37 @@ bool WritePackage(const std::wstring& exe, const std::vector<std::wstring>& file
     return ok;
 }
 
-bool ReadPackedFile(const Package& package, const PackedFile& file, std::vector<uint8_t>* out, std::wstring* error) {
+bool ReadPackedFile(const Package& package, const PackedFile& file, std::vector<uint8_t>* out, std::wstring* error,
+                    const std::function<void(uint64_t)>& progress) {
     File f(package.path, false);
     std::vector<uint8_t> packed(static_cast<size_t>(file.packedSize));
     if (!f || !f.ReadAt(file.offset, packed.data(), packed.size())) return *error = L"cannot read the setup file", false;
     if (file.stored) {
         *out = std::move(packed);
+        if (progress) progress(file.size);
         return true;
     }
     DECOMPRESSOR_HANDLE d = nullptr;
     if (!CreateDecompressor(COMPRESS_ALGORITHM_LZMS, nullptr, &d)) return *error = L"no LZMS decompressor", false;
     out->resize(static_cast<size_t>(file.size));
-    SIZE_T got = 0;
-    const bool ok = Decompress(d, packed.data(), packed.size(), out->data(), out->size(), &got) && got == file.size;
+    bool ok = true;
+    size_t in = 0, done = 0;
+    while (ok && done < out->size()) {
+        uint32_t raw = 0, n = 0;
+        ok = in + 8 <= packed.size();
+        if (!ok) break;
+        memcpy(&raw, packed.data() + in, 4);
+        memcpy(&n, packed.data() + in + 4, 4);
+        in += 8;
+        SIZE_T got = 0;
+        ok = raw <= out->size() - done && n <= packed.size() - in &&
+             Decompress(d, packed.data() + in, n, out->data() + done, raw, &got) && got == raw;
+        in += n;
+        done += raw;
+        if (ok && progress) progress(done);
+    }
     CloseDecompressor(d);
+    ok = ok && in == packed.size() && Checksum(out->data(), out->size()) == file.checksum;
     if (!ok) *error = L"the setup file is damaged (" + file.name + L"): download it again";
     return ok;
 }

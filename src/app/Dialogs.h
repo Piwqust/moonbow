@@ -37,6 +37,9 @@ void ShowMetadataMatchDialog(const std::wstring& videoPath);
 void ShowMediaInfoDialog();
 // Version, libmpv/FFmpeg versions and licences; over `host` (Settings) or the main window.
 void ShowAboutDialog(ui::Host* host = nullptr);
+// What the versions after `since` up to this one bring (setup/ReleaseNotes.h); all of this
+// version's notes when `since` is empty. Nothing when there are none.
+void ShowWhatsNew(const std::wstring& since, ui::Host* host = nullptr);
 
 // First-run setup window; `done` runs after it closes (finished or skipped).
 void ShowOnboarding(std::function<void()> done);

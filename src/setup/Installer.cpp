@@ -19,7 +19,7 @@ namespace {
 namespace fs = std::filesystem;
 
 constexpr wchar_t kUninstallKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Lumen";
-// The Inno Setup beta (tools/installer/lumen.iss) installed into the same folder under this entry.
+// The Inno Setup beta (tools/installer/lumen.iss, now in git history) used the same folder and this entry.
 constexpr wchar_t kInnoKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{0E08DF8D-068E-44DF-96DD-AFDC2CCD259A}_is1";
 
@@ -99,9 +99,16 @@ void RemoveTree(const std::wstring& path) {
     fs::remove_all(path, ec);
 }
 
+// Lumen's own files in the install folder, also from layouts without versions\ (the Inno beta).
+// A yt-dlp.exe the user put next to Lumen.exe (Config.cpp FindYtDlp) is theirs: it never follows
+// version switches and an uninstall leaves it.
+bool IsLumenFile(const std::wstring& name) {
+    const std::wstring lower = Lower(name);
+    return lower == L"lumen.exe" || EndsWith(lower, L".dll") || (lower.rfind(L"readme", 0) == 0 && EndsWith(lower, L".txt"));
+}
+
 // The Inno beta and older layouts had no versions\ folder: the current files are kept there first,
-// so they can be switched back to. Only Lumen's own files: a yt-dlp.exe the user put next to
-// Lumen.exe (Config.cpp FindYtDlp) is theirs and must not follow version switches.
+// so they can be switched back to.
 void KeepCurrent(const std::wstring& dir, const std::wstring& current) {
     if (current.empty() || IsDir(VersionDir(dir, current))) return;
     const std::wstring tmp = VersionDir(dir, current) + L".tmp";
@@ -109,11 +116,8 @@ void KeepCurrent(const std::wstring& dir, const std::wstring& current) {
     std::error_code ec;
     fs::create_directories(tmp, ec);
     bool ok = !ec;
-    for (const std::wstring& name : FilesIn(dir)) {
-        const std::wstring lower = Lower(name);
-        if (lower == L"lumen.exe" || EndsWith(lower, L".dll") || (lower.rfind(L"readme", 0) == 0 && EndsWith(lower, L".txt")))
-            ok = ok && LinkOrCopy(dir + L"\\" + name, tmp + L"\\" + name);
-    }
+    for (const std::wstring& name : FilesIn(dir))
+        if (IsLumenFile(name)) ok = ok && LinkOrCopy(dir + L"\\" + name, tmp + L"\\" + name);
     if (ok && MoveFileW(tmp.c_str(), VersionDir(dir, current).c_str())) return;
     RemoveTree(tmp);
 }
@@ -134,7 +138,10 @@ bool Extract(const Package& package, const std::wstring& dir, const Progress& pr
     for (const std::wstring& v : StoredVersions(dir)) candidates.push_back(VersionDir(dir, v));
     for (const PackedFile& f : package.files) {
         std::vector<uint8_t> data;
-        if (!ReadPackedFile(package, f, &data, error)) return RemoveTree(tmp), false;
+        auto unpacked = [&](uint64_t bytes) {
+            if (progress && total) progress(double(done + bytes) / double(total));
+        };
+        if (!ReadPackedFile(package, f, &data, error, unpacked)) return RemoveTree(tmp), false;
         const std::wstring dest = tmp + L"\\" + f.name;
         bool linked = false;
         for (const std::wstring& c : candidates) {
@@ -151,7 +158,6 @@ bool Extract(const Package& package, const std::wstring& dir, const Progress& pr
         }
         if (!linked && !WriteFileBytes(dest, data)) return *error = L"cannot write " + dest, RemoveTree(tmp), false;
         done += f.size;
-        if (progress) progress(total ? double(done) / double(total) : 1.0);
     }
     // A reinstall of the same version replaces its folder; the current files are links of their own.
     if (IsDir(finalDir)) {
@@ -161,11 +167,12 @@ bool Extract(const Package& package, const std::wstring& dir, const Progress& pr
         RemoveTree(old);
     }
     if (!MoveFileW(tmp.c_str(), finalDir.c_str())) return *error = L"cannot create " + finalDir, RemoveTree(tmp), false;
+    if (progress) progress(1.0);
     return true;
 }
 
-// Puts the files of versions\<to> in place of those of versions\<from> (empty: nothing installed).
-bool Activate(const std::wstring& dir, const std::wstring& from, const std::wstring& to, std::wstring* error) {
+// Puts the files of versions\<to> in place of `old` (the names the current version has there).
+bool Activate(const std::wstring& dir, const std::vector<std::wstring>& old, const std::wstring& to, std::wstring* error) {
     const std::wstring src = VersionDir(dir, to);
     const std::vector<std::wstring> files = FilesIn(src);
     if (std::find(files.begin(), files.end(), L"Lumen.exe") == files.end())
@@ -179,18 +186,24 @@ bool Activate(const std::wstring& dir, const std::wstring& from, const std::wstr
             return false;
         }
     }
-    if (!from.empty())
-        for (const std::wstring& name : FilesIn(VersionDir(dir, from)))
-            if (std::find(files.begin(), files.end(), name) == files.end()) DeleteFileW((dir + L"\\" + name).c_str());
+    for (const std::wstring& name : old)
+        if (std::find(files.begin(), files.end(), name) == files.end()) DeleteFileW((dir + L"\\" + name).c_str());
     return true;
 }
 
-// Activate, and on failure the previous version back.
-bool ActivateOrRestore(const std::wstring& dir, const std::wstring& from, const std::wstring& to, std::wstring* error) {
-    if (Activate(dir, from, to, error)) return true;
+// Activate, and on failure the previous version back. `old` is read before versions\<to> is
+// written: a reinstall replaces the folder of the current version itself.
+bool ActivateOrRestore(const std::wstring& dir, const std::wstring& from, const std::vector<std::wstring>& old,
+                       const std::wstring& to, std::wstring* error) {
+    if (Activate(dir, old, to, error)) return true;
     std::wstring ignored;
-    if (!from.empty()) Activate(dir, to, from, &ignored);
+    if (!from.empty()) Activate(dir, FilesIn(VersionDir(dir, to)), from, &ignored);
     return false;
+}
+
+// The names the current version has in the install folder.
+std::vector<std::wstring> CurrentFiles(const std::wstring& dir, const std::wstring& current) {
+    return current.empty() ? std::vector<std::wstring>{} : FilesIn(VersionDir(dir, current));
 }
 
 void Prune(const std::wstring& dir, const std::wstring& current) {
@@ -385,9 +398,10 @@ bool Install(const Package& package, const Target& target, const Progress& progr
     if (LumenRunning(dir)) return *error = L"Lumen is running", false;
     const std::wstring current = InstalledVersion(dir);
     KeepCurrent(dir, current);
+    const std::vector<std::wstring> old = CurrentFiles(dir, current);
     if (!Extract(package, dir, progress, error)) return false;
     if (!current.empty() && current != package.version) SnapshotData(current);
-    if (!ActivateOrRestore(dir, IsDir(VersionDir(dir, current)) ? current : L"", package.version, error)) return false;
+    if (!ActivateOrRestore(dir, IsDir(VersionDir(dir, current)) ? current : L"", old, package.version, error)) return false;
     Prune(dir, package.version);
     return Integrate(target, package.version, error);
 }
@@ -399,7 +413,8 @@ bool SwitchVersion(const Target& target, const std::wstring& version, std::wstri
     const std::wstring current = InstalledVersion(dir);
     KeepCurrent(dir, current);
     if (!current.empty() && current != version) SnapshotData(current);
-    if (!ActivateOrRestore(dir, IsDir(VersionDir(dir, current)) ? current : L"", version, error)) return false;
+    if (!ActivateOrRestore(dir, IsDir(VersionDir(dir, current)) ? current : L"", CurrentFiles(dir, current), version, error))
+        return false;
     Prune(dir, version);
     return Integrate(target, version, error);
 }
@@ -414,11 +429,11 @@ bool Uninstall(const Target& target, bool removeData, std::wstring* error) {
         RemoveInno(dir);
     }
     // Lumen's files only: anything else the user put in the folder stays, and so does the folder then.
-    std::vector<std::wstring> ours{L"Lumen.exe"};
+    std::vector<std::wstring> ours;
     for (const std::wstring& v : StoredVersions(dir))
         for (const std::wstring& name : FilesIn(VersionDir(dir, v))) ours.push_back(name);
     for (const std::wstring& name : FilesIn(dir))
-        if (std::find(ours.begin(), ours.end(), name) != ours.end() || EndsWith(name, L".new"))
+        if (IsLumenFile(name) || std::find(ours.begin(), ours.end(), name) != ours.end() || EndsWith(name, L".new"))
             DeleteFileW((dir + L"\\" + name).c_str());
     RemoveTree(dir + L"\\versions");
     RemoveDirectoryW(dir.c_str());

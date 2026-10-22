@@ -10,8 +10,8 @@ namespace setup {
 //   Lumen.exe --uninstall [--silent] [--remove-data]
 //   Lumen.exe --switch-version <version> [--silent] [--restore-data]
 //   Lumen.exe --make-setup <out.exe> <file>...   builds a Setup.exe from this Lumen.exe and the files
-// --no-system (tests): no uninstall entry, shortcut or file types.
-// For now it asks with plain message boxes; the setup's own screens replace them.
+// --no-system (tests): no uninstall entry, shortcut or file types. Without --silent the setup's
+// window (SetupWindow.h) asks and shows the work; --automation --setup-page <name> shows one page.
 bool RunSetupMode(const std::vector<std::wstring>& args, int* exitCode);
 
 }  // namespace setup

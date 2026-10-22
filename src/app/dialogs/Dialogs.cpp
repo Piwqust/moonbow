@@ -14,6 +14,8 @@
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
 #include "net/Online.h"
+#include "setup/Installer.h"
+#include "setup/ReleaseNotes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +27,7 @@ namespace app {
 
 using namespace ui;
 using namespace dlg;
+using setup::CompareVersions;
 
 void InitDialogs() {
     InstallSubtitleMemory();
@@ -1245,6 +1248,10 @@ void ShowAboutDialog(Host* host) {
     auto* title = names->Add<Label>(L"Lumen", TextStyle::Large);
     title->color = SoftText;
     names->Add<Label>(Fmt(Tr(L"Version {0}"), {AppVersion()}), TextStyle::Body, Tone::Tertiary);
+    if (!setup::NotesBetween({}, AppVersion(), CurrentLanguage() == Language::Russian).empty()) {
+        auto* news = names->Add<LinkButton>(Tr(L"What's new"), TextStyle::Body);
+        news->onClick = [host] { ShowWhatsNew({}, host); };
+    }
 
     // mpv starts with the first file; before that its versions aren't known.
     Player& player = TheApp().player();
@@ -1253,6 +1260,29 @@ void ShowAboutDialog(Host* host) {
     std::wstring ffmpeg = player.Ready() ? Utf8ToWide(player.GetPropertyString("ffmpeg-version")) : L"";
     body->Add<InfoLine>(L"libmpv", mpv.empty() ? later : mpv);
     body->Add<InfoLine>(L"FFmpeg", ffmpeg.empty() ? later : ffmpeg);
+
+    // The versions the setup keeps (src/setup): this exe switches (from a copy in %TEMP%) and closes
+    // this Lumen on the click of its window; a kept version may predate the switch command. Nothing
+    // for a build run from elsewhere (no versions folder).
+    std::wstring dir = ExeDir();
+    if (!dir.empty()) dir.pop_back();
+    const std::vector<std::wstring> kept = setup::StoredVersions(dir);
+    if (kept.size() > 1) {
+        AddSeparator(body);
+        body->Add<Label>(Tr(L"Versions on this computer"), TextStyle::Body, Tone::Tertiary);
+        for (const std::wstring& v : kept) {
+            auto* row = Row(body, 12);
+            row->width = Length::Grow();
+            auto* name = row->Add<Label>(v == AppVersion() ? Fmt(Tr(L"{0} (this one)"), {v}) : v, TextStyle::Body);
+            name->color = SoftText;
+            name->width = Length::Grow();
+            if (v == AppVersion()) continue;
+            auto* go = row->Add<LinkButton>(CompareVersions(v, AppVersion()) < 0 ? Tr(L"Go back to it") : Tr(L"Switch to it"),
+                                            TextStyle::Body);
+            const std::wstring exe = dir + L"\\Lumen.exe", args = L"--switch-version " + v;
+            go->onClick = [exe, args] { Host::ShellOpen(nullptr, L"open", exe.c_str(), args.c_str(), nullptr, SW_SHOWNORMAL); };
+        }
+    }
 
     AddSeparator(body);
     body->Add<Label>(Tr(L"Licences"), TextStyle::Body, Tone::Tertiary);
@@ -1286,6 +1316,32 @@ void ShowAboutDialog(Host* host) {
     close->onClick = [f] { f->Close(); };
     f->onSubmit = [f] { f->Close(); };
     // On "Close", not the first licence link: Enter closes, as in the other dialogs (VF-04).
+    ShowFrame(host, std::move(frame), close);
+}
+
+void ShowWhatsNew(const std::wstring& since, Host* host) {
+    if (!host) host = TheApp().main();
+    const std::vector<std::wstring> lines =
+        setup::NotesBetween(since, AppVersion(), CurrentLanguage() == Language::Russian);
+    if (!host || lines.empty()) return;
+    auto frame = std::make_unique<Frame>(Fmt(Tr(L"What's new in Lumen {0}"), {AppVersion()}), FitWidth(host, 520));
+    Frame* f = frame.get();
+    Widget* body = f->Body();
+    body->gap = 10;
+    for (const std::wstring& line : lines) {
+        auto* row = Row(body, 10);
+        row->align = Align::Start;
+        row->width = Length::Grow();
+        row->Add<Label>(L"•", TextStyle::Body, Tone::Tertiary);
+        auto* text = row->Add<Label>(line, TextStyle::Body);
+        text->color = SoftText;
+        text->wrap = true;
+        text->width = Length::Grow();
+    }
+    f->Footer()->Add<Spacer>();
+    auto* close = f->Footer()->Add<DButton>(Tr(L"Close"), BtnStyle::Accent);
+    close->onClick = [f] { f->Close(); };
+    f->onSubmit = [f] { f->Close(); };
     ShowFrame(host, std::move(frame), close);
 }
 

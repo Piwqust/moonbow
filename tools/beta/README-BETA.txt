@@ -7,12 +7,12 @@ Lumen — бета-версия для тестирования
 1. Запустите Lumen-...-setup.exe. Права администратора не нужны. Windows может предупредить
    «Система Windows защитила ваш компьютер»: сборка пока не подписана. Нажмите «Подробнее» →
    «Выполнить в любом случае».
-2. Установщик положит Lumen в %LOCALAPPDATA%\Programs\Lumen, добавит его в меню «Пуск» и в
-   «Открыть с помощью» для видео, музыки и плейлистов.
-3. Оставьте галочку «Открывать видео в Lumen по умолчанию»: видео сразу начнут открываться в Lumen,
-   музыка останется в прежней программе. Если Windows этого не позволит, откроются её «Приложения
-   по умолчанию», выберите там Lumen. То же самое потом делает кнопка в Lumen: Настройки → Общие →
-   «Открывать видео в Lumen по умолчанию». Музыку можно открыть в Lumen через «Открыть с помощью».
+2. Нажмите «Установить». Lumen встанет в %LOCALAPPDATA%\Programs\Lumen, появится в меню «Пуск» и в
+   «Открыть с помощью» для видео, музыки и плейлистов. Другая папка: «Параметры установки».
+3. Видео сразу начнут открываться в Lumen, музыка останется в прежней программе. Не хотите этого:
+   выключите «Открывать видео в Lumen по умолчанию» в «Параметрах установки». Если Windows не
+   позволит, откроются её «Приложения по умолчанию», выберите там Lumen. То же делает кнопка в
+   Lumen: Настройки → Общие → «Открывать видео в Lumen по умолчанию».
 4. Пользуйтесь как обычным плеером: смотрите свои видео, слушайте музыку, добавьте папки в медиатеку.
 Без установки: распакуйте .zip в любую папку и запустите Lumen.exe.
 
@@ -31,9 +31,13 @@ Lumen — бета-версия для тестирования
   (стеки потоков и список модулей), без содержимого ваших видео и музыки.
 Lumen ничего не отправляет сам: файлы остаются на вашем компьютере, пока вы их не пришлёте.
 
-КАК ОБНОВИТЬ
+КАК ОБНОВИТЬ ИЛИ ВЕРНУТЬСЯ
 Сам Lumen пока не обновляется: новую сборку вы получите файлом.
-- Установщик: просто запустите новый setup.exe, он поставит Lumen поверх старого.
+- Запустите новый setup.exe: он покажет, что изменилось, и обновит Lumen. Открытый Lumen закроется
+  сам, место, где вы остановились, сохранится. После обновления Lumen один раз покажет «Что нового».
+- Прежняя версия остаётся на компьютере (хранятся две прошлые). Вернуться к ней: Lumen → меню
+  логотипа → «О программе» → «Версии на этом компьютере» → «Вернуться на неё». Или запустите
+  setup.exe той версии: он сам поймёт, что это возврат.
 - Архив: закройте Lumen и распакуйте новый архив поверх старой папки с заменой файлов.
 Настройки и медиатека хранятся отдельно, в %APPDATA%\Lumen, и при обновлении не теряются.
 Когда сообщаете о проблеме, назовите имя файла сборки (вида Lumen-0.1.0-beta-1a2b3c4): по нему
@@ -44,7 +48,7 @@ Lumen ничего не отправляет сам: файлы остаются
   формат (например .mp4) и прежний плеер. Внизу там же есть «Сбросить» для всех форматов.
 - Удалить Lumen: Параметры Windows → Приложения → Установленные приложения → Lumen → Удалить.
   Lumen уберёт себя из «Открыть с помощью», вернёт для видео те программы, что открывали
-  их до Lumen, и спросит, удалять ли настройки и медиатеку.
+  их до Lumen. Настройки и медиатека останутся, если не отметить «Удалить также настройки».
 - Версия из архива: удалите её папку и папку %APPDATA%\Lumen.
 
 Lumen распространяется по лицензии GPL-3.0-or-later. Воспроизведение работает на libmpv (mpv.io).
@@ -52,17 +56,19 @@ Lumen распространяется по лицензии GPL-3.0-or-later. �
 
 Lumen — beta for testers (English)
 ----------------------------------
-Run Lumen-...-setup.exe (no admin rights; or unzip the .zip and run Lumen.exe). The build is not
-signed yet: on the SmartScreen warning choose "More info" → "Run anyway". Keep "Open videos in
-Lumen by default" ticked: videos then open in Lumen, music stays as it was (or Windows' Default apps
+Run Lumen-...-setup.exe and press Install (no admin rights; or unzip the .zip and run Lumen.exe).
+The build is not signed yet: on the SmartScreen warning choose "More info" → "Run anyway". Videos
+then open in Lumen, music stays as it was ("Install options" turns that off; Windows' Default apps
 opens if it refuses).
 If something goes wrong: Settings → General → Diagnostics → "Logs and crash reports" → "Open
 folder", and send every file from there together with a few words on what you did and what
 happened. For a file that plays wrong, turn on "Detailed playback log", play it again and send
 mpv.log too. Nothing is sent automatically; crash dumps hold thread stacks and the module list,
 not your media. Settings and the library live in %APPDATA%\Lumen.
-To update: run the new setup (or unzip over the old folder); settings and the library stay.
+To update: run the new setup (or unzip over the old folder); settings and the library stay. The
+previous version is kept: Lumen's logo menu → About Lumen → Versions on this computer takes you
+back, and so does running that version's setup.
 To undo: pick another player in Settings → Apps → Default apps, or uninstall Lumen in Settings →
 Apps → Installed apps: it removes its file types, gives each type back the app it had before
-Lumen, and asks whether to delete its data.
+Lumen, and keeps its data unless you tick "Also delete settings".
 When reporting, name the build you run (like Lumen-0.1.0-beta-1a2b3c4).

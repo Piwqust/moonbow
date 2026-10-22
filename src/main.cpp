@@ -30,9 +30,10 @@ std::vector<std::wstring> Arguments() {
     std::vector<std::wstring> args;
     for (int i = 1; argv && i < argc; ++i) {
         std::wstring a = argv[i];
-        // A number or a version, not a file.
+        // A number, a version or a page name, not a file.
         const bool value = i > 1 && (wcscmp(argv[i - 1], L"--scale") == 0 || wcscmp(argv[i - 1], L"--wait-pid") == 0 ||
-                                     wcscmp(argv[i - 1], L"--switch-version") == 0);
+                                     wcscmp(argv[i - 1], L"--switch-version") == 0 ||
+                                     wcscmp(argv[i - 1], L"--setup-page") == 0);
         if (!a.empty() && a[0] != L'-' && a.find(L"://") == std::wstring::npos && !value) {
             wchar_t full[MAX_PATH * 4];
             const DWORD n = GetFullPathNameW(a.c_str(), static_cast<DWORD>(std::size(full)), full, nullptr);
@@ -121,7 +122,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     app::InstallCrashHandler(net::AppVersion());
     // Setup.exe (this exe with a package appended), uninstall and version switches: no player.
     if (int code = 0; setup::RunSetupMode(args, &code)) return code;
-    // The installer's hooks (tools/installer/lumen.iss): file types for this user, no window.
+    // The setup's hooks (src/setup/Installer.cpp): file types for this user, no window.
     if (!args.empty() && args[0] == L"--register-file-types") {
         // Explorer's verb labels are written once, so in the language a first run would pick.
         app::SetLanguage(PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? app::Language::Russian

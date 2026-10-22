@@ -3974,6 +3974,13 @@ void TestSetupPackage() {
           std::string(data.begin(), data.end()) == big);
     CHECK(p.files.size() == 3 && setup::ReadPackedFile(p, p.files[0], &data, &error) &&
           std::string(data.begin(), data.end()) == ReadAll(FakeLumen(1)));
+    // Files come out block by block (8 MB): the setup's progress moves through libmpv.
+    const setup::Package big2 = MakeSetup(9, {{L"big.dll", std::string(17 << 20, 'x')}});
+    std::vector<uint64_t> steps;
+    CHECK(big2.files.size() == 2 && setup::ReadPackedFile(big2, big2.files[1], &data, &error,
+                                                          [&](uint64_t n) { steps.push_back(n); }) &&
+          data.size() == (17u << 20));
+    CHECK(steps == (std::vector<uint64_t>{8u << 20, 16u << 20, 17u << 20}));
     // A setup is never packed into another one.
     CHECK(!setup::WritePackage(p.path, {}, g_temp + L"\\twice.exe", &error));
 }
@@ -4026,7 +4033,7 @@ void TestSetupInstallSwitch() {
     // A damaged setup changes nothing.
     {
         std::string bytes = ReadAll(b.path);
-        bytes[static_cast<size_t>(b.files[1].offset) + 40] ^= 0x5A;
+        bytes[static_cast<size_t>(b.files[1].offset) + 8 + b.files[1].packedSize / 2 - 4] ^= 0x5A;  // in the data
         const std::wstring bad = g_temp + L"\\damaged-setup.exe";
         WriteFile(bad, bytes);
         setup::Package damaged;
@@ -4056,6 +4063,12 @@ void TestSetupFromInno() {
     CHECK(FileExists(dir + L"\\versions\\0.1.0\\Lumen.exe") && !FileExists(dir + L"\\versions\\0.1.0\\yt-dlp.exe"));
     CHECK(setup::SwitchVersion({dir, false}, L"0.1.0", &error) && ReadAll(dir + L"\\libmpv-2.dll") == "old mpv");
     CHECK(ReadAll(dir + L"\\yt-dlp.exe") == "mine");
+    // A reinstall of the same version with fewer files leaves none of the old ones behind.
+    const setup::Package again = MakeSetup(1, {{L"libmpv-2.dll", "new mpv"}});
+    CHECK_MSG(setup::Install(again, {dir, false}, nullptr, &error), "%s", U8(error).c_str());
+    CHECK(!FileExists(dir + L"\\README-BETA.txt") && ReadAll(dir + L"\\libmpv-2.dll") == "new mpv");
+    CHECK(setup::Uninstall({dir, false}, false, &error));
+    CHECK(!FileExists(dir + L"\\Lumen.exe") && ReadAll(dir + L"\\yt-dlp.exe") == "mine");
 }
 
 struct TestCase {
