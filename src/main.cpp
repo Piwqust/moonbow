@@ -1,6 +1,8 @@
 #include "Trace.h"
 #include "app/App.h"
 #include "app/CrashReport.h"
+#include "app/FileAssociations.h"
+#include "app/I18n.h"
 #include "app/Gallery.h"
 #include "app/MainWindow.h"
 #include "core/Log.h"
@@ -114,6 +116,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (args[i] == L"--data-dir" && i + 1 < args.size()) SetDataDirForTests(args[i + 1]);
     }
     app::InstallCrashHandler(net::AppVersion());
+    // The installer's hooks (tools/installer/lumen.iss): file types for this user, no window.
+    if (!args.empty() && args[0] == L"--register-file-types") {
+        // Explorer's verb labels are written once, so in the language a first run would pick.
+        app::SetLanguage(PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? app::Language::Russian
+                                                                                    : app::Language::English);
+        return app::RegisterFileAssociations() ? 0 : 1;
+    }
+    if (!args.empty() && args[0] == L"--unregister-file-types") return app::UnregisterFileAssociations() ? 0 : 1;
     // --scale <factor> (--automation only): lay out as if at factor x the monitor's scale;
     // 1.5 or 150 both mean 150 % on a 100 % screen.
     for (size_t i = 0; i + 1 < args.size(); ++i)

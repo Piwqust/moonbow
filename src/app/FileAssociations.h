@@ -8,6 +8,8 @@ namespace app {
 // let apps take defaults themselves, so OpenDefaultAppsSettings() opens the
 // page where the user confirms.
 bool RegisterFileAssociations();
+// Removes everything RegisterFileAssociations() wrote (the uninstaller runs it).
+bool UnregisterFileAssociations();
 void OpenDefaultAppsSettings();
 
 }  // namespace app

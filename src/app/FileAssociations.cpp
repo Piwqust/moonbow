@@ -95,6 +95,29 @@ bool RegisterFileAssociations() {
     return ok;
 }
 
+bool UnregisterFileAssociations() {
+    // A key that is already gone counts as removed.
+    auto gone = [](LSTATUS s) { return s == ERROR_SUCCESS || s == ERROR_FILE_NOT_FOUND; };
+    auto removeTree = [&](const std::wstring& key) { return gone(RegDeleteTreeW(HKEY_CURRENT_USER, key.c_str())); };
+    bool ok = true;
+    for (const wchar_t* key : {L"Software\\Classes\\Lumen.Video", L"Software\\Classes\\Lumen.Audio",
+                               L"Software\\Classes\\Lumen.Playlist", L"Software\\Classes\\Applications\\Lumen.exe", L"Software\\Lumen"})
+        ok &= removeTree(key);
+    for (const wchar_t* shell : {L"SystemFileAssociations\\video\\shell", L"SystemFileAssociations\\audio\\shell", L"Directory\\shell"})
+        for (const wchar_t* verb : {L"Lumen.play", L"Lumen.enqueue"})
+            ok &= removeTree(std::wstring(L"Software\\Classes\\") + shell + L"\\" + verb);
+    auto removeProgIds = [&](const auto& exts, const wchar_t* progId) {
+        for (const wchar_t* ext : exts)
+            ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), progId));
+    };
+    removeProgIds(kVideo, kVideoProgId);
+    removeProgIds(kAudio, kAudioProgId);
+    removeProgIds(kPlaylists, kPlaylistProgId);
+    ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Lumen"));
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return ok;
+}
+
 void OpenDefaultAppsSettings() {
     ui::Host::ShellOpen(nullptr, L"open", L"ms-settings:defaultapps?registeredAppUser=Lumen", nullptr, nullptr, SW_SHOWNORMAL);
 }
