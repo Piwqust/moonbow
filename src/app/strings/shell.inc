@@ -85,8 +85,6 @@
 {L"window layout", L"вид окон и страниц"},
 {L"settings", L"настройки"},
 {L"per-file settings", L"настройки отдельных файлов"},
-{L"ON", L"ВКЛ"},
-{L"OFF", L"ВЫКЛ"},
 // Key names as Windows translates them; keycap labels (Esc, Home, PgUp, Backspace) stay as printed.
 {L"Space", L"Пробел"},
 {L"Media Play", L"Медиа: пуск/пауза"},

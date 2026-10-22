@@ -1818,6 +1818,20 @@ void BuildMedia(Builder& b) {
             .Desc(L"Lumen listens to its own sound through a Windows feature that older versions don't have.",
                   L"Lumen слушает свой звук через функцию Windows, которой нет в более старых версиях.");
     }
+    // Read by the music view; the spectrometer is drawn around the cover, so it always takes its place.
+    ItemRef vizLayout = b.Pick("audio.visualizerLayout", L"Visualization layout", L"Где показывать визуализацию",
+           {{"replace", L"Instead of the cover", L"Вместо обложки"},
+            {"wings", L"On both sides of the cover", L"По бокам обложки"},
+            {"side", L"Left of the cover", L"Слева от обложки"},
+            {"below", L"Below the cover and title", L"Под обложкой и названием"}},
+           "replace")
+        .Desc(L"Where the animation goes in the music view. Except for \"Instead of the cover\", the cover stays "
+              L"on screen. The spectrometer always takes the cover's place.",
+              L"Где анимация стоит на экране музыки. Во всех вариантах, кроме «Вместо обложки», обложка остаётся "
+              L"на экране. Спектрометр всегда заменяет обложку.")
+        .Basic("grid", L"Next to the cover or instead of it.", L"Рядом с обложкой или вместо неё.")
+        .When("audio.visualizer", "disabled", true);
+    if (!audio::ProcessLoopbackSupported()) vizLayout.Hidden();
     b.Toggle("audio.pitchCorrection", L"Keep pitch when changing speed", L"Сохранять тон при смене скорости", true)
         .MpvBool("audio-pitch-correction");
 

@@ -198,17 +198,17 @@ void Button::Paint(Painter& p) {
             break;
         case ButtonKind::Secondary:
             // Hover and press step towards the text colour: a visible change in both themes.
-            bg = !on ? DisabledFill() : down ? Color::Mix(c.bgPanel, c.textPrimary, 0.18f)
-                 : hot ? Color::Mix(c.bgPanel, c.textPrimary, 0.08f) : c.bgPanel;
-            fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            bg = !on ? DisabledFill() : down ? Color::Mix(c.bgPanel, c.textPrimary, 0.2f)
+                 : hot ? Color::Mix(c.bgPanel, c.textPrimary, 0.12f) : Color::Mix(c.bgPanel, c.textPrimary, 0.06f);
+            fg = on ? c.textPrimary : c.textDisabled;
             break;
         case ButtonKind::Ghost:
             bg = down ? c.press : hot ? c.hover : Color::Clear();
             fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
             break;
         case ButtonKind::Outline:
-            bg = !on ? DisabledFill() : down ? c.press : hot ? c.hover : Color::Clear();
-            fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            bg = !on ? DisabledFill() : down ? c.press : hot ? c.hover : c.textPrimary.Fade(0.03f);
+            fg = on ? c.textPrimary : c.textDisabled;
             break;
     }
     p.Fill(rect, bg, 4);
@@ -294,7 +294,6 @@ void Toggle::OnClick() {
 }
 
 namespace {
-std::wstring g_toggleOn = L"ON", g_toggleOff = L"OFF";
 std::wstring g_menuNoMatch = L"Nothing found";
 std::wstring g_textMenu[4] = {L"Cut", L"Copy", L"Paste", L"Select all"};
 }  // namespace
@@ -310,53 +309,42 @@ void SetTextMenuCaptions(std::wstring cut, std::wstring copy, std::wstring paste
     g_textMenu[3] = std::move(selectAll);
 }
 
-void SetToggleCaptions(std::wstring on, std::wstring off) {
-    g_toggleOn = std::move(on);
-    g_toggleOff = std::move(off);
-}
-
 Size Toggle::MeasureContent(float, float) {
     const float s = gfx::Text::Get().Scale();
-    return {66 * s, 30 * s};
+    return {48 * s, 32 * s};  // a bigger target than the 40×20 track
 }
 
 void Toggle::Paint(Painter& p) {
     const Palette& c = P();
     const float k = knob_.Get();
-    const float s = gfx::Text::Get().Scale();  // the captions grow with Windows "Text size"
-    const Rect box = rect.Center(66 * s, 30 * s);
+    const float s = gfx::Text::Get().Scale();
+    const Rect box = rect.Center(40 * s, 20 * s);
+    const float r = box.h / 2;
     const bool live = IsEnabled();
     const bool hot = live && IsHot(), down = live && IsPressed();
-    // ON is a filled accent track, OFF an outlined neutral one (iOS, Fluent): the state reads from
-    // the fill in both themes, not from the knob position or the caption.
+    // ON is a filled accent pill, OFF an outlined neutral one (iOS, Fluent): the state reads from
+    // the fill and the knob's side in both themes.
     if (live) {
         const Color onFill = down ? Color::Mix(c.accent, c.bgBase, 0.22f) : hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent;
-        const Color offFill = down ? c.bgSelected : c.bgCard;
-        p.Fill(box, Color::Mix(offFill, onFill, k), 4);
-        if (k < 1) p.Stroke(box, (hot ? c.textSecondary : c.lineControl).Fade(1 - k), 4);
+        const Color offFill = down ? c.bgSelected : hot ? Color::Mix(c.bgCard, c.textPrimary, 0.06f) : c.bgCard;
+        p.Fill(box, Color::Mix(offFill, onFill, k), r);
+        if (k < 1) p.Stroke(box, (hot ? c.textSecondary : c.lineControl).Fade(1 - k), r);
     } else {
-        p.Fill(box, DisabledFill(), 4);  // flatter than a live track, no border
+        p.Fill(box, DisabledFill(), r);  // flatter than a live track, no border
     }
-    PaintFocusRing(p, box, 4);
+    PaintFocusRing(p, box, r);
 
-    // An 18 DIP knob leaves each caption 40 DIP, so "выкл" keeps air on both sides.
-    const float knobW = 18 * s, knobH = 22 * s, inset = 4 * s;
-    const float x = box.x + inset + (box.w - 2 * inset - knobW) * k;
-    // Disabled: an outlined knob in the disabled tone, so it reads as unusable rather than off.
-    // Live off: knob and caption at >= 3:1 on the track in both themes (lineStrong was ~1.5:1).
+    // The knob grows under the pointer and stretches while pressed (Windows 11).
+    const float d = (hot ? 14.0f : 12.0f) * s, kw = d + (down ? 4 * s : 0);
+    const float inset = (box.h - d) / 2;
+    const Rect knob{box.x + inset + (box.w - 2 * inset - kw) * k, box.y + inset, kw, d};
+    // Live off: a knob at >= 3:1 on the track in both themes. Disabled: an outlined knob in the
+    // disabled tone, so it reads as unusable rather than off.
     const Color knobOff = Color::Mix(c.textTertiary, c.textSecondary, 0.4f);
-    const Rect knob{x, box.y + inset, knobW, knobH};
     if (live)
-        p.Fill(knob, Color::Mix(knobOff, c.onAccent, k), kRadiusSmall);
+        p.Fill(knob, Color::Mix(knobOff, c.onAccent, k), d / 2);
     else
-        p.Stroke(knob.Inset(0.75f), c.textDisabled, kRadiusSmall, 1.5f);
-    // Centred in the free part of the track, between the knob and the inner edge.
-    const Rect textOffRect{box.x + inset + knobW, box.y, box.w - 2 * inset - knobW, box.h};
-    const Rect textOnRect{box.x + inset, box.y, box.w - 2 * inset - knobW, box.h};
-    if (k < 0.99f)
-        p.Text(g_toggleOff, textOffRect, TextStyle::Micro, (live ? c.textSecondary : c.textDisabled).Fade(1 - k),
-               HAlign::Center);
-    if (k > 0.01f) p.Text(g_toggleOn, textOnRect, TextStyle::Micro, (live ? c.onAccent : c.textDisabled).Fade(k), HAlign::Center);
+        p.Stroke(knob.Inset(0.75f), c.textDisabled, d / 2, 1.5f);
 }
 
 // --- Checkbox -------------------------------------------------------------------------------
@@ -533,16 +521,18 @@ void Dropdown::Paint(Painter& p) {
     const bool open = menu_ && GetHost() && GetHost()->IsPopupOpen(menu_);
     const bool live = IsEnabled();
     if (live) {
-        p.Fill(rect, IsHot() || open ? Color::Mix(c.bgPanel, c.bgSelected, 0.6f) : c.bgPanel, kRadiusControl);
+        p.Fill(rect, Color::Mix(c.bgPanel, c.textPrimary, IsHot() || open ? 0.08f : 0.035f), kRadiusControl);
         p.Stroke(rect, IsHot() || open ? c.textTertiary : c.lineControl, kRadiusControl);
+        // Open: an accent line along the bottom ties the field to its menu (Fluent).
+        if (open) p.Fill({rect.x + 6, rect.Bottom() - 2, rect.w - 12, 2}, c.accent, 1);
     } else {
         p.Fill(rect, DisabledFill(), kRadiusControl);
     }
     PaintFocusRing(p, rect, kRadiusControl);
     const bool has = selected_ >= 0 && selected_ < static_cast<int>(choices_.size());
     const std::wstring& label = has ? choices_[static_cast<size_t>(selected_)].label : placeholder;
-    const Color fg = !live ? c.textDisabled : has ? (IsHot() ? c.textPrimary : c.textSecondary) : c.textTertiary;
-    const Rect box{rect.x + 16, rect.y, rect.w - 52, rect.h};
+    const Color fg = !live ? c.textDisabled : has ? c.textPrimary : c.textTertiary;
+    const Rect box{rect.x + 14, rect.y, rect.w - 46, rect.h};
     // A value cut by the ellipsis can be read in full in the tooltip (unless the owner set one).
     if (tooltip.empty() || autoTooltip_) {
         const bool cut = !label.empty() && p.Measure(label, TextStyle::Body).width > box.w;
@@ -551,7 +541,8 @@ void Dropdown::Paint(Painter& p) {
         else if (!cut && !tooltip.empty()) tooltip.clear();
     }
     p.Text(label, box, TextStyle::Body, fg);
-    p.Icon(open ? "chevron_up" : "chevron_down", {rect.Right() - 36, rect.Cy() - 10, 20, 20}, fg);
+    p.Icon(open ? "chevron_up" : "chevron_down", {rect.Right() - 30, rect.Cy() - 9, 18, 18},
+           !live ? c.textDisabled : IsHot() || open ? c.textPrimary : c.textSecondary);
 }
 
 void Dropdown::OnClick() {

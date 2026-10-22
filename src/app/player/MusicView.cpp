@@ -78,6 +78,16 @@ VizStyle VizStyleOf(const std::string& v) {
     return VizStyle::Off;
 }
 
+// audio.visualizerLayout: where a bar-like visualizer goes (the spectrometer always replaces the cover).
+enum class VizLayout { Replace, Wings, Side, Below };
+
+VizLayout VizLayoutOf(const std::string& v) {
+    if (v == "wings") return VizLayout::Wings;
+    if (v == "side") return VizLayout::Side;
+    if (v == "below") return VizLayout::Below;
+    return VizLayout::Replace;
+}
+
 // How the lyrics column looks: audio.lyricsStyle picks a preset, the other audio.lyrics* settings
 // replace parts of it.
 struct LyricsLook {
@@ -271,6 +281,10 @@ public:
     // wide lyrics.
     struct Geometry {
         Rect area, left, cover;
+        Rect title;             // the title line; the artist line and the pills follow it
+        Rect viz, viz2;         // the visualizer next to the cover (viz2: the right wing)
+        bool beside = false;    // the cover stays and the visualizer has viz (and viz2)
+        bool textLeft = false;  // the text starts at title.x instead of centering under the cover
         bool shown = false, wide = false, oneLine = false;
     };
     Geometry Place() const {
@@ -296,6 +310,42 @@ public:
         const float block = side + 88 + 30 + extra;
         const float top = rect.y + std::max(24.0f, (rect.h - block) / 2);
         g.cover = {std::round(g.left.Cx() - side / 2), std::round(top), side, side};
+        g.title = {g.left.x + 48, g.cover.Bottom() + 70, g.left.w - 96, 36};
+        const VizLayout layout =
+            g.shown || style_ == VizStyle::Off || style_ == VizStyle::Spectrometer ? VizLayout::Replace : layout_;
+        if (layout == VizLayout::Wings) {
+            // Mirrored bars grow out of the cover's sides, the low notes next to it.
+            const float wing = std::floor((area.w - side) / 2 - 64);
+            if (wing >= 120) {
+                g.beside = true;
+                g.viz = {g.cover.x - 24 - wing, g.cover.y, wing, side};
+                g.viz2 = {g.cover.Right() + 24, g.cover.y, wing, side};
+            }
+        } else if (layout == VizLayout::Side) {
+            // The cover and its text take the right 40 %, the visualizer the rest at the cover's height.
+            const float colW = std::floor(area.w * 0.4f);
+            const float s2 = std::floor(std::max(96.0f, std::min({colW - 96, rect.h - 180 - extra, 560.0f})));
+            if (area.w - colW >= 320) {
+                g.beside = true;
+                g.left = {area.Right() - colW, area.y, colW, area.h};
+                const float t2 = rect.y + std::max(24.0f, (rect.h - (s2 + 88 + 30 + extra)) / 2);
+                g.cover = {std::round(g.left.Cx() - s2 / 2), std::round(t2), s2, s2};
+                g.title = {g.left.x + 24, g.cover.Bottom() + 70, g.left.w - 48, 36};
+                g.viz = {area.x + 64, g.cover.y, g.left.x - area.x - 96, s2};
+            }
+        } else if (layout == VizLayout::Below) {
+            // As in AIMP: a small cover with the text beside it on top, the visualizer across the rest.
+            const float s2 = std::floor(std::clamp(rect.h * 0.28f, 120.0f, 280.0f));
+            const float x = area.x + 64, y = rect.y + 48;
+            const Rect viz{x, y + s2 + 48, area.w - 128, rect.Bottom() - 40 - (y + s2 + 48)};
+            if (viz.h >= 120 && area.w >= 560) {
+                g.beside = g.textLeft = true;
+                g.cover = {x, y, s2, s2};
+                const float textH = 36 + 22 + kPillsH;
+                g.title = {x + s2 + 32, std::round(y + (s2 - textH) / 2), area.Right() - 64 - (x + s2 + 32), 36};
+                g.viz = viz;
+            }
+        }
         return g;
     }
 
@@ -357,16 +407,30 @@ public:
 
         lastPaint_ = AnimFloat::Now();
         const float viz = UpdateVisualizer(s);
-        if (viz < 1 && !loading) {
-            p.PushOpacity((1 - viz) * appear);
-            p.Shadow(cover, 16, 40, 12, 0.55f * (1 - viz) * appear);
+        const float gone = g.beside ? 0.0f : viz;  // how far the cover has made way
+        if (gone < 1 && !loading) {
+            p.PushOpacity((1 - gone) * appear);
+            p.Shadow(cover, 16, 40, 12, 0.55f * (1 - gone) * appear);
             if (bmp) p.Image(bmp, cover, 16, true);
             else PaintGeneratedArt(p, cover, Hash(path));
             p.PopOpacity();
         }
+        // Beside the cover the band stays in place at rest (a pause, before the first frame): one
+        // dim row instead of an empty half of the view.
+        if (g.beside && viz < 1) {
+            p.PushOpacity((1 - viz) * 0.6f);
+            PaintBand(p, g.viz, g.viz2.w > 0, true);
+            if (g.viz2.w > 0) PaintBand(p, g.viz2, false, true);
+            p.PopOpacity();
+        }
         if (viz > 0) {
             p.PushOpacity(viz);
-            PaintVisualizer(p, left, cover, bmp);
+            if (!g.beside) {
+                PaintVisualizer(p, left, cover, bmp);
+            } else {
+                PaintBand(p, g.viz, g.viz2.w > 0, false);
+                if (g.viz2.w > 0) PaintBand(p, g.viz2, false, false);
+            }
             p.PopOpacity();
         }
 
@@ -379,11 +443,12 @@ public:
         // The view is always on the (dark) video background, also in the light theme, so the
         // text is light rather than the palette's text colors.
         const Color white = Color::Hex(0xFFFFFF);
-        const Rect titleBox{left.x + 48, cover.Bottom() + 70, left.w - 96, 36};
-        const Rect secondBox{left.x + 48, cover.Bottom() + 106, left.w - 96, 22};
-        p.Text(title, titleBox, TextStyle::Title, white.Fade(0.8f), HAlign::Center);
+        const Rect titleBox = g.title;
+        const Rect secondBox{titleBox.x, titleBox.y + 36, titleBox.w, 22};
+        const HAlign textAlign = g.textLeft ? HAlign::Leading : HAlign::Center;
+        p.Text(title, titleBox, TextStyle::Title, white.Fade(0.8f), textAlign);
         if (!second.empty())
-            p.Text(second, secondBox, TextStyle::Body, white.Fade(0.55f), HAlign::Center);
+            p.Text(second, secondBox, TextStyle::Body, white.Fade(0.55f), textAlign);
         const bool cut = p.Measure(title, TextStyle::Title).width > titleBox.w ||
                          (!second.empty() && p.Measure(second, TextStyle::Body).width > secondBox.w);
         titleTip_->visible = cut;
@@ -394,12 +459,13 @@ public:
 
         // The pills: under the artist, or under the sung line when it shows there.
         const float textEnd =
-            cover.Bottom() + (oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f);
+            titleBox.y - 70 + (oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f);
         lyricsBtn_->active = shown;
         lyricsBtn_->dim = lyrics_.Empty() && !pending_ && !onlineReq_;
         queueBtn_->active = PlayerPanelOpen(PanelKind::Queue);
         const float lw = lyricsBtn_->Width(), qw = queueBtn_->Width();
-        const float px = std::round(left.Cx() - (lw + 10 + qw) / 2), py = std::round(textEnd + 16);
+        const float px = g.textLeft ? titleBox.x : std::round(left.Cx() - (lw + 10 + qw) / 2);
+        const float py = std::round(textEnd + 16);
         lyricsBtn_->rect = {px, py, lw, kPillsH - 16};
         queueBtn_->rect = {px + lw + 10, py, qw, kPillsH - 16};
         if (noLyricsCardPending_ && !pending_ && !onlineReq_) {
@@ -489,6 +555,7 @@ public:
 private:
     // --- visualizer -----------------------------------------------------------------------
     void ReadVisualizerSetting() {
+        layout_ = VizLayoutOf(TheApp().config().GetString("audio.visualizerLayout"));
         style_ = audio::ProcessLoopbackSupported() ? VizStyleOf(TheApp().config().GetString("audio.visualizer"))
                                                    : VizStyle::Off;
         // While it is on, volume 0 still carries a (silent) signal to listen to (Player::SetSignalTap).
@@ -554,7 +621,7 @@ private:
         const float w = std::floor(std::min(left.w - 96, cover.w * 1.5f));
         const Rect band{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
         switch (style_) {
-            case VizStyle::Spectrum: PaintSpectrum(p, band, white); break;
+            case VizStyle::Spectrum: PaintSpectrum(p, band, white, false, false); break;
             case VizStyle::Waveform: PaintWaveform(p, band, white); break;
             case VizStyle::Scope: PaintScope(p, band, fg, dim); break;
             case VizStyle::Spectrometer: PaintSpectrometer(p, cover, bmp, fg, dim); break;
@@ -562,25 +629,49 @@ private:
         }
     }
 
-    // AIMP-style bars rising from the cover's bottom edge: stacked segments that brighten towards
-    // the top, and a peak drop over each bar that hangs a moment, then falls.
-    void PaintSpectrum(Painter& p, const Rect& r, Color white) {
+    // A bar-like visualizer in its own rect next to the cover. `leftWing`: the left one of two
+    // mirrored wings, so the low notes sit next to the cover on both sides. `rest`: silence.
+    void PaintBand(Painter& p, const Rect& r, bool leftWing, bool rest) {
+        const Color white = Color::Hex(0xFFFFFF);
+        if (rest && style_ != VizStyle::Spectrum) {
+            p.Fill({r.x, std::round(r.Cy()), r.w, 1}, white.Fade(0.3f));
+            return;
+        }
+        switch (style_) {
+            case VizStyle::Spectrum: PaintSpectrum(p, r, white, leftWing, layout_ == VizLayout::Wings, rest); break;
+            case VizStyle::Waveform: PaintWaveform(p, r, white); break;
+            case VizStyle::Scope: PaintScope(p, r, white.Fade(0.86f), white.Fade(0.4f)); break;
+            default: break;
+        }
+    }
+
+    // AIMP-style bars: stacked segments that brighten towards the top, and a peak drop over each
+    // bar that hangs a moment, then falls. Bars rise from the band's bottom edge; `wing` centres
+    // them on the band's middle, growing both ways and fading away from the cover. `reverse`
+    // puts the low notes on the right.
+    void PaintSpectrum(Painter& p, const Rect& r, Color white, bool reverse, bool wing, bool rest = false) {
         constexpr int n = audio::kBands;
         const float step = r.w / n;
         const float seg = std::max(2.0f, std::round(r.h / 110)), space = std::max(1.0f, std::round(seg * 0.6f));
         const float pitch = seg + space;
-        const int rows = std::max(1, static_cast<int>(r.h * 0.9f / pitch));
+        const int rows = std::max(1, static_cast<int>(r.h * (wing ? 0.45f : 0.9f) / pitch));
+        const float base = wing ? std::round(r.Cy() + pitch / 2) : r.Bottom();
         for (int i = 0; i < n; ++i) {
-            const float x0 = std::round(r.x + i * step), x1 = std::round(r.x + (i + 0.78f) * step);
-            const int lit = std::max(1, static_cast<int>(std::round(frame_.bands[i] * rows)));
+            const int slot = reverse ? n - 1 - i : i;
+            const float x0 = std::round(r.x + slot * step), x1 = std::round(r.x + (slot + 0.78f) * step);
+            const float fade = wing ? 1.0f - 0.7f * i / (n - 1) : 1.0f;
+            const int lit = rest ? 1 : std::max(1, static_cast<int>(std::round(frame_.bands[i] * rows)));
             for (int k = 0; k < lit; ++k) {
-                const float y = r.Bottom() - (k + 1) * pitch + space;
-                p.Fill({x0, y, x1 - x0, seg}, white.Fade(0.38f + 0.5f * k / rows));
+                const Color c = white.Fade((0.38f + 0.5f * k / rows) * fade);
+                p.Fill({x0, base - (k + 1) * pitch + space, x1 - x0, seg}, c);
+                if (wing && k > 0) p.Fill({x0, base + space + (k - 1) * pitch, x1 - x0, seg}, c);
             }
-            const int peak = static_cast<int>(std::round(frame_.peaks[i] * rows));
-            if (frame_.peaks[i] > 0.02f) {
-                const int at = std::max(peak, lit);  // a drop sits on its bar, never inside it
-                p.Fill({x0, r.Bottom() - (at + 1) * pitch + space, x1 - x0, seg}, white.Fade(0.95f));
+            if (!rest && frame_.peaks[i] > 0.02f) {
+                // A drop sits on its bar, never inside it.
+                const int at = std::max(static_cast<int>(std::round(frame_.peaks[i] * rows)), lit);
+                const Color c = white.Fade(0.95f * fade);
+                p.Fill({x0, base - (at + 1) * pitch + space, x1 - x0, seg}, c);
+                if (wing) p.Fill({x0, base + space + (at - 1) * pitch, x1 - x0, seg}, c);
             }
         }
     }
@@ -1282,6 +1373,7 @@ private:
     ScopedConnection conn_, imagesConn_;
     Config::Token vizToken_ = 0;
     VizStyle style_ = VizStyle::Off;
+    VizLayout layout_ = VizLayout::Replace;
     std::unique_ptr<audio::LoopbackCapture> capture_;
     audio::VisualFrame frame_;
     AnimFloat vizShow_{0};  // 0 = the cover, 1 = the visualizer
@@ -1317,7 +1409,8 @@ Rect MusicToastSlot() {
     if (!g_musicView || !g_musicView->visible) return {};
     const auto g = g_musicView->Place();
     // The title is 70 DIP under the cover (Paint): a 40 DIP toast sits in the middle of the gap.
-    return {g.left.x, g.cover.Bottom() + 15, g.left.w, 40};
+    if (g.textLeft) return {g.viz.x, g.viz.y - 44, g.viz.w, 40};
+    return {g.left.x, g.title.y - 55, g.left.w, 40};
 }
 
 std::vector<MenuItem> LyricsStyleItems() {

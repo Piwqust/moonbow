@@ -585,7 +585,7 @@ private:
             text->dir = Dir::Column;
             // A known width: measured as Grow, the description was one line and its second line
             // ran into the separator below.
-            text->width = Length::Px(680 - 20 - 12 - 24 - 66);  // card - padding - gap - toggle
+            text->width = Length::Px(680 - 20 - 12 - 24 - 48);  // card - padding - gap - toggle
             text->gap = 4;
             text->Add<Label>(item->Label(lang), TextStyle::Body)->color = SoftText;
             auto* d = text->Add<Label>(item->Description(lang), TextStyle::Small, Tone::Tertiary);
