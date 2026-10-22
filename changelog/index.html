@@ -53,7 +53,7 @@ body {
   padding-bottom: 120px;
 }
 a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; transition: text-decoration-color .14s; }
-a:hover { text-decoration-color: var(--ink); }
+a:hover { text-decoration-color: var(--ink); text-decoration-thickness: 2px; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
 code, kbd { font: 500 .88em/1 Inter, system-ui, sans-serif; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; white-space: nowrap; }
 
@@ -113,12 +113,13 @@ h2.t:focus { outline: none; }
 .figs dd { margin: 0; color: var(--ink); font-weight: 300; font-size: clamp(26px, 2.3vw, 32px); line-height: 1.05; letter-spacing: -.03em; white-space: nowrap; }
 .figs dt { margin-top: 6px; font-size: 13px; line-height: 1.4; color: var(--dim); }
 .src { margin: 28px 0 0; font-size: 13px; color: var(--dim); }
+.src a { padding: 4px 0; }
 
 /* Plates are frames of the player: always a dark screen, whatever the page theme */
 .frame, .pv-img, .zd-fig {
   --ground: #0E0E0E; --deep: #0B0B0B; --panel: #171717; --card: #202020;
   --line: #2C2C2C; --line-strong: #4D4D4D;
-  --ink: #F2F2F2; --muted: #BDBDBD; --dim: #9C9C9C;
+  --ink: #F2F2F2; --muted: #CACACA; --dim: #ADADAD;
   --accent: #F2F2F2; --accent-dim: #363636; --on-accent: #0E0E0E;
   color-scheme: dark;
 }
@@ -274,7 +275,7 @@ h2.t:focus { outline: none; }
 .brief .ch.open .more svg { transform: rotate(180deg); }
 
 /* Footer */
-.foot { border-top: 1px solid var(--line); padding: 56px 0 40px; font-size: 13px; color: var(--dim); }
+.foot { border-top: 1px solid var(--line); padding-top: 56px; padding-bottom: 40px; font-size: 13px; color: var(--dim); }
 .foot p { margin: 0 0 6px; max-width: 64ch; }
 
 /* Player bar: Lumen's floating control bar, here the chapter navigation */
@@ -2233,7 +2234,9 @@ h2.t:focus { outline: none; }
     if (!atTop) chs[at - 1].scrollIntoView({ block: 'start' });
   }
   viewBtns.forEach(b => b.addEventListener('click', () => setBrief(b.dataset.view === 'brief')));
-  setBrief(read('lumen-log-brief') === '1', false);
+  // Phones start brief: the full stream is too long to scroll by hand
+  const b0 = read('lumen-log-brief');
+  setBrief(b0 ? b0 === '1' : matchMedia('(max-width: 640px)').matches, false);
 })();
 </script>
 </body>
