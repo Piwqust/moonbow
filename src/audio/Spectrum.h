@@ -59,6 +59,26 @@ inline float Smooth(float current, float target, float dt, float attack, float r
     return current + (target - current) * k;
 }
 
+// A peak mark that drops like AIMP's: it sits on the highest recent bar for kPeakHold seconds,
+// then falls faster and faster until a bar catches it.
+inline constexpr float kPeakHold = 0.3f;
+inline constexpr float kPeakGravity = 2.5f;  // bar heights per second, per second
+struct PeakDrop {
+    float value = 0, hold = 0, speed = 0;
+};
+inline void UpdatePeak(PeakDrop& p, float bar, float dt) {
+    if (bar >= p.value) {
+        p = {bar, kPeakHold, 0};
+        return;
+    }
+    if (p.hold > 0) {
+        p.hold -= dt;
+        return;
+    }
+    p.speed += kPeakGravity * dt;
+    p.value = std::max(bar, p.value - p.speed * dt);
+}
+
 // Index of the rising zero crossing in s[0, limit) that starts the steepest rise, so a steady
 // tone draws as a standing wave; 0 when there is none.
 inline int ScopeTrigger(const float* s, int limit) {

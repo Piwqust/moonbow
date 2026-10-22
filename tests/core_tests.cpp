@@ -3038,6 +3038,22 @@ void TestSpectrum() {
     CHECK(wave[trig] >= 0 && wave[trig - 1] < 0);
     float flat[8] = {};
     CHECK(ScopeTrigger(flat, 8) == 0);
+    // Peak drops: caught by a rising bar, held, then falling faster each frame, never below the bar.
+    PeakDrop drop;
+    UpdatePeak(drop, 0.8f, 0.016f);
+    CHECK(drop.value == 0.8f);
+    for (int i = 0; i < 15; ++i) UpdatePeak(drop, 0.1f, 0.016f);
+    CHECK_MSG(drop.value == 0.8f, "held %.3f", drop.value);
+    float last = drop.value, lastFall = 0;
+    for (int i = 0; i < 10; ++i) {
+        UpdatePeak(drop, 0.1f, 0.016f);
+        const float fall = last - drop.value;
+        CHECK(fall >= lastFall);
+        last = drop.value;
+        lastFall = fall;
+    }
+    for (int i = 0; i < 200; ++i) UpdatePeak(drop, 0.1f, 0.016f);
+    CHECK(drop.value == 0.1f);
 }
 
 void TestMusicSettings() {

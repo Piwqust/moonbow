@@ -37,6 +37,18 @@ float NavColumnWidth() {
     return std::max(216.0f, std::ceil(8 + 6 + 44 + w + 8 + 6 + 8));
 }
 
+// Basic mode lists only the categories that have basic items.
+bool HasBasicItems(const Category& c) {
+    for (const settings::Section& s : c.sections)
+        for (const Item& it : s.items)
+            if (it.basic && !it.hidden) return true;
+    return false;
+}
+
+bool CategoryShown(const Category& c) {
+    return !BasicMode() || HasBasicItems(c);
+}
+
 Widget* FindById(Widget* w, const std::string& id) {
     if (!w) return nullptr;
     if (w->id == id) return w;
@@ -230,8 +242,9 @@ public:
     }
 
     void ShowCategory(const std::string& id) {
-        if (!settings::FindCategory(id)) return;
-        category_ = id;
+        const Category* cat = settings::FindCategory(id);
+        if (!cat) return;
+        category_ = CategoryShown(*cat) ? id : std::string("general");
         if (search_ && !search_->Text().empty()) search_->SetText(L"");
         query_.clear();
         RefreshNav();
@@ -243,7 +256,13 @@ public:
         int i = 0;
         for (size_t k = 0; k < cats.size(); ++k)
             if (cats[k].id == category_) i = static_cast<int>(k);
-        i = std::clamp(i + delta, 0, static_cast<int>(cats.size()) - 1);
+        const int last = static_cast<int>(cats.size()) - 1;
+        const int step = delta < 0 ? -1 : 1;
+        for (int left = std::abs(delta), k = i + step; left > 0 && k >= 0 && k <= last; k += step)
+            if (CategoryShown(cats[static_cast<size_t>(k)])) {
+                i = k;
+                --left;
+            }
         ShowCategory(cats[static_cast<size_t>(i)].id);
         if (Widget* item = FindById(Root(), "nav." + category_)) SetFocus(item, true);
     }
@@ -292,7 +311,12 @@ private:
         title_ = header->Add<Label>(L"", TextStyle::Large, Tone::Secondary);
         title_->width = Length::Grow();
         title_->maxW = kMaxPageW;
-        header->Add<Widget>()->width = Length::Px(32 + 8);  // under the close button
+        auto* mode = header->Add<Segmented>(
+            std::vector<ui::Choice>{{Tr(L"Basic"), "basic", {}}, {Tr(L"All"), "all", {}}}, BasicMode() ? 0 : 1);
+        mode->id = "settings-mode";
+        mode->segmentWidth = 88;
+        mode->onChange = [this](int i) { SetBasicMode(i == 0); };
+        header->Add<Widget>()->width = Length::Px(16 + 32 + 8);  // under the close button
 
         auto* body = frame->Add<Widget>();
         body->dir = Dir::Row;
@@ -319,8 +343,9 @@ private:
         nav->gap = 8;
         nav->width = Length::Grow();
         navItems_.clear();
+        navGroups_.clear();
         for (const settings::Group& g : settings::Groups()) {
-            nav->Add<NavGroupLabel>(g.Label(Lang()));
+            navGroups_.push_back({nav->Add<NavGroupLabel>(g.Label(Lang())), g.id});
             for (const Category& c : settings::Categories())
                 if (c.group == g.id) navItems_.push_back(nav->Add<NavItem>(this, c));
         }
@@ -350,8 +375,22 @@ private:
         BuildPage();
     }
 
+    void SetBasicMode(bool basic) {
+        Cfg().SetString("interface.settingsMode", basic ? "basic" : "all");
+        if (auto* mode = dynamic_cast<Segmented*>(FindById(Root(), "settings-mode"))) mode->SetSelected(basic ? 0 : 1);
+        if (const Category* c = settings::FindCategory(category_); c && !CategoryShown(*c)) category_ = "general";
+        RefreshNav();
+        BuildPage();
+    }
+
     void RefreshNav() {
         const bool searching = !query_.empty();
+        for (NavItem* n : navItems_) n->visible = CategoryShown(n->Cat());
+        for (auto& [label, group] : navGroups_) {
+            label->visible = false;
+            for (NavItem* n : navItems_)
+                if (n->visible && n->Cat().group == group) label->visible = true;
+        }
         // One Tab stop for the whole list (the selected item); Up/Down move inside it.
         for (NavItem* n : navItems_) {
             const bool sel = !searching && n->Cat().id == category_;
@@ -409,11 +448,12 @@ private:
 
     void BuildCategory(Widget* page, const Category& cat) {
         const settings::Lang lang = Lang();
+        const bool basic = BasicMode();
         bool anyAdvanced = false;
         for (const settings::Section& s : cat.sections) {
             std::vector<const Item*> normal;
             for (const Item& it : s.items) {
-                if (it.hidden) continue;
+                if (it.hidden || (basic && !it.basic)) continue;
                 if (it.advanced) anyAdvanced = true;
                 else normal.push_back(&it);
             }
@@ -465,6 +505,11 @@ private:
         footer->width = Length::Grow();
         footer->align = Align::Center;
         footer->pad = {0, 8, 0, 0};
+        if (basic) {
+            auto* more = footer->Add<LinkButton>(Tr(L"Show all settings"));
+            more->id = "show-all";
+            more->onClick = [this] { Post([this] { SetBasicMode(false); }); };  // the rebuild deletes this link
+        }
         footer->Add<Spacer>();
         auto* reset = footer->Add<Button>(Tr(L"Reset to defaults"), ButtonKind::Outline, "refresh");
         reset->id = "reset-category";
@@ -590,6 +635,7 @@ private:
     Label* title_ = nullptr;
     ScrollView* content_ = nullptr;
     std::vector<NavItem*> navItems_;
+    std::vector<std::pair<NavGroupLabel*, std::string>> navGroups_;
 };
 
 void NavItem::OnClick() {

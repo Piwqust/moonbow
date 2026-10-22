@@ -80,6 +80,7 @@ private:
     float bandsDb_[kBands] = {};
     float linear_[kFftSize] = {};
     VisualFrame work_;
+    PeakDrop drops_[kBands];
     SpectrumAnalyzer analyzer_;
     std::thread thread_;
 };

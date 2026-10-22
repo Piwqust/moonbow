@@ -299,8 +299,8 @@ void LoopbackCapture::Analyze(double dt) {
     for (int b = 0; b < kBands; ++b) {
         const float target = BarLevel(bandsDb_[b]);
         work_.bands[b] = Smooth(work_.bands[b], target, t, 0.025f, 0.22f);
-        // Peak marks hold, then fall at 0.9 of the height per second.
-        work_.peaks[b] = std::max(work_.bands[b], work_.peaks[b] - 0.9f * t);
+        UpdatePeak(drops_[b], work_.bands[b], t);
+        work_.peaks[b] = drops_[b].value;
     }
     const float rms = freshCount ? std::sqrt(energy / static_cast<float>(freshCount)) : 0.0f;
     const float rmsDb = rms > 1e-9f ? 20.0f * std::log10(rms) : -180.0f;

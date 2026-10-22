@@ -83,3 +83,5 @@
 {L"Stereo widener settings", L"Параметры расширения стереобазы"},
 {L"Preamp: the level before the bands", L"Предусиление: уровень перед полосами"},
 {L"About Lumen", L"О программе"},
+{L"Basic", L"Основные"},
+{L"Show all settings", L"Показать все настройки"},

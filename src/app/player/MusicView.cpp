@@ -554,7 +554,7 @@ private:
         const float w = std::floor(std::min(left.w - 96, cover.w * 1.5f));
         const Rect band{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
         switch (style_) {
-            case VizStyle::Spectrum: PaintSpectrum(p, band, fg, dim); break;
+            case VizStyle::Spectrum: PaintSpectrum(p, band, white); break;
             case VizStyle::Waveform: PaintWaveform(p, band, white); break;
             case VizStyle::Scope: PaintScope(p, band, fg, dim); break;
             case VizStyle::Spectrometer: PaintSpectrometer(p, cover, bmp, fg, dim); break;
@@ -562,18 +562,26 @@ private:
         }
     }
 
-    // Bars rising from the cover's bottom edge, with falling peak marks.
-    void PaintSpectrum(Painter& p, const Rect& r, Color fg, Color dim) {
+    // AIMP-style bars rising from the cover's bottom edge: stacked segments that brighten towards
+    // the top, and a peak drop over each bar that hangs a moment, then falls.
+    void PaintSpectrum(Painter& p, const Rect& r, Color white) {
         constexpr int n = audio::kBands;
         const float step = r.w / n;
-        const float bw = std::max(2.0f, step * 0.7f);
-        const float top = r.h * 0.9f;
+        const float seg = std::max(2.0f, std::round(r.h / 110)), space = std::max(1.0f, std::round(seg * 0.6f));
+        const float pitch = seg + space;
+        const int rows = std::max(1, static_cast<int>(r.h * 0.9f / pitch));
         for (int i = 0; i < n; ++i) {
-            const float x0 = std::round(r.x + i * step), x1 = std::round(r.x + i * step + bw);
-            const float h = std::max(3.0f, std::round(frame_.bands[i] * top));
-            p.Fill({x0, r.Bottom() - h, x1 - x0, h}, fg, std::min(2.0f, (x1 - x0) / 2));
-            const float peak = frame_.peaks[i] * top;
-            if (peak > h + 6) p.Fill({x0, std::round(r.Bottom() - peak - 2), x1 - x0, 2}, dim, 1);
+            const float x0 = std::round(r.x + i * step), x1 = std::round(r.x + (i + 0.78f) * step);
+            const int lit = std::max(1, static_cast<int>(std::round(frame_.bands[i] * rows)));
+            for (int k = 0; k < lit; ++k) {
+                const float y = r.Bottom() - (k + 1) * pitch + space;
+                p.Fill({x0, y, x1 - x0, seg}, white.Fade(0.38f + 0.5f * k / rows));
+            }
+            const int peak = static_cast<int>(std::round(frame_.peaks[i] * rows));
+            if (frame_.peaks[i] > 0.02f) {
+                const int at = std::max(peak, lit);  // a drop sits on its bar, never inside it
+                p.Fill({x0, r.Bottom() - (at + 1) * pitch + space, x1 - x0, seg}, white.Fade(0.95f));
+            }
         }
     }
 

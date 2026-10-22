@@ -32,6 +32,10 @@ Config& Cfg() {
     return TheApp().config();
 }
 
+bool BasicMode() {
+    return Cfg().GetString("interface.settingsMode") != "all";
+}
+
 Color HeadingColor() {
     return Color::Mix(P().textPrimary, P().textSecondary, 0.36f);
 }
@@ -118,30 +122,56 @@ public:
 };
 
 // Label text followed by the (i) icon. A label cut by a narrow window shows its full text as
-// the tooltip, together with the hint of a disabled row.
+// the tooltip, together with the hint of a disabled row. Basic mode adds an icon on the left and
+// a plain one-line summary under the label.
 class RowLabel : public Widget {
 public:
-    RowLabel(std::wstring text, std::wstring description) {
+    RowLabel(std::wstring text, std::wstring description, std::string icon = {}, std::wstring summary = {})
+        : icon_(std::move(icon)) {
         width = Length::Grow();
         label_ = Add<Label>(std::move(text), TextStyle::Body, Tone::Secondary);
-        label_->color = [this] { return !dimmed_ && label_->IsEnabled() ? P().textSecondary : DisabledTextColor(); };
+        const bool rich = !summary.empty();
+        label_->color = [this, rich] {
+            return dimmed_ || !label_->IsEnabled() ? DisabledTextColor() : rich ? P().textPrimary : P().textSecondary;
+        };
         if (!description.empty()) info_ = Add<InfoIcon>(std::move(description));
+        if (rich) {
+            summary_ = Add<Label>(std::move(summary), TextStyle::Small, Tone::Tertiary);
+            summary_->wrap = true;
+            summary_->color = [this] { return dimmed_ || !label_->IsEnabled() ? DisabledTextColor() : P().textTertiary; };
+        }
     }
     // Width the label needs to show its whole text.
-    float NaturalWidth() { return std::ceil(label_->Measure(kInf, kInf).w) + (info_ ? 28.0f : 0.0f); }
+    float NaturalWidth() { return Indent() + std::ceil(label_->Measure(kInf, kInf).w) + (info_ ? 28.0f : 0.0f); }
     void Describe(A11y& a) override { a.name = label_->Text(); }  // the "Turn on …" tooltip is help
     Size MeasureContent(float availW, float) override {
-        const Size l = label_->Measure(availW, kInf);
-        return {l.w + (info_ ? 28.0f : 0.0f), std::max(l.h, 18.0f)};
+        const float in = Indent();
+        const Size l = label_->Measure(std::max(0.0f, availW - in), kInf);
+        float h = std::max(l.h, 18.0f);
+        if (summary_) h = l.h + kSummaryGap + summary_->Measure(std::max(0.0f, availW - in), kInf).h;
+        return {in + l.w + (info_ ? 28.0f : 0.0f), std::max(h, icon_.empty() ? 0.0f : 24.0f)};
     }
     void OnLayout() override {
+        const float in = Indent();
         const float reserve = info_ ? 28.0f : 0.0f;
         const Size l = label_->Measure(kInf, kInf);
-        const float lw = std::min(l.w, std::max(0.0f, rect.w - reserve));
-        label_->Arrange({rect.x, rect.Cy() - l.h / 2, lw, l.h});
-        if (info_) info_->Arrange({rect.x + lw + 10, rect.Cy() - 9, 18, 18});
+        const float lw = std::min(l.w, std::max(0.0f, rect.w - in - reserve));
+        float top = rect.Cy() - l.h / 2;
+        if (summary_) {
+            const float sw = std::max(0.0f, rect.w - in);
+            const Size sz = summary_->Measure(sw, kInf);
+            top = rect.Cy() - (l.h + kSummaryGap + sz.h) / 2;
+            summary_->Arrange({rect.x + in, top + l.h + kSummaryGap, sw, sz.h});
+        }
+        label_->Arrange({rect.x + in, top, lw, l.h});
+        if (info_) info_->Arrange({rect.x + in + lw + 10, top + l.h / 2 - 9, 18, 18});
         cut_ = l.w > lw + 0.5f;
         UpdateTooltip();
+    }
+    void Paint(Painter& p) override {
+        if (icon_.empty()) return;
+        p.Icon(icon_, {rect.x, rect.Cy() - 12, 24, 24},
+               dimmed_ || !label_->IsEnabled() ? DisabledTextColor() : P().textSecondary);
     }
     void SetHint(std::wstring hint) {
         hint_ = std::move(hint);
@@ -160,7 +190,11 @@ private:
         if (tip != tooltip) tooltip = std::move(tip);
         interactive = !tooltip.empty();
     }
+    static constexpr float kSummaryGap = 2;
+    float Indent() const { return icon_.empty() ? 0.0f : 36.0f; }
+    std::string icon_;
     Label* label_ = nullptr;
+    Label* summary_ = nullptr;
     InfoIcon* info_ = nullptr;
     std::wstring hint_;
     bool cut_ = false;
@@ -1185,7 +1219,12 @@ void SettingRow::Build(std::wstring label, std::wstring description, std::unique
         };
         help(control.get());
     }
-    Add<RowLabel>(std::move(label), std::move(description));
+    if (item.basic && BasicMode()) {
+        pad = {0, 8, 0, 8};
+        Add<RowLabel>(std::move(label), std::move(description), item.icon, item.Summary(Lang()));
+    } else {
+        Add<RowLabel>(std::move(label), std::move(description));
+    }
     if (control) {
         control_ = AddChild(std::move(control));
         if (control_->width.kind == Length::Fixed && control_->width.value >= kControlW)

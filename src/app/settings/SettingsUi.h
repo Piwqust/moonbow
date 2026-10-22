@@ -24,6 +24,8 @@ inline constexpr float kSmallButtonW = 100;
 
 settings::Lang Lang();
 Config& Cfg();
+// Settings shows only the basic items, with icons and summaries (interface.settingsMode).
+bool BasicMode();
 ui::Color HeadingColor();  // section headings (between primary and secondary text)
 ui::Color DisabledTextColor();  // labels of disabled rows: text.disabled raised to at least 3:1
 

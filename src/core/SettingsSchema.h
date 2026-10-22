@@ -101,6 +101,10 @@ struct Item {
     std::wstring actionLabel, actionLabelRu;  // Button caption ("Browse", "Reset", ...)
 
     bool advanced = false;  // under "Advanced Options"
+    // Shown in the Settings window's "Basic" mode, with `icon` and the one-line `summary` under the label.
+    bool basic = false;
+    std::string icon;
+    std::wstring summary, summaryRu;
     bool secret = false;    // password-like text
     bool hidden = false;    // not a row in the Settings window (edited elsewhere or internal)
     bool inferred = false;  // not visible in the design frames (below the fold); chosen by us
@@ -121,6 +125,7 @@ struct Item {
     const std::wstring& Unit(Lang lang) const { return lang == Lang::Ru ? unitRu : unit; }
     const std::wstring& Placeholder(Lang lang) const { return lang == Lang::Ru ? placeholderRu : placeholder; }
     const std::wstring& ActionLabel(Lang lang) const { return lang == Lang::Ru ? actionLabelRu : actionLabel; }
+    const std::wstring& Summary(Lang lang) const { return lang == Lang::Ru ? summaryRu : summary; }
 };
 
 struct Section {
