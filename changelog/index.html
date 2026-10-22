@@ -319,16 +319,16 @@ h2.t:focus { outline: none; }
 <div class="wrap">
   <header class="top">
     <span class="mark"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v7l5.5-3.5z" fill="currentColor"/></svg>Lumen</span>
-    <span>17.10 → 21.10.2026 · 31 глава</span>
+    <span>17.10 → 23.10.2026 · 32 главы</span>
   </header>
 
   <section class="hero grid" id="now" aria-labelledby="h1">
     <h1 id="h1">Lumen,<br>глава за главой</h1>
-    <p class="lede"><strong>Lumen</strong>: минималистичный видео- и аудиоплеер для Windows с медиатекой, на C++20, Direct2D и libmpv, в монохроме «белый на графите». Здесь всё, что с ним произошло за четыре дня, по раундам правок. Внизу экрана полоса перемотки, как в самом плеере: каждая засечка это глава. Листайте вниз, и вы перематываете назад, к первой сборке.</p>
+    <p class="lede"><strong>Lumen</strong>: минималистичный видео- и аудиоплеер для Windows с медиатекой, на C++20, Direct2D и libmpv, в монохроме «белый на графите». Здесь всё, что с ним произошло за неделю, по раундам правок. Внизу экрана полоса перемотки, как в самом плеере: каждая засечка это глава. Листайте вниз, и вы перематываете назад, к первой сборке.</p>
     <aside class="now" aria-labelledby="now-h">
-      <h2 id="now-h">Где проект сейчас, 21.10</h2>
+      <h2 id="now-h">Где проект сейчас, 23.10</h2>
       <dl>
-        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи: <a href="#ch-29">глава 29</a>. Все ветки собраны в одну <code>main</code>. Для бета-тестеров: журнал и отчёты о сбоях, <a href="#ch-30">глава 30</a>. Фаззинг и плохие файлы: <a href="#ch-31">глава 31</a>.</dd></div>
+        <div><dt>Состояние</dt><dd>Всё влито в <code>main</code>, включая исправления UI-ревью: 81 из 84. 51 тест без ошибок, прогон 375 состояний: 373 в порядке. <a href="#ch-27">Глава 27</a>. Запуск с файлом без мигания: <a href="#ch-28">глава 28</a>. Полноэкранный режим без дрожи: <a href="#ch-29">глава 29</a>. Все ветки собраны в одну <code>main</code>. Для бета-тестеров: журнал и отчёты о сбоях, <a href="#ch-30">глава 30</a>. Фаззинг и плохие файлы: <a href="#ch-31">глава 31</a>. Свой установщик с обновлением и возвратом к любой версии: <a href="#ch-32">глава 32</a>.</dd></div>
         <div><dt>Открыто</dt><dd>Частично: размер текста Windows 200 % и заголовок первой страницы знакомства. Отложено: серый фон под белой обложкой.</dd></div>
         <div><dt>Проверить вам руками</dt><dd>Alt+Space, изменение размера мышью за край, живой Narrator, медиа-карточка Windows и недавние файлы на панели задач, размер текста 150-200 %.</dd></div>
         <div><dt>Решения, которые можно поменять</dt><dd>Тема «Как в системе» по умолчанию, Ctrl+F для поиска, клавиши громкости у Windows, «Избранное» первым в плейлистах.</dd></div>
@@ -345,6 +345,52 @@ h2.t:focus { outline: none; }
 </div>
 
 <main id="chapters" class="wrap" tabindex="-1">
+
+<!-- 32 -->
+<article class="ch grid" id="ch-32" data-n="32" data-date="23.10" aria-labelledby="t32">
+  <div class="meta"><span class="num">32</span><span class="date">23.10.2026</span><span class="tag">Установка</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t32" tabindex="-1">Свой установщик: любая версия в любую сторону</h2>
+    <p class="say">Inno Setup заменён установщиком на движке самого Lumen. Он сам понимает, что вы запускаете: первую установку, обновление, возврат к прежней версии или исправление. Прежние версии остаются на компьютере, и к ним можно вернуться в один клик.</p>
+    <ul>
+      <li>Setup.exe это сам Lumen.exe с приложенными libmpv и памяткой. Окна установщика рисует интерфейс плеера, тема и язык берутся из ваших настроек.</li>
+      <li>Экраны: приветствие с одной кнопкой, обновление со списком «Что нового», возврат, «Открыть / Исправить / Удалить», кольцо прогресса вокруг логотипа, готово.</li>
+      <li>Каждая версия лежит в своей папке, текущая всегда в корне: ярлыки, закрепления и форматы не меняют путь. Хранятся текущая и две прошлые, одинаковый libmpv на диске один.</li>
+      <li>Сначала новая версия раскладывается целиком, потом файлы подменяются. При сбое возвращается прежняя. У каждого файла контрольная сумма: испорченный установщик ничего не ставит.</li>
+      <li>В «О программе» список версий на компьютере с переходом в один клик. После обновления Lumen один раз показывает «Что нового».</li>
+      <li>Установка забирает Inno-бету: её файлы становятся версией, к которой можно вернуться. Проверено в чистой Windows Sandbox: после удаления не остаётся ни папки, ни записей в реестре, ни ярлыка, а настройки остаются для следующей установки.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>2,1 с</dd><dt>установка</dt></div>
+      <div><dd>3</dd><dt>версии на компьютере</dt></div>
+      <div><dd>48 МБ</dd><dt>установщик</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6р; <a href="../src/setup/Installer.h">src/setup</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,92;20,166;460,166;20,252" viewBox="0 0 480 300" role="img" aria-label="Папка установки: текущая версия в корне, каждая версия в своей папке versions, общий libmpv хранится один раз; внизу дорожка версий, по которой Lumen переходит вперёд и назад">
+        <text class="tm" x="40" y="58" style="fill:var(--ink)">Programs\Lumen</text><text class="t" x="440" y="58" text-anchor="end">пример с двумя версиями</text>
+        <rect class="pn" x="40" y="72" width="400" height="38" rx="6"/>
+        <text class="tr" x="56" y="96">Lumen.exe</text><text class="t" x="176" y="95">libmpv-2.dll</text><text class="t" x="424" y="95" text-anchor="end" style="fill:var(--ink)">текущая 0.2.0</text>
+        <text class="t" x="40" y="134">versions\</text>
+        <rect class="cd" x="40" y="142" width="250" height="30" rx="4"/><rect class="lk" x="40.75" y="142.75" width="248.5" height="28.5" rx="4" style="stroke-width:1.5"/>
+        <text class="tr" x="56" y="162">0.2.0</text><text class="t" x="104" y="161">Lumen.exe</text><text class="t" x="176" y="161">libmpv-2.dll</text>
+        <rect class="cd" x="40" y="180" width="250" height="30" rx="4"/>
+        <text class="tm" x="56" y="200">0.1.0</text><text class="t" x="104" y="199">Lumen.exe</text><text class="t" x="176" y="199">libmpv-2.dll</text>
+        <path class="ls" d="M246 91H320M290 157H320M290 195H320M320 91V195"/>
+        <text class="t" x="332" y="140" style="fill:var(--ink)">один файл</text><text class="t" x="332" y="156">121 МБ на диске</text><text class="t" x="332" y="172">один раз</text>
+        <text class="t" x="40" y="236">переход между версиями</text>
+        <path class="ls" d="M40 252H440"/>
+        <path class="ld" d="M120 246V258M320 246V258"/>
+        <text class="t" x="120" y="276" text-anchor="middle">0.1.0</text><text class="t" x="320" y="276" text-anchor="middle" style="fill:var(--ink)">0.2.0</text>
+        <g class="dg"><circle class="ac" cx="120" cy="252" r="7"/></g>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Корень: всегда текущая версия, поэтому ярлык, закрепление на панели и форматы файлов не меняют путь</li><li data-k="2">versions: каждая версия целиком в своей папке; хранятся текущая и две прошлые</li><li data-k="3">Одинаковый libmpv не копируется: это одна запись на диске под тремя именами (жёсткие ссылки)</li><li data-k="4">Обновление и возврат это одно переключение: сначала новая папка готова целиком, при сбое возвращается прежняя</li></ol>
+    <figcaption>Рис. 32. Папка установки и дорожка версий</figcaption>
+  </figure>
+</article>
 
 <!-- 31 -->
 <article class="ch grid flip" id="ch-31" data-n="31" data-date="21.10" aria-labelledby="t31">
@@ -1669,14 +1715,14 @@ h2.t:focus { outline: none; }
 
 <nav class="bar" aria-label="Главы">
   <button class="nb prev" type="button" aria-label="Глава раньше"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h2v12H5zM16 4v12l-8-6z" fill="currentColor"/></svg></button>
-  <span class="pill" aria-hidden="true">31</span>
+  <span class="pill" aria-hidden="true">32</span>
   <button class="nb next" type="button" aria-label="Глава позже"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12l8-6zM13 4h2v12h-2z" fill="currentColor"/></svg></button>
   <p class="cur" aria-hidden="true">Сейчас<span>20.10</span></p>
   <div class="seek">
     <div class="trk"></div><div class="fill"></div><div class="ticks"></div><div class="hd"></div>
-    <input type="range" min="1" max="31" step="1" value="31" aria-label="Глава">
+    <input type="range" min="1" max="32" step="1" value="32" aria-label="Глава">
   </div>
-  <span class="total">из 31</span>
+  <span class="total">из 32</span>
   <div class="pv" aria-hidden="true"><div class="pv-img live"></div><div class="pv-t"></div></div>
 </nav>
 
