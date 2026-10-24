@@ -1,0 +1,581 @@
+<title>Четыре плеера вместо Lumen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500&family=Onest:wght@400;500;700&family=Literata:opsz,wght@7..72,400;7..72,600&family=Golos+Text:wght@400;500;600&family=Tektur:wght@400;600&family=Geologica:wght@300;400;600&family=JetBrains+Mono:wght@400;500&family=Tenor+Sans&family=Manrope:wght@400;500;700&family=Wix+Madefor+Display:wght@400;600;800&display=swap">
+<style>
+/* Layout: a neutral specimen-book frame; each concept is a full-width band that lives in its own brand world */
+:root{
+  --bg:#F1F1EF; --fg:#121212; --mut:#5E5E5A; --line:#D9D9D4; --card:#FAFAF8;
+  --f-disp:"Wix Madefor Display","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0F0F0F;--fg:#ECECE8;--mut:#9A9A94;--line:#262626;--card:#161616;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0F0F0F;--fg:#ECECE8;--mut:#9A9A94;--line:#262626;--card:#161616;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-disp);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+a{color:inherit;text-underline-offset:3px}
+:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:4px}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--f-mono)}
+.lbl{font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7}
+
+/* intro */
+.intro{padding-block:64px 40px}
+.intro h1{font-size:clamp(38px,6.4vw,80px);font-weight:800;line-height:.98;letter-spacing:-.035em;max-width:13ch}
+.intro .lead{margin-top:22px;font-size:19px;max-width:60ch;color:var(--fg)}
+.intro .lead + .lead{margin-top:12px;color:var(--mut);font-size:16px}
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:36px}
+.picker a{display:flex;flex-direction:column;justify-content:space-between;gap:28px;min-height:150px;padding:16px;border-radius:12px;text-decoration:none;transition:translate .25s cubic-bezier(.2,.7,.2,1)}
+.picker a:hover{translate:0 -4px}
+.picker a:active{translate:0 0}
+.picker svg{width:44px;height:44px}
+.picker b{font-size:22px;line-height:1;font-weight:600}
+.picker small{display:block;margin-top:6px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.shared{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:40px;padding-top:24px;border-top:1px solid var(--line)}
+.shared div{min-width:0}
+.shared b{display:block;font-size:15px;margin-bottom:4px}
+.shared p{font-size:15px;color:var(--mut)}
+
+/* concept band: tokens set per band, deliberately one look each */
+.band{background:var(--g);color:var(--i);padding-block:72px}
+.band .wrap{display:grid;gap:48px}
+.head{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center}
+.head .mark{width:clamp(88px,12vw,140px);height:auto}
+.word{font-family:var(--fd);font-size:clamp(54px,10vw,128px);line-height:.9;letter-spacing:var(--trk,-.04em);font-weight:var(--fw,400)}
+.say{margin-top:12px;font-family:var(--fu);font-size:16px;color:var(--m)}
+.tag{font-family:var(--fd);font-size:clamp(22px,2.6vw,30px);line-height:1.2;max-width:24ch;letter-spacing:-.01em}
+.cols{display:grid;grid-template-columns:1.1fr .9fr;gap:40px}
+.cols>*{min-width:0}
+.txt{display:grid;gap:18px;font-family:var(--fu);font-size:17px}
+.txt p{max-width:58ch}
+.txt .muted{color:var(--m)}
+.anchor{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-family:var(--fu);font-size:15px}
+.anchor li{padding:10px 14px;border:1px solid var(--l);border-radius:8px}
+.pos{display:grid;gap:12px;font-family:var(--fu);font-size:15px}
+.pos div{display:grid;grid-template-columns:110px 1fr;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--l)}
+.pos dt,.pos .k{color:var(--m);font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding-top:3px}
+
+/* kit row: icon tiles, palette, type, icons */
+.kit{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kit>section{min-width:0;padding:18px;border:1px solid var(--l);border-radius:12px;display:grid;gap:14px;align-content:start}
+.kit h3{font-family:var(--f-mono);font-size:12px;font-weight:400;letter-spacing:.1em;text-transform:uppercase;color:var(--m)}
+.tiles{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.tile{display:grid;place-items:center;background:var(--tb);border-radius:22%}
+.tile svg{width:62%;height:62%}
+.sw{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sw div{border-radius:6px;padding:28px 8px 6px;font-family:var(--f-mono);font-size:11px;line-height:1.3;border:1px solid var(--l)}
+.sw span{display:block;opacity:.75}
+.type p{font-family:var(--fu);font-size:14px;color:var(--m)}
+.type .big{font-family:var(--fd);font-size:30px;line-height:1.05;color:var(--i)}
+.ico{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ico span{display:grid;place-items:center;aspect-ratio:1;border:1px solid var(--l);border-radius:8px}
+.ico svg{width:26px;height:26px}
+
+/* UI mockup */
+.ui{display:grid;gap:12px}
+.ui figcaption{font-family:var(--fu);font-size:14px;color:var(--m);max-width:70ch}
+.win{background:var(--wb);color:var(--wi);border-radius:var(--wr,10px);overflow:hidden;border:1px solid var(--wl);font-family:var(--fu);font-size:13px;box-shadow:0 30px 80px -40px rgba(0,0,0,.7)}
+.bar{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;border-bottom:1px solid var(--wl)}
+.bar svg{width:16px;height:16px}
+.bar .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--wm)}
+.bar .dots{display:flex;gap:16px;color:var(--wm);font-size:12px}
+.body{display:grid;grid-template-columns:1fr 230px}
+.stage{min-width:0;display:grid}
+.pic{position:relative;aspect-ratio:16/9;max-width:100%;background:var(--pic);overflow:hidden}
+.pic .note{position:absolute;left:10px;bottom:8px;font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;opacity:.55;color:#fff}
+.ctl{padding:10px 14px 12px;display:grid;gap:10px}
+.row{display:flex;align-items:center;gap:14px}
+.row svg{width:20px;height:20px;flex:none}
+.row .sp{flex:1}
+.time{font-family:var(--f-mono);font-size:11.5px;color:var(--wm);font-variant-numeric:tabular-nums}
+.side{border-left:1px solid var(--wl);padding:12px;display:grid;gap:8px;align-content:start;min-width:0}
+.side .h{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--wm)}
+.item{display:grid;grid-template-columns:38px 1fr;gap:9px;align-items:center;min-width:0}
+.item .th{aspect-ratio:16/10;border-radius:4px;background:var(--pic)}
+.item b{display:block;font-weight:500;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item small{color:var(--wm);font-size:11px}
+.risk{font-family:var(--fu);font-size:14px;color:var(--m);padding:14px 16px;border-left:2px solid var(--a);max-width:80ch}
+.risk b{color:var(--i)}
+
+/* ---------- Continuo ---------- */
+#continuo{--g:#0B0C0E;--i:#ECEDEA;--m:#8B9099;--l:#24272D;--a:#7FC8F8;--fd:"Unbounded",system-ui,sans-serif;--fu:"Onest",system-ui,sans-serif;--fw:300;--trk:-.05em;--tb:#15171B;
+  --wb:#0E0F12;--wi:#ECEDEA;--wm:#8B9099;--wl:#22252B;--wr:12px;
+  --pic:radial-gradient(60% 40% at 70% 62%,#F5C27A 0 6%,rgba(245,194,122,.0) 30%),linear-gradient(180deg,#0E1A2E 0%,#284466 48%,#E59C67 64%,#141820 66%,#07080A 100%)}
+.cline{stroke:var(--a);stroke-width:5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.cglow{stroke:#fff;stroke-width:5;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:10 150;animation:run 3.2s linear infinite}
+@keyframes run{to{stroke-dashoffset:-160}}
+.seekc{position:relative;height:16px}
+.seekc i{position:absolute;top:7px;height:2px;border-radius:2px}
+.seekc .done{left:0;width:58%;background:var(--a)}
+.seekc .rest{left:58%;right:16%;background:#3A3F48}
+.seekc .next{left:84%;right:0;background:repeating-linear-gradient(90deg,var(--a) 0 6px,transparent 6px 10px);opacity:.55}
+.seekc .head{left:58%;top:3px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#fff}
+.seekc .nx{position:absolute;right:0;top:-18px;font-size:11px;color:var(--a);white-space:nowrap}
+.qline{position:relative;display:grid;gap:12px;padding-left:16px}
+.qline::before{content:"";position:absolute;left:4px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--a) 0 34%,#3A3F48 34%)}
+.qline div{position:relative;font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qline div::before{content:"";position:absolute;left:-16px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--wb);border:2px solid #3A3F48}
+.qline .on::before{border-color:var(--a);background:var(--a)}
+.qline small{display:block;color:var(--wm);font-size:11px}
+
+/* ---------- Crease ---------- */
+#crease{--g:#E8EAEE;--i:#15171B;--m:#5B606A;--l:#C9CDD5;--a:#2F55E0;--fd:"Literata",Georgia,serif;--fu:"Golos Text",system-ui,sans-serif;--fw:400;--trk:-.03em;--tb:#1A1C20;
+  --wb:#17191D;--wi:#ECEEF2;--wm:#8E949E;--wl:#262930;--wr:10px;
+  --pic:linear-gradient(115deg,#2B2622 0%,#5A4636 38%,#C99C6A 52%,#3A2E25 53%,#1A1715 100%)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 14px 14px}
+.card{min-width:0}
+.card .cv{position:relative;aspect-ratio:16/10;border-radius:6px;background:var(--pic);clip-path:polygon(0 0,calc(100% - var(--f)) 0,100% var(--f),100% 100%,0 100%)}
+.card .cv::after{content:"";position:absolute;right:0;top:0;width:var(--f);height:var(--f);background:linear-gradient(225deg,transparent 50%,#F4F1EA 50%);border-bottom-left-radius:3px;transition:width .35s cubic-bezier(.2,.7,.2,1),height .35s cubic-bezier(.2,.7,.2,1)}
+.card:hover .cv::after{width:calc(var(--f) + 6px);height:calc(var(--f) + 6px)}
+.card b{display:block;margin-top:6px;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card small{color:var(--wm);font-size:11px}
+.seekk{position:relative;height:16px}
+.seekk i{position:absolute;top:7px;height:2px}
+.seekk .done{left:0;width:41%;background:#ECEEF2}
+.seekk .rest{left:41%;right:0;background:#3A3E46}
+#crease .win,#phi .win{max-width:880px}
+.seekk .bm{top:0;width:11px;height:11px;margin-left:-5px;background:linear-gradient(225deg,transparent 50%,var(--a) 50%)}
+.toast{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(244,241,234,.96);color:#15171B;border-radius:6px;font-size:12px;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%)}
+.toast b{color:var(--a);font-weight:600}
+
+/* ---------- Phi ---------- */
+#phi{--g:#000;--i:#FFF;--m:#8C8C8C;--l:#232323;--a:#FFF;--fd:"Tektur",system-ui,sans-serif;--fu:"Geologica",system-ui,sans-serif;--fw:400;--trk:.02em;--tb:#0D0D0D;
+  --wb:#000;--wi:#F2F2F2;--wm:#8C8C8C;--wl:#1F1F1F;--wr:2px;
+  --pic:linear-gradient(90deg,rgba(0,0,0,.0) 0 62%,rgba(0,0,0,.35) 62%),linear-gradient(180deg,#5C6B78 0%,#A9B3BA 40%,#2E3237 41%,#111316 100%)}
+.cal{display:flex;height:8px;max-width:220px}
+.cal i{flex:1}
+.strip{display:grid;grid-template-columns:repeat(9,1fr);gap:2px}
+.strip i{aspect-ratio:16/9;background:var(--pic);filter:grayscale(.4) brightness(.8)}
+.strip i:nth-child(5){outline:1px solid #fff;filter:none}
+.seekp{position:relative;height:12px}
+.seekp i{position:absolute;top:5px;height:2px}
+.seekp .done{left:0;width:50%;background:#fff}
+.seekp .rest{left:50%;right:0;background:#333}
+.seekp .ph{left:50%;top:0;width:2px;height:12px;background:#fff}
+.seekp .tick{top:3px;width:1px;height:6px;background:#666}
+.stats{position:absolute;right:10px;top:10px;font-family:var(--f-mono);font-size:10.5px;line-height:1.5;color:#E6E6E6;background:rgba(0,0,0,.62);padding:8px 10px;white-space:pre}
+.stats b{color:#fff;font-weight:500}
+.phi-step{animation:sweep 2.4s steps(12) infinite}
+@keyframes sweep{from{transform:translateX(-14px)}to{transform:translateX(14px)}}
+
+/* ---------- Phalena ---------- */
+#phalena{--g:#0F0D0B;--i:#F6EAD0;--m:#9A8E7B;--l:#2A241D;--a:#F2A65A;--fd:"Tenor Sans",Georgia,serif;--fu:"Manrope",system-ui,sans-serif;--fw:400;--trk:-.01em;--tb:#1B1713;
+  --wb:#14110E;--wi:#F6EAD0;--wm:#9A8E7B;--wl:#2A241D;--wr:16px;
+  --pic:radial-gradient(30% 45% at 34% 46%,#F7C77C 0,#C9702F 30%,rgba(60,30,12,0) 70%),linear-gradient(160deg,#1E1410 0%,#3B2116 55%,#120D0A 100%)}
+.glow{position:relative}
+.glow .pic{box-shadow:0 0 0 1px #2A241D}
+.glow::before{content:"";position:absolute;inset:6% 8% 28%;background:radial-gradient(closest-side,rgba(242,166,90,.35),transparent);filter:blur(30px);z-index:0}
+.glow>*{position:relative;z-index:1}
+.lyr{position:absolute;inset:auto 0 18px 0;text-align:center;font-family:"Tenor Sans",Georgia,serif;color:#F6EAD0;font-size:clamp(13px,2vw,20px);display:grid;gap:4px;text-shadow:0 1px 12px rgba(0,0,0,.6)}
+.lyr span{opacity:.45;font-size:.75em}
+.seekh{position:relative;height:14px}
+.seekh i{position:absolute;top:6px;height:2px;border-radius:2px}
+.seekh .done{left:0;width:33%;background:linear-gradient(90deg,#7D5530,var(--a))}
+.seekh .rest{left:33%;right:0;background:#2E2721}
+.seekh .head{left:33%;top:2px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--a);box-shadow:0 0 12px var(--a)}
+.wing{transform-origin:32px 32px;animation:flutter 5s cubic-bezier(.4,0,.2,1) infinite}
+.wing.r{animation-delay:.04s}
+@keyframes flutter{0%,82%,100%{transform:scaleX(1)}88%{transform:scaleX(.55)}94%{transform:scaleX(1.04)}}
+
+/* compare */
+.cmp{padding-block:64px;border-top:1px solid var(--line)}
+.cmp h2{font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:-.025em;line-height:1.05}
+.tbl{overflow-x:auto;margin-top:28px}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:15px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+td b{font-size:17px}
+.pick{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.pick>div{min-width:0;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:grid;gap:10px;align-content:start}
+.pick h3{font-size:20px}
+.pick p,.pick li{font-size:15px;color:var(--mut)}
+.pick ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.foot{padding-block:28px 48px;color:var(--mut);font-size:14px;border-top:1px solid var(--line)}
+
+@media (max-width:900px){
+  .kit{grid-template-columns:1fr 1fr}
+  .cols{grid-template-columns:1fr}
+  .picker{grid-template-columns:1fr 1fr}
+  .shared{grid-template-columns:1fr}
+}
+@media (max-width:620px){
+  .head{grid-template-columns:1fr}
+  .body{grid-template-columns:1fr}
+  .side{border-left:0;border-top:1px solid var(--wl)}
+  .kit{grid-template-columns:1fr}
+  .pick{grid-template-columns:1fr}
+  .stats{display:none}
+  .cards{grid-template-columns:1fr 1fr}
+  .cards .card:nth-child(3){display:none}
+  .pos div{grid-template-columns:1fr;gap:2px}
+}
+@media (prefers-reduced-motion:reduce){
+  .cglow,.phi-step,.wing{animation:none}
+  .cglow{display:none}
+  .picker a,.card .cv::after{transition:none}
+}
+</style>
+
+<!-- marks, reused by id -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="m-continuo" viewBox="0 0 64 64"><path class="cline" d="M5 44H19V20L45 32H59"/><path class="cglow" d="M5 44H19V20L45 32H59"/></symbol>
+    <symbol id="m-continuo-flat" viewBox="0 0 64 64"><path d="M5 44H19V20L45 32H59" fill="none" stroke="#7FC8F8" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="m-crease" viewBox="0 0 64 64"><path d="M14 9L41 24.9V39.1L14 55Z" fill="#F4F1EA" stroke="#F4F1EA" stroke-width="3" stroke-linejoin="round"/><path d="M41 24.9L30 32L41 39.1Z" fill="#2F55E0" stroke="#2F55E0" stroke-width="3" stroke-linejoin="round"/></symbol>
+    <symbol id="m-crease-ink" viewBox="0 0 64 64"><path d="M14 9L41 24.9V39.1L14 55Z" fill="#15171B" stroke="#15171B" stroke-width="3" stroke-linejoin="round"/><path d="M41 24.9L30 32L41 39.1Z" fill="#2F55E0" stroke="#2F55E0" stroke-width="3" stroke-linejoin="round"/></symbol>
+    <symbol id="m-phi" viewBox="0 0 64 64"><circle cx="32" cy="32" r="15" fill="none" stroke="#fff" stroke-width="4.5"/><path d="M32 5V59" stroke="#fff" stroke-width="4.5"/></symbol>
+    <symbol id="m-phalena" viewBox="0 0 64 64"><g class="wing"><path d="M31 32L8 14V50Z" fill="#CDBF9F" stroke="#CDBF9F" stroke-width="4" stroke-linejoin="round"/></g><g class="wing r"><path d="M33 32L56 14V50Z" fill="#CDBF9F" stroke="#CDBF9F" stroke-width="4" stroke-linejoin="round"/></g><path d="M32 22V44" stroke="#F2A65A" stroke-width="2.5" stroke-linecap="round"/><path d="M31 21C29 16 26 13 22 12M33 21C35 16 38 13 42 12" fill="none" stroke="#CDBF9F" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="m-phalena-still" viewBox="0 0 64 64"><path d="M31 32L8 14V50Z" fill="#CDBF9F" stroke="#CDBF9F" stroke-width="4" stroke-linejoin="round"/><path d="M33 32L56 14V50Z" fill="#CDBF9F" stroke="#CDBF9F" stroke-width="4" stroke-linejoin="round"/><path d="M32 22V44" stroke="#F2A65A" stroke-width="2.5" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<header class="wrap intro">
+  <p class="lbl">Ребрендинг плеера · раунд 3 · 24 октября 2026</p>
+  <h1>Четыре плеера вместо Lumen</h1>
+  <p class="lead">Четыре бренда, и каждый вырос из того, что плеер уже умеет. У каждого есть имя, знак, позиционирование, палитра, шрифты, иконки и набросок интерфейса.</p>
+  <p class="lead">В прошлых раундах было 17 имён (Kadrin, Rovel, Terso, Filin, Polka, Plenka, Okno, Plover, Twill, Quinby, Cairn, Vennel, Attic, Fika, Oddly, Sundot, Whirr). Здесь ни одно из них не повторяется. Макеты нарисованы кодом, кадры в них условные.</p>
+  <nav class="picker" aria-label="Концепции">
+    <a href="#continuo" style="background:#0B0C0E;color:#ECEDEA"><svg aria-hidden="true"><use href="#m-continuo-flat"/></svg><span><b style="font-family:Unbounded,sans-serif;font-weight:300">continuo</b><small>Ничего не обрывается</small></span></a>
+    <a href="#crease" style="background:#E8EAEE;color:#15171B"><svg aria-hidden="true"><use href="#m-crease-ink"/></svg><span><b style="font-family:Literata,serif">Crease</b><small>Помнит, где вы остановились</small></span></a>
+    <a href="#phi" style="background:#000;color:#fff"><svg aria-hidden="true"><use href="#m-phi"/></svg><span><b style="font-family:Tektur,sans-serif">PHI</b><small>Картинка прежде всего</small></span></a>
+    <a href="#phalena" style="background:#0F0D0B;color:#F6EAD0"><svg aria-hidden="true"><use href="#m-phalena-still"/></svg><span><b style="font-family:'Tenor Sans',serif">Phalena</b><small>Свет только от экрана</small></span></a>
+  </nav>
+  <div class="shared">
+    <div><b>Общая основа</b><p>Плеер для Windows для тех, кто хранит свои фильмы, сериалы и музыку на диске. Без аккаунта и без облака. Бесплатный и открытый (GPL).</p></div>
+    <div><b>Место на рынке</b><p>Между VLC, MPC и PotPlayer, где всё мощно, но неуютно, и Plex или Jellyfin, где для своей папки нужен сервер. Для Mac такую нишу занимают IINA и Infuse.</p></div>
+    <div><b>Чем отличаются концепции</b><p>Каждая обещает своё: непрерывность, память, качество картинки или вечерний уют. Обещание определяет знак и то, как должен вести себя интерфейс.</p></div>
+  </div>
+</header>
+
+<main>
+<!-- ============ CONTINUO ============ -->
+<section class="band" id="continuo" aria-labelledby="h-continuo">
+  <div class="wrap">
+    <div class="head">
+      <svg class="mark" viewBox="0 0 64 64" role="img" aria-label="Знак Continuo: линия складывается в Play и идёт дальше"><use href="#m-continuo"/></svg>
+      <div>
+        <h2 class="word" id="h-continuo">continuo</h2>
+        <p class="say">Конти́нуо · от basso continuo, басовой линии в барочной музыке, которая звучит через всю пьесу без перерывов</p>
+      </div>
+    </div>
+    <div class="cols">
+      <div class="txt">
+        <p class="tag">Включил, и дальше всё идёт само.</p>
+        <p>Плеер, в котором ничего не обрывается. Окно открывается сразу на первом кадре, песни идут без пауз, серия перетекает в следующую, а полноэкранный режим включается без дрожания.</p>
+        <p class="muted">Знак: одна линия складывается в Play и идёт дальше. По ней всё время бежит свет. Так и в интерфейсе: полоса перемотки не обрывается на краю, её пунктир уже показывает следующий файл.</p>
+        <p class="muted">Как всё движется: одной линией. Ничто не появляется рывком, каждое состояние вырастает из предыдущего.</p>
+      </div>
+      <div class="pos">
+        <p class="lbl" style="color:var(--m)">На что опирается в плеере</p>
+        <ul class="anchor">
+          <li>Gapless и плавный переход между песнями, от 1 до 12 с</li>
+          <li>«Следующая серия» на титрах и пропуск заставки по главам</li>
+          <li>Окно появляется на первом кадре, около 0,1 с, без мигания</li>
+          <li>Полноэкранный режим без дрожания кадра</li>
+        </ul>
+        <div><span class="k">Для кого</span><span>Для тех, кто смотрит сериалы подряд и слушает альбомы целиком</span></div>
+        <div><span class="k">Обещание</span><span>Не мигает, не щёлкает паузой между треками и не спрашивает лишнего</span></div>
+      </div>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="tiles"><span class="tile" style="width:96px;height:96px"><svg aria-hidden="true"><use href="#m-continuo-flat"/></svg></span><span class="tile" style="width:48px;height:48px"><svg aria-hidden="true"><use href="#m-continuo-flat"/></svg></span><span class="tile" style="width:32px;height:32px"><svg aria-hidden="true"><use href="#m-continuo-flat"/></svg></span><span class="tile" style="width:16px;height:16px;border-radius:4px"><svg aria-hidden="true" style="width:80%;height:80%"><use href="#m-continuo-flat"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#0B0C0E">Ночь<span>#0B0C0E</span></div><div style="background:#ECEDEA;color:#0B0C0E">Мел<span>#ECEDEA</span></div><div style="background:#24272D">Шов<span>#24272D</span></div><div style="background:#7FC8F8;color:#0B0C0E">Линия<span>#7FC8F8</span></div></div>
+      </section>
+      <section class="type"><h3>Шрифты</h3><p class="big" style="font-weight:300;letter-spacing:-.04em">дальше</p><p>Unbounded 300 для слова-знака, строчными. Onest для интерфейса: ровный, с хорошей кириллицей.</p></section>
+      <section><h3>Иконки</h3><div class="ico" data-icons="continuo"></div><p class="type"><span style="font-family:Onest,sans-serif;font-size:13px;color:var(--m)">Линия 2 px, концы открыты, как будто линия пришла и ушла</span></p></section>
+    </div>
+
+    <figure class="ui" style="margin:0">
+      <div class="win" role="img" aria-label="Набросок окна Continuo: видео, полоса перемотки переходит в следующую серию, очередь одной линией">
+        <div class="bar"><svg aria-hidden="true"><use href="#m-continuo-flat"/></svg><span class="t">Дом у моря · серия 3</span><span class="dots"><span>_</span><span>▢</span><span>✕</span></span></div>
+        <div class="body">
+          <div class="stage">
+            <div class="pic"><span class="note">кадр условный</span></div>
+            <div class="ctl">
+              <div class="seekc" aria-hidden="true"><span class="nx">Серия 4 через 0:12</span><i class="done"></i><i class="rest"></i><i class="next"></i><i class="head"></i></div>
+              <div class="row" data-row="continuo"><span class="time">38:41 / 46:10</span></div>
+            </div>
+          </div>
+          <aside class="side">
+            <span class="h">Очередь</span>
+            <div class="qline">
+              <div class="on">Серия 3<small>идёт сейчас</small></div>
+              <div>Серия 4<small>начнётся без паузы</small></div>
+              <div>Серия 5<small>46 мин</small></div>
+              <div>Серия 6<small>44 мин</small></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <figcaption>Пунктир справа на полосе перемотки уже показывает следующую серию. Очередь сбоку тоже одна линия: пройденное светится, дальше её продолжение.</figcaption>
+    </figure>
+    <p class="risk"><b>Риск имени.</b> Само слово не проверено. Рядом с этой идеей все короткие слова уже заняты: Attacca (шоу-контроль для Windows с видео), Weft (склейка видео), Segue (несколько музыкальных плееров), Senza (видеоплатформа). Идея сильнее имени, его можно заменить.</p>
+  </div>
+</section>
+
+<!-- ============ CREASE ============ -->
+<section class="band" id="crease" aria-labelledby="h-crease">
+  <div class="wrap">
+    <div class="head">
+      <svg class="mark" viewBox="0 0 64 64" role="img" aria-label="Знак Crease: Play с загнутым кончиком"><use href="#m-crease-ink"/></svg>
+      <div>
+        <h2 class="word" id="h-crease">Crease</h2>
+        <p class="say">Криз · складка, загиб · по-русски в речи можно просто «Складка»</p>
+      </div>
+    </div>
+    <div class="cols">
+      <div class="txt">
+        <p class="tag">Вернёшься, а всё как было.</p>
+        <p>Плеер, который помнит. Загнутый уголок страницы: самый старый способ сказать «я остановился здесь». Здесь он и есть знак: Play, у которого загнут кончик.</p>
+        <p class="muted">В интерфейсе у недосмотренного в медиатеке загнут уголок обложки, и чем больше осталось, тем крупнее загиб. Закладки на полосе перемотки выглядят как маленькие загибы. При открытии файла появляется подсказка «Продолжить с 41:07».</p>
+        <p class="muted">Как всё движется: загибается и разглаживается, как бумага. Уголок приподнимается под курсором.</p>
+      </div>
+      <div class="pos">
+        <p class="lbl" style="color:var(--m)">На что опирается в плеере</p>
+        <ul class="anchor">
+          <li>Настройки для каждого файла: дорожки, задержки, скорость, поворот, петля A-B</li>
+          <li>Продолжение с места остановки, Play после Stop идёт с той же точки</li>
+          <li>Закладки, главы, история</li>
+          <li>Медиатека с сериалами и плейлистами</li>
+        </ul>
+        <div><span class="k">Для кого</span><span>Для тех, у кого большая коллекция: сериалы, курсы, лекции, длинные альбомы</span></div>
+        <div><span class="k">Обещание</span><span>Не нужно ничего запоминать: дорожка, субтитры и место уже такие, как вы оставили</span></div>
+      </div>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="tiles"><span class="tile" style="width:96px;height:96px"><svg aria-hidden="true"><use href="#m-crease"/></svg></span><span class="tile" style="width:48px;height:48px"><svg aria-hidden="true"><use href="#m-crease"/></svg></span><span class="tile" style="width:32px;height:32px"><svg aria-hidden="true"><use href="#m-crease"/></svg></span><span class="tile" style="width:16px;height:16px;border-radius:4px"><svg aria-hidden="true" style="width:80%;height:80%"><use href="#m-crease"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#17191D;color:#ECEEF2">Переплёт<span>#17191D</span></div><div style="background:#F4F1EA">Лист<span>#F4F1EA</span></div><div style="background:#E8EAEE">Бумага<span>#E8EAEE</span></div><div style="background:#2F55E0;color:#fff">Ляссе<span>#2F55E0</span></div></div>
+      </section>
+      <section class="type"><h3>Шрифты</h3><p class="big">Продолжить</p><p>Literata для слова-знака и заголовков: книжная, но без старины. Golos Text для интерфейса.</p></section>
+      <section><h3>Иконки</h3><div class="ico" data-icons="crease"></div><p class="type"><span style="font-family:'Golos Text',sans-serif;font-size:13px;color:var(--m)">Заливка, у каждой иконки свой загиб на одном углу</span></p></section>
+    </div>
+
+    <figure class="ui" style="margin:0">
+      <div class="win" role="img" aria-label="Набросок окна Crease: подсказка «Продолжить с 41:07», закладки-загибы на полосе, карточки с загнутыми уголками">
+        <div class="bar"><svg aria-hidden="true"><use href="#m-crease"/></svg><span class="t">Лекции по истории кино · 7. Монтаж</span><span class="dots"><span>_</span><span>▢</span><span>✕</span></span></div>
+        <div class="stage">
+          <div class="pic"><span class="toast">Продолжить с <b>41:07</b> · дорожка 2, субтитры RU</span><span class="note">кадр условный</span></div>
+          <div class="ctl">
+            <div class="seekk" aria-hidden="true"><i class="done"></i><i class="rest"></i><i class="bm" style="left:18%"></i><i class="bm" style="left:41%"></i><i class="bm" style="left:73%"></i></div>
+            <div class="row" data-row="crease"><span class="time">41:07 / 1:38:20</span></div>
+          </div>
+          <div class="cards">
+            <div class="card" style="--f:26px"><div class="cv"></div><b>8. Звук в кино</b><small>осталось 1 ч 12 мин</small></div>
+            <div class="card" style="--f:14px"><div class="cv" style="--pic:linear-gradient(140deg,#1C2A33,#4F6B73 50%,#0F1417)"></div><b>Дом у моря · серия 5</b><small>осталось 19 мин</small></div>
+            <div class="card" style="--f:6px"><div class="cv" style="--pic:linear-gradient(120deg,#2A1E2E,#7A4A5C 55%,#140F14)"></div><b>Glass Hours · альбом</b><small>осталось 2 трека</small></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>Размер загиба на карточке показывает, сколько осталось. Синие загибы на полосе перемотки означают закладки.</figcaption>
+    </figure>
+    <p class="risk"><b>Риск имени.</b> Среди плееров совпадений не нашлось. Так называются спортивные приложения и одна игра. Dogear, первый вариант для этой идеи, отпал: так зовут приложение для книг и PDF-читалку.</p>
+  </div>
+</section>
+
+<!-- ============ PHI ============ -->
+<section class="band" id="phi" aria-labelledby="h-phi">
+  <div class="wrap">
+    <div class="head">
+      <svg class="mark" viewBox="0 0 64 64" role="img" aria-label="Знак Phi: круг объектива и вертикаль позиции воспроизведения"><use href="#m-phi"/></svg>
+      <div>
+        <h2 class="word" id="h-phi">PHI</h2>
+        <p class="say">Фай · Φ · от «фи-феномена»: глаз видит движение там, где есть только неподвижные кадры</p>
+        <div class="cal" aria-hidden="true" style="margin-top:14px"><i style="background:#C0C0C0"></i><i style="background:#C0C000"></i><i style="background:#00C0C0"></i><i style="background:#00C000"></i><i style="background:#C000C0"></i><i style="background:#C00000"></i><i style="background:#0000C0"></i></div>
+      </div>
+    </div>
+    <div class="cols">
+      <div class="txt">
+        <p class="tag">Каждый кадр как задумано.</p>
+        <p>Плеер для тех, кому важно, как выглядит картинка. Кино и есть иллюзия: двадцать четыре неподвижных кадра в секунду. Phi отвечает за то, чтобы каждый из них показался таким, как его сняли.</p>
+        <p class="muted">Знак Φ: круг означает объектив и кадр, вертикаль означает позицию воспроизведения. Цвет у бренда есть только в калибровочных полосах SMPTE. Всё остальное чисто чёрное и чисто белое.</p>
+        <p class="muted">Как всё движется: точным шагом, кадр за кадром. Никаких пружин, только ступени.</p>
+      </div>
+      <div class="pos">
+        <p class="lbl" style="color:var(--m)">На что опирается в плеере</p>
+        <ul class="anchor">
+          <li>Превью кадров на полосе перемотки</li>
+          <li>ИИ-апскейл NVIDIA RTX и Intel, RTX Video HDR, тональная компрессия</li>
+          <li>«Плавное движение», резкость CAS, деинтерлейс, свои шейдеры</li>
+          <li>Статистика поверх видео: декодер, пропуски, кэш</li>
+        </ul>
+        <div><span class="k">Для кого</span><span>Для тех, кто замечает бэндинг на небе и рассинхрон в 40 мс</span></div>
+        <div><span class="k">Обещание</span><span>Уровень mpv и madVR без конфиг-файлов</span></div>
+      </div>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="tiles"><span class="tile" style="width:96px;height:96px;border-radius:12px"><svg aria-hidden="true"><use href="#m-phi"/></svg></span><span class="tile" style="width:48px;height:48px;border-radius:7px"><svg aria-hidden="true"><use href="#m-phi"/></svg></span><span class="tile" style="width:32px;height:32px;border-radius:5px"><svg aria-hidden="true"><use href="#m-phi"/></svg></span><span class="tile" style="width:16px;height:16px;border-radius:2px"><svg aria-hidden="true" style="width:84%;height:84%"><use href="#m-phi"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#000">Чёрный<span>#000000</span></div><div style="background:#fff;color:#000">Белый<span>#FFFFFF</span></div><div style="background:#767676">Серый 18 %<span>#767676</span></div><div style="background:linear-gradient(90deg,#C0C0C0 14%,#C0C000 14% 28%,#00C0C0 28% 42%,#00C000 42% 57%,#C000C0 57% 71%,#C00000 71% 85%,#0000C0 85%);color:#000">SMPTE 75 %<span>только полоса</span></div></div>
+      </section>
+      <section class="type"><h3>Шрифты</h3><p class="big" style="font-family:Tektur,sans-serif">01:24:07:12</p><p>Tektur для слова-знака, JetBrains Mono для таймкода и данных о сигнале, Geologica для остального текста.</p></section>
+      <section><h3>Иконки</h3><div class="ico" data-icons="phi"></div><p class="type"><span style="font-family:Geologica,sans-serif;font-size:13px;color:var(--m)">Линия 1,5 px, прямые концы, только круги и прямые</span></p></section>
+    </div>
+
+    <figure class="ui" style="margin:0">
+      <div class="win" role="img" aria-label="Набросок окна Phi: лента кадров над полосой перемотки, статистика сигнала поверх видео">
+        <div class="bar"><svg aria-hidden="true"><use href="#m-phi"/></svg><span class="t mono" style="font-size:11.5px">Berg_2026_UHD_HDR10.mkv</span><span class="dots"><span>_</span><span>▢</span><span>✕</span></span></div>
+        <div class="stage">
+          <div class="pic"><span class="stats"><b>d3d11va</b> · без копирования
+3840×2160 · 23,976 к/с
+HDR10 → SDR · тон: spline
+RTX VSR · ×1,5
+пропущено <b>0</b> · кэш 41 с</span><span class="note">кадр условный</span></div>
+          <div class="ctl">
+            <div class="strip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="seekp" aria-hidden="true"><i class="done"></i><i class="rest"></i><i class="tick" style="left:12%"></i><i class="tick" style="left:31%"></i><i class="tick" style="left:64%"></i><i class="tick" style="left:88%"></i><i class="ph"></i></div>
+            <div class="row" data-row="phi"><span class="time">01:24:07:12</span></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>Над полосой перемотки лента кадров, засечки на полосе отмечают главы. Данные о сигнале здесь часть дизайна, а не отладочный режим.</figcaption>
+    </figure>
+    <p class="risk"><b>Риск имени.</b> Среди плееров для Windows совпадений не нашлось. Есть Phi Browser и игры Phigros. По-русски «фи» звучит как брезгливое междометие, поэтому произносить лучше «Фай», как в английском. Это нужно проверить на слух.</p>
+  </div>
+</section>
+
+<!-- ============ PHALENA ============ -->
+<section class="band" id="phalena" aria-labelledby="h-phalena">
+  <div class="wrap">
+    <div class="head">
+      <svg class="mark" viewBox="0 0 64 64" role="img" aria-label="Знак Phalena: треугольники назад и вперёд складываются в крылья"><use href="#m-phalena"/></svg>
+      <div>
+        <h2 class="word" id="h-phalena">Phalena</h2>
+        <p class="say">Фале́на · старое латинское имя ночных бабочек, Phalaena</p>
+      </div>
+    </div>
+    <div class="cols">
+      <div class="txt">
+        <p class="tag">Свет только от экрана.</p>
+        <p>Lumen значит «свет», а ночная бабочка летит на свет. Это наследник имени, но с характером: плеер для вечера. Тёмный, тёплый и тихий. Светит только картинка, всё остальное уходит в тень.</p>
+        <p class="muted">Знак: два треугольника, «назад» и «вперёд», сходятся остриями и становятся крыльями. Тонкая янтарная вертикаль между ними показывает позицию воспроизведения. Время от времени крылья вздрагивают.</p>
+        <p class="muted">Как всё движется: короткий взмах и мягкая посадка. Окно мягко светится цветом той картинки, что сейчас идёт.</p>
+      </div>
+      <div class="pos">
+        <p class="lbl" style="color:var(--m)">На что опирается в плеере</p>
+        <ul class="anchor">
+          <li>Тёмный монохромный интерфейс по умолчанию</li>
+          <li>Экран музыки: обложка, визуализация, синхронные тексты песен</li>
+          <li>Мини-плеер и «картинка в картинке»</li>
+          <li>Тонкая полоска прогресса, когда панель скрыта</li>
+        </ul>
+        <div><span class="k">Для кого</span><span>Для вечернего кино и музыки перед сном, на ноутбуке в темноте</span></div>
+        <div><span class="k">Обещание</span><span>Ничего не слепит и не мешает: только то, что вы включили</span></div>
+      </div>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="tiles"><span class="tile" style="width:96px;height:96px;border-radius:30%"><svg aria-hidden="true"><use href="#m-phalena-still"/></svg></span><span class="tile" style="width:48px;height:48px;border-radius:30%"><svg aria-hidden="true"><use href="#m-phalena-still"/></svg></span><span class="tile" style="width:32px;height:32px;border-radius:30%"><svg aria-hidden="true"><use href="#m-phalena-still"/></svg></span><span class="tile" style="width:16px;height:16px;border-radius:5px"><svg aria-hidden="true" style="width:84%;height:84%"><use href="#m-phalena-still"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#0F0D0B">Ночь<span>#0F0D0B</span></div><div style="background:#F6EAD0;color:#0F0D0B">Лампа<span>#F6EAD0</span></div><div style="background:#CDBF9F;color:#0F0D0B">Пыльца<span>#CDBF9F</span></div><div style="background:#F2A65A;color:#0F0D0B">Огонёк<span>#F2A65A</span></div></div>
+      </section>
+      <section class="type"><h3>Шрифты</h3><p class="big">Тихая ночь</p><p>Tenor Sans для слова-знака и строк песен: узкие светлые штрихи. Manrope для интерфейса.</p></section>
+      <section><h3>Иконки</h3><div class="ico" data-icons="phalena"></div><p class="type"><span style="font-family:Manrope,sans-serif;font-size:13px;color:var(--m)">Мягкая заливка со скруглёнными углами, а вместо закладки маленькая бабочка</span></p></section>
+    </div>
+
+    <figure class="ui glow" style="margin:0">
+      <div class="win" role="img" aria-label="Набросок окна Phalena: экран музыки с тёплой картинкой, строка песни, янтарная полоса прогресса">
+        <div class="bar"><svg aria-hidden="true"><use href="#m-phalena-still"/></svg><span class="t">Lunar Drift · Glass Hours</span><span class="dots"><span>_</span><span>▢</span><span>✕</span></span></div>
+        <div class="body">
+          <div class="stage">
+            <div class="pic"><div class="lyr"><span>и фонари погасли по одному</span><div>а мы остались слушать тишину</div><span>до самого утра</span></div><span class="note">кадр условный</span></div>
+            <div class="ctl">
+              <div class="seekh" aria-hidden="true"><i class="done"></i><i class="rest"></i><i class="head"></i></div>
+              <div class="row" data-row="phalena"><span class="time">1:22 / 4:09</span></div>
+            </div>
+          </div>
+          <aside class="side">
+            <span class="h">Альбом</span>
+            <div class="item"><span class="th"></span><span><b>Glass Hours</b><small>идёт сейчас</small></span></div>
+            <div class="item"><span class="th" style="--pic:linear-gradient(160deg,#2A1A14,#6B3A22)"></span><span><b>Low Tide Radio</b><small>5:12</small></span></div>
+            <div class="item"><span class="th" style="--pic:linear-gradient(160deg,#1A1612,#4A3828)"></span><span><b>Paper Lanterns</b><small>3:48</small></span></div>
+            <div class="item"><span class="th" style="--pic:linear-gradient(160deg,#120E0B,#3A2A1E)"></span><span><b>After the Rain</b><small>6:01</small></span></div>
+          </aside>
+        </div>
+      </div>
+      <figcaption>Окно подсвечивается тёплым светом картинки. Текущая строка песни горит, соседние уходят в тень. Исполнитель и строки песни выдуманы для примера.</figcaption>
+    </figure>
+    <p class="risk"><b>Риск имени.</b> Среди плееров совпадений не нашлось. Так называется марка шампуня в США и итальянская IoT-платформа. Moth и Mothlight заняты (MothPlayer, Moth Light). Ударение «фалЕна» нужно проверить на слух.</p>
+  </div>
+</section>
+</main>
+
+<section class="wrap cmp" aria-labelledby="h-cmp">
+  <h2 id="h-cmp">Рядом друг с другом</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Концепция</th><th>Обещание</th><th>Насколько далеко от нынешнего вида</th><th>Сильная сторона</th><th>Слабая сторона</th></tr></thead>
+      <tbody>
+        <tr><td><b>continuo</b></td><td>Ничего не обрывается</td><td>Близко: тот же чёрный, плюс одна холодная линия</td><td>Описывает то, на что ушла большая часть работы: мигание, паузы, дрожание</td><td>Имя не проверено, у соседних слов много совпадений</td></tr>
+        <tr><td><b>Crease</b></td><td>Помнит, где вы остановились</td><td>Средне: добавляются бумажные загибы и синие закладки</td><td>Самый понятный значок, сразу читается как плеер</td><td>Слово мало кто знает по-русски</td></tr>
+        <tr><td><b>PHI</b></td><td>Картинка прежде всего</td><td>Ближе всех: чисто чёрный и белый, строже нынешнего</td><td>Короткое имя, знак Φ узнаётся даже в 16 px</td><td>«Фи» по-русски звучит как брезгливое междометие</td></tr>
+        <tr><td><b>Phalena</b></td><td>Свет только от экрана</td><td>Дальше всех: тёплый чёрный, янтарь, свечение</td><td>Продолжает смысл Lumen, у бренда есть характер</td><td>Ударение неочевидно, свечение сложнее сделать в Direct2D</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pick">
+    <div>
+      <h3>Что выбрал бы я</h3>
+      <p>Идею <b style="color:var(--fg)">continuo</b>: она честнее всех описывает этот плеер, ведь больше всего сил ушло на то, чтобы ничего не мигало и не обрывалось. Имя для неё, скорее всего, придётся искать ещё раз.</p>
+      <p>Если хочется остаться ближе к нынешнему чёрному интерфейсу, то <b style="color:var(--fg)">PHI</b>. Если нужен самый понятный значок, то <b style="color:var(--fg)">Crease</b>, и его можно совместить с любой другой идеей.</p>
+    </div>
+    <div>
+      <h3>Что дальше, когда выберете</h3>
+      <ol>
+        <li>Проверить имя: домен, товарные знаки, Microsoft Store, GitHub, произношение у русских и англоязычных людей.</li>
+        <li>Довести знак: значок Windows в 16, 24, 32 и 48 px, светлая и тёмная версии.</li>
+        <li>Точные макеты главной, видео, музыки и настроек в обеих темах.</li>
+        <li>Тема в <span class="mono">res/skins</span> и иконки в <span class="mono">design/icons</span>, а уже потом переименование данных и сайта.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+<footer class="wrap foot">Поиск совпадений имён выполнен 24.10.2026 по открытой выдаче. Отсутствие совпадений не значит, что имя свободно: юридическая проверка не проводилась.</footer>
+
+<script>
+// Icon sets: each concept draws the same six actions in its own hand.
+(function(){
+  var names=["Play","Пауза","Следующий","Субтитры","Закладка","Громкость"];
+  var S={
+    continuo:{a:'fill="none" stroke="#ECEDEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"',
+      d:["M3 18h4V6l11 6h3","M8 5v14M16 5v14","M2 12h4M6 6v12l9-6zM18 6v12","M4 6h16v12H4zM7 14h5M15 14h2","M7 3h10v18l-5-4-5 4z","M3 10v4h4l5 4V6l-5 4zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"]},
+    crease:{a:'fill="#15171B" stroke="#15171B" stroke-width="1.5" stroke-linejoin="round"',
+      d:["M6 4L14 8.6V15.4L6 20Z","M6 4h4v16H6zM14 4h2.5L18 5.5V20h-4z","M5 5l10 7-10 7zM17 5h3v14h-3z","M3 5h14l4 4v10H3z","M6 3h12v18l-6-4-6 4z","M3 9h4l5-4v14l-5-4H3z"],
+      f:['<path d="M14 8.6L8.6 12L14 15.4Z" fill="#2F55E0" stroke="#2F55E0" stroke-width="1.5" stroke-linejoin="round"/>','<path d="M16.5 4V5.5H18Z" fill="#2F55E0" stroke="#2F55E0"/>','','<path d="M17 5v4h4z" fill="#2F55E0" stroke="#2F55E0"/><path d="M6 14h5M13 14h3" stroke="#E8EAEE" stroke-width="1.6" stroke-linecap="round"/>','<path d="M18 3v4l-3-1z" fill="#2F55E0" stroke="none"/>','<path d="M15.5 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" fill="none" stroke="#15171B" stroke-width="1.8" stroke-linecap="round"/>']},
+    phi:{a:'fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="square"',
+      d:["M7 5v14l11-7z","M8 5v14M16 5v14","M6 5v14l9-7zM18 5v14","M3 6h18v12H3zM6 14h6M14 14h4","M12 3v18M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8","M4 10v4h4l5 4V6l-5 4zM16 9v6M19 7v10"]},
+    phalena:{a:'fill="#CDBF9F" stroke="#CDBF9F" stroke-width="2" stroke-linejoin="round"',
+      d:["M7 5l11 7-11 7z","M7 5h3v14H7zM14 5h3v14h-3z","M5 6l9 6-9 6zM16 6h3v12h-3z","M3 6h18v12H3z","M11.5 12L4 6.5v11zM12.5 12L20 6.5v11z","M3 9h4l6-4v14l-6-4H3z"],
+      f:['','','','<path d="M6 14h6M14 14h4" stroke="#14110E" stroke-width="1.8" stroke-linecap="round"/>','<path d="M12 8.5v7" stroke="#F2A65A" stroke-width="1.6" stroke-linecap="round"/>','<path d="M16 9a4 4 0 0 1 0 6" fill="none" stroke="#CDBF9F" stroke-width="2" stroke-linecap="round"/>']}
+  };
+  function svg(k,i,size){var s=S[k],f=(s.f&&s.f[i])||'';return '<svg viewBox="0 0 24 24" width="'+size+'" height="'+size+'" aria-hidden="true"><path d="'+s.d[i]+'" '+s.a+'/>'+f+'</svg>';}
+  document.querySelectorAll('[data-icons]').forEach(function(el){
+    var k=el.getAttribute('data-icons'),h='';
+    for(var i=0;i<6;i++)h+='<span title="'+names[i]+'">'+svg(k,i,26)+'<span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">'+names[i]+'</span></span>';
+    el.innerHTML=h;
+  });
+  // controls row in the mockups use the window's own icon set, recoloured for the dark window
+  var dark={crease:['#15171B','#ECEEF2']};
+  document.querySelectorAll('[data-row]').forEach(function(el){
+    var k=el.getAttribute('data-row'),order=[1,2,3,5],h='';
+    order.forEach(function(i){var t=svg(k,i,20);if(dark[k])t=t.split(dark[k][0]).join(dark[k][1]).split('#E8EAEE').join('#17191D');h+=t;});
+    el.insertAdjacentHTML('afterbegin',h);
+    var sp=document.createElement('span');sp.className='sp';el.insertBefore(sp,el.lastElementChild);
+  });
+})();
+</script>
