@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cinemoth · имя</title>
+<meta name="description" content="Новое имя плеера по формуле anglebird: слово про свет и существо, которое летит вправо и становится кнопкой Play.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: тёмный гайд anglebird в одну колонку с оглавлением слева; все знаки рисуются из сеток в скрипте внизу */
+  :root {
+    --bg: #07090d;
+    --panel: #0d1016;
+    --ink: #e9f4ff;
+    --muted: #8a98ab;
+    --line: rgba(170, 195, 225, 0.16);
+    --glow: #ffc98a;
+    --ok: #7fd4a0;
+    --no: #ff7a6b;
+    --display: "Geist", "Inter", "Helvetica Neue", Arial, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color-scheme: dark;
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--display); -webkit-font-smoothing: antialiased; }
+  .wrap {
+    max-width: 1180px; margin: 0 auto;
+    padding-block: 56px 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 48px;
+  }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; gap: 24px; } nav.toc { display: none; } }
+
+  nav.toc { position: sticky; top: 24px; align-self: start; display: grid; gap: 4px; }
+  nav.toc a { color: var(--muted); text-decoration: none; font: 500 12px/1.4 var(--mono); padding: 4px 0; }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc b { font: 500 11px var(--mono); color: var(--glow); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+
+  main { display: grid; gap: 72px; min-width: 0; }
+  section { display: grid; gap: 20px; min-width: 0; scroll-margin-top: 24px; }
+  .eyebrow { font: 500 11px var(--mono); color: var(--glow); text-transform: uppercase; letter-spacing: 0.08em; }
+  h1 { margin: 0; font-weight: 500; font-size: clamp(44px, 8vw, 92px); letter-spacing: -0.04em; line-height: 0.95; }
+  h2 { margin: 0; font-weight: 500; font-size: clamp(24px, 3.2vw, 32px); letter-spacing: -0.02em; line-height: 1.1; text-wrap: balance; }
+  h3 { margin: 0; font-weight: 500; font-size: 16px; }
+  p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; max-width: 68ch; }
+  p strong { color: var(--ink); font-weight: 500; }
+  code { font-family: var(--mono); font-size: 0.9em; color: var(--ink); }
+  canvas { display: block; width: 100%; height: auto; }
+
+  .hero canvas { border-radius: 14px; border: 1px solid var(--line); }
+  .say { font: 500 13px var(--mono); color: var(--muted); }
+  .say b { color: var(--ink); font-weight: 500; }
+
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .rules div { background: var(--panel); padding: 18px; display: grid; gap: 8px; align-content: start; }
+  .rules b { font: 500 11px var(--mono); color: var(--glow); }
+  .rules h3 + p { font-size: 14px; }
+
+  .figure { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .figure canvas { border-radius: 10px; border: 1px solid var(--line); }
+  .cap { font: 500 12px/1.5 var(--mono); color: var(--muted); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+
+  /* Окно плеера: та же раскладка, что у Lumen сейчас; 1em = 1/120 ширины кадра */
+  .frame { container-type: inline-size; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  .win { font-size: calc(100cqw / 120); aspect-ratio: 16/10; display: grid; grid-template-rows: 3.33em 1fr; background: #0e0e0e; color: #f2f2f2; font-family: var(--display); overflow: hidden; }
+  .win svg.ic { width: 1.67em; height: 1.67em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .tb { display: flex; align-items: center; gap: 1.6em; padding: 0 1.6em; background: #141414; border-bottom: 1px solid #1c1c1c; font-size: 1.17em; }
+  .tb canvas { width: 1.6em; flex: none; }
+  .tb .mid { flex: 1; text-align: center; color: #8f8f8f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tb .wc { display: flex; gap: 2.2em; color: #8f8f8f; font-size: .95em; }
+  .player { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  .vid { position: relative; margin: 0 .8em; overflow: hidden; }
+  .vid canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ctl { display: flex; align-items: center; gap: 1.8em; padding: 1.3em 2.4em 1.5em; font-size: 1.17em; }
+  .ctl .ic { width: 1.5em; height: 1.5em; }
+  .pill { display: grid; place-items: center; width: 4.6em; height: 2.4em; border-radius: .5em; background: #fff; flex: none; }
+  .pill canvas { width: 1.5em; }
+  .tm { color: #8f8f8f; font-variant-numeric: tabular-nums; min-width: 2.8em; }
+  .seek { position: relative; flex: 1; height: 2em; border-radius: .3em; background: #141414; }
+  .seek i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .3em; background: #2a2a2a; }
+  .seek .knob { position: absolute; top: -.25em; bottom: -.25em; width: .3em; border-radius: .2em; background: #f2f2f2; }
+  .note { position: absolute; left: 1em; bottom: .8em; font-family: var(--mono); font-size: .9em; color: #fff; opacity: .5; }
+
+  .task { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: #202020; width: max-content; max-width: 100%; }
+  .task span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; }
+  .task span.me { background: rgba(255,255,255,.08); position: relative; }
+  .task span.me::after { content: ""; position: absolute; bottom: -5px; left: 13px; width: 8px; height: 3px; border-radius: 2px; background: #9ab; }
+  .task svg { width: 24px; height: 24px; fill: none; stroke: #9aa; stroke-width: 1.6; }
+  .task canvas { width: 26px; }
+  .sizes { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .sizes canvas { width: auto; }
+
+  .alt { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .alt > div { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: grid; align-content: start; }
+  .alt canvas { border-bottom: 1px solid var(--line); }
+  .alt .body { padding: 16px 18px 18px; display: grid; gap: 10px; }
+  .alt h3 { font-size: 22px; letter-spacing: -0.02em; display: flex; gap: 10px; align-items: baseline; }
+  .alt h3 span { font: 500 12px var(--mono); color: var(--muted); letter-spacing: 0; }
+  .alt p { font-size: 14px; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 500 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; background: var(--panel); }
+  td { color: var(--muted); line-height: 1.5; }
+  td.k { font-family: var(--mono); color: var(--ink); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+
+  .dodont { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .dodont ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .dodont li { font-size: 14px; line-height: 1.5; color: var(--muted); padding-left: 22px; position: relative; }
+  .dodont li::before { position: absolute; left: 0; font: 500 13px var(--mono); }
+  .dodont .ok li::before { content: "+"; color: var(--ok); }
+  .dodont .no li::before { content: "×"; color: var(--no); }
+  .dodont h3 { margin-bottom: 12px; }
+  footer { font: 12px/1.6 var(--mono); color: var(--muted); border-top: 1px solid var(--line); padding-top: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc" aria-label="Оглавление">
+    <b>имя плеера</b>
+    <a href="#idea">Формула</a>
+    <a href="#mark">Знак</a>
+    <a href="#lockup">Логотип</a>
+    <a href="#app">В плеере</a>
+    <a href="#icon">Иконка</a>
+    <a href="#alt">Запасное имя</a>
+    <a href="#check">Проверка имени</a>
+    <a href="#rules">Правила</a>
+  </nav>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="eyebrow">Новое имя плеера · по формуле anglebird</div>
+      <h1>cinemoth</h1>
+      <p class="say">читается <b>«си́немот»</b> · по-английски <b>SIN-uh-moth</b> · 8 букв, всегда строчными</p>
+      <p>Lumen значит «свет». Новое имя продолжает эту историю: плеер — светящийся экран в тёмной комнате, а моль — тот, кто летит на этот свет. Знак собран из пиксельных клеток, как колибри anglebird, и тоже смотрит вправо. Поэтому моль сама становится кнопкой Play.</p>
+      <canvas id="hero" width="1320" height="620" aria-label="Стеклянная моль летит вправо к светлому прямоугольнику экрана, за ней хвост из точек"></canvas>
+    </section>
+
+    <section id="idea">
+      <div class="eyebrow">01 · Формула</div>
+      <h2>Как anglebird: правило плюс существо</h2>
+      <p><strong>anglebird = angle + bird.</strong> Angle задаёт сетку: все линии под 0°, 45° или 90°. Bird даёт знак, который работает стрелкой установщика. <strong>cinemoth = cine + moth.</strong> Cine задаёт мир: экран, тёмный зал, свет проектора. Moth даёт знак: моль со сложенными крыльями — это треугольник, смотрящий вправо, то есть Play с усиками.</p>
+      <div class="rules">
+        <div><b>Правило 1</b><h3>Только сетка</h3><p>Та же сетка, что у колибри: клетки, углы 0°, 45° и 90°. Никаких кривых.</p></div>
+        <div><b>Правило 2</b><h3>Моль летит вправо</h3><p>Знак смотрит по ходу воспроизведения. Перевёрнутая моль означает «назад», других поворотов нет.</p></div>
+        <div><b>Правило 3</b><h3>Свет экрана</h3><p>Стекло anglebird, только акцент тёплый, как лампа проектора. Всё остальное чёрное и белое, как в плеере сейчас.</p></div>
+        <div><b>Правило 4</b><h3>Play и есть знак</h3><p>Белая кнопка Play — главная деталь нынешнего плеера. В ней теперь силуэт моли, так что бренд виден в каждом кадре.</p></div>
+      </div>
+    </section>
+
+    <section id="mark">
+      <div class="eyebrow">02 · Знак</div>
+      <h2>Моль 12 × 15 клеток</h2>
+      <p>Крылья сложены треугольником, как у моли на стене. Щель сзади делит их на два крыла, пустые квадраты 2 × 2 на крыльях — пятна-«глазки». Голова на острие, усики уходят вперёд под 45°. На 16 px знак читается как Play, с 32 px видны крылья и усики.</p>
+      <div class="cols">
+        <div class="figure"><canvas id="markGrid" width="1000" height="640"></canvas><div class="cap">Построение на сетке, по осям номера клеток.</div></div>
+        <div class="figure"><canvas id="markSizes" width="1000" height="640"></canvas><div class="cap">Стекло, бумага и плоский знак. Справа размеры 64, 32 и 16 px.</div></div>
+      </div>
+    </section>
+
+    <section id="lockup">
+      <div class="eyebrow">03 · Логотип</div>
+      <h2>Знак, имя, капсула</h2>
+      <p>Пропорции как у anglebird: знак высотой в кегль имени (клетка 0,066 кегля, у колибри 0,09 при 11 рядах), зазор до имени 0,32 кегля, капсула в 0,4 кегля. Имя набрано Geist 500 строчными, в капсуле версия или слово <code>beta</code>.</p>
+      <div class="cols">
+        <div class="figure"><canvas id="lockGlass" width="1000" height="320"></canvas><div class="cap">Стекло, на тёмном</div></div>
+        <div class="figure"><canvas id="lockPaper" width="1000" height="320"></canvas><div class="cap">Бумага, на светлом</div></div>
+      </div>
+    </section>
+
+    <section id="app">
+      <div class="eyebrow">04 · В плеере</div>
+      <h2>На нынешней раскладке ничего не двигается</h2>
+      <p>Окно то же, что у Lumen: заголовок, картинка, нижняя панель с белой кнопкой. Меняются три вещи: значок в заголовке, силуэт в кнопке Play и пустой экран, где стеклянная моль летит к прямоугольнику будущего кадра.</p>
+      <div class="cols">
+        <figure class="figure" style="margin:0">
+          <div class="frame"><div class="win" role="img" aria-label="Плеер cinemoth: кадр, нижняя панель, в белой кнопке силуэт моли">
+            <div class="tb"><canvas data-flat="#f2f2f2" width="40" height="40"></canvas><svg class="ic"><use href="#i-dots"/></svg><svg class="ic"><use href="#i-side"/></svg><span class="mid">Дом у моря · S01E04 · Маяк</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+            <div class="player">
+              <div class="vid"><canvas id="scene" width="1100" height="560"></canvas><span class="note">кадр условный</span></div>
+              <div class="ctl"><svg class="ic"><use href="#i-prev"/></svg><span class="pill"><canvas data-flat="#0b0b0b" width="40" height="40"></canvas></span><svg class="ic"><use href="#i-next"/></svg><span class="tm">33:41</span><span class="seek"><i style="width:72%"></i><span class="knob" style="left:72%"></span></span><span class="tm">46:10</span><svg class="ic"><use href="#i-vol"/></svg><svg class="ic"><use href="#i-subs"/></svg><svg class="ic"><use href="#i-gear"/></svg></div>
+            </div>
+          </div></div>
+          <figcaption class="cap">Плеер. Белая кнопка остаётся, треугольник в ней становится молью.</figcaption>
+        </figure>
+        <figure class="figure" style="margin:0">
+          <div class="frame"><div class="win" role="img" aria-label="Пустой экран cinemoth: стеклянная моль летит к пунктирной рамке, подпись «Перетащите фильм или папку»">
+            <div class="tb"><canvas data-flat="#f2f2f2" width="40" height="40"></canvas><svg class="ic"><use href="#i-dots"/></svg><svg class="ic"><use href="#i-side"/></svg><span class="mid">cinemoth</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+            <div class="player" style="grid-template-rows:1fr">
+              <div class="vid" style="margin:0"><canvas id="empty" width="1100" height="620"></canvas></div>
+            </div>
+          </div></div>
+          <figcaption class="cap">Пустое окно. Как в DMG anglebird: знак летит от себя к месту, куда класть файл.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="icon">
+      <div class="eyebrow">05 · Иконка</div>
+      <h2>Стеклянная моль на чёрной плитке</h2>
+      <p>Иконка программы — плитка Windows 11 с мягким скруглением, почти чёрная, в центре моль из стекла с тёплым ореолом. На 16 px остаётся плоский белый знак без зерна и свечения: там стекло превращается в кашу.</p>
+      <div class="cols">
+        <div class="figure"><div class="sizes" id="iconSizes"></div><div class="cap">128 · 64 · 48 · 32 · 16 px</div></div>
+        <div class="figure"><div class="task" aria-label="Иконка на панели задач"><span><svg viewBox="0 0 24 24"><path d="M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z"/></svg></span><span class="me"><canvas id="taskIcon" width="64" height="64"></canvas></span><span><svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></svg></span><span><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg></span></div><div class="cap">Панель задач, 24 px</div></div>
+      </div>
+    </section>
+
+    <section id="alt">
+      <div class="eyebrow">06 · Запасное имя</div>
+      <h2>Та же формула, другое существо</h2>
+      <p>Если моль не нравится, вот имя по тому же правилу: слово про свет и существо, которое смотрит вправо. Третий вариант, nightray (луч и скат), отброшен: на сетке скат выходит самолётом.</p>
+      <div class="alt">
+        <div><canvas id="altFish" width="1000" height="440"></canvas><div class="body"><h3>lampfish <span>«лэ́мпфиш»</span></h3><p><strong>lamp + fish.</strong> Глубоководная рыба носит свой фонарь в полной темноте. Плеер тоже приносит свет в тёмную комнату. Фонарь — одна клетка с ореолом, и это самый «anglebird» вариант: свет вместо цвета буквально. Тело рыбы смотрит вправо, как Play.</p><p>Это настоящее английское слово: так называют несколько глубоководных рыб. Рядом с anglebird звучит как родня: angler — удильщик. Знак читается лучше моли, но не работает как Play: на 16 px рыба превращается в пятно.</p></div></div>
+      </div>
+    </section>
+
+    <section id="check">
+      <div class="eyebrow">07 · Проверка имени</div>
+      <h2>Что уже называется так же</h2>
+      <p>Проверено поиском 25 октября 2026. Мерка прежняя: нет плеера или видеоприложения с таким именем. Домены и товарные знаки не проверялись.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Имя</th><th>Что нашлось</th><th>Плеер или видеоприложение</th></tr></thead>
+        <tbody>
+          <tr><td class="k">cinemoth</td><td>Cinemoth Podcast на YouTube, где трое обсуждают фильмы. Cinemoth Productions в Атланте, прокат кинотехники. Ник на IMDb.</td><td>нет</td></tr>
+          <tr><td class="k">lampfish</td><td>Lampfish, прокат света и грузовик для съёмок в Остине. Общее название нескольких глубоководных рыб.</td><td>нет</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Риск cinemoth:</strong> подкаст и прокат техники из той же киношной темы. Они маленькие и не программы, но в поиске будут рядом. У lampfish такого соседа нет.</p>
+    </section>
+
+    <section id="rules">
+      <div class="eyebrow">08 · Правила</div>
+      <h2>Можно и нельзя</h2>
+      <div class="dodont">
+        <div class="ok"><h3>Можно</h3><ul>
+          <li>Ставить моль в кнопку Play, в заголовок окна и на пустые экраны.</li>
+          <li>Переворачивать моль влево только как «назад» в истории или «предыдущий».</li>
+          <li>Подписывать сборки в капсуле: <code>beta</code>, номер версии.</li>
+          <li>Рисовать знак стеклом на больших картинках и плоским на маленьких.</li>
+        </ul></div>
+        <div class="no"><h3>Нельзя</h3><ul>
+          <li>Рисовать моль вне сетки, сглаживать углы, добавлять кривые.</li>
+          <li>Писать имя с прописной: только <code>cinemoth</code>.</li>
+          <li>Красить интерфейс в тёплый акцент. Он живёт только в стеклянном ореоле знака.</li>
+          <li>Ставить рядом знак anglebird: это разные семьи, у плеера свой знак.</li>
+        </ul></div>
+      </div>
+    </section>
+
+    <footer>cinemoth · раунд 5 · имя по формуле anglebird · знаки на странице рисуются из сеток в скрипте ниже</footer>
+  </main>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16.5 9.5a3.5 3.5 0 0 1 0 5"/></symbol>
+  <symbol id="i-subs" viewBox="0 0 24 24"><path d="M3 6h18v12H3zM7 14h4M13 14h4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3"/></symbol>
+  <symbol id="i-side" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM9 5v14"/></symbol>
+</svg>
+
+<script>
+// "#" стекло, "o" клетка-фонарь со своим ореолом (только у lampfish)
+const MOTH = [
+  "##..........",
+  "###.........",
+  "####........",
+  "#####.......",
+  "##..##......",
+  "##..###....#",
+  "########..#.",
+  "...#######..",
+  "########..#.",
+  "##..###....#",
+  "##..##......",
+  "#####.......",
+  "####........",
+  "###.........",
+  "##.........."
+];
+const FISH = [
+  "..........###.....",
+  ".........#...#....",
+  "........#.....#...",
+  "....######....o...",
+  "#..#########......",
+  "##.######.###.....",
+  ".###########......",
+  "##.#########.#....",
+  "#..##########.....",
+  "....#######......."
+];
+
+const WARM = { glow: "255,176,96", to: "255,214,170", field: "255,205,150" };
+const SEA = { glow: "90,210,255", to: "170,230,255", field: "140,210,240" };
+const FONT = '"Geist", "Helvetica Neue", Arial, sans-serif';
+const MONO = '"Geist Mono", Consolas, monospace';
+
+// Детерминированная случайность, чтобы картинка не менялась при перерисовке
+function rng(seed) { let s = seed; return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; }
+
+function cells(rows) {
+  const out = [];
+  rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch !== ".") out.push({ x, y, ch }); }));
+  return out;
+}
+
+// Стекло anglebird: плитка с градиентом, ореол, блик; "o" светится сильнее
+function glass(ctx, rows, x0, y0, c, tint, opts = {}) {
+  const R = rng(opts.seed || 7);
+  ctx.save();
+  cells(rows).forEach(({ x, y, ch }) => {
+    const lure = ch === "o";
+    if (lure) {
+      const cx = x0 + (x + 0.5) * c, cy = y0 + (y + 0.5) * c, h = ctx.createRadialGradient(cx, cy, 0, cx, cy, c * 4);
+      h.addColorStop(0, "rgba(255,226,170,0.55)"); h.addColorStop(1, "rgba(255,226,170,0)");
+      ctx.fillStyle = h; ctx.fillRect(cx - c * 4, cy - c * 4, c * 8, c * 8);
+    }
+    const dim = !lure && R() < 0.22 ? 0.6 : 1;
+    const size = c * (lure ? 0.9 : 0.8), ox = x0 + x * c + (c - size) / 2, oy = y0 + y * c + (c - size) / 2;
+    ctx.shadowColor = lure ? "rgba(255,210,140,1)" : `rgba(${tint.glow},0.75)`;
+    ctx.shadowBlur = c * (lure ? 2.2 : 0.6) * (opts.glowScale || 1);
+    const gr = ctx.createLinearGradient(ox, oy, ox + size, oy + size);
+    gr.addColorStop(0, `rgba(255,255,255,${dim})`);
+    gr.addColorStop(1, lure ? "rgba(255,214,150,1)" : `rgba(${tint.to},${0.75 * dim})`);
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.roundRect(ox, oy, size, size, size * 0.24); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(255,255,255,${0.35 * dim})`;
+    ctx.beginPath(); ctx.roundRect(ox + size * 0.16, oy + size * 0.08, size * 0.68, size * 0.12, size * 0.06); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function flat(ctx, rows, x0, y0, c, color) {
+  ctx.fillStyle = color;
+  cells(rows).forEach(({ x, y }) => ctx.fillRect(x0 + x * c, y0 + y * c, c + 0.4, c + 0.4));
+}
+
+function glyphSize(rows, c) { return [rows[0].length * c, rows.length * c]; }
+
+// Хвост из точек позади знака, как у колибри в DMG
+function trail(ctx, x1, y, len, c, tint, seed) {
+  const R = rng(seed);
+  for (let i = 0; i < 26; i++) {
+    const t = R(), x = x1 - t * len, dy = (R() - 0.5) * c * 3 * t;
+    ctx.fillStyle = `rgba(${tint.field},${0.5 * (1 - t)})`;
+    ctx.beginPath(); ctx.arc(x, y + dy, c * (0.12 + 0.12 * (1 - t)), 0, 7); ctx.fill();
+  }
+}
+
+function field(ctx, w, h, step, tint) {
+  ctx.fillStyle = `rgba(${tint.field},0.06)`;
+  for (let y = step / 2; y < h; y += step) for (let x = step / 2; x < w; x += step) { ctx.beginPath(); ctx.arc(x, y, 1.4, 0, 7); ctx.fill(); }
+}
+
+function grain(ctx, w, h, amount) {
+  const img = ctx.getImageData(0, 0, w, h), d = img.data, R = rng(3);
+  for (let i = 0; i < d.length; i += 4) { const n = (R() - 0.5) * amount; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  ctx.putImageData(img, 0, 0);
+}
+
+function hero() {
+  const cv = document.getElementById("hero"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  ctx.fillStyle = "#05070b"; ctx.fillRect(0, 0, W, H);
+  // Экран справа: тёплый свет, на который летит моль
+  const sx = 860, sy = 170, sw = 360, sh = 220;
+  const halo = ctx.createRadialGradient(sx + sw / 2, sy + sh / 2, 20, sx + sw / 2, sy + sh / 2, 520);
+  halo.addColorStop(0, "rgba(255,190,120,0.30)"); halo.addColorStop(1, "rgba(255,190,120,0)");
+  ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+  field(ctx, W, H, 22, WARM);
+  const sg = ctx.createLinearGradient(sx, sy, sx + sw, sy + sh);
+  sg.addColorStop(0, "#fff6ea"); sg.addColorStop(1, "#ffd9ad");
+  ctx.shadowColor = "rgba(255,176,96,0.9)"; ctx.shadowBlur = 80;
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.roundRect(sx, sy, sw, sh, 10); ctx.fill();
+  ctx.shadowBlur = 0;
+  const c = 22, [gw, gh] = glyphSize(MOTH, c), gx = 470, gy = 280 - gh / 2;
+  trail(ctx, gx - 10, gy + gh / 2, 380, c, WARM, 11);
+  glass(ctx, MOTH, gx, gy, c, WARM, { seed: 5 });
+  ctx.font = `500 54px ${FONT}`; ctx.fillStyle = "#e9f4ff";
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "-0.8px";
+  ctx.fillText("cinemoth", 70, H - 70);
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  ctx.font = `500 18px ${MONO}`; ctx.fillStyle = "rgba(170,195,225,0.62)";
+  ctx.fillText("плеер, на свет которого летят", 70, H - 36);
+  grain(ctx, W, H, 14);
+}
+
+function markGrid() {
+  const cv = document.getElementById("markGrid"), ctx = cv.getContext("2d");
+  const gw = MOTH[0].length, gh = MOTH.length, c = 34, ox = (cv.width - gw * c) / 2, oy = 70;
+  ctx.fillStyle = "#0d1016"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.strokeStyle = "rgba(170,195,225,0.12)"; ctx.lineWidth = 1;
+  for (let x = 0; x <= gw; x++) { ctx.beginPath(); ctx.moveTo(ox + x * c + 0.5, oy); ctx.lineTo(ox + x * c + 0.5, oy + gh * c); ctx.stroke(); }
+  for (let y = 0; y <= gh; y++) { ctx.beginPath(); ctx.moveTo(ox, oy + y * c + 0.5); ctx.lineTo(ox + gw * c, oy + y * c + 0.5); ctx.stroke(); }
+  ctx.fillStyle = "#e9f4ff";
+  cells(MOTH).forEach(({ x, y }) => ctx.fillRect(ox + x * c + 2, oy + y * c + 2, c - 3, c - 3));
+  // Пунктиром треугольник Play, в который вписаны крылья
+  ctx.strokeStyle = "rgba(255,201,138,0.8)"; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + 9.5 * c, oy + 7.5 * c); ctx.lineTo(ox, oy + gh * c); ctx.closePath(); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font = `500 16px ${MONO}`; ctx.fillStyle = "#8a98ab"; ctx.textAlign = "center";
+  for (let x = 0; x < gw; x += 2) ctx.fillText(String(x), ox + x * c + c / 2, oy - 18);
+  ctx.textAlign = "right";
+  for (let y = 0; y < gh; y += 2) ctx.fillText(String(y), ox - 14, oy + y * c + c / 2 + 6);
+  ctx.textAlign = "left";
+  ctx.fillText(`${gw} × ${gh} клеток · ${cells(MOTH).length} закрашено`, ox, oy + gh * c + 44);
+  ctx.fillStyle = "rgba(255,201,138,0.9)";
+  ctx.fillText("Play", ox + gw * c + 16, oy + 7.5 * c + 6);
+}
+
+function markSizes() {
+  const cv = document.getElementById("markSizes"), ctx = cv.getContext("2d"), W = cv.width;
+  ctx.fillStyle = "#05070b"; ctx.fillRect(0, 0, W, 320);
+  ctx.fillStyle = "#f2efe8"; ctx.fillRect(0, 320, W, 320);
+  const c = 17, [gw, gh] = glyphSize(MOTH, c);
+  glass(ctx, MOTH, 90, 160 - gh / 2, c, WARM, { seed: 9 });
+  flat(ctx, MOTH, 90, 480 - gh / 2, c, "#1a1610");
+  // Размеры: клетка 64/17, 32/17, 16/17 px
+  [[64, 600], [32, 760], [16, 860]].forEach(([px, x]) => {
+    const k = px / MOTH.length;
+    flat(ctx, MOTH, x, 160 - (MOTH.length * k) / 2, k, "#f2f2f2");
+    flat(ctx, MOTH, x, 480 - (MOTH.length * k) / 2, k, "#1a1610");
+  });
+}
+
+function lockup(id, paper) {
+  const cv = document.getElementById(id), ctx = cv.getContext("2d");
+  const fs = 96, c = fs * 0.066, [gw, gh] = glyphSize(MOTH, c), ink = paper ? "#1a1610" : "#e9f4ff";
+  ctx.fillStyle = paper ? "#f2efe8" : "#05070b"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.font = `500 ${fs}px ${FONT}`;
+  if ("letterSpacing" in ctx) ctx.letterSpacing = `${-0.015 * fs}px`;
+  const nameW = ctx.measureText("cinemoth").width, capH = ctx.measureText("H").actualBoundingBoxAscent;
+  ctx.font = `500 ${fs * 0.4}px ${FONT}`;
+  const pillW = ctx.measureText("beta").width + fs * 0.4 * 0.9;
+  const total = gw + fs * 0.32 + nameW + fs * 0.27 + pillW, x0 = (cv.width - total) / 2, cy = cv.height / 2;
+  if (paper) flat(ctx, MOTH, x0, cy - gh / 2, c, ink); else glass(ctx, MOTH, x0, cy - gh / 2, c, WARM, { seed: 4 });
+  const nx = x0 + gw + fs * 0.32;
+  ctx.fillStyle = ink; ctx.font = `500 ${fs}px ${FONT}`;
+  if ("letterSpacing" in ctx) ctx.letterSpacing = `${-0.015 * fs}px`;
+  ctx.fillText("cinemoth", nx, cy + capH / 2);
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  const ps = fs * 0.4, px = nx + nameW + fs * 0.27, ph = ps * 1.6;
+  ctx.strokeStyle = ink; ctx.lineWidth = fs * 0.04;
+  ctx.beginPath(); ctx.roundRect(px, cy - ph / 2, pillW, ph, fs * 0.15); ctx.stroke();
+  ctx.font = `500 ${ps}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("beta", px + pillW / 2, cy + ps * 0.04);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+}
+
+function scene() {
+  const cv = document.getElementById("scene"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#0E1A2E"); g.addColorStop(0.5, "#284466"); g.addColorStop(0.66, "#E59C67"); g.addColorStop(0.68, "#141820"); g.addColorStop(1, "#07080A");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const r = ctx.createRadialGradient(W * 0.7, H * 0.64, 0, W * 0.7, H * 0.64, W * 0.3);
+  r.addColorStop(0, "rgba(245,194,122,.9)"); r.addColorStop(1, "rgba(245,194,122,0)");
+  ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
+}
+
+function emptyState() {
+  const cv = document.getElementById("empty"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  ctx.fillStyle = "#0b0b0c"; ctx.fillRect(0, 0, W, H);
+  field(ctx, W, H, 26, WARM);
+  const fx = 620, fy = 170, fw = 340, fh = 200;
+  const halo = ctx.createRadialGradient(fx + fw / 2, fy + fh / 2, 10, fx + fw / 2, fy + fh / 2, 320);
+  halo.addColorStop(0, "rgba(255,190,120,0.16)"); halo.addColorStop(1, "rgba(255,190,120,0)");
+  ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(242,242,242,0.5)"; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.roundRect(fx, fy, fw, fh, 14); ctx.stroke(); ctx.setLineDash([]);
+  const c = 16, [gw, gh] = glyphSize(MOTH, c), gx = 330, gy = fy + fh / 2 - gh / 2;
+  trail(ctx, gx - 6, gy + gh / 2, 240, c, WARM, 21);
+  glass(ctx, MOTH, gx, gy, c, WARM, { seed: 2 });
+  ctx.font = `500 30px ${FONT}`; ctx.fillStyle = "#f2f2f2"; ctx.textAlign = "center";
+  ctx.fillText("Перетащите фильм или папку", W / 2, 470);
+  ctx.font = `400 22px ${FONT}`; ctx.fillStyle = "#8f8f8f";
+  ctx.fillText("или нажмите Ctrl+O", W / 2, 510);
+  ctx.textAlign = "left";
+}
+
+function icon(size) {
+  const cv = document.createElement("canvas"), k = 2;
+  cv.width = cv.height = size * k; cv.style.width = size + "px";
+  const ctx = cv.getContext("2d"), S = size * k;
+  const pad = S * 0.06, r = S * 0.22;
+  const bg = ctx.createLinearGradient(0, 0, 0, S);
+  bg.addColorStop(0, "#1b1712"); bg.addColorStop(1, "#08070a");
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(pad, pad, S - 2 * pad, S - 2 * pad, r); ctx.fill();
+  ctx.strokeStyle = "rgba(255,230,200,0.14)"; ctx.lineWidth = Math.max(1, S / 128); ctx.stroke();
+  const c = (S * 0.6) / MOTH.length, [gw, gh] = glyphSize(MOTH, c), gx = (S - gw) / 2, gy = (S - gh) / 2;
+  if (size >= 32) glass(ctx, MOTH, gx, gy, c, WARM, { seed: 6, glowScale: size >= 64 ? 1 : 0.5 });
+  else flat(ctx, MOTH, Math.round(gx), Math.round(gy), c, "#f6efe6");
+  return cv;
+}
+
+function iconSizes() {
+  document.getElementById("iconSizes").replaceChildren(...[128, 64, 48, 32, 16].map(s => icon(s)));
+  const t = document.getElementById("taskIcon"), src = icon(24);
+  t.getContext("2d").drawImage(src, 0, 0, 64, 64);
+}
+
+function altCard(id, rows, tint, name, c) {
+  const cv = document.getElementById(id), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  ctx.fillStyle = "#05070b"; ctx.fillRect(0, 0, W, H);
+  field(ctx, W, H, 22, tint);
+  const [gw, gh] = glyphSize(rows, c), gx = W / 2 - gw / 2 + 60, gy = H / 2 - gh / 2 - 30;
+  trail(ctx, gx - 8, gy + gh / 2, 260, c, tint, 31);
+  glass(ctx, rows, gx, gy, c, tint, { seed: 12 });
+  ctx.font = `500 34px ${FONT}`; ctx.fillStyle = "#e9f4ff";
+  ctx.fillText(name, 40, H - 36);
+  grain(ctx, W, H, 12);
+}
+
+function flats() {
+  document.querySelectorAll("canvas[data-flat]").forEach(cv => {
+    const ctx = cv.getContext("2d"), c = Math.min(cv.width / MOTH[0].length, cv.height / MOTH.length);
+    const [gw, gh] = glyphSize(MOTH, c);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    flat(ctx, MOTH, (cv.width - gw) / 2, (cv.height - gh) / 2, c, cv.dataset.flat);
+  });
+}
+
+function draw() {
+  hero(); markGrid(); markSizes(); lockup("lockGlass", false); lockup("lockPaper", true);
+  scene(); emptyState(); iconSizes(); flats();
+  altCard("altFish", FISH, SEA, "lampfish", 30);
+}
+draw();
+if (document.fonts) document.fonts.ready.then(draw);
+</script>
+</body>
+</html>
