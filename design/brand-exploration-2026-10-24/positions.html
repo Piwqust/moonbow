@@ -1,0 +1,592 @@
+<title>Три позиции для плеера</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Rubik:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Permanent+Marker&family=Wix+Madefor+Display:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,700,100&display=swap">
+<style>
+/* Layout: specimen-book frame; each position is a band with its own brand world, mockups drawn on the real Lumen layout */
+:root{
+  --bg:#F0F0EE; --fg:#121212; --mut:#5D5D59; --line:#D8D8D3; --card:#FAFAF8;
+  --f-disp:"Wix Madefor Display","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0E0E0E;--fg:#ECECE8;--mut:#9A9A94;--line:#262626;--card:#161616;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0E0E0E;--fg:#ECECE8;--mut:#9A9A94;--line:#262626;--card:#161616;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-disp);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+a{color:inherit;text-underline-offset:3px}
+:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:4px}
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.lbl{font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.72}
+
+.intro{padding-block:64px 44px;display:grid;gap:22px}
+.intro h1{font-size:clamp(38px,6.2vw,78px);font-weight:800;line-height:.98;letter-spacing:-.035em;max-width:14ch}
+.intro .lead{font-size:19px;max-width:62ch}
+.fix{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
+.fix>div{min-width:0;padding:18px 20px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:grid;gap:6px}
+.fix b{font-size:15px}
+.fix p{font-size:15px;color:var(--mut)}
+.jump{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.jump a{display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center;padding:14px;border-radius:14px;text-decoration:none;transition:translate .25s cubic-bezier(.2,.7,.2,1)}
+.jump a:hover{translate:0 -3px}
+.jump a:active{translate:0 0}
+.jump svg{width:56px;height:56px}
+.jump b{display:block;font-size:20px;line-height:1.1}
+.jump small{font-size:13px;opacity:.75}
+
+/* position band */
+.band{background:var(--g);color:var(--i);padding-block:76px}
+.band .wrap{display:grid;gap:44px}
+.top{display:grid;grid-template-columns:auto 1fr;gap:32px;align-items:center}
+.top .appicon{width:clamp(96px,13vw,168px);height:auto}
+.pos-lbl{font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--m)}
+.pos-h{font-family:var(--fu);font-weight:600;font-size:clamp(30px,4.4vw,54px);line-height:1.02;letter-spacing:-.03em;margin-top:8px;max-width:18ch}
+.one{margin-top:14px;font-family:var(--fu);font-size:19px;color:var(--m);max-width:56ch}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.grid3>div{min-width:0;border-top:1px solid var(--l);padding-top:14px;display:grid;gap:6px;align-content:start;font-family:var(--fu)}
+.grid3 .k{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--m)}
+.grid3 p{font-size:15.5px}
+.grid3 ul{margin:0;padding-left:18px;font-size:15px;display:grid;gap:4px}
+.voice{display:flex;flex-wrap:wrap;gap:8px}
+.voice span{font-family:var(--fu);font-size:14px;padding:8px 12px;border-radius:var(--vr,8px);background:var(--chip);color:var(--i)}
+
+/* mockup frame: everything inside scales with the frame width (1em = 1/120 of it, 12px at 1440) */
+.shots{display:grid;gap:22px}
+.shot{margin:0;display:grid;gap:10px}
+.shot figcaption{font-family:var(--fu);font-size:14px;color:var(--m);max-width:80ch}
+.frame{container-type:inline-size;border-radius:12px;overflow:hidden;box-shadow:0 40px 90px -50px rgba(0,0,0,.8)}
+.win{font-size:calc(100cqw / 120);aspect-ratio:16/10;max-width:100%;display:grid;grid-template-rows:3.33em 1fr;background:var(--wb);color:var(--wt);font-family:var(--fu);overflow:hidden;position:relative}
+.win svg.ic{width:1.67em;height:1.67em;fill:none;stroke:currentColor;stroke-width:var(--sw,1.6);stroke-linecap:var(--cap,round);stroke-linejoin:round;flex:none}
+.tb{display:flex;align-items:center;gap:1.6em;padding:0 1.6em;background:var(--tbg);border-bottom:1px solid var(--wl);font-size:1.17em}
+.tb .logo{width:1.6em;height:1.6em}
+.tb .mid{flex:1;text-align:center;color:var(--wm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb .wc{display:flex;gap:2.2em;color:var(--wm);font-size:.95em}
+.tb .crumb{display:flex;align-items:center;gap:.6em;color:var(--wm)}
+.tb .crumb .ic{width:1.3em;height:1.3em}
+.app{display:grid;grid-template-columns:16em 1fr;min-height:0}
+.nav{margin:.7em;border-radius:.7em;background:var(--nb);padding:.6em;display:grid;gap:.25em;align-content:start;backdrop-filter:blur(20px)}
+.nav a{display:flex;align-items:center;gap:1em;padding:.8em 1em;border-radius:.6em;color:var(--wt);text-decoration:none;font-size:1.17em;pointer-events:none}
+.nav a .ic{width:1.45em;height:1.45em;color:var(--wm)}
+.nav a.on{background:var(--sel)}
+.nav a.on .ic{color:var(--wt)}
+.main{min-width:0;display:grid;grid-template-rows:auto 1fr;min-height:0}
+.hdr{display:flex;align-items:center;gap:1.6em;padding:1.6em 2.4em;border-bottom:1px solid var(--wl)}
+.hdr .t{font-size:1.25em;font-weight:500;flex:1}
+.hdr .ic{color:var(--wm)}
+.search{display:flex;align-items:center;gap:.8em;width:27em;padding:.65em 1em;border-radius:.6em;background:var(--srch);color:var(--wm);font-size:1.1em}
+.search .ic{width:1.3em;height:1.3em}
+.cnt{padding:2.4em;display:grid;gap:2.6em;align-content:start;min-height:0;overflow:hidden}
+.sec h4{margin:0 0 1.1em;font-weight:500;font-size:1.6em;color:var(--wt);display:flex;align-items:center;gap:.4em}
+.sec h4 small{font-size:.6em;color:var(--wm);font-weight:400;margin-left:.6em}
+.row{display:grid;gap:1.6em}
+.c{min-width:0}
+.c .th{position:relative;border-radius:var(--cr,1em);background:var(--pic);aspect-ratio:16/9;overflow:hidden}
+.c b{display:block;margin-top:.7em;font-weight:500;font-size:1.25em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c small{display:block;color:var(--wm);font-size:1.05em;margin-top:.15em}
+.c .pr{position:absolute;left:0;bottom:0;height:.3em;background:var(--acc)}
+.c .pr::after{content:"";position:absolute;left:100%;right:-999em;top:0;bottom:0;background:rgba(255,255,255,.18)}
+.dur{position:absolute;right:.6em;bottom:.7em;font-size:1em;padding:.15em .45em;border-radius:.35em;background:rgba(0,0,0,.72);color:#fff;font-variant-numeric:tabular-nums}
+
+/* player */
+.player{display:grid;grid-template-rows:1fr auto;min-height:0}
+.vid{position:relative;margin:0 .8em;background:var(--pic);overflow:hidden}
+.ctl{display:flex;align-items:center;gap:1.8em;padding:1.3em 2.4em 1.5em;font-size:1.17em}
+.ctl .ic{width:1.5em;height:1.5em;color:var(--wt)}
+.pill{display:grid;place-items:center;width:4.6em;height:2.4em;border-radius:.5em;background:var(--pillbg);color:var(--pillfg)}
+.pill svg{width:1.3em;height:1.3em}
+.tm{color:var(--wm);font-variant-numeric:tabular-nums;min-width:2.8em}
+.seek{position:relative;flex:1;height:2em;border-radius:.3em;background:var(--seekbg)}
+.seek i{position:absolute;left:0;top:0;bottom:0;border-radius:.3em;background:var(--seekfg)}
+.seek .knob{position:absolute;top:-.25em;bottom:-.25em;width:.3em;border-radius:.2em;background:var(--wt)}
+.vol{width:7em;height:1.4em;background:linear-gradient(to top right,var(--wt) 50%,transparent 50%);clip-path:polygon(0 100%,100% 0,100% 100%);opacity:.9}
+.note{position:absolute;left:1em;bottom:.8em;font-family:var(--f-mono);font-size:.9em;letter-spacing:.06em;color:#fff;opacity:.5}
+
+/* app icon sheet */
+.kit{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px}
+.kit>section{min-width:0;border:1px solid var(--l);border-radius:14px;padding:18px;display:grid;gap:14px;align-content:start}
+.kit h3{font-family:var(--f-mono);font-weight:400;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--m)}
+.sizes{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.sizes svg{display:block}
+.task{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#202020;width:max-content;max-width:100%}
+.task span{width:30px;height:30px;display:grid;place-items:center;border-radius:6px}
+.task span.me{background:rgba(255,255,255,.08);position:relative}
+.task span.me::after{content:"";position:absolute;bottom:-5px;left:11px;width:8px;height:3px;border-radius:2px;background:#9ab}
+.task svg{width:24px;height:24px}
+.sw{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.sw div{border-radius:8px;padding:30px 8px 7px;font-family:var(--f-mono);font-size:11px;line-height:1.3;border:1px solid var(--l)}
+.sw span{display:block;opacity:.72}
+.ty .big{font-size:40px;line-height:1}
+.ty p{font-family:var(--fu);font-size:14px;color:var(--m)}
+.risk{font-family:var(--fu);font-size:14.5px;color:var(--m);padding:14px 16px;border-left:2px solid var(--acc2,var(--i));max-width:84ch}
+.risk b{color:var(--i)}
+
+/* ===== HOLLO: the Lumen layout, refined; monochrome; Mica; the white pill is the brand ===== */
+#hollo{--g:#0B0B0C;--i:#F2F2F2;--m:#8F8F8F;--l:#232325;--fu:"Onest",system-ui,sans-serif;--chip:#1A1A1C;--vr:999px;
+  --wb:#0E0E0E;--wt:#F2F2F2;--wm:#8F8F8F;--wl:#1C1C1C;--tbg:#141414;--nb:rgba(38,38,42,.55);--sel:rgba(255,255,255,.09);--srch:#161616;--acc:#fff;
+  --pillbg:#fff;--pillfg:#0B0B0B;--seekbg:#141414;--seekfg:#2A2A2A;--cr:1em}
+#hollo .win{background:radial-gradient(60% 80% at 0% 0%,#1B1E26 0%,#0E0E0E 45%)}
+#hollo .cont .th{box-shadow:0 0 0 1px rgba(255,255,255,.06)}
+.hollo-hero-pill{display:inline-flex;align-items:center;gap:.7em;padding:.7em 1.3em;border-radius:.6em;background:#fff;color:#0B0B0B;font-weight:600;font-size:1.15em}
+.hollo-hero-pill svg{width:1.1em;height:1.1em}
+
+/* ===== SNUG: home cinema; warm dark; honey ===== */
+#snug{--g:#15110E;--i:#F5ECE1;--m:#A79886;--l:#2C241E;--fu:"Rubik",system-ui,sans-serif;--chip:#221B16;--vr:10px;--acc2:#E9B04F;
+  --wb:#15110E;--wt:#F5ECE1;--wm:#A79886;--wl:#241D18;--tbg:#120F0C;--nb:#1C1713;--sel:rgba(233,176,79,.14);--srch:#1E1814;--acc:#E9B04F;
+  --pillbg:#E9B04F;--pillfg:#15110E;--seekbg:#221B16;--seekfg:#E9B04F;--cr:.8em}
+#snug .nav a.on .ic{color:#E9B04F}
+.hero{position:relative;height:25em;margin:-2.4em -2.4em 0;padding:0 2.4em 2.6em;display:flex;flex-direction:column;justify-content:flex-end;gap:.9em;background:linear-gradient(90deg,rgba(21,17,14,.96) 0%,rgba(21,17,14,.55) 45%,rgba(21,17,14,0) 70%),linear-gradient(0deg,#15110E 0%,rgba(21,17,14,0) 40%),var(--hpic)}
+.hero .kick{font-size:1.1em;color:#E9B04F;font-weight:500;letter-spacing:.02em}
+.hero h5{margin:0;font-family:"Fraunces",Georgia,serif;font-variation-settings:"SOFT" 100;font-weight:700;font-size:4.4em;line-height:.95;letter-spacing:-.02em}
+.hero p{font-size:1.2em;color:#D8CBBB;max-width:36em}
+.hero .btns{display:flex;gap:1em;margin-top:.5em}
+.btn{display:inline-flex;align-items:center;gap:.6em;padding:.75em 1.4em;border-radius:.6em;font-weight:500;font-size:1.15em}
+.btn svg{width:1.05em;height:1.05em}
+.btn.p{background:#E9B04F;color:#15110E}
+.btn.s{background:rgba(245,236,225,.12);color:#F5ECE1}
+.posters .c .th{aspect-ratio:2/3;display:flex;flex-direction:column;justify-content:flex-end;padding:1em;border-radius:.7em}
+.posters .c .th em{font-style:normal;font-family:"Fraunces",Georgia,serif;font-variation-settings:"SOFT" 100;font-weight:700;font-size:1.55em;line-height:1;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.5)}
+.posters .c .th u{text-decoration:none;font-size:.85em;color:rgba(255,255,255,.75);margin-top:.4em;letter-spacing:.08em;text-transform:uppercase}
+.nextcard{position:absolute;right:2em;bottom:2em;display:grid;grid-template-columns:11em 1fr;gap:1.2em;align-items:center;width:36em;padding:1em;border-radius:1em;background:rgba(21,17,14,.88);backdrop-filter:blur(12px);border:1px solid rgba(233,176,79,.25)}
+.nextcard .th{aspect-ratio:16/9;border-radius:.6em;background:var(--pic2)}
+.nextcard small{color:#E9B04F;font-size:1.05em}
+.nextcard b{display:block;font-size:1.35em;font-weight:500;margin:.2em 0 .5em}
+.nextcard>span{display:block;min-width:0}
+.nextcard .th{display:block}
+.nextcard .bar{display:block;height:.35em;border-radius:.2em;background:#3A2F25;overflow:hidden}
+.nextcard .bar i{display:block;width:62%;height:100%;background:#E9B04F}
+
+/* ===== GAFFA: power; matte black; tape labels; mono signal line ===== */
+#gaffa{--g:#0A0A0A;--i:#EDEDED;--m:#8A8A8A;--l:#222;--fu:"IBM Plex Sans",system-ui,sans-serif;--chip:#161616;--vr:2px;--acc2:#E4E0D4;--sw:1.5;--cap:square;
+  --wb:#0A0A0A;--wt:#EDEDED;--wm:#8A8A8A;--wl:#1E1E1E;--tbg:#0F0F0F;--nb:#121212;--sel:#1F1F1F;--srch:#141414;--acc:#E4E0D4;
+  --pillbg:#EDEDED;--pillfg:#0A0A0A;--seekbg:#161616;--seekfg:#3A3A3A;--cr:.2em}
+#gaffa .win svg.ic{stroke-linecap:square;stroke-linejoin:miter;stroke-width:1.5}
+.tape{display:inline-block;padding:.35em 1.1em .3em;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(0,0,0,.06)),#E4E0D4;color:#121212;font-family:"Permanent Marker","Comic Sans MS",cursive;letter-spacing:.04em;clip-path:polygon(0 8%,3% 0,6% 10%,9% 2%,12% 0,100% 0,97% 12%,100% 25%,98% 40%,100% 55%,97% 72%,100% 88%,98% 100%,0 100%,2% 86%,0 70%,3% 52%,0 36%,2% 20%)}
+.sig{font-family:"IBM Plex Mono",monospace;font-size:1.02em;color:#9A9A9A;padding:0 2.4em 1em;display:flex;gap:1.4em;flex-wrap:nowrap;white-space:nowrap;overflow:hidden}
+.sig b{color:#EDEDED;font-weight:500}
+.palette{position:absolute;left:50%;top:9%;translate:-50% 0;width:56em;background:rgba(14,14,14,.96);border:1px solid #2A2A2A;border-radius:.4em;box-shadow:0 2em 5em rgba(0,0,0,.7);font-size:1.1em;overflow:hidden}
+.palette .q{display:flex;align-items:center;gap:.8em;padding:1em 1.2em;border-bottom:1px solid #222;color:#EDEDED}
+.palette .q span{color:#666}
+.palette .q kbd{margin-left:auto}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:.85em;padding:.1em .45em;border:1px solid #3A3A3A;border-radius:.25em;color:#AAA}
+.palette .it{display:flex;align-items:center;gap:1em;padding:.75em 1.2em;color:#CFCFCF}
+.palette .it.on{background:#1C1C1C;color:#fff;box-shadow:inset .2em 0 0 #E4E0D4}
+.palette .it .v{margin-left:auto;font-family:"IBM Plex Mono",monospace;color:#8A8A8A;font-size:.9em}
+.palette .grp{padding:.7em 1.2em .3em;font-family:"IBM Plex Mono",monospace;font-size:.8em;letter-spacing:.1em;color:#666}
+.set{padding:2.2em 2.6em;display:grid;gap:2em;align-content:start}
+.set .mode{display:flex;align-items:center;gap:1.4em}
+.seg{display:inline-flex;border:1px solid #2E2E2E;border-radius:.3em;overflow:hidden;font-size:1.1em}
+.seg span{padding:.5em 1.2em;color:#8A8A8A}
+.seg span.on{background:#EDEDED;color:#0A0A0A}
+.grp2{display:grid;gap:.2em}
+.grp2 .tape{font-size:1.25em;justify-self:start;margin-bottom:.8em}
+.opt{display:grid;grid-template-columns:1fr auto;gap:2em;align-items:center;padding:1em 0;border-bottom:1px solid #1C1C1C;font-size:1.15em}
+.opt small{display:block;color:#7A7A7A;font-size:.85em;margin-top:.2em}
+.opt .val{font-family:"IBM Plex Mono",monospace;color:#CFCFCF;font-size:.92em}
+.tg{width:2.8em;height:1.5em;border-radius:.75em;background:#2A2A2A;position:relative}
+.tg::after{content:"";position:absolute;top:.2em;left:.2em;width:1.1em;height:1.1em;border-radius:50%;background:#777}
+.tg.on{background:#EDEDED}
+.tg.on::after{left:auto;right:.2em;background:#0A0A0A}
+
+/* compare */
+.cmp{padding-block:68px;display:grid;gap:26px}
+.cmp h2{font-size:clamp(28px,4vw,46px);font-weight:800;letter-spacing:-.025em;line-height:1.04}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:15px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+td b{font-size:17px}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pick>div{min-width:0;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:grid;gap:10px;align-content:start}
+.pick h3{font-size:20px}
+.pick p,.pick li{font-size:15px;color:var(--mut)}
+.pick b{color:var(--fg)}
+.pick ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.foot{padding-block:26px 48px;color:var(--mut);font-size:14px;border-top:1px solid var(--line)}
+
+@media (max-width:900px){
+  .grid3{grid-template-columns:1fr}
+  .kit{grid-template-columns:1fr}
+  .jump{grid-template-columns:1fr}
+  .fix{grid-template-columns:1fr}
+}
+@media (max-width:620px){
+  .top{grid-template-columns:1fr}
+  .pick{grid-template-columns:1fr}
+  .band{padding-block:56px}
+}
+@media (prefers-reduced-motion:reduce){.jump a{transition:none}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+  <!-- UI icons, 24 grid, stroke inherits per brand -->
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17V5l10-2v12M9 17a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0M19 15a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0"/></symbol>
+  <symbol id="i-net" viewBox="0 0 24 24"><path d="M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9M4.6 4.6a10.5 10.5 0 0 0 0 14.8M19.4 4.6a10.5 10.5 0 0 1 0 14.8"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h16M4 12h11M4 18h7M16 15v6l5-3z"/></symbol>
+  <symbol id="i-recent" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4M12 8v4l3 2"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M5 11a6 6 0 1 0 12 0a6 6 0 1 0-12 0M20 20l-4.5-4.5"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16.5 9.5a3.5 3.5 0 0 1 0 5"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4"/></symbol>
+  <symbol id="i-subs" viewBox="0 0 24 24"><path d="M3 6h18v12H3zM7 14h4M13 14h4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3"/></symbol>
+  <symbol id="i-side" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM9 5v14"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></symbol>
+  <symbol id="i-cmd" viewBox="0 0 24 24"><path d="M4 6l6 6-6 6M12 18h8"/></symbol>
+
+  <!-- HOLLO app icon: a black disc with a play-shaped hollow, light comes through -->
+  <radialGradient id="h-disc" cx="36%" cy="28%" r="80%"><stop offset="0" stop-color="#55565C"/><stop offset=".38" stop-color="#1C1C20"/><stop offset="1" stop-color="#050506"/></radialGradient>
+  <linearGradient id="h-light" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#D6E2FF"/></linearGradient>
+  <linearGradient id="h-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".08"/></linearGradient>
+  <filter id="h-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+  <filter id="sh" x="-30%" y="-30%" width="160%" height="170%"><feGaussianBlur stdDeviation="7"/></filter>
+  <symbol id="app-hollo" viewBox="0 0 256 256">
+    <ellipse cx="128" cy="236" rx="80" ry="10" fill="#000" opacity=".45" filter="url(#sh)"/>
+    <circle cx="128" cy="124" r="104" fill="url(#h-disc)"/>
+    <circle cx="128" cy="124" r="103" fill="none" stroke="url(#h-rim)" stroke-width="2"/>
+    <path d="M108 84L170 124L108 164Z" fill="#CFE0FF" stroke="#CFE0FF" stroke-width="26" stroke-linejoin="round" opacity=".55" filter="url(#h-blur)"/>
+    <path d="M108 84L170 124L108 164Z" fill="url(#h-light)" stroke="url(#h-light)" stroke-width="22" stroke-linejoin="round"/>
+    <path d="M102 79L113 86" stroke="#000" stroke-opacity=".25" stroke-width="3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="app-hollo-s" viewBox="0 0 256 256">
+    <circle cx="128" cy="128" r="112" fill="url(#h-disc)"/>
+    <path d="M106 84L172 128L106 172Z" fill="#fff" stroke="#fff" stroke-width="26" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- SNUG app icon: three posters on a shelf, the front one glows warm -->
+  <linearGradient id="s-a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD27A"/><stop offset=".55" stop-color="#E9902F"/><stop offset="1" stop-color="#B8481F"/></linearGradient>
+  <linearGradient id="s-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6E3A2C"/><stop offset="1" stop-color="#2C1712"/></linearGradient>
+  <linearGradient id="s-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E4A5A"/><stop offset="1" stop-color="#1A1F27"/></linearGradient>
+  <linearGradient id="s-gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <symbol id="app-snug" viewBox="0 0 256 256">
+    <ellipse cx="128" cy="238" rx="86" ry="10" fill="#000" opacity=".45" filter="url(#sh)"/>
+    <rect x="44" y="50" width="104" height="150" rx="18" fill="url(#s-c)" transform="rotate(-13 96 125)"/>
+    <rect x="108" y="46" width="104" height="150" rx="18" fill="url(#s-b)" transform="rotate(11 160 121)"/>
+    <rect x="72" y="58" width="112" height="166" rx="20" fill="url(#s-a)"/>
+    <rect x="72" y="58" width="112" height="166" rx="20" fill="url(#s-gl)"/>
+    <path d="M114 118L150 141L114 164Z" fill="#fff" stroke="#fff" stroke-width="14" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="app-snug-s" viewBox="0 0 256 256">
+    <rect x="40" y="44" width="100" height="160" rx="20" fill="url(#s-b)" transform="rotate(-10 90 124)"/>
+    <rect x="64" y="40" width="128" height="184" rx="24" fill="url(#s-a)"/>
+    <path d="M110 104L156 132L110 160Z" fill="#fff" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- GAFFA app icon: a roll of gaffer tape, a torn strip with a marker play -->
+  <radialGradient id="g-roll" cx="40%" cy="32%" r="78%"><stop offset="0" stop-color="#3A3A3A"/><stop offset=".5" stop-color="#1A1A1A"/><stop offset="1" stop-color="#080808"/></radialGradient>
+  <linearGradient id="g-core" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D9B57E"/><stop offset="1" stop-color="#9B7444"/></linearGradient>
+  <linearGradient id="g-strip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F4F1E8"/><stop offset="1" stop-color="#D3CEC0"/></linearGradient>
+  <symbol id="app-gaffa" viewBox="0 0 256 256">
+    <ellipse cx="124" cy="236" rx="84" ry="10" fill="#000" opacity=".5" filter="url(#sh)"/>
+    <circle cx="124" cy="122" r="102" fill="url(#g-roll)"/>
+    <circle cx="124" cy="122" r="88" fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="2"/>
+    <circle cx="124" cy="122" r="74" fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="2"/>
+    <circle cx="124" cy="122" r="101" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="2"/>
+    <circle cx="124" cy="122" r="46" fill="url(#g-core)"/>
+    <circle cx="124" cy="122" r="34" fill="#0A0A0A"/>
+    <path d="M150 168L236 150L240 168L232 174L244 182L236 190L244 198L156 214Z" fill="url(#g-strip)"/>
+    <path d="M186 172L214 184L188 198Z" fill="none" stroke="#141414" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="app-gaffa-s" viewBox="0 0 256 256">
+    <circle cx="128" cy="128" r="112" fill="url(#g-roll)"/>
+    <circle cx="128" cy="128" r="52" fill="url(#g-core)"/>
+    <circle cx="128" cy="128" r="38" fill="#0A0A0A"/>
+    <path d="M118 112L146 128L118 144Z" fill="#F4F1E8" stroke="#F4F1E8" stroke-width="8" stroke-linejoin="round"/>
+  </symbol>
+</defs>
+</svg>
+
+<header class="wrap intro">
+  <p class="lbl">Ребрендинг плеера · раунд 4 · 24 октября 2026</p>
+  <h1>Три позиции для плеера</h1>
+  <p class="lead">В прошлых раундах я сначала придумывал красивое слово и метафору, а позиционирование выводил из функций. Здесь наоборот: сначала место на рынке и человек, ради которого плеер существует. Имя, знак и интерфейс идут уже за этим.</p>
+  <div class="fix">
+    <div><b>Что поменялось в подходе</b><p>Позиция отвечает на вопрос, кому этот плеер и что он заменяет. Имя стало коротким звуком или простым словом, как вы выбрали. Значки нарисованы как предметы, в стиле Windows 11, а не плоскими символами.</p></div>
+    <div><b>Экраны настоящие</b><p>Наброски собраны на раскладке, которая есть сейчас: шапка окна, боковое меню, сетка карточек, нижняя панель с белой кнопкой Play. Видно, что меняется в каждом направлении, а что остаётся.</p></div>
+  </div>
+  <nav class="jump" aria-label="Направления">
+    <a href="#hollo" style="background:#0B0B0C;color:#F2F2F2"><svg aria-hidden="true"><use href="#app-hollo-s"/></svg><span><b style="font-family:Onest,sans-serif;font-weight:600">hollo</b><small>Красивый плеер для Windows</small></span></a>
+    <a href="#snug" style="background:#15110E;color:#F5ECE1"><svg aria-hidden="true"><use href="#app-snug-s"/></svg><span><b style="font-family:Fraunces,Georgia,serif;font-variation-settings:'SOFT' 100">Snug</b><small>Свой кинотеатр без сервера</small></span></a>
+    <a href="#gaffa" style="background:#0A0A0A;color:#EDEDED"><svg aria-hidden="true"><use href="#app-gaffa-s"/></svg><span><b style="font-family:'Permanent Marker',cursive;font-weight:400">GAFFA</b><small>Вся мощь, без хлама</small></span></a>
+  </nav>
+</header>
+
+<main>
+<!-- =================== HOLLO =================== -->
+<section class="band" id="hollo" aria-labelledby="h-hollo">
+  <div class="wrap">
+    <div class="top">
+      <svg class="appicon" viewBox="0 0 256 256" role="img" aria-label="Значок hollo: чёрный диск с отверстием в форме Play"><use href="#app-hollo"/></svg>
+      <div>
+        <p class="pos-lbl">Позиция 1 · hollo · «хо́лло»</p>
+        <h2 class="pos-h" id="h-hollo">Красивый плеер для Windows</h2>
+        <p class="one">У Mac есть IINA и Infuse. У Windows есть VLC. hollo закрывает этот пробел: плеер, за который не стыдно, и который при этом играет всё.</p>
+      </div>
+    </div>
+    <div class="grid3">
+      <div><span class="k">Для кого</span><p>Для тех, кто выбирает программы по ощущению и замечает, когда вещь сделана аккуратно. Смотрят своё кино и сериалы, слушают свою музыку.</p></div>
+      <div><span class="k">Что заменяет</span><p>VLC с конусом и меню из 2005 года, PotPlayer с рекламой и сотней пунктов, «Кино и ТВ», которое почти ничего не умеет.</p></div>
+      <div><span class="k">На чём держится</span><ul><li>окно открывается сразу на первом кадре, без мигания</li><li>играет всё, что играет mpv</li><li>монохромная тёмная тема, мини-плеер, картинка в картинке</li><li>настройки «Основные / Все»</li></ul></div>
+    </div>
+    <div class="voice" aria-label="Как звучит бренд">
+      <span>Открыл и смотришь.</span><span>Здесь появятся ваши фильмы. Перетащите папку.</span><span>Субтитры: русские</span><span>Продолжить с 41:07</span>
+    </div>
+
+    <div class="shots">
+      <figure class="shot">
+        <div class="frame"><div class="win" role="img" aria-label="Главная hollo: полупрозрачное меню, ряд «Продолжить» с прогрессом, недавно добавленные">
+          <div class="tb"><svg class="logo" aria-hidden="true"><use href="#app-hollo-s"/></svg><svg class="ic" aria-hidden="true"><use href="#i-dots"/></svg><svg class="ic" aria-hidden="true"><use href="#i-side"/></svg><span class="mid">hollo</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+          <div class="app">
+            <nav class="nav"><a class="on"><svg class="ic"><use href="#i-home"/></svg>Главная</a><a><svg class="ic"><use href="#i-video"/></svg>Видео</a><a><svg class="ic"><use href="#i-music"/></svg>Музыка</a><a><svg class="ic"><use href="#i-net"/></svg>Сеть</a><a><svg class="ic"><use href="#i-list"/></svg>Плейлисты</a><a><svg class="ic"><use href="#i-recent"/></svg>Недавние</a><a><svg class="ic"><use href="#i-add"/></svg>Добавить</a></nav>
+            <div class="main">
+              <div class="hdr"><svg class="ic"><use href="#i-back"/></svg><svg class="ic"><use href="#i-fwd"/></svg><span class="t">Главная</span><span class="search"><svg class="ic"><use href="#i-search"/></svg>Поиск</span></div>
+              <div class="cnt cont">
+                <div class="sec"><h4>Продолжить</h4>
+                  <div class="row" style="grid-template-columns:repeat(3,1fr)">
+                    <div class="c"><div class="th" style="--pic:linear-gradient(180deg,#0E1A2E 0%,#284466 48%,#E59C67 64%,#141820 66%,#07080A 100%)"><i class="pr" style="width:72%"></i></div><b>Дом у моря · S01E04</b><small>осталось 12 мин</small></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(115deg,#2B2622 0%,#5A4636 38%,#C99C6A 52%,#3A2E25 53%,#1A1715 100%)"><i class="pr" style="width:41%"></i></div><b>Глубина резкости</b><small>осталось 58 мин</small></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(140deg,#1C2A33,#4F6B73 50%,#0F1417)"><i class="pr" style="width:18%"></i></div><b>Северный ветер · S02E01</b><small>осталось 39 мин</small></div>
+                  </div>
+                </div>
+                <div class="sec"><h4>Недавно добавленные</h4>
+                  <div class="row" style="grid-template-columns:repeat(4,1fr)">
+                    <div class="c"><div class="th" style="--pic:linear-gradient(160deg,#2A1A14,#6B3A22 60%,#120D0A)"><span class="dur">1:48:02</span></div><b>Последний трамвай</b></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(200deg,#1A2230,#5D6F86 55%,#0C0F14)"><span class="dur">42:10</span></div><b>Тишина в эфире · S01E01</b></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(120deg,#2A1E2E,#7A4A5C 55%,#140F14)"><span class="dur">4:09</span></div><b>Lunar Drift · Glass Hours</b></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#1E2418,#55613F 50%,#0E100B)"><span class="dur">1:32:40</span></div><b>Короткие дни</b></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+        <figcaption>Раскладка та же, что сейчас. Меняются материал и иерархия: меню полупрозрачное, как Mica в Windows 11, сверху ряд «Продолжить» с полосками прогресса, карточки крупнее. Кадры условные.</figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame"><div class="win" role="img" aria-label="Плеер hollo: видео, нижняя панель с белой кнопкой Play">
+          <div class="tb"><svg class="logo" aria-hidden="true"><use href="#app-hollo-s"/></svg><svg class="ic" aria-hidden="true"><use href="#i-dots"/></svg><svg class="ic" aria-hidden="true"><use href="#i-side"/></svg><span class="crumb"><svg class="ic"><use href="#i-folder"/></svg>Дом у моря · сезон 1</span><span class="mid">S01E04 · Маяк</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+          <div class="player">
+            <div class="vid" style="--pic:radial-gradient(40% 30% at 70% 64%,rgba(245,194,122,.9) 0,rgba(245,194,122,0) 70%),linear-gradient(180deg,#0E1A2E 0%,#284466 50%,#E59C67 66%,#141820 68%,#07080A 100%)"><span class="note">кадр условный</span></div>
+            <div class="ctl"><svg class="ic"><use href="#i-prev"/></svg><span class="pill"><svg><use href="#i-play"/></svg></span><svg class="ic"><use href="#i-next"/></svg><span class="tm">33:41</span><span class="seek"><i style="width:72%"></i><span class="knob" style="left:72%"></span></span><span class="tm">46:10</span><svg class="ic"><use href="#i-vol"/></svg><span class="vol"></span><svg class="ic"><use href="#i-wave"/></svg><svg class="ic"><use href="#i-subs"/></svg><svg class="ic"><use href="#i-gear"/></svg><svg class="ic"><use href="#i-queue"/></svg></div>
+          </div>
+        </div></div>
+        <figcaption>Белая кнопка Play из нынешнего плеера становится знаком бренда: в значке тот же треугольник, только вырезанный в чёрном диске. Остальное почти не трогается, так что это самый дешёвый путь.</figcaption>
+      </figure>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="sizes"><svg width="128" height="128" aria-hidden="true"><use href="#app-hollo"/></svg><svg width="48" height="48" aria-hidden="true"><use href="#app-hollo-s"/></svg><svg width="32" height="32" aria-hidden="true"><use href="#app-hollo-s"/></svg><svg width="16" height="16" aria-hidden="true"><use href="#app-hollo-s"/></svg></div>
+        <div class="task" aria-label="Значок на панели задач"><span><svg viewBox="0 0 24 24" fill="none" stroke="#9AA" stroke-width="1.6"><path d="M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z"/></svg></span><span class="me"><svg aria-hidden="true"><use href="#app-hollo-s"/></svg></span><span><svg viewBox="0 0 24 24" fill="none" stroke="#9AA" stroke-width="1.6"><path d="M3 6h6l2 2h10v11H3z"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#0E0E0E">Фон<span>#0E0E0E</span></div><div style="background:#26262A">Мика<span>#26262A 55 %</span></div><div style="background:#fff;color:#0E0E0E">Play<span>#FFFFFF</span></div><div style="background:#8F8F8F;color:#0E0E0E">Вторичный<span>#8F8F8F</span></div><div style="background:#CFE0FF;color:#0E0E0E">Свет<span>только в значке</span></div><div style="background:#1C1C1C">Линия<span>#1C1C1C</span></div></div>
+      </section>
+      <section class="ty"><h3>Шрифт</h3><p class="big" style="font-family:Onest,sans-serif;font-weight:600;letter-spacing:-.04em">hollo</p><p>Onest для слова-знака (строчными) и для всего интерфейса. Он ровнее нынешнего системного и хорошо держит кириллицу.</p></section>
+    </div>
+    <p class="risk"><b>Имя.</b> От hollow, «полый»: знак и есть полый Play. По-русски и по-английски читается одинаково. Так называется сервер для федиверса и один AI-сервис, плееров и видеоприложений с таким именем не нашлось.</p>
+  </div>
+</section>
+
+<!-- =================== SNUG =================== -->
+<section class="band" id="snug" aria-labelledby="h-snug">
+  <div class="wrap">
+    <div class="top">
+      <svg class="appicon" viewBox="0 0 256 256" role="img" aria-label="Значок Snug: три постера, передний светится тёплым светом"><use href="#app-snug"/></svg>
+      <div>
+        <p class="pos-lbl">Позиция 2 · Snug · «снаг»</p>
+        <h2 class="pos-h" id="h-snug">Свой кинотеатр без сервера</h2>
+        <p class="one">Укажите папку, и получится домашний Netflix: постеры, сезоны, «продолжить». Без сервера, аккаунта и подписки.</p>
+      </div>
+    </div>
+    <div class="grid3">
+      <div><span class="k">Для кого</span><p>Для тех, у кого на диске сотни фильмов и сериалов. Многие из них уже пробовали Plex или Jellyfin и не захотели держать сервер ради своей же папки.</p></div>
+      <div><span class="k">Что заменяет</span><p>Plex, Jellyfin и Kodi с их сервером, аккаунтом и настройкой. А ещё папку в Проводнике с файлами вида The.Wand.S01E04.1080p.mkv.</p></div>
+      <div><span class="k">На чём держится</span><ul><li>медиатека сама находит серии и сезоны</li><li>постеры и описания из TMDB, субтитры из OpenSubtitles, тексты песен из LRCLIB</li><li>«Следующая серия» на титрах, пропуск заставки</li><li>продолжение с места остановки</li></ul></div>
+    </div>
+    <div class="voice" aria-label="Как звучит бренд">
+      <span>Добрый вечер. Вы остановились на 4-й серии.</span><span>Сезон 2 целиком на диске</span><span>Следующая серия через 8 с</span>
+    </div>
+
+    <div class="shots">
+      <figure class="shot">
+        <div class="frame"><div class="win" role="img" aria-label="Главная Snug: большой кадр сериала с кнопкой «Продолжить», полка постеров">
+          <div class="tb"><svg class="logo" aria-hidden="true"><use href="#app-snug-s"/></svg><svg class="ic" aria-hidden="true"><use href="#i-dots"/></svg><svg class="ic" aria-hidden="true"><use href="#i-side"/></svg><span class="mid">Snug</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+          <div class="app">
+            <nav class="nav"><a class="on"><svg class="ic"><use href="#i-home"/></svg>Главная</a><a><svg class="ic"><use href="#i-video"/></svg>Фильмы</a><a><svg class="ic"><use href="#i-list"/></svg>Сериалы</a><a><svg class="ic"><use href="#i-music"/></svg>Музыка</a><a><svg class="ic"><use href="#i-net"/></svg>Сеть</a><a><svg class="ic"><use href="#i-add"/></svg>Добавить папку</a></nav>
+            <div class="main">
+              <div class="hdr" style="border:0;position:relative;z-index:2"><svg class="ic"><use href="#i-back"/></svg><svg class="ic"><use href="#i-fwd"/></svg><span class="t"></span><span class="search"><svg class="ic"><use href="#i-search"/></svg>Найти фильм или серию</span></div>
+              <div class="cnt" style="padding-top:0;gap:2.2em">
+                <div class="hero" style="--hpic:radial-gradient(40% 50% at 78% 42%,rgba(245,194,122,.85) 0,rgba(245,194,122,0) 70%),linear-gradient(180deg,#1B2A3E 0%,#3B5878 46%,#D88E58 62%,#1B1A1C 64%,#0B0A0A 100%)">
+                  <span class="kick">Вы остановились здесь</span>
+                  <h5>Дом у моря</h5>
+                  <p>Сезон 1, серия 4 «Маяк». Осталось 31 минута, дальше ещё 4 серии.</p>
+                  <div class="btns"><span class="btn p"><svg><use href="#i-play"/></svg>Продолжить</span><span class="btn s">Все серии</span></div>
+                </div>
+                <div class="sec posters"><h4>Сериалы <small>12 на диске</small></h4>
+                  <div class="row" style="grid-template-columns:repeat(6,1fr);gap:1.3em">
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#3B5878,#0E1A2E)"><em>Дом у моря</em><u>2 сезона</u></div></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#4F6B73,#0F1417)"><em>Северный ветер</em><u>3 сезона</u></div></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#5D6F86,#0C0F14)"><em>Тишина в эфире</em><u>1 сезон</u></div></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#7A4A5C,#140F14)"><em>Ночная смена</em><u>4 сезона</u></div></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#6B3A22,#120D0A)"><em>Белые ночи</em><u>1 сезон</u></div></div>
+                    <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#55613F,#0E100B)"><em>Сад камней</em><u>2 сезона</u></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+        <figcaption>Главная меняется сильнее всего. Наверху большой кадр того, что вы смотрите, с одной кнопкой. Ниже полки постеров, а не плитки с именами файлов. Постеры и кадры условные.</figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame"><div class="win" role="img" aria-label="Плеер Snug: на титрах появляется карточка следующей серии">
+          <div class="tb"><svg class="logo" aria-hidden="true"><use href="#app-snug-s"/></svg><svg class="ic" aria-hidden="true"><use href="#i-dots"/></svg><svg class="ic" aria-hidden="true"><use href="#i-side"/></svg><span class="crumb"><svg class="ic"><use href="#i-folder"/></svg>Дом у моря · сезон 1</span><span class="mid">Серия 4 · Маяк</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+          <div class="player">
+            <div class="vid" style="--pic:linear-gradient(180deg,#0A0908 0%,#16110E 100%)">
+              <div style="position:absolute;left:0;right:0;top:34%;text-align:center;color:#7E7062;font-size:1.3em;line-height:1.9">Режиссёр<br><span style="color:#B9A994">А. Северина</span><br><br>Оператор<br><span style="color:#B9A994">М. Котов</span></div>
+              <div class="nextcard" style="--pic2:linear-gradient(180deg,#1B2A3E,#3B5878 50%,#D88E58 66%,#0B0A0A)"><span class="th"></span><span><small>Следующая серия через 8 с</small><b>Серия 5 · Прилив</b><span class="bar"><i></i></span></span></div>
+            </div>
+            <div class="ctl"><svg class="ic"><use href="#i-prev"/></svg><span class="pill"><svg><use href="#i-play"/></svg></span><svg class="ic"><use href="#i-next"/></svg><span class="tm">45:02</span><span class="seek"><i style="width:97%"></i><span class="knob" style="left:97%"></span></span><span class="tm">46:10</span><svg class="ic"><use href="#i-vol"/></svg><span class="vol"></span><svg class="ic"><use href="#i-subs"/></svg><svg class="ic"><use href="#i-gear"/></svg><svg class="ic"><use href="#i-queue"/></svg></div>
+          </div>
+        </div></div>
+        <figcaption>Кнопка Play и полоса перемотки медовые. На титрах плеер сам предлагает следующую серию. Эта функция уже есть, но в этой позиции она становится главной.</figcaption>
+      </figure>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="sizes"><svg width="128" height="128" aria-hidden="true"><use href="#app-snug"/></svg><svg width="48" height="48" aria-hidden="true"><use href="#app-snug-s"/></svg><svg width="32" height="32" aria-hidden="true"><use href="#app-snug-s"/></svg><svg width="16" height="16" aria-hidden="true"><use href="#app-snug-s"/></svg></div>
+        <div class="task" aria-label="Значок на панели задач"><span><svg viewBox="0 0 24 24" fill="none" stroke="#9AA" stroke-width="1.6"><path d="M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z"/></svg></span><span class="me"><svg aria-hidden="true"><use href="#app-snug-s"/></svg></span><span><svg viewBox="0 0 24 24" fill="none" stroke="#9AA" stroke-width="1.6"><path d="M3 6h6l2 2h10v11H3z"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#15110E">Вечер<span>#15110E</span></div><div style="background:#1C1713">Плед<span>#1C1713</span></div><div style="background:#E9B04F;color:#15110E">Мёд<span>#E9B04F</span></div><div style="background:#F5ECE1;color:#15110E">Свет лампы<span>#F5ECE1</span></div><div style="background:#A79886;color:#15110E">Вторичный<span>#A79886</span></div><div style="background:#B8481F">Угли<span>только в значке</span></div></div>
+      </section>
+      <section class="ty"><h3>Шрифты</h3><p class="big" style="font-family:Fraunces,Georgia,serif;font-variation-settings:'SOFT' 100;font-weight:700">Snug</p><p>Fraunces с мягкими засечками для слова-знака и названий на постерах. Rubik для интерфейса: округлый и дружелюбный.</p></section>
+    </div>
+    <p class="risk"><b>Имя.</b> По-английски snug значит «уютно» и «впору». Звучит тепло, коротко и запоминается. Так называется маленькое приложение для сжатия видео на iPhone и несколько приложений из других областей, плееров не нашлось. Запасное имя: Tuvo.</p>
+  </div>
+</section>
+
+<!-- =================== GAFFA =================== -->
+<section class="band" id="gaffa" aria-labelledby="h-gaffa">
+  <div class="wrap">
+    <div class="top">
+      <svg class="appicon" viewBox="0 0 256 256" role="img" aria-label="Значок GAFFA: рулон чёрного скотча и полоска с нарисованным маркером Play"><use href="#app-gaffa"/></svg>
+      <div>
+        <p class="pos-lbl">Позиция 3 · GAFFA · «га́ффа»</p>
+        <h2 class="pos-h" id="h-gaffa">Вся мощь, без хлама</h2>
+        <p class="one">Всё, ради чего ставят PotPlayer или MPC с madVR, но с нормальным интерфейсом и без рекламы. Настраивается всё, а по умолчанию трогать ничего не нужно.</p>
+      </div>
+    </div>
+    <div class="grid3">
+      <div><span class="k">Для кого</span><p>Для тех, кто знает, что такое HDR, битстрим и апскейл, и раньше собирал себе плеер из плагинов и конфиг-файлов.</p></div>
+      <div><span class="k">Что заменяет</span><p>PotPlayer, MPC-HC с madVR, голый mpv с mpv.conf и скриптами.</p></div>
+      <div><span class="k">На чём держится</span><ul><li>ИИ-апскейл RTX и Intel, RTX Video HDR, свои шейдеры</li><li>объёмный звук на ресивер как есть, WASAPI монопольно</li><li>статистика поверх видео, настройки для каждого файла</li><li>«Основные / Все»: сложное спрятано, пока не нужно</li></ul></div>
+    </div>
+    <div class="voice" aria-label="Как звучит бренд">
+      <span>Звук идёт на ресивер как есть: TrueHD 7.1</span><span>Пропущено кадров: 0</span><span>Всё под рукой: Ctrl+K</span>
+    </div>
+
+    <div class="shots">
+      <figure class="shot">
+        <div class="frame"><div class="win" role="img" aria-label="Плеер GAFFA: командная строка поверх видео, строка с данными о сигнале">
+          <div class="tb"><svg class="logo" aria-hidden="true"><use href="#app-gaffa-s"/></svg><svg class="ic" aria-hidden="true"><use href="#i-dots"/></svg><svg class="ic" aria-hidden="true"><use href="#i-side"/></svg><span class="crumb"><svg class="ic"><use href="#i-folder"/></svg>UHD</span><span class="mid" style="font-family:'IBM Plex Mono',monospace;font-size:.92em">Berg.2026.2160p.UHD.HDR10.TrueHD.7.1.mkv</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+          <div class="player">
+            <div class="vid" style="--pic:linear-gradient(90deg,rgba(0,0,0,0) 0 62%,rgba(0,0,0,.35) 62%),linear-gradient(180deg,#5C6B78 0%,#A9B3BA 40%,#2E3237 41%,#111316 100%)">
+              <div class="palette">
+                <div class="q"><svg class="ic" style="width:1.3em;height:1.3em"><use href="#i-cmd"/></svg>апск<span>|</span><kbd>Esc</kbd></div>
+                <div class="grp">ВИДЕО</div>
+                <div class="it on">Апскейл: RTX Video Super Resolution<span class="v">вкл · ×1,5</span></div>
+                <div class="it">Апскейл: шейдер FSRCNNX<span class="v">выкл</span></div>
+                <div class="it">HDR в SDR: тональная компрессия<span class="v">spline</span></div>
+                <div class="grp">ЗВУК</div>
+                <div class="it">Передавать на ресивер<span class="v">TrueHD, DTS-HD</span></div>
+              </div>
+              <span class="note">кадр условный</span>
+            </div>
+            <div class="ctl" style="padding-bottom:.6em"><svg class="ic"><use href="#i-prev"/></svg><span class="pill" style="border-radius:.2em"><svg><use href="#i-play"/></svg></span><svg class="ic"><use href="#i-next"/></svg><span class="tm" style="font-family:'IBM Plex Mono',monospace">01:24:07</span><span class="seek" style="height:1.2em;border-radius:0"><i style="width:56%;border-radius:0"></i><span class="knob" style="left:56%;border-radius:0"></span></span><span class="tm" style="font-family:'IBM Plex Mono',monospace">02:31:40</span><svg class="ic"><use href="#i-vol"/></svg><svg class="ic"><use href="#i-subs"/></svg><svg class="ic"><use href="#i-gear"/></svg><svg class="ic"><use href="#i-queue"/></svg></div>
+            <div class="sig"><span><b>HEVC</b> 10 бит</span><span>3840×2160 · 23,976</span><span><b>HDR10</b> → RTX HDR</span><span><b>TrueHD 7.1</b> → ресивер</span><span>d3d11va · без копирования</span><span>пропущено <b>0</b></span></div>
+          </div>
+        </div></div>
+        <figcaption>Ctrl+K открывает командную строку: любую настройку можно найти словом, не зная, в каком она меню. Под полосой перемотки всегда видно, что происходит с сигналом. Сейчас эти данные спрятаны в оверлей статистики.</figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame"><div class="win" role="img" aria-label="Настройки GAFFA: разделы подписаны полосками скотча, переключатель «Основные / Все»">
+          <div class="tb"><svg class="logo" aria-hidden="true"><use href="#app-gaffa-s"/></svg><span class="mid">Настройки</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+          <div class="app">
+            <nav class="nav"><a class="on"><svg class="ic"><use href="#i-video"/></svg>Видео</a><a><svg class="ic"><use href="#i-vol"/></svg>Звук</a><a><svg class="ic"><use href="#i-subs"/></svg>Субтитры</a><a><svg class="ic"><use href="#i-gear"/></svg>Шейдеры</a><a><svg class="ic"><use href="#i-cmd"/></svg>Клавиши</a><a><svg class="ic"><use href="#i-folder"/></svg>Медиатека</a></nav>
+            <div class="set">
+              <div class="mode"><span class="seg"><span>Основные</span><span class="on">Все</span></span><span style="color:#7A7A7A;font-size:1.05em">Показаны все 214 настроек</span></div>
+              <div class="grp2"><span class="tape">КАРТИНКА</span>
+                <div class="opt"><span>ИИ-апскейл<small>NVIDIA RTX Video Super Resolution</small></span><span class="val">×1,5 · качество 4</span></div>
+                <div class="opt"><span>RTX Video HDR<small>превращает SDR в HDR на HDR-мониторе</small></span><span class="tg on"></span></div>
+                <div class="opt"><span>Устранение полос<small>для неба и градиентов в 8-битном видео</small></span><span class="tg"></span></div>
+              </div>
+              <div class="grp2"><span class="tape">ПЛАВНОСТЬ</span>
+                <div class="opt"><span>Плавное движение<small>синхронизация с частотой экрана</small></span><span class="tg on"></span></div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+        <figcaption>Тот же чёрный, что сейчас, но плотнее и строже: квадратные углы, моноширинные значения. Разделы подписаны полосками белого скотча, как подписывают провода и кофры на съёмочной площадке. Это единственная живая деталь бренда.</figcaption>
+      </figure>
+    </div>
+
+    <div class="kit">
+      <section><h3>Значок приложения</h3>
+        <div class="sizes"><svg width="128" height="128" aria-hidden="true"><use href="#app-gaffa"/></svg><svg width="48" height="48" aria-hidden="true"><use href="#app-gaffa-s"/></svg><svg width="32" height="32" aria-hidden="true"><use href="#app-gaffa-s"/></svg><svg width="16" height="16" aria-hidden="true"><use href="#app-gaffa-s"/></svg></div>
+        <div class="task" aria-label="Значок на панели задач"><span><svg viewBox="0 0 24 24" fill="none" stroke="#9AA" stroke-width="1.6"><path d="M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z"/></svg></span><span class="me"><svg aria-hidden="true"><use href="#app-gaffa-s"/></svg></span><span><svg viewBox="0 0 24 24" fill="none" stroke="#9AA" stroke-width="1.6"><path d="M3 6h6l2 2h10v11H3z"/></svg></span></div>
+      </section>
+      <section><h3>Палитра</h3>
+        <div class="sw"><div style="background:#0A0A0A">Матовый<span>#0A0A0A</span></div><div style="background:#161616">Кофр<span>#161616</span></div><div style="background:#E4E0D4;color:#0A0A0A">Скотч<span>#E4E0D4</span></div><div style="background:#EDEDED;color:#0A0A0A">Текст<span>#EDEDED</span></div><div style="background:#8A8A8A;color:#0A0A0A">Вторичный<span>#8A8A8A</span></div><div style="background:#B48A55;color:#0A0A0A">Картон<span>только в значке</span></div></div>
+      </section>
+      <section class="ty"><h3>Шрифты</h3><p class="big"><span class="tape" style="font-size:34px">GAFFA</span></p><p>Permanent Marker, как подпись маркером на скотче, только для слова-знака и меток разделов. IBM Plex Sans и Plex Mono для интерфейса и цифр.</p></section>
+    </div>
+    <p class="risk"><b>Имя.</b> От gaffer tape, чёрного скотча, которым на съёмочной площадке держится всё. Короткое, твёрдое, хорошо звучит по-русски. Так называется датский музыкальный журнал GAFFA, футбольная игра и сервис для парсинга сайтов, плееров не нашлось. Запасное имя: Velu.</p>
+  </div>
+</section>
+</main>
+
+<section class="wrap cmp" aria-labelledby="h-cmp">
+  <h2 id="h-cmp">Рядом друг с другом</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Направление</th><th>Позиция</th><th>Кого переманивает</th><th>Сколько менять в интерфейсе</th><th>Риск</th></tr></thead>
+      <tbody>
+        <tr><td><b>hollo</b></td><td>Красивый плеер для Windows</td><td>Всех, кто сидит на VLC и «Кино и ТВ»: самая широкая аудитория</td><td>Мало: материал, ряд «Продолжить», значок</td><td>«Красивый» нужно доказывать каждым экраном</td></tr>
+        <tr><td><b>Snug</b></td><td>Свой кинотеатр без сервера</td><td>Владельцев больших коллекций, уставших от Plex и Jellyfin</td><td>Много: новая главная, постеры, страницы сериалов</td><td>Всё держится на том, насколько хорошо распознаются файлы</td></tr>
+        <tr><td><b>GAFFA</b></td><td>Вся мощь, без хлама</td><td>Пользователей PotPlayer и MPC: аудитория маленькая, но громкая на форумах</td><td>Средне: командная строка, строка сигнала, плотные настройки</td><td>Узкая ниша, новичка может отпугнуть</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pick">
+    <div>
+      <h3>Что выбрал бы я</h3>
+      <p><b>hollo.</b> Эта позиция лучше всего описывает то, что уже сделано: аккуратный монохромный интерфейс, окно без мигания, всё играет. Она ближе всех к нынешнему чёрному виду, и аудитория у неё самая широкая.</p>
+      <p>Из двух других можно взять по одной вещи, не меняя позицию. У Snug полку «Продолжить», у GAFFA командную строку по Ctrl+K.</p>
+    </div>
+    <div>
+      <h3>Что дальше, когда выберете</h3>
+      <ol>
+        <li>Проверить имя глубже: домены, товарные знаки, Microsoft Store, GitHub.</li>
+        <li>Довести значок до файлов .ico в 16, 24, 32, 48 и 256 px и проверить на панели задач.</li>
+        <li>Нарисовать точные макеты главной, видео, музыки и настроек.</li>
+        <li>Перенести палитру в Theme.cpp и иконки в design/icons, потом заняться переименованием.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+<footer class="wrap foot">Совпадения имён проверены 24.10.2026 по открытой выдаче. Заняты оказались Mivo, Kivo, Juke, Usher, Matinee, Couch, Kuva, Nightcap, Overscan, Roxy, Bijou, Lux, Nightjar и Ondo, у каждого уже есть плеер или видеоприложение. Отсутствие совпадений не значит, что имя свободно: юридической проверки не было.</footer>
