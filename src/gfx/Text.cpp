@@ -31,8 +31,32 @@ constexpr StyleSpec kStyles[] = {
 };
 static_assert(std::size(kStyles) == static_cast<size_t>(TextStyle::Count));
 
-// Resource ids of the bundled fonts, see res/app.rc.
-constexpr int kFontResources[] = {201, 202, 203, 204};
+// Moonbow sets text in Onest (design/brand-exploration-2026-10-25/moonbow.html) and keeps Inter for
+// the tabular styles: its figures are tabular, so timecodes don't wobble. Line heights and baselines
+// keep following kStyles, so every row and box lays out exactly as with Inter. Onest has a 3.5 %
+// smaller x-height than Inter and sets about 2.4 % narrower (median over the app's own strings), so
+// the text styles grow by 2.8 %: the same widths, an x-height 1 % lower. Display, Title and Section
+// are large enough not to need it. Title goes Light to Regular: Onest Light at 24 is too thin on
+// the dark window. (Measured for the Depth style, archive/depth-style.)
+constexpr StyleSpec kOnestStyles[] = {
+    {32, DWRITE_FONT_WEIGHT_LIGHT, false},         // Display
+    {24, DWRITE_FONT_WEIGHT_REGULAR, false},       // Title
+    {20, DWRITE_FONT_WEIGHT_REGULAR, false},       // Section
+    {16.4f, DWRITE_FONT_WEIGHT_MEDIUM, false},     // Heading
+    {16.4f, DWRITE_FONT_WEIGHT_REGULAR, false},    // Large
+    {14.4f, DWRITE_FONT_WEIGHT_REGULAR, false},    // Body
+    {14.4f, DWRITE_FONT_WEIGHT_MEDIUM, false},     // BodyMedium
+    {14.4f, DWRITE_FONT_WEIGHT_SEMI_BOLD, false},  // BodyStrong
+    {12.3f, DWRITE_FONT_WEIGHT_REGULAR, false},    // Small
+    {12.3f, DWRITE_FONT_WEIGHT_MEDIUM, false},     // SmallMedium
+    {10.3f, DWRITE_FONT_WEIGHT_MEDIUM, false},     // Micro
+    {14, DWRITE_FONT_WEIGHT_REGULAR, true},        // Mono: Inter, as in kStyles
+    {12, DWRITE_FONT_WEIGHT_REGULAR, true},        // MonoSmall: Inter, as in kStyles
+};
+static_assert(std::size(kOnestStyles) == static_cast<size_t>(TextStyle::Count));
+
+// Resource ids of the bundled fonts, see res/app.rc: Inter 201-204, Onest 205.
+constexpr int kFontResources[] = {201, 202, 203, 204, 205};
 
 template <class S>
 struct BasicLayoutKey {
@@ -123,6 +147,7 @@ bool Text::LoadFonts(HINSTANCE instance) {
         fonts_.Reset();
         family_ = L"Segoe UI Variable Text";
     }
+    onest_ = bundled;
 
     if (SUCCEEDED(dw->CreateTypography(&tabular_)))
         tabular_->AddFontFeature({DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
@@ -132,10 +157,11 @@ bool Text::LoadFonts(HINSTANCE instance) {
 bool Text::CreateFormats() {
     IDWriteFactory5* dw = Gpu::Get().DWrite();
     for (int i = 0; i < static_cast<int>(TextStyle::Count); ++i) {
-        const StyleSpec& s = kStyles[i];
+        const StyleSpec& s = onest_ ? kOnestStyles[i] : kStyles[i];
         formats_[i].Reset();
         ellipsis_[i].Reset();
-        if (FAILED(dw->CreateTextFormat(family_, fonts_.Get(), s.weight, DWRITE_FONT_STYLE_NORMAL,
+        const wchar_t* family = onest_ && !s.tabular ? L"Onest" : family_;
+        if (FAILED(dw->CreateTextFormat(family, fonts_.Get(), s.weight, DWRITE_FONT_STYLE_NORMAL,
                                         DWRITE_FONT_STRETCH_NORMAL, s.size * scale_, L"ru-ru", &formats_[i])))
             return false;
         formats_[i]->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -218,8 +244,9 @@ ComPtr<IDWriteTextFormat> Text::CustomFormat(const std::wstring& family, float s
     WaitReady();
     const bool own = family.empty();
     ComPtr<IDWriteTextFormat> format;
+    const wchar_t* face = own ? (onest_ ? L"Onest" : family_) : family.c_str();
     // A font that isn't installed falls back to DirectWrite's default, as everywhere in Windows.
-    if (FAILED(Gpu::Get().DWrite()->CreateTextFormat(own ? family_ : family.c_str(), own ? fonts_.Get() : nullptr,
+    if (FAILED(Gpu::Get().DWrite()->CreateTextFormat(face, own ? fonts_.Get() : nullptr,
                                                      weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
                                                      size, L"ru-ru", &format)))
         return nullptr;

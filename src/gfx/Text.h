@@ -40,7 +40,7 @@ struct TextMetrics {
     uint32_t lines = 0;
 };
 
-// Loads the bundled Inter fonts and caches text formats and layouts.
+// Loads the bundled fonts (Onest for text, Inter for tabular figures) and caches text formats and layouts.
 class Text {
 public:
     static Text& Get();
@@ -59,7 +59,7 @@ public:
     IDWriteTextLayout* Layout(std::wstring_view text, TextStyle style, float maxWidth, float maxHeight, HAlign h,
                               VAlign v, uint8_t flags);
     TextMetrics Measure(std::wstring_view text, TextStyle style, float maxWidth = 100000.0f, uint8_t flags = 0);
-    // A format in an installed font (empty: the bundled Inter) at any size, for text the user
+    // A format in an installed font (empty: the bundled Onest) at any size, for text the user
     // styles (song lyrics). Not cached: the caller keeps it. Null on failure.
     ComPtr<IDWriteTextFormat> CustomFormat(const std::wstring& family, float size, DWRITE_FONT_WEIGHT weight);
 
@@ -77,7 +77,8 @@ private:
     ComPtr<IDWriteTextFormat> formats_[static_cast<int>(TextStyle::Count)];
     ComPtr<IDWriteTypography> tabular_;
     ComPtr<IDWriteInlineObject> ellipsis_[static_cast<int>(TextStyle::Count)];
-    const wchar_t* family_ = L"Inter";
+    const wchar_t* family_ = L"Inter";  // the tabular styles; Segoe UI for all when the bundled fonts fail
+    bool onest_ = false;                 // the bundled fonts loaded: text styles use Onest
     float scale_ = 1;
     struct Impl;
     Impl* impl_ = nullptr;

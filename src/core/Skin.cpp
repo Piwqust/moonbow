@@ -274,7 +274,7 @@ ParseResult Parse(std::string_view text) {
                 s.barOpacity = static_cast<float>(d);
             }
         } else if (k == "font" || k == "fonts") {
-            w.push_back(k + ": fonts cannot be changed by a skin yet; Inter is kept");
+            w.push_back(k + ": fonts cannot be changed by a skin yet; Onest is kept");
         } else {
             w.push_back(k + ": unknown key; ignored");
         }

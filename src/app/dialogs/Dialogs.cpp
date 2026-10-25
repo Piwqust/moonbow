@@ -1293,7 +1293,7 @@ void ShowAboutDialog(Host* host) {
     links->Add<AboutLink>(Tr(L"Moonbow: GNU GPL 3.0 or later"), L"https://www.gnu.org/licenses/gpl-3.0.html");
     links->Add<AboutLink>(Tr(L"mpv and libmpv: GPL 2.0 or later"), L"https://github.com/mpv-player/mpv/blob/master/Copyright");
     links->Add<AboutLink>(Tr(L"FFmpeg: LGPL 2.1 or later"), L"https://ffmpeg.org/legal.html");
-    links->Add<AboutLink>(Tr(L"Inter typeface: SIL Open Font License 1.1"), L"https://openfontlicense.org");
+    links->Add<AboutLink>(Tr(L"Onest and Inter typefaces: SIL Open Font License 1.1"), L"https://openfontlicense.org");
 
     // The online services (each off until turned on in Settings › Privacy). TMDB's terms ask for
     // this notice word for word.

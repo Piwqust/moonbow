@@ -120,4 +120,4 @@
 {L"Moonbow: GNU GPL 3.0 or later", L"Moonbow: GNU GPL 3.0 или новее"},
 {L"mpv and libmpv: GPL 2.0 or later", L"mpv и libmpv: GPL 2.0 или новее"},
 {L"FFmpeg: LGPL 2.1 or later", L"FFmpeg: LGPL 2.1 или новее"},
-{L"Inter typeface: SIL Open Font License 1.1", L"Шрифт Inter: SIL Open Font License 1.1"},
+{L"Onest and Inter typefaces: SIL Open Font License 1.1", L"Шрифты Onest и Inter: SIL Open Font License 1.1"},
