@@ -30,45 +30,45 @@ constexpr uint32_t kLightAccents[kAccentTones] = {0x141414, 0x2A2A2A, 0x404040, 
 Colors BrandColors(bool dark) {
     Colors c{};
     if (dark) {
-        c[kBgDeep] = Rgba::Hex(0x090909);
-        c[kBgBase] = Rgba::Hex(0x0E0E0E);
-        c[kBgRaised] = Rgba::Hex(0x151515);
-        c[kBgPanel] = Rgba::Hex(0x191919);
-        c[kBgChrome] = Rgba::Hex(0x1B1B1B);
-        c[kBgCard] = Rgba::Hex(0x1E1E1E);
-        c[kBgSelected] = Rgba::Hex(0x242424);
-        c[kBgMenu] = Rgba::Hex(0x222222);
+        c[kBgDeep] = Rgba::Hex(0x08090C);
+        c[kBgBase] = Rgba::Hex(0x0B0C10);
+        c[kBgRaised] = Rgba::Hex(0x131519);
+        c[kBgPanel] = Rgba::Hex(0x17191E);
+        c[kBgChrome] = Rgba::Hex(0x191B20);
+        c[kBgCard] = Rgba::Hex(0x1C1E24);
+        c[kBgSelected] = Rgba::Hex(0x22252B);
+        c[kBgMenu] = Rgba::Hex(0x202329);
         c[kHover] = Rgba::Hex(0xFFFFFF, 0.06f);
         c[kPress] = Rgba::Hex(0xFFFFFF, 0.10f);
-        c[kLineSubtle] = Rgba::Hex(0x171717);
-        c[kLine] = Rgba::Hex(0x262626);
-        c[kLineStrong] = Rgba::Hex(0x404040);
-        c[kLineControl] = Rgba::Hex(0x707070);  // >= 3:1 on every background a field sits on
-        c[kTextPrimary] = Rgba::Hex(0xEAEAEA);
-        c[kTextSecondary] = Rgba::Hex(0xA8A8A8);
-        c[kTextTertiary] = Rgba::Hex(0x8B8B8B);
-        c[kTextDisabled] = Rgba::Hex(0x646464);  // ~3:1 on bgBase: readable, clearly off
+        c[kLineSubtle] = Rgba::Hex(0x15171C);
+        c[kLine] = Rgba::Hex(0x23262E);
+        c[kLineStrong] = Rgba::Hex(0x3D4048);
+        c[kLineControl] = Rgba::Hex(0x6F737B);  // >= 3:1 on every background a field sits on
+        c[kTextPrimary] = Rgba::Hex(0xEEF1F6);
+        c[kTextSecondary] = Rgba::Hex(0xA7ABB3);
+        c[kTextTertiary] = Rgba::Hex(0x8E939C);
+        c[kTextDisabled] = Rgba::Hex(0x63676F);  // ~3:1 on bgBase: readable, clearly off
         c[kScrim] = Rgba::Hex(0x000000, 0.60f);
         c[kShadow] = Rgba::Hex(0x000000, 0.46f);
     } else {
-        c[kBgDeep] = Rgba::Hex(0xE6E6E6);
-        c[kBgBase] = Rgba::Hex(0xF2F2F2);
-        c[kBgRaised] = Rgba::Hex(0xFAFAFA);
+        c[kBgDeep] = Rgba::Hex(0xE7E6E1);
+        c[kBgBase] = Rgba::Hex(0xF4F3EF);
+        c[kBgRaised] = Rgba::Hex(0xFAF9F6);
         c[kBgPanel] = Rgba::Hex(0xFFFFFF);
-        c[kBgChrome] = Rgba::Hex(0xEBEBEB);
-        c[kBgCard] = Rgba::Hex(0xE4E4E4);
-        c[kBgSelected] = Rgba::Hex(0xDCDCDC);
+        c[kBgChrome] = Rgba::Hex(0xECEBE6);
+        c[kBgCard] = Rgba::Hex(0xE5E4DF);
+        c[kBgSelected] = Rgba::Hex(0xDDDCD7);
         c[kBgMenu] = Rgba::Hex(0xFFFFFF);
         c[kHover] = Rgba::Hex(0x000000, 0.05f);
         c[kPress] = Rgba::Hex(0x000000, 0.09f);
-        c[kLineSubtle] = Rgba::Hex(0xE3E3E3);
-        c[kLine] = Rgba::Hex(0xD6D6D6);
-        c[kLineStrong] = Rgba::Hex(0xBDBDBD);
-        c[kLineControl] = Rgba::Hex(0x808080);
-        c[kTextPrimary] = Rgba::Hex(0x141414);
-        c[kTextSecondary] = Rgba::Hex(0x424242);
-        c[kTextTertiary] = Rgba::Hex(0x616161);
-        c[kTextDisabled] = Rgba::Hex(0x848484);  // ~3.3:1 on bgBase, ~3.7:1 on white
+        c[kLineSubtle] = Rgba::Hex(0xE4E3DE);
+        c[kLine] = Rgba::Hex(0xD7D6D1);
+        c[kLineStrong] = Rgba::Hex(0xBEBDB8);
+        c[kLineControl] = Rgba::Hex(0x7E7D79);
+        c[kTextPrimary] = Rgba::Hex(0x121317);
+        c[kTextSecondary] = Rgba::Hex(0x404349);
+        c[kTextTertiary] = Rgba::Hex(0x5C5F65);
+        c[kTextDisabled] = Rgba::Hex(0x83858B);  // ~3.3:1 on bgBase, ~3.7:1 on white
         c[kScrim] = Rgba::Hex(0x000000, 0.32f);
         c[kShadow] = Rgba::Hex(0x000000, 0.18f);
     }

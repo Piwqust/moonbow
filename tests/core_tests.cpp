@@ -3342,11 +3342,11 @@ void TestSkinResolve() {
     using namespace skin;
     // No skin: the brand palette of DESIGN.md, the accent family from the tone.
     Colors dark = Resolve(true, 0, nullptr);
-    CHECK(dark[kBgBase].Rgb() == 0x0E0E0E && dark[kTextPrimary].Rgb() == 0xEAEAEA && dark[kAccent].Rgb() == 0xEDEDED);
+    CHECK(dark[kBgBase].Rgb() == 0x0B0C10 && dark[kTextPrimary].Rgb() == 0xEEF1F6 && dark[kAccent].Rgb() == 0xEDEDED);
     CHECK(dark[kOnAccent] == dark[kBgBase]);
     CHECK(dark[kAccentMid] == Mix(dark[kAccent], dark[kBgBase], 0.25f));
     Colors light = Resolve(false, 4, nullptr);
-    CHECK(light[kBgBase].Rgb() == 0xF2F2F2 && light[kAccent].Rgb() == 0x6C6C6C);
+    CHECK(light[kBgBase].Rgb() == 0xF4F3EF && light[kAccent].Rgb() == 0x6C6C6C);
     CHECK(Resolve(true, 99, nullptr)[kAccent].Rgb() == 0x828282);  // tone clamped
     Skin empty;
     CHECK(Resolve(true, 2, &empty) == Resolve(true, 2, nullptr));
@@ -3359,7 +3359,7 @@ void TestSkinResolve() {
     CHECK(c[kAccentMid] == Mix(c[kAccent], c[kBgBase], 0.25f));
     CHECK(c[kOnAccent].Rgb() == 0x202020);
     CHECK(Resolve(false, 3, &r.skin)[kAccentDim] == Mix(Rgba::Hex(0x202020), Rgba::Hex(0x3366FF), 0.12f));
-    CHECK(c[kTextPrimary].Rgb() == 0xEAEAEA);  // untouched tokens keep the brand value
+    CHECK(c[kTextPrimary].Rgb() == 0xEEF1F6);  // untouched tokens keep the brand value
 }
 
 void TestSkinContrast() {
