@@ -747,7 +747,8 @@ void BuildApp(Builder& b) {
         .Desc(L"Look for a new version of Moonbow once a day. Nothing else is sent.",
               L"Раз в день проверять, вышла ли новая версия Moonbow. Больше ничего не отправляется.")
         .Hidden();  // not implemented yet
-    b.Button("general.fileAssociations", L"Make Moonbow the default video player", L"Открывать видео в Moonbow по умолчанию",
+    // Short: with the longer name the full phrase no longer fit the narrowest Settings window.
+    b.Button("general.fileAssociations", L"Open videos in Moonbow", L"Открывать видео в Moonbow",
              "file-associations", L"Set up", L"Настроить")
         .Inferred()
         .Desc(L"Videos open in Moonbow; music stays with your music app. If Windows doesn't allow it, its Default apps page opens.",
