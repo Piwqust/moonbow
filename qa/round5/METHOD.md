@@ -77,7 +77,7 @@ How to review screenshots with a vision model. The research shows these steps ra
 
 ### Bug taxonomy for the review
 
-From the UI-Lens and canvas studies, adapted to Lumen.
+From the UI-Lens and canvas studies, adapted to Moonbow.
 
 | Type | Examples |
 |---|---|

@@ -1411,7 +1411,7 @@ std::wstring DecodeLegacyText(const uint8_t* data, size_t size, unsigned codePag
     if (ascii) return std::wstring(data, data + size);
     std::wstring w = Widen(data, size, CP_UTF8, MB_ERR_INVALID_CHARS);
     if (!w.empty()) return w;
-    // Not CP_ACP: the manifest makes that UTF-8 inside Lumen.exe.
+    // Not CP_ACP: the manifest makes that UTF-8 inside Moonbow.exe.
     return Widen(data, size, codePage ? codePage : SystemCodePage(), 0);
 }
 

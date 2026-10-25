@@ -11,15 +11,15 @@ class LibraryPane;
 class PlayerView;
 class MiniPlayer;
 
-inline constexpr wchar_t kMainWindowTitle[] = L"Lumen";
+inline constexpr wchar_t kMainWindowTitle[] = L"Moonbow";
 inline constexpr ULONG_PTR kCopyDataOpen = 0x4C554D31;  // 'LUM1'
 // Window property on a main window that takes files from new launches: its single-instance group
 // (a hash of the data folder, never 0). --new-instance windows have none, so a launch never hands
 // files to a test instance or a second window. wWinMain sets g_instanceGroup before the window.
-inline constexpr wchar_t kInstanceGroupProp[] = L"Lumen.InstanceGroup";
+inline constexpr wchar_t kInstanceGroupProp[] = L"Moonbow.InstanceGroup";
 inline uintptr_t g_instanceGroup = 0;
 // --automation only: WM_COPYDATA with a UTF-16 test command (App::AutomationCommand). The
-// message returns TRUE on success; the reply text goes to %TEMP%\lumen-cmd-<pid>.txt.
+// message returns TRUE on success; the reply text goes to %TEMP%\moonbow-cmd-<pid>.txt.
 inline constexpr ULONG_PTR kCopyDataCommand = 0x4C554D;  // 'LUM'
 
 // The main window: title bar, library (sidebar + content) or player, and the

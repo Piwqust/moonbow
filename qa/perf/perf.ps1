@@ -1,9 +1,9 @@
-# Lumen performance probe: startup trace, memory, CPU. Background (--automation) instances only.
-param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Lumen.exe"), [string]$Tag = "base", [int]$Runs = 3)
+# Moonbow performance probe: startup trace, memory, CPU. Background (--automation) instances only.
+param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Moonbow.exe"), [string]$Tag = "base", [int]$Runs = 3)
 $t = (Join-Path $PSScriptRoot "..\..\tools\dev")
-$m = "$env:TEMP\lumen-qa\media"
-$trace = "$env:TEMP\lumen-trace.txt"
-$env:LUMEN_TRACE = "1"
+$m = "$env:TEMP\moonbow-qa\media"
+$trace = "$env:TEMP\moonbow-trace.txt"
+$env:MOONBOW_TRACE = "1"
 
 function Probe($id, $label, $seconds) {
   $p = Get-Process -Id $id
@@ -24,7 +24,7 @@ function Stop($id) {
 "=== $Tag ==="
 for ($i = 0; $i -lt $Runs; $i++) {
   Remove-Item $trace -ErrorAction SilentlyContinue
-  $id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh -Library $m
+  $id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh -Library $m
   Start-Sleep 3
   "library start #$i : " + ((Get-Content $trace) -join " | ")
   if ($i -eq 0) { Probe $id "library idle" 5 }
@@ -32,7 +32,7 @@ for ($i = 0; $i -lt $Runs; $i++) {
 }
 for ($i = 0; $i -lt $Runs; $i++) {
   Remove-Item $trace -ErrorAction SilentlyContinue
-  $id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh "$m\Videos\Chaptered Demo (1080p).mkv"
+  $id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh "$m\Videos\Chaptered Demo (1080p).mkv"
   Start-Sleep 3
   "file start #$i : " + ((Get-Content $trace) -join " | ")
   if ($i -eq 0) {
@@ -43,7 +43,7 @@ for ($i = 0; $i -lt $Runs; $i++) {
   Stop $id
 }
 Remove-Item $trace -ErrorAction SilentlyContinue
-$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh "$m\Videos\4K Mandelbrot.mp4"
+$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh "$m\Videos\4K Mandelbrot.mp4"
 Start-Sleep 3
 Probe $id "4K playing" 5
 Stop $id

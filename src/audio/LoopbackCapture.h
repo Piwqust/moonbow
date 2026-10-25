@@ -1,5 +1,5 @@
 #pragma once
-// The music view's visualizer source: Lumen's own sound, captured with WASAPI process loopback
+// The music view's visualizer source: Moonbow's own sound, captured with WASAPI process loopback
 // (this process tree only, never other apps), analyzed on a background thread.
 //
 // The thread exists while the visualizer setting is on. It does work only while the view asks

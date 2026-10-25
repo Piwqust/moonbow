@@ -15,7 +15,7 @@ struct Request {
     std::wstring previewPage;          // --automation --setup-page <name>: that page, nothing runs
 };
 
-// The setup window, drawn with Lumen's UI: welcome, options, update with what's new, rollback,
+// The setup window, drawn with Moonbow's UI: welcome, options, update with what's new, rollback,
 // repair or remove, progress, done. Runs its own message loop; 0 when the work was done.
 int RunWindow(const Request& request);
 

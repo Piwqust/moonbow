@@ -110,7 +110,7 @@ bool OpenPackage(const std::wstring& exe, Package* out) {
     Package p;
     p.path = exe;
     p.version = FileVersion(exe);
-    p.files.push_back({L"Lumen.exe", first, first, 0, 0, true});
+    p.files.push_back({L"Moonbow.exe", first, first, 0, 0, true});
     uint64_t at = first;
     for (uint32_t i = 0; i < count; ++i) {
         uint16_t nameLen = 0;

@@ -1,10 +1,10 @@
 # State-matrix sweep (qa/round5/METHOD.md, layer 2): runs every scenario of a scenarios file in its own
-# fresh, invisible Lumen instance, captures a full-resolution PNG and a widget-tree dump (and a hit map
+# fresh, invisible Moonbow instance, captures a full-resolution PNG and a widget-tree dump (and a hit map
 # when the scenario asks), audits the dump with ui-audit.py and writes <Out>\index.html, a contact sheet
 # for a human or a vision model.
 #
 # Usage:
-#   powershell -File tools\dev\sweep.ps1 -Exe %TEMP%\lumen-qa\r5-base\Lumen.exe -Out %TEMP%\lumen-qa\r5sw-run
+#   powershell -File tools\dev\sweep.ps1 -Exe %TEMP%\moonbow-qa\r5-base\Moonbow.exe -Out %TEMP%\moonbow-qa\r5sw-run
 #              [-Scenarios qa\round5\scenarios.json] [-Filter <regex>] [-MaxPriority 1..3] [-Parallel 4]
 #              [-Prefix r5sw] [-List] [-NoHitmap]
 #
@@ -40,14 +40,14 @@ $dumpTreePs1 = Join-Path $here "dump-tree.ps1"
 $commandPs1 = Join-Path $here "command.ps1"
 $winposPs1 = Join-Path $here "winpos.ps1"
 $hitmapPs1 = Join-Path $here "hitmap.ps1"
-$qaTemp = Join-Path $env:TEMP "lumen-qa"
+$qaTemp = Join-Path $env:TEMP "moonbow-qa"
 
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
-if (-not ("LumenSweep" -as [type])) {
+if (-not ("MoonbowSweep" -as [type])) {
 Add-Type @"
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
-public static class LumenSweep {
+public static class MoonbowSweep {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
@@ -70,7 +70,7 @@ public static class LumenSweep {
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p);
       if (p != pid) return true;
       var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (c.ToString() == "LumenHost") list.Add(h);
+      if (c.ToString() == "MoonbowHost") list.Add(h);
       return true; }, IntPtr.Zero);
     return list.ToArray();
   }
@@ -78,7 +78,7 @@ public static class LumenSweep {
 }
 "@
 }
-[LumenSweep]::SetProcessDPIAware() | Out-Null
+[MoonbowSweep]::SetProcessDPIAware() | Out-Null
 
 # --- small helpers -------------------------------------------------------------------------------
 
@@ -181,8 +181,8 @@ function Expand-Scenarios($doc) {
 # --- Win32 access ------------------------------------------------------------------------------
 
 function Find-Main([int]$procId) {
-  foreach ($h in [LumenSweep]::Windows([uint32]$procId)) {
-    if ([LumenSweep]::IsWindowVisible($h) -and [LumenSweep]::GetWindow($h, 4) -eq [IntPtr]::Zero) { return $h }
+  foreach ($h in [MoonbowSweep]::Windows([uint32]$procId)) {
+    if ([MoonbowSweep]::IsWindowVisible($h) -and [MoonbowSweep]::GetWindow($h, 4) -eq [IntPtr]::Zero) { return $h }
   }
   return [IntPtr]::Zero
 }
@@ -190,20 +190,20 @@ function Find-Target([int]$procId, $spec) {
   # spec: "main" | "owned" | @{ title = regex }
   if ($null -eq $spec -or $spec -eq "main") { return Find-Main $procId }
   $re = if ($spec -is [string]) { if ($spec -eq "owned") { "" } else { $spec } } else { [string](Get-Prop $spec "title" "") }
-  foreach ($h in [LumenSweep]::Windows([uint32]$procId)) {
-    if (-not [LumenSweep]::IsWindowVisible($h)) { continue }
-    $owned = [LumenSweep]::GetWindow($h, 4) -ne [IntPtr]::Zero
-    if ($re) { if ([LumenSweep]::Title($h) -match $re) { return $h } }
+  foreach ($h in [MoonbowSweep]::Windows([uint32]$procId)) {
+    if (-not [MoonbowSweep]::IsWindowVisible($h)) { continue }
+    $owned = [MoonbowSweep]::GetWindow($h, 4) -ne [IntPtr]::Zero
+    if ($re) { if ([MoonbowSweep]::Title($h) -match $re) { return $h } }
     elseif ($owned) { return $h }
   }
   return [IntPtr]::Zero
 }
 function Get-Scale([IntPtr]$h) {
   if ($script:treeScale) { return $script:treeScale }
-  $d = [LumenSweep]::GetDpiForWindow($h); if ($d -le 0) { $d = 96 }; return $d / 96.0
+  $d = [MoonbowSweep]::GetDpiForWindow($h); if ($d -le 0) { $d = 96 }; return $d / 96.0
 }
-function Client-Size([IntPtr]$h) { $r = New-Object LumenSweep+RECT; [LumenSweep]::GetClientRect($h, [ref]$r) | Out-Null; return @($r.R, $r.B) }
-function Post([IntPtr]$h, [int]$msg, [int64]$w, [int64]$l) { [LumenSweep]::PostMessage($h, [uint32]$msg, [IntPtr]$w, [IntPtr]$l) | Out-Null }
+function Client-Size([IntPtr]$h) { $r = New-Object MoonbowSweep+RECT; [MoonbowSweep]::GetClientRect($h, [ref]$r) | Out-Null; return @($r.R, $r.B) }
+function Post([IntPtr]$h, [int]$msg, [int64]$w, [int64]$l) { [MoonbowSweep]::PostMessage($h, [uint32]$msg, [IntPtr]$w, [IntPtr]$l) | Out-Null }
 function LParam([int]$x, [int]$y) { [int64](($y -shl 16) -bor ($x -band 0xFFFF)) }
 
 function Send-Key([IntPtr]$h, [string]$combo) {
@@ -233,8 +233,8 @@ function Send-Mouse([IntPtr]$h, [string]$kind, [int]$x, [int]$y, [int]$delta = -
                Start-Sleep -Milliseconds 40; Post $h 0x203 (0x1 -bor $mk) $l; Post $h 0x202 $mk $l }
     "right" { Post $h 0x200 $mk $l; Start-Sleep -Milliseconds 30; Post $h 0x204 (0x2 -bor $mk) $l; Post $h 0x205 $mk $l }
     "wheel" {
-      $pt = New-Object LumenSweep+POINT; $pt.X = $x; $pt.Y = $y
-      [LumenSweep]::ClientToScreen($h, [ref]$pt) | Out-Null
+      $pt = New-Object MoonbowSweep+POINT; $pt.X = $x; $pt.Y = $y
+      [MoonbowSweep]::ClientToScreen($h, [ref]$pt) | Out-Null
       Post $h 0x200 $mk $l
       Post $h 0x20A ([int64](($delta * 120) -shl 16) -band 0xFFFFFFFF) (LParam $pt.X $pt.Y)
     }
@@ -252,7 +252,7 @@ function Dump-Tree([int]$procId, [IntPtr]$h, [string]$path) {
     try { & $dumpTreePs1 -ProcessId $procId -All -Out $path -Quiet | Out-Null } catch { }
     if (Test-Path $path) { return $true }
   }
-  $tmp = Join-Path $env:TEMP "lumen-tree-$procId.txt"
+  $tmp = Join-Path $env:TEMP "moonbow-tree-$procId.txt"
   if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
   Post $h (0x8000 + 43) 0 0
   $len = -1
@@ -310,7 +310,7 @@ function Parse-Tree([string]$path) {
 }
 function Pick-Window($wins, [IntPtr]$h) {
   if ($wins.Count -le 1) { return $wins[0] }
-  $t = [LumenSweep]::Title($h)
+  $t = [MoonbowSweep]::Title($h)
   foreach ($w in $wins) { if ($w.title -eq $t) { return $w } }
   return $wins[0]
 }
@@ -367,18 +367,18 @@ function Resolve-Point($sel, [int]$procId, [IntPtr]$h) {
 }
 
 function Capture-Png([IntPtr]$h, [string]$path, [string]$thumb) {
-  $r = New-Object LumenSweep+RECT
-  [LumenSweep]::GetWindowRect($h, [ref]$r) | Out-Null
+  $r = New-Object MoonbowSweep+RECT
+  [MoonbowSweep]::GetWindowRect($h, [ref]$r) | Out-Null
   $w = $r.R - $r.L; $hh = $r.B - $r.T
   if ($w -le 0 -or $hh -le 0) { throw "window has no size" }
   $bmp = New-Object System.Drawing.Bitmap $w, $hh
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $dc = $g.GetHdc()
-  [LumenSweep]::PrintWindow($h, $dc, 2) | Out-Null   # PW_RENDERFULLCONTENT: includes the DComp layer
+  [MoonbowSweep]::PrintWindow($h, $dc, 2) | Out-Null   # PW_RENDERFULLCONTENT: includes the DComp layer
   $g.ReleaseHdc($dc); $g.Dispose()
   # The client area only, without the window's invisible resize band (as capture.ps1).
-  $cr = New-Object LumenSweep+RECT; [LumenSweep]::GetClientRect($h, [ref]$cr) | Out-Null
-  $o = New-Object LumenSweep+POINT; [LumenSweep]::ClientToScreen($h, [ref]$o) | Out-Null
+  $cr = New-Object MoonbowSweep+RECT; [MoonbowSweep]::GetClientRect($h, [ref]$cr) | Out-Null
+  $o = New-Object MoonbowSweep+POINT; [MoonbowSweep]::ClientToScreen($h, [ref]$o) | Out-Null
   $cx = [math]::Max(0, $o.X - $r.L); $cy = [math]::Max(0, $o.Y - $r.T)
   $cw = [math]::Min($cr.R, $w - $cx); $ch = [math]::Min($cr.B, $hh - $cy)
   if ($cw -gt 0 -and $ch -gt 0 -and ($cw -ne $w -or $ch -ne $hh)) {
@@ -428,7 +428,7 @@ function Wait-Stable([string]$file, [int]$quietMs, [int]$maxMs) {
   return $false
 }
 
-function Start-Lumen($sc, [string]$dataDir) {
+function Start-Moonbow($sc, [string]$dataDir) {
   $argList = @("--new-instance", "--automation", "--data-dir", "`"$dataDir`"")
   if ($sc["scale"] -and [double]$sc["scale"] -ne 1) { $argList += @("--scale", [string]$sc["scale"]) }
   foreach ($f in @($sc["filesResolved"])) { if ($f) { $argList += "`"$f`"" } }
@@ -491,7 +491,7 @@ function Apply-Size([int]$procId, [string]$size) {
   $h = Find-Target $procId $script:target
   if ($h -eq [IntPtr]::Zero) { $h = Find-Main $procId }
   $wp = @{ ProcessId = $procId }
-  if ($h -ne (Find-Main $procId)) { $wp["Title"] = [LumenSweep]::Title($h) }
+  if ($h -ne (Find-Main $procId)) { $wp["Title"] = [MoonbowSweep]::Title($h) }
   switch -regex ($size) {
     '^min$' { & $winposPs1 @wp -Size "1,1" | Out-Null }
     '^max$' { & $winposPs1 @wp -Maximize | Out-Null }
@@ -515,12 +515,12 @@ function Take-Capture([int]$procId, [string]$label, [bool]$final) {
   $okTree = Dump-Tree $procId $h $tree
   $cs = Client-Size $h
   $state = "normal"
-  if ($script:fullscreen) { $state = "fullscreen" } elseif ([LumenSweep]::IsZoomed($h)) { $state = "maximized" }
+  if ($script:fullscreen) { $state = "fullscreen" } elseif ([MoonbowSweep]::IsZoomed($h)) { $state = "maximized" }
   $hit = $null
   if ($final -and $sc["hitmap"] -and -not $script:plan.noHitmap) {
     $hit = Join-Path $dir "$base.hitmap.txt"
     $step = if ($cs[0] -gt 1400) { 16 } else { 8 }
-    $title = [LumenSweep]::Title($h)
+    $title = [MoonbowSweep]::Title($h)
     try {
       $lines = & $hitmapPs1 -ProcessId $procId -Step $step -Title $title 2>&1 | ForEach-Object { "$_" }
       Write-Utf8 $hit (($lines -join "`r`n") + "`r`n")
@@ -532,14 +532,14 @@ function Take-Capture([int]$procId, [string]$label, [bool]$final) {
     $json = Join-Path $dir "$base.audit.json"; $md = Join-Path $dir "$base.audit.md"
     # Only the captured window: the others (the main window behind Settings) have their own scenarios.
     $a = @($auditPy, $tree, "--allow", $allowFile, "--json", $json, "--md", $md, "--quiet", "--context", $sc["name"], "--state", $state,
-           "--window", ("^" + [regex]::Escape([LumenSweep]::Title($h)) + "$"))
-    if ($hit) { $a += @("--hitmap", $hit, "--hitmap-step", "$($script:hitStep)", "--hitmap-window", ("^" + [regex]::Escape([LumenSweep]::Title($h)) + "$")) }
+           "--window", ("^" + [regex]::Escape([MoonbowSweep]::Title($h)) + "$"))
+    if ($hit) { $a += @("--hitmap", $hit, "--hitmap-step", "$($script:hitStep)", "--hitmap-window", ("^" + [regex]::Escape([MoonbowSweep]::Title($h)) + "$")) }
     & $script:plan.python @a 2>&1 | Out-Null
     if (Test-Path $json) { $audit = "$base.audit.json" }
   }
   $script:captures += [ordered]@{ label = $label; png = "$base.png"; thumb = "$base.thumb.jpg"; pixels = $px; client = "$($cs[0])x$($cs[1])"
     state = $state; tree = $(if ($okTree) { "$base.tree.txt" } else { $null }); hitmap = $(if ($hit) { "$base.hitmap.txt" } else { $null })
-    audit = $audit; auditMd = $(if ($audit) { "$base.audit.md" } else { $null }); window = [LumenSweep]::Title($h) }
+    audit = $audit; auditMd = $(if ($audit) { "$base.audit.md" } else { $null }); window = [MoonbowSweep]::Title($h) }
 }
 
 function Run-Scenario($sc) {
@@ -552,7 +552,7 @@ function Run-Scenario($sc) {
     description = $sc["description"]; status = "ok"; notes = @(); captures = @(); seconds = 0 }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   foreach ($r in @($sc["requires"])) {
-    if ($r -eq "scale" -and -not $script:plan.scale) { $result.status = "skipped"; $result.notes = @("needs Lumen --scale (exe without the v2 dump)"); return $result }
+    if ($r -eq "scale" -and -not $script:plan.scale) { $result.status = "skipped"; $result.notes = @("needs Moonbow --scale (exe without the v2 dump)"); return $result }
     if ($r -eq "cmd" -and -not $script:hasCommand) { $result.status = "skipped"; $result.notes = @("needs tools\dev\command.ps1"); return $result }
   }
   $dataDir = Join-Path $qaTemp ("{0}-w{1}" -f $script:plan.prefix, $WorkerId)
@@ -561,7 +561,7 @@ function Run-Scenario($sc) {
     $warm = $null
     if (@($sc["libraryResolved"]).Count) { $warm = $script:plan.warm[(@($sc["libraryResolved"]) -join "|")] }
     Prepare-DataDir $dataDir $sc $warm
-    $procId = Start-Lumen $sc $dataDir
+    $procId = Start-Moonbow $sc $dataDir
     $deadline = [DateTime]::Now.AddSeconds(20)
     $wantOwned = [bool]$sc["onboarding"]
     while ((Find-Main $procId) -eq [IntPtr]::Zero -and [DateTime]::Now -lt $deadline) {
@@ -697,10 +697,10 @@ if ($Reaudit) {
     }
   }
 } else {
-if (-not $Exe) { throw "-Exe is required (never the owner's build\Lumen.exe)" }
+if (-not $Exe) { throw "-Exe is required (never the owner's build\Moonbow.exe)" }
 if (-not $Out) { throw "-Out is required" }
 $Exe = (Resolve-Path $Exe).Path
-if ($Exe -ieq (Join-Path $repo "build\Lumen.exe")) { Write-Warning "using build\Lumen.exe: make sure the owner is not running it" }
+if ($Exe -ieq (Join-Path $repo "build\Moonbow.exe")) { Write-Warning "using build\Moonbow.exe: make sure the owner is not running it" }
 $Parallel = [math]::Max(1, [math]::Min(4, $Parallel))
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
@@ -825,9 +825,9 @@ main { display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr))
 table.tot { border-collapse:collapse; font-size:12px; margin-top:8px; } table.tot td, table.tot th { border:1px solid var(--line); padding:2px 8px; text-align:left; }
 @media (max-width:520px) { main { grid-template-columns:1fr; padding:12px 16px; } .bar { padding:8px 16px; } input[type=search] { width:100%; } }
 "@
-[void]$sb.Append("<!doctype html><html lang=`"en`"><head><meta charset=`"utf-8`"><meta name=`"viewport`" content=`"width=device-width, initial-scale=1`"><title>Lumen sweep</title><style>$css</style></head><body>")
+[void]$sb.Append("<!doctype html><html lang=`"en`"><head><meta charset=`"utf-8`"><meta name=`"viewport`" content=`"width=device-width, initial-scale=1`"><title>Moonbow sweep</title><style>$css</style></head><body>")
 $okN = @($results | Where-Object { $_.status -eq "ok" }).Count
-[void]$sb.Append("<header><h1>Lumen state-matrix sweep</h1><div class=`"muted`">$(Html $Exe) &middot; $($results.Count) scenarios ($okN ok) &middot; $([math]::Round($sw.Elapsed.TotalMinutes, 1)) min &middot; command.ps1: $($script:hasCommand) &middot; tree v2: $($script:dumpV2) &middot; --scale: $scaleOk &middot; $(Get-Date -Format 'yyyy-MM-dd HH:mm')</div>")
+[void]$sb.Append("<header><h1>Moonbow state-matrix sweep</h1><div class=`"muted`">$(Html $Exe) &middot; $($results.Count) scenarios ($okN ok) &middot; $([math]::Round($sw.Elapsed.TotalMinutes, 1)) min &middot; command.ps1: $($script:hasCommand) &middot; tree v2: $($script:dumpV2) &middot; --scale: $scaleOk &middot; $(Get-Date -Format 'yyyy-MM-dd HH:mm')</div>")
 [void]$sb.Append("<table class=`"tot`"><tr><th>check</th><th>findings</th></tr>")
 foreach ($c in $checkNames) { if ($totals[$c]) { [void]$sb.Append("<tr><td>$c</td><td>$($totals[$c])</td></tr>") } }
 [void]$sb.Append("</table><p class=`"muted`">Each card: the final capture (click for full resolution), the scenario, and the ui-audit findings of its tree dump. Review with METHOD.md section 2: compare with the same screen in the other theme or size, crop toolbars and rows, verify every candidate in the tree.</p></header>")

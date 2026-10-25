@@ -6,7 +6,7 @@ rem     build-tests\fuzz.exe mutates the seeds itself, for example:
 rem     build-tests\fuzz.exe tags tests\fuzz\seeds\tags 300 %TEMP%
 rem   libfuzzer: coverage-guided with AddressSanitizer (needs the C++ AddressSanitizer component of
 rem     Visual Studio), build-tests\fuzz-lf.exe, run as:
-rem     set LUMEN_FUZZ_TARGET=tags
+rem     set MOONBOW_FUZZ_TARGET=tags
 rem     build-tests\fuzz-lf.exe -max_total_time=300 %TEMP%\corpus-tags tests\fuzz\seeds\tags
 setlocal enabledelayedexpansion
 set "ROOT=%~dp0..\..\"
@@ -32,7 +32,7 @@ set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /WX /permissive- /Zc:__cplusplus
 set "LFLAGS=/SUBSYSTEM:CONSOLE /DYNAMICBASE /NXCOMPAT /DEBUG"
 set "EXE=fuzz.exe"
 if /i "%CONFIG%"=="libfuzzer" (
-    set "CFLAGS=%CFLAGS% /O1 /MT /DNDEBUG /fsanitize=address,fuzzer /DLUMEN_LIBFUZZER"
+    set "CFLAGS=%CFLAGS% /O1 /MT /DNDEBUG /fsanitize=address,fuzzer /DMOONBOW_LIBFUZZER"
     set "LFLAGS=%LFLAGS% /INCREMENTAL:NO"
     set "EXE=fuzz-lf.exe"
 ) else (

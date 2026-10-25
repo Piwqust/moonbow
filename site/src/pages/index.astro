@@ -12,13 +12,13 @@ const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 1
     <div class="hero__clock">
       <p class="hero__time time" aria-hidden="true" data-clock>0:00:00.085</p>
       <p class="label hero__note" data-clock-note>
-        <span data-clock-static>Через 0,085 секунды после запуска Lumen уже показывает первый кадр.</span>
-        <span data-clock-live hidden>Столько вы на сайте. Lumen за это время успел бы показать первый кадр <span class="time" data-clock-count>0</span>&nbsp;раз.</span>
+        <span data-clock-static>Через 0,085 секунды после запуска Moonbow уже показывает первый кадр.</span>
+        <span data-clock-live hidden>Столько вы на сайте. Moonbow за это время успел бы показать первый кадр <span class="time" data-clock-count>0</span>&nbsp;раз.</span>
       </p>
     </div>
     <div class="hero__text">
       <h1 class="display" id="hero-title" data-split="lines" data-intro>Плеер для своих фильмов, сериалов и&nbsp;музыки</h1>
-      <p class="lead" data-reveal="fade" data-intro data-delay="0.25">Lumen для Windows 10 и 11. Открывает файл быстрее, чем вы моргнёте, и потом ничего не мигает.</p>
+      <p class="lead" data-reveal="fade" data-intro data-delay="0.25">Moonbow для Windows 10 и 11. Открывает файл быстрее, чем вы моргнёте, и потом ничего не мигает.</p>
       <div class="hero__cta" data-reveal="fade" data-intro data-delay="0.4">
         <a class="btn btn--solid" href={download.url}>
           <span class="btn__fill" aria-hidden="true"></span>
@@ -29,12 +29,12 @@ const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 1
       </div>
     </div>
     <Shot class="hero__shot" name="player-film" eager sizes="(max-width: 767px) 100vw, 64vw"
-      alt="Lumen играет фильм «Вечер у воды»: девушка смотрит на город на закате, внизу панель управления" />
+      alt="Moonbow играет фильм «Вечер у воды»: девушка смотрит на город на закате, внизу панель управления" />
   </section>
 
   <section class="evening" aria-labelledby="evening-title" data-evening>
     <div class="wrap evening__intro grid">
-      <h2 class="display" id="evening-title" data-split="lines">Один вечер с&nbsp;Lumen, по&nbsp;секундам</h2>
+      <h2 class="display" id="evening-title" data-split="lines">Один вечер с&nbsp;Moonbow, по&nbsp;секундам</h2>
       <p class="prose" data-reveal="fade">Часы слева идут по логарифмической шкале: каждый следующий шаг в несколько раз длиннее предыдущего. От первых миллисекунд после запуска до недели спустя.</p>
     </div>
 
@@ -87,7 +87,7 @@ const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 1
 
   <section class="mono wrap" aria-labelledby="mono-title">
     <div class="grid">
-      <h2 class="mono__statement" id="mono-title" data-split="lines">Интерфейс Lumen серый. Цветным на&nbsp;экране бывает только ваш фильм.</h2>
+      <h2 class="mono__statement" id="mono-title" data-split="lines">Интерфейс Moonbow серый. Цветным на&nbsp;экране бывает только ваш фильм.</h2>
       <p class="prose mono__text" data-reveal="fade">Оранжевый акцент исходного макета заменён шкалой белого: пять тонов на выбор. Есть светлая тема, скины «Чёрный OLED», «Высокий контраст» и «Сепия», а свой скин в JSON перезагружается на лету.</p>
     </div>
     <ul class="tones" aria-label="Тона акцента">
@@ -99,8 +99,8 @@ const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 1
       ))}
     </ul>
     <div class="mono__pair grid">
-      <Shot class="mono__shot mono__shot--a" name="home-light" alt="Главная медиатеки Lumen в светлой теме" caption="Светлая тема. Та же шкала, зеркально." sizes="(max-width: 767px) 100vw, 50vw" />
-      <Shot class="mono__shot mono__shot--b" name="settings" alt="Окно настроек Lumen с поиском по параметрам" caption="Около 240 настроек, у каждой поиск и сброс." sizes="(max-width: 767px) 100vw, 40vw" />
+      <Shot class="mono__shot mono__shot--a" name="home-light" alt="Главная медиатеки Moonbow в светлой теме" caption="Светлая тема. Та же шкала, зеркально." sizes="(max-width: 767px) 100vw, 50vw" />
+      <Shot class="mono__shot mono__shot--b" name="settings" alt="Окно настроек Moonbow с поиском по параметрам" caption="Около 240 настроек, у каждой поиск и сброс." sizes="(max-width: 767px) 100vw, 40vw" />
     </div>
   </section>
 
@@ -128,7 +128,7 @@ const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 1
       <a class="btn" href={download.url}>
         <span class="btn__fill" aria-hidden="true"></span>
         <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
-        Скачать Lumen
+        Скачать Moonbow
       </a>
       <p class="label">Windows 10 и 11, 64 бит. Версия {download.version}, {download.size}. Бесплатно, GPL-3.0.</p>
     </div>

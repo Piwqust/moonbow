@@ -1,8 +1,8 @@
 # UI stress on a big library: scan time, memory, frame stats while scrolling and hovering.
-param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Lumen.exe"), [string]$Tag = "stress", [switch]$Keep)
+param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Moonbow.exe"), [string]$Tag = "stress", [switch]$Keep)
 $t = (Join-Path $PSScriptRoot "..\..\tools\dev")
-$trace = "$env:TEMP\lumen-trace.txt"
-$env:LUMEN_TRACE = "1"
+$trace = "$env:TEMP\moonbow-trace.txt"
+$env:MOONBOW_TRACE = "1"
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class St {
@@ -16,7 +16,7 @@ public static class St {
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   public static IntPtr Find(uint pid) { IntPtr f = IntPtr.Zero;
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (p == pid && c.ToString() == "LumenHost" && GetWindow(h, 4) == IntPtr.Zero) { f = h; return false; } return true; }, IntPtr.Zero); return f; }
+      if (p == pid && c.ToString() == "MoonbowHost" && GetWindow(h, 4) == IntPtr.Zero) { f = h; return false; } return true; }, IntPtr.Zero); return f; }
   public static void Wheel(IntPtr h, int x, int y, int delta, int count, int sleepMs) {
     var pt = new POINT { X = x, Y = y }; ClientToScreen(h, ref pt);
     for (int i = 0; i < count; i++) { PostMessage(h, 0x20A, (IntPtr)((delta * 120) << 16), (IntPtr)((pt.Y << 16) | (pt.X & 0xFFFF))); System.Threading.Thread.Sleep(sleepMs); } }
@@ -31,7 +31,7 @@ function Frames($label) { "--- $label"; if (Test-Path $trace) { Get-Content $tra
 
 Remove-Item $trace -ErrorAction SilentlyContinue
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh -Library "$env:TEMP\lumen-qa\big"
+$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh -Library "$env:TEMP\moonbow-qa\big"
 $p = Get-Process -Id $id
 Start-Sleep 1
 $h = [St]::Find([uint32]$id)
@@ -48,7 +48,7 @@ Frames "home scroll+hover"
 & "$t\input.ps1" -ProcessId $id -Click "100,160" | Out-Null; Start-Sleep 2
 Mem $p "music hub"
 Frames "open music"
-& "$t\capture.ps1" -ProcessId $id -Out "$env:TEMP\lumen-qa\v\stress-music.png" -Scale 0.5 | Out-Null
+& "$t\capture.ps1" -ProcessId $id -Out "$env:TEMP\moonbow-qa\v\stress-music.png" -Scale 0.5 | Out-Null
 # Videos: 60 show folders
 & "$t\input.ps1" -ProcessId $id -Click "100,114" | Out-Null; Start-Sleep 2
 Frames "open videos"
@@ -59,6 +59,6 @@ Mem $p "videos"
 & "$t\input.ps1" -ProcessId $id -Click "1060,75" | Out-Null
 $sw.Restart(); & "$t\input.ps1" -ProcessId $id -Type "Song 5" | Out-Null; Start-Sleep 1
 Frames "search typing"
-& "$t\capture.ps1" -ProcessId $id -Out "$env:TEMP\lumen-qa\v\stress-search.png" -Scale 0.5 | Out-Null
+& "$t\capture.ps1" -ProcessId $id -Out "$env:TEMP\moonbow-qa\v\stress-search.png" -Scale 0.5 | Out-Null
 Mem $p "after search"
 if ($Keep) { "kept PID $id" } else { $p.CloseMainWindow() | Out-Null; if (-not $p.WaitForExit(5000)) { Stop-Process -Id $id -Force; "killed" } }

@@ -755,7 +755,7 @@ std::vector<MenuItem> Page::FolderMenu(const std::wstring& folder, library::Medi
         m.push_back(MenuItem::Separator());
         m.push_back(Item(L"Remove from Library", "remove", [folder, name] {
             ShowConfirm(Tr(L"Remove folder from library"),
-                        Fmt(Tr(L"“{0}” will no longer appear in Lumen. The files stay on your disk."), {name}),
+                        Fmt(Tr(L"“{0}” will no longer appear in Moonbow. The files stay on your disk."), {name}),
                         Tr(L"Remove"), [folder] { RemoveLibraryRoot(folder); });
         }));
     }
@@ -1107,8 +1107,8 @@ protected:
         if (route_.path.empty()) {
             if (app.library().Roots().empty()) {
                 e.Set("new-folder", Tr(L"Add your media folders"),
-                      video ? Tr(L"Lumen shows the videos from the folders you add. Nothing is moved or copied.")
-                            : Tr(L"Lumen shows the music from the folders you add. Nothing is moved or copied."),
+                      video ? Tr(L"Moonbow shows the videos from the folders you add. Nothing is moved or copied.")
+                            : Tr(L"Moonbow shows the music from the folders you add. Nothing is moved or copied."),
                       {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }},
                        {Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}});
             } else if (scanning) {

@@ -1,24 +1,24 @@
 // Russian translations for the onboarding area: {L"English", L"Русский"},
-{L"Lumen Setup", L"Настройка Lumen"},
-{L"Welcome to Lumen!", L"Добро пожаловать в Lumen!"},
-{L"Lumen is a fast, quiet player for your videos and music. It opens almost any file, "
+{L"Moonbow Setup", L"Настройка Moonbow"},
+{L"Welcome to Moonbow!", L"Добро пожаловать в Moonbow!"},
+{L"Moonbow is a fast, quiet player for your videos and music. It opens almost any file, "
  L"folder or network stream, remembers where you stopped and keeps your library in "
  L"order.",
- L"Lumen — быстрый и спокойный плеер для видео и музыки. Он открывает почти любой файл, папку или сетевой "
+ L"Moonbow — быстрый и спокойный плеер для видео и музыки. Он открывает почти любой файл, папку или сетевой "
  L"поток, помнит, где вы остановились, и держит медиатеку в порядке."},
 {L"Interface language", L"Язык интерфейса"},
 {L"Choose a Media Folder to get started with", L"Выберите папку с медиа, чтобы начать"},
 {L"Folder with your videos or music", L"Папка с видео или музыкой"},
 {L"Browse", L"Обзор"},
 {L"You can add folders later from the sidebar.", L"Папки можно добавить и позже, на боковой панели."},
-{L"Folder found. Lumen will look for videos and music in it.", L"Папка найдена. Lumen найдёт в ней видео и музыку."},
+{L"Folder found. Moonbow will look for videos and music in it.", L"Папка найдена. Moonbow найдёт в ней видео и музыку."},
 {L"This folder doesn't exist. It won't be added.", L"Такой папки нет, она не будет добавлена."},
-{L"This is a whole drive: Lumen would scan all of it. Better pick your media folder.",
- L"Это весь диск: Lumen просмотрит его целиком. Лучше выберите папку с медиа."},
-{L"This is a system folder: Lumen would scan all of it. Better pick your media folder.",
- L"Это системная папка: Lumen просмотрит её целиком. Лучше выберите папку с медиа."},
+{L"This is a whole drive: Moonbow would scan all of it. Better pick your media folder.",
+ L"Это весь диск: Moonbow просмотрит его целиком. Лучше выберите папку с медиа."},
+{L"This is a system folder: Moonbow would scan all of it. Better pick your media folder.",
+ L"Это системная папка: Moonbow просмотрит её целиком. Лучше выберите папку с медиа."},
 {L"Skip", L"Пропустить"},
-{L"Keep the defaults and start using Lumen", L"Оставить настройки по умолчанию и начать"},
+{L"Keep the defaults and start using Moonbow", L"Оставить настройки по умолчанию и начать"},
 {L"Continue", L"Далее"},
 {L"Finish", L"Готово"},
 // appearance
@@ -33,8 +33,8 @@
 {L"Graphite", L"Графит"},
 // summary
 {L"You're all set.", L"Всё готово."},
-{L"Here is how Lumen is set up. Everything can be changed later in Settings.",
- L"Так настроен Lumen. Всё это можно изменить позже в настройках."},
+{L"Here is how Moonbow is set up. Everything can be changed later in Settings.",
+ L"Так настроен Moonbow. Всё это можно изменить позже в настройках."},
 {L"Media folder", L"Папка с медиа"},
 {L"Not chosen", L"Не выбрана"},
 {L"Theme", L"Тема"},

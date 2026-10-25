@@ -64,9 +64,9 @@ DWORD WINAPI WriteReport(void*) {
     const wchar_t* slash = wcsrchr(modulePath, L'\\');
     char text[512];
     snprintf(text, sizeof text,
-             "Lumen %ls crashed.\r\n"
+             "Moonbow %ls crashed.\r\n"
              "Exception 0x%08lX%s at %ls+0x%llX, thread %lu.\r\n%s%s"
-             "The .dmp file next to this one has the stacks; open it in WinDbg with Lumen.pdb of this build.\r\n",
+             "The .dmp file next to this one has the stacks; open it in WinDbg with Moonbow.pdb of this build.\r\n",
              g_version, code, code == kAbort ? " (std::terminate, abort or a CRT check)" : "",
              slash ? slash + 1 : modulePath,
              static_cast<unsigned long long>(static_cast<BYTE*>(at) - reinterpret_cast<BYTE*>(module)), g_thread,
@@ -115,7 +115,7 @@ void InstallCrashHandler(const std::wstring& version) {
     if (dir.empty()) return;
     wcsncpy_s(g_dir, dir.c_str(), _TRUNCATE);
     // Test runs that wipe their data folders (tools\dev\sweep.ps1) collect reports elsewhere.
-    if (wchar_t custom[MAX_PATH]; GetEnvironmentVariableW(L"LUMEN_CRASH_DIR", custom, MAX_PATH) - 1u < MAX_PATH - 1u)
+    if (wchar_t custom[MAX_PATH]; GetEnvironmentVariableW(L"MOONBOW_CRASH_DIR", custom, MAX_PATH) - 1u < MAX_PATH - 1u)
         wcsncpy_s(g_dir, custom, _TRUNCATE);
     wcsncpy_s(g_version, version.c_str(), _TRUNCATE);
     SetUnhandledExceptionFilter(OnCrash);

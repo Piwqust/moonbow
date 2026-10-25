@@ -246,7 +246,7 @@ void ShowVideoContextMenu(Host* host, Point at) {
     settings.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
                                 [] { TogglePlayerPanel(PanelKind::Settings, {}); }});
     settings.submenu.push_back(Item(L"Customize player", Action::CustomizePlayer, "edit"));
-    settings.submenu.push_back(Item(L"Lumen Settings", Action::Settings, "preferences"));
+    settings.submenu.push_back(Item(L"Moonbow Settings", Action::Settings, "preferences"));
     items.push_back(settings);
     items.push_back(Item(L"Quit", Action::Quit, "quit"));
     KeepMenu(host, ShowContextMenu(host, at, std::move(items)));

@@ -28,7 +28,7 @@ export function startHome() {
 function heroClock(el: HTMLElement, intro: gsap.core.Timeline) {
   if (prefersReducedMotion()) return () => {};
   const dark = document.querySelector<HTMLElement>('.hero__shot .shot__dark');
-  // The picture develops from black in 200 ms, exactly as Lumen does it.
+  // The picture develops from black in 200 ms, exactly as Moonbow does it.
   if (dark) intro.add(gsap.to(dark, { opacity: 0, duration: 0.2, ease: 'none' }), 0.35);
   document.querySelector<HTMLElement>('[data-clock-static]')!.hidden = true;
   document.querySelector<HTMLElement>('[data-clock-live]')!.hidden = false;

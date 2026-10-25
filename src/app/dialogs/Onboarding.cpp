@@ -95,7 +95,7 @@ private:
 
 // --- step 1 widgets ---------------------------------------------------------------------------
 
-// A sketch of a Lumen window in live palette colors: plain shapes instead of real icons and
+// A sketch of a Moonbow window in live palette colors: plain shapes instead of real icons and
 // text, so it reads as a picture of the theme and not as a player that could be clicked.
 class PreviewWindow : public Widget {
 public:
@@ -106,7 +106,7 @@ public:
         p.Fill(rect, c.bgBase);
         const Rect title{rect.x, rect.y, rect.w, 20};
         p.Fill(title, c.bgChrome);
-        p.Icon("lumen", {title.x + 8, title.y + 4, 12, 12}, c.textPrimary);
+        p.Icon("moonbow", {title.x + 8, title.y + 4, 12, 12}, c.textPrimary);
         for (int i = 0; i < 3; ++i) p.Fill({title.Right() - 22 - i * 18.0f, title.Cy() - 1, 8, 2}, c.textTertiary, 1);
 
         const Rect bar{rect.x, rect.Bottom() - 30, rect.w, 30};
@@ -213,7 +213,7 @@ public:
     bool Open() {
         MainWindow* main = TheApp().main();
         HostOptions o;
-        o.title = Tr(L"Lumen Setup");
+        o.title = Tr(L"Moonbow Setup");
         o.width = kW;
         o.height = kH;
         o.minWidth = kW;
@@ -294,7 +294,7 @@ private:
         back_ = root_->Add<DButton>(Tr(L"Back"), BtnStyle::Neutral, TextStyle::Heading);
         next_ = root_->Add<DButton>(Tr(L"Continue"), BtnStyle::Solid, TextStyle::Heading);
         dots_ = root_->Add<Dots>(this);
-        skip_->tooltip = Tr(L"Keep the defaults and start using Lumen");
+        skip_->tooltip = Tr(L"Keep the defaults and start using Moonbow");
         skip_->onClick = [this] { Finish(); };
         back_->onClick = [this] { Go(step_ - 1, true); };
         next_->onClick = [this] { Next(); };
@@ -315,9 +315,9 @@ private:
     }
 
     void Relabel() {
-        SetWindowTextW(host_.Hwnd(), Tr(L"Lumen Setup"));
+        SetWindowTextW(host_.Hwnd(), Tr(L"Moonbow Setup"));
         skip_->text = Tr(L"Skip");
-        skip_->tooltip = Tr(L"Keep the defaults and start using Lumen");
+        skip_->tooltip = Tr(L"Keep the defaults and start using Moonbow");
         back_->SetText(Tr(L"Back"));
         next_->SetText(step_ == kSteps - 1 ? Tr(L"Finish") : Tr(L"Continue"));
         GoLater(step_, false);
@@ -434,11 +434,11 @@ private:
     // --- steps -----------------------------------------------------------------------------------
 
     void BuildWelcome(AbsPage* pg) {
-        pg->Centered<IconView>(84, 104, 104, "lumen", 104, Tone::Accent);
-        pg->Centered<Label>(214, 700, 39, Tr(L"Welcome to Lumen!"), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<IconView>(84, 104, 104, "moonbow", 104, Tone::Accent);
+        pg->Centered<Label>(214, 700, 39, Tr(L"Welcome to Moonbow!"), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         auto* d = pg->At<Label>(Rect{248, 276, 595, 72},
-                                Tr(L"Lumen is a fast, quiet player for your videos and music. It opens almost any file, "
+                                Tr(L"Moonbow is a fast, quiet player for your videos and music. It opens almost any file, "
                                    L"folder or network stream, remembers where you stopped and keeps your library in "
                                    L"order."),
                                 TextStyle::Large, Tone::Secondary);
@@ -464,9 +464,9 @@ private:
             const int broad = dir ? TooBroad(t) : 0;
             const wchar_t* text =
                 t.empty()     ? L"You can add folders later from the sidebar."
-                : broad == 1 ? L"This is a whole drive: Lumen would scan all of it. Better pick your media folder."
-                : broad == 2 ? L"This is a system folder: Lumen would scan all of it. Better pick your media folder."
-                : dir        ? L"Folder found. Lumen will look for videos and music in it."
+                : broad == 1 ? L"This is a whole drive: Moonbow would scan all of it. Better pick your media folder."
+                : broad == 2 ? L"This is a system folder: Moonbow would scan all of it. Better pick your media folder."
+                : dir        ? L"Folder found. Moonbow will look for videos and music in it."
                              : L"This folder doesn't exist. It won't be added.";
             status->SetText(Tr(text));
             // A missing folder is an error and a whole drive a warning, not the grey helper line.
@@ -518,7 +518,7 @@ private:
     void BuildSummary(AbsPage* pg) {
         pg->Centered<Label>(72, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
-        pg->Centered<Label>(132, 700, 22, Tr(L"Here is how Lumen is set up. Everything can be changed later in Settings."),
+        pg->Centered<Label>(132, 700, 22, Tr(L"Here is how Moonbow is set up. Everything can be changed later in Settings."),
                             TextStyle::Large, Tone::Tertiary)
             ->halign = HAlign::Center;
         auto card = [pg](float y, float h) {
@@ -565,7 +565,7 @@ private:
             change->onClick = [this, s] { GoLater(s, true); };
         }
 
-        // What Lumen keeps about the user, right here instead of on a page of its own.
+        // What Moonbow keeps about the user, right here instead of on a page of its own.
         auto* prefs = card(178 + rows.size() * 48.0f + 16 + 16, 0);  // 0: as tall as its rows
         // The Settings rows' own words, so a switch is found there under the same name.
         const char* const opts[] = {"privacy.saveHistory", "privacy.rememberPosition", "library.thumbnails"};

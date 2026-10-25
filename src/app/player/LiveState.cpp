@@ -43,7 +43,7 @@ Config& Cfg() {
     return TheApp().config();
 }
 
-// Video Super Resolution flavour of the graphics card Lumen (and mpv, on the default adapter)
+// Video Super Resolution flavour of the graphics card Moonbow (and mpv, on the default adapter)
 // renders with: "nvidia", "intel" or "" when it has none. Asked once the device exists.
 const char* SuperResVendor() {
     static int vendor = -1;
@@ -99,7 +99,7 @@ HMONITOR VideoMonitor() {
     return w ? MonitorFromWindow(w->Hwnd(), MONITOR_DEFAULTTONEAREST) : nullptr;
 }
 
-// The config's vf chain: "@lumen:lavfi=[...]" with the CPU filters the user picked (a
+// The config's vf chain: "@moonbow:lavfi=[...]" with the CPU filters the user picked (a
 // deinterlacing method, deblocking...), empty when none.
 std::string ConfigVf() {
     for (const auto& [name, value] : MpvOptionFor(Cfg(), "performance.postprocessing"))
@@ -170,7 +170,7 @@ bool ExcludedFromMemory(const std::wstring& path) {
     return TheApp().history().IsExcluded(path);
 }
 
-// Settings whose mpv mapping rewrites a whole filter chain ("vf", "af"), dropping Lumen's
+// Settings whose mpv mapping rewrites a whole filter chain ("vf", "af"), dropping Moonbow's
 // labelled filters in it.
 bool Rewrites(const std::string& key, const char* chain) {
     const settings::Item* item = settings::FindItem(key);

@@ -91,7 +91,7 @@ void Line(Painter& p, D2D1_POINT_2F a, D2D1_POINT_2F b, Color color, float width
         p.Ctx()->DrawLine(a, b, brush.Get(), width, RoundStroke());
 }
 
-// Lumen's mark over a soft halo; grows in once.
+// Moonbow's mark over a soft halo; grows in once.
 class LogoMark : public Widget {
 public:
     explicit LogoMark(float size, bool dim = false) : size_(size), dim_(dim) { appear_.To(1, 520); }
@@ -102,7 +102,7 @@ public:
         Glow(p, ctr, size_ * (0.75f + 0.15f * k), c.accent.Fade(0.12f * k));
         const float s = std::round(size_ * (0.92f + 0.08f * k));
         p.PushOpacity(k);
-        p.Icon("lumen", {ctr.x - s / 2, ctr.y - s / 2, s, s}, dim_ ? c.textTertiary : c.accent);
+        p.Icon("moonbow", {ctr.x - s / 2, ctr.y - s / 2, s, s}, dim_ ? c.textTertiary : c.accent);
         p.PopOpacity();
     }
 
@@ -131,7 +131,7 @@ public:
             Arc(p, ctr, r, 0, value.Get(), c.accent, 3);
         }
         const float s = std::round(r * 0.9f);
-        p.Icon("lumen", {ctr.x - s / 2, ctr.y - s / 2, s, s}, c.accent);
+        p.Icon("moonbow", {ctr.x - s / 2, ctr.y - s / 2, s, s}, c.accent);
     }
 };
 
@@ -157,7 +157,7 @@ private:
     AnimFloat draw_{0};
 };
 
-// "0.1.0 → 0.2.0": where Lumen is, where it goes.
+// "0.1.0 → 0.2.0": where Moonbow is, where it goes.
 class VersionFlow : public Widget {
 public:
     VersionFlow(std::wstring from, std::wstring to) : from_(std::move(from)), to_(std::move(to)) {}
@@ -293,7 +293,7 @@ public:
 
     int Run() {
         HostOptions o;
-        o.title = Tr(L"Lumen Installer");
+        o.title = Tr(L"Moonbow Installer");
         o.width = o.minWidth = kW;
         o.height = o.minHeight = kH;
         o.resizable = false;
@@ -415,8 +415,8 @@ private:
     }
 
     void RunningNotice(float y) {
-        if (!LumenRunning(dir_)) return;
-        auto* l = CenteredText(page_, y, 560, 20, Tr(L"Lumen is open: it will close, and where you stopped is saved."),
+        if (!MoonbowRunning(dir_)) return;
+        auto* l = CenteredText(page_, y, 560, 20, Tr(L"Moonbow is open: it will close, and where you stopped is saved."),
                                TextStyle::Small, Tone::Secondary);
         l->a11yName = l->Text();
     }
@@ -425,7 +425,7 @@ private:
 
     void BuildWelcome() {
         page_->Centered<LogoMark>(56, 120, 120, 96.0f);
-        CenteredText(page_, 196, 640, 40, Tr(L"Welcome to Lumen"), TextStyle::Display, Tone::Primary);
+        CenteredText(page_, 196, 640, 40, Tr(L"Welcome to Moonbow"), TextStyle::Display, Tone::Primary);
         CenteredText(page_, 246, 520, 48,
                      Tr(L"A fast, quiet player for your videos and music. It installs in seconds, just for you, "
                         L"without administrator rights."),
@@ -452,7 +452,7 @@ private:
         browse->onClick = [this, folder] {
             const std::wstring f = app::dlg::PickFolder(host_.Hwnd(), folder->Text());
             if (f.empty()) return;
-            dir_ = f + (f.size() > 3 && f.find(L"Lumen") == std::wstring::npos ? L"\\Lumen" : L"");
+            dir_ = f + (f.size() > 3 && f.find(L"Moonbow") == std::wstring::npos ? L"\\Moonbow" : L"");
             folder->SetText(dir_);
         };
         auto* hint = page_->At<Label>(Rect{60, 184, 600, 36},
@@ -463,11 +463,11 @@ private:
         hint->valign = VAlign::Top;
 
         page_->At<Divider>(Rect{60, 240, 600, 1});
-        page_->At<Label>(Rect{60, 262, 500, 20}, Tr(L"Open videos in Lumen by default"), TextStyle::Body, Tone::Primary);
+        page_->At<Label>(Rect{60, 262, 500, 20}, Tr(L"Open videos in Moonbow by default"), TextStyle::Body, Tone::Primary);
         page_->At<Label>(Rect{60, 286, 500, 18}, Tr(L"Music and playlists stay with the app you use now."),
                          TextStyle::Small, Tone::Tertiary);
         auto* toggle = page_->At<Toggle>(Rect{620, 268, 40, 20}, defaultPlayer_);
-        toggle->a11yName = Tr(L"Open videos in Lumen by default");
+        toggle->a11yName = Tr(L"Open videos in Moonbow by default");
         toggle->onChange = [this](bool on) { defaultPlayer_ = on; };
 
         auto* back = page_->At<DButton>(Rect{60, 420, 120, 40}, Tr(L"Back"), BtnStyle::Neutral, TextStyle::Heading);
@@ -482,7 +482,7 @@ private:
     void BuildUpdate() {
         page_->Centered<LogoMark>(20, 76, 76, 56.0f);
         CenteredText(page_, 100, 640, 32,
-                     req_.op == Op::Switch ? Fmt(Tr(L"Switch to Lumen {0}"), {incoming_}) : std::wstring(Tr(L"Lumen update")),
+                     req_.op == Op::Switch ? Fmt(Tr(L"Switch to Moonbow {0}"), {incoming_}) : std::wstring(Tr(L"Moonbow update")),
                      TextStyle::Title, Tone::Primary);
         page_->Centered<VersionFlow>(144, 400, 32, installed_, incoming_);
         const std::vector<std::wstring> notes = NotesBetween(installed_, incoming_, Russian());
@@ -507,7 +507,7 @@ private:
             }
         }
         const float y = notes.empty() ? 210.0f : 378.0f;
-        if (LumenRunning(dir_)) RunningNotice(y);
+        if (MoonbowRunning(dir_)) RunningNotice(y);
         else
             CenteredText(page_, y, 560, 20, Fmt(Tr(L"Version {0} stays on this computer, so you can go back to it."), {installed_}),
                          TextStyle::Small, Tone::Tertiary);
@@ -518,7 +518,7 @@ private:
     void BuildRollback() {
         const float y = snapshot_ ? 0.0f : 40.0f;  // without the checkbox the page is shorter: keep it centred
         page_->Centered<LogoMark>(36 + y, 88, 88, 64.0f);
-        CenteredText(page_, 132 + y, 640, 32, Fmt(Tr(L"Go back to Lumen {0}"), {incoming_}), TextStyle::Title, Tone::Primary);
+        CenteredText(page_, 132 + y, 640, 32, Fmt(Tr(L"Go back to Moonbow {0}"), {incoming_}), TextStyle::Title, Tone::Primary);
         page_->Centered<VersionFlow>(180 + y, 400, 32, installed_, incoming_);
         CenteredText(page_, 232 + y, 520, 44,
                      Fmt(Tr(L"Version {0} stays on this computer, so you can return to it later."), {installed_}),
@@ -527,7 +527,7 @@ private:
             auto* row = page_->Centered<Widget>(292, 520, 24);
             row->dir = Dir::Row;
             row->justify = Justify::Center;
-            auto* box = row->Add<Checkbox>(Fmt(Tr(L"Bring back the settings and library Lumen {0} had"), {incoming_}), restoreData_);
+            auto* box = row->Add<Checkbox>(Fmt(Tr(L"Bring back the settings and library Moonbow {0} had"), {incoming_}), restoreData_);
             box->onChange = [this](bool on) { restoreData_ = on; };
             CenteredText(page_, 322, 520, 18, Tr(L"Otherwise the current ones stay."), TextStyle::Small, Tone::Tertiary);
         }
@@ -537,10 +537,10 @@ private:
 
     void BuildSame() {
         page_->Centered<LogoMark>(36, 88, 88, 64.0f);
-        CenteredText(page_, 132, 640, 32, Fmt(Tr(L"Lumen {0} is installed"), {installed_}), TextStyle::Title, Tone::Primary);
+        CenteredText(page_, 132, 640, 32, Fmt(Tr(L"Moonbow {0} is installed"), {installed_}), TextStyle::Title, Tone::Primary);
         CenteredText(page_, 176, 640, 22, Tr(L"What would you like to do?"), TextStyle::Large, Tone::Secondary);
         const float w = 196, gap = 16, x0 = std::round((kW - 3 * w - 2 * gap) / 2);
-        auto* open = page_->At<ActionCard>(Rect{x0, 230, w, 150}, "play", Tr(L"Open Lumen"),
+        auto* open = page_->At<ActionCard>(Rect{x0, 230, w, 150}, "play", Tr(L"Open Moonbow"),
                                            Tr(L"Start the installed version."));
         open->onClick = [this] {
             Launch();
@@ -550,7 +550,7 @@ private:
                                              Tr(L"Put its files, file types and shortcut back in place."));
         repair->onClick = [this] { Start(); };
         auto* remove = page_->At<ActionCard>(Rect{x0 + 2 * (w + gap), 230, w, 150}, "remove", Tr(L"Uninstall"),
-                                             Tr(L"Remove Lumen from this computer."));
+                                             Tr(L"Remove Moonbow from this computer."));
         remove->onClick = [this] {
             req_.op = Op::Uninstall;
             GoLater(Page::Remove);
@@ -561,28 +561,28 @@ private:
 
     void BuildRemove() {
         page_->Centered<LogoMark>(36, 88, 88, 64.0f, true);
-        CenteredText(page_, 132, 640, 32, Tr(L"Uninstall Lumen?"), TextStyle::Title, Tone::Primary);
+        CenteredText(page_, 132, 640, 32, Tr(L"Uninstall Moonbow?"), TextStyle::Title, Tone::Primary);
         CenteredText(page_, 178, 540, 44,
-                     Tr(L"Lumen and all its kept versions will be removed. Your videos and music stay where they are."),
+                     Tr(L"Moonbow and all its kept versions will be removed. Your videos and music stay where they are."),
                      TextStyle::Body, Tone::Secondary);
         auto* row = page_->Centered<Widget>(256, 520, 24);
         row->dir = Dir::Row;
         row->justify = Justify::Center;
         auto* box = row->Add<Checkbox>(Tr(L"Also delete settings, library and logs"), removeData_);
         box->onChange = [this](bool on) { removeData_ = on; };
-        CenteredText(page_, 286, 520, 18, Tr(L"Keep them if you plan to install Lumen again."), TextStyle::Small,
+        CenteredText(page_, 286, 520, 18, Tr(L"Keep them if you plan to install Moonbow again."), TextStyle::Small,
                      Tone::Tertiary);
         RunningNotice(372);
         Buttons(420, Tr(L"Uninstall"), [this] { Start(); }, Tr(L"Cancel"), [this] { host_.Close(); });
     }
 
     std::wstring WorkTitle() const {
-        if (req_.op == Op::Uninstall) return Tr(L"Removing Lumen…");
+        if (req_.op == Op::Uninstall) return Tr(L"Removing Moonbow…");
         switch (action_) {
-            case Action::Install: return Fmt(Tr(L"Installing Lumen {0}…"), {incoming_});
+            case Action::Install: return Fmt(Tr(L"Installing Moonbow {0}…"), {incoming_});
             case Action::Update: return Fmt(Tr(L"Updating to {0}…"), {incoming_});
             case Action::Rollback: return Fmt(Tr(L"Going back to {0}…"), {incoming_});
-            default: return Tr(L"Repairing Lumen…");
+            default: return Tr(L"Repairing Moonbow…");
         }
     }
 
@@ -598,7 +598,7 @@ private:
         if (!status_) return;
         const int phase = phase_.load();
         const float f = static_cast<float>(progress_.load());
-        std::wstring text = phase == 0   ? Tr(L"Closing Lumen…")
+        std::wstring text = phase == 0   ? Tr(L"Closing Moonbow…")
                             : phase == 2 ? Tr(L"Almost done…")
                             : req_.op == Op::Uninstall ? Tr(L"Removing files…")
                             : f >= 1.0f  ? Tr(L"Connecting file types and the shortcut…")
@@ -610,12 +610,12 @@ private:
     }
 
     std::wstring DoneTitle() const {
-        if (req_.op == Op::Uninstall) return Tr(L"Lumen is removed");
+        if (req_.op == Op::Uninstall) return Tr(L"Moonbow is removed");
         switch (action_) {
-            case Action::Install: return Tr(L"Lumen is installed");
-            case Action::Update: return Fmt(Tr(L"Lumen is updated to {0}"), {incoming_});
-            case Action::Rollback: return Fmt(Tr(L"You are back on Lumen {0}"), {incoming_});
-            default: return Tr(L"Lumen is repaired");
+            case Action::Install: return Tr(L"Moonbow is installed");
+            case Action::Update: return Fmt(Tr(L"Moonbow is updated to {0}"), {incoming_});
+            case Action::Rollback: return Fmt(Tr(L"You are back on Moonbow {0}"), {incoming_});
+            default: return Tr(L"Moonbow is repaired");
         }
     }
 
@@ -625,11 +625,11 @@ private:
                                : Tr(L"Your settings and library are kept for the next install.");
         switch (action_) {
             case Action::Install:
-                return defaultPlayer_ ? Tr(L"Videos now open in Lumen. It is also in the Start menu.")
+                return defaultPlayer_ ? Tr(L"Videos now open in Moonbow. It is also in the Start menu.")
                                       : Tr(L"You will find it in the Start menu.");
             case Action::Update:
             case Action::Rollback:
-                return Fmt(Tr(L"Version {0} is kept: Settings › About Lumen takes you back to it."), {installed_});
+                return Fmt(Tr(L"Version {0} is kept: Settings › About Moonbow takes you back to it."), {installed_});
             default: return Tr(L"Its files, file types and shortcut are in place again.");
         }
     }
@@ -642,7 +642,7 @@ private:
             Buttons(420, Tr(L"Close"), [this] { host_.Close(); });
             return;
         }
-        Buttons(420, Tr(L"Open Lumen"),
+        Buttons(420, Tr(L"Open Moonbow"),
                 [this] {
                     Launch();
                     host_.Close();
@@ -653,10 +653,10 @@ private:
     void BuildError() {
         page_->Centered<IconView>(112, 56, 56, "warning", 56, Tone::Secondary);
         CenteredText(page_, 192, 640, 32,
-                     req_.op == Op::Uninstall ? Tr(L"Lumen could not be removed.") : Tr(L"Lumen could not be installed."),
+                     req_.op == Op::Uninstall ? Tr(L"Moonbow could not be removed.") : Tr(L"Moonbow could not be installed."),
                      TextStyle::Title, Tone::Primary);
         if (req_.op != Op::Uninstall)
-            CenteredText(page_, 236, 540, 22, Tr(L"Nothing changed: Lumen is as it was."), TextStyle::Body, Tone::Secondary);
+            CenteredText(page_, 236, 540, 22, Tr(L"Nothing changed: Moonbow is as it was."), TextStyle::Body, Tone::Secondary);
         CenteredText(page_, 272, 560, 60, error_, TextStyle::Small, Tone::Tertiary);
         Buttons(420, Tr(L"Retry"), [this] { Start(); }, Tr(L"Close"), [this] { host_.Close(); });
     }
@@ -683,8 +683,8 @@ private:
         worker_ = std::thread([this, req, dir, restore, removeData, defaultPlayer, action] {
             CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);  // the Start menu shortcut
             std::wstring error;
-            bool ok = CloseRunningLumen(dir, 15000);
-            if (!ok) error = Tr(L"Lumen did not close. Close it and try again.");
+            bool ok = CloseRunningMoonbow(dir, 15000);
+            if (!ok) error = Tr(L"Moonbow did not close. Close it and try again.");
             phase_ = 1;
             const Target target{dir, req.target.system};
             if (ok) {
@@ -695,7 +695,7 @@ private:
             phase_ = 2;
             if (ok && restore) RestoreData(req.op == Op::Switch ? req.version : req.package->version);
             if (ok && action == Action::Install && req.op == Op::Install && defaultPlayer && target.system)
-                RunAndWait(dir + L"\\Lumen.exe", L"--set-default-player");
+                RunAndWait(dir + L"\\Moonbow.exe", L"--set-default-player");
             CoUninitialize();
             error_ = error;
             ok_ = ok;
@@ -716,7 +716,7 @@ private:
     }
 
     void Launch() {
-        ShellExecuteW(nullptr, L"open", (dir_ + L"\\Lumen.exe").c_str(), nullptr, dir_.c_str(), SW_SHOWNORMAL);
+        ShellExecuteW(nullptr, L"open", (dir_ + L"\\Moonbow.exe").c_str(), nullptr, dir_.c_str(), SW_SHOWNORMAL);
     }
 
     Request req_;
@@ -744,8 +744,8 @@ private:
     std::atomic<bool> finished_{false}, ok_{false};
 };
 
-// Theme, accent and language as the user's Lumen has them, so an update looks like their player.
-void ApplyLumenLook() {
+// Theme, accent and language as the user's Moonbow has them, so an update looks like their player.
+void ApplyMoonbowLook() {
     Config cfg;
     const std::wstring path = DataFilePath(L"settings.json");
     const bool has = !path.empty() && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES && cfg.LoadFrom(path);
@@ -773,7 +773,7 @@ void ApplyLumenLook() {
 }  // namespace
 
 int RunWindow(const Request& request) {
-    ApplyLumenLook();
+    ApplyMoonbowLook();
     OleInitialize(nullptr);
     int code = 1;
     if (gfx::Gpu::Get().CreateFactories()) {

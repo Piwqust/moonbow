@@ -62,7 +62,7 @@ struct Skin {
     std::array<std::optional<float>, kRadiusCount> radius;
     std::optional<float> barOpacity;
 
-    // True when it changes nothing (the Lumen look).
+    // True when it changes nothing (the Moonbow look).
     bool Empty() const;
     const std::wstring& Name(bool russian) const { return russian && !nameRu.empty() ? nameRu : name; }
 };

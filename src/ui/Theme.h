@@ -43,7 +43,7 @@ public:
     int Accent() const { return accent_; }
 
     void Set(ThemeMode mode, int accent);
-    // nullptr (or an empty skin) = the Lumen look. Callers then repaint every Host.
+    // nullptr (or an empty skin) = the Moonbow look. Callers then repaint every Host.
     void SetSkin(std::shared_ptr<const skin::Skin> s);
     const skin::Skin* Skin() const { return skin_.get(); }
 

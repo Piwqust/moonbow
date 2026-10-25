@@ -1,6 +1,6 @@
-# Sends synthetic input to a Lumen window with PostMessage: the real mouse and
+# Sends synthetic input to a Moonbow window with PostMessage: the real mouse and
 # keyboard focus are untouched, so several test runs (and the user) don't collide.
-# Coordinates are client-area pixels. Start Lumen with --automation so hover
+# Coordinates are client-area pixels. Start Moonbow with --automation so hover
 # state survives while the real cursor is elsewhere.
 # Usage:
 #   tools\dev\input.ps1 -ProcessId 1234 -Click 300,200 [-Right] [-Double]
@@ -21,7 +21,7 @@ param([Parameter(Mandatory = $true)][int]$ProcessId, [string]$Title = "",
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
-public static class LumenIn {
+public static class MoonbowIn {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
@@ -38,7 +38,7 @@ public static class LumenIn {
       uint p; GetWindowThreadProcessId(h, out p);
       if (p != pid || !IsWindowVisible(h)) return true;
       var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (c.ToString() != "LumenHost") return true;
+      if (c.ToString() != "MoonbowHost") return true;
       var t = new StringBuilder(256); GetWindowText(h, t, 256);
       if (title.Length > 0 && !t.ToString().Contains(title)) return true;
       found = h; return false;
@@ -47,16 +47,16 @@ public static class LumenIn {
   }
 }
 "@
-$h = [LumenIn]::Find([uint32]$ProcessId, $Title)
-if ($h -eq [IntPtr]::Zero) { throw "no visible LumenHost window for process $ProcessId" }
-# Never the owner's Lumen: only --automation instances, whose windows are WS_EX_NOACTIVATE (ui/Host.cpp).
-if (([LumenIn]::GetWindowLong($h, -20) -band 0x08000000) -eq 0) { throw "process $ProcessId is not a --automation instance: no input sent" }
+$h = [MoonbowIn]::Find([uint32]$ProcessId, $Title)
+if ($h -eq [IntPtr]::Zero) { throw "no visible MoonbowHost window for process $ProcessId" }
+# Never the owner's Moonbow: only --automation instances, whose windows are WS_EX_NOACTIVATE (ui/Host.cpp).
+if (([MoonbowIn]::GetWindowLong($h, -20) -band 0x08000000) -eq 0) { throw "process $ProcessId is not a --automation instance: no input sent" }
 function MakeLParam([int]$x, [int]$y) { [IntPtr](($y -shl 16) -bor ($x -band 0xFFFF)) }
-function Post([uint32]$m, [int64]$w, [IntPtr]$l) { [LumenIn]::PostMessage($h, $m, [IntPtr]$w, $l) | Out-Null }
+function Post([uint32]$m, [int64]$w, [IntPtr]$l) { [MoonbowIn]::PostMessage($h, $m, [IntPtr]$w, $l) | Out-Null }
 $mk = 0; if ($Ctrl) { $mk = $mk -bor 0x8 }; if ($Shift) { $mk = $mk -bor 0x4 }
 function XY($s) { $p = $s -split ','; return [int]$p[0], [int]$p[1] }
 
-# Held modifiers for this call, posted before any mouse or key message (Lumen reads them only with --automation).
+# Held modifiers for this call, posted before any mouse or key message (Moonbow reads them only with --automation).
 $mods = ([int][bool]$Ctrl) -bor (2 * [int][bool]$Shift) -bor (4 * [int][bool]$Alt)
 if ($mods) { Post 0x802D $mods ([IntPtr]0) }
 if ($Move) { $x, $y = XY $Move; Post 0x200 $mk (MakeLParam $x $y) }
@@ -79,8 +79,8 @@ if ($Drag) {
 if ($Up) { $x, $y = XY $Up; Post 0x202 0 (MakeLParam $x $y) }
 if ($Wheel) {
   $x, $y = XY $Wheel
-  $pt = New-Object LumenIn+POINT; $pt.X = $x; $pt.Y = $y
-  [LumenIn]::ClientToScreen($h, [ref]$pt) | Out-Null
+  $pt = New-Object MoonbowIn+POINT; $pt.X = $x; $pt.Y = $y
+  [MoonbowIn]::ClientToScreen($h, [ref]$pt) | Out-Null
   Post 0x20A ([int64](($Delta * 120) -shl 16)) (MakeLParam $pt.X $pt.Y)
 }
 if ($Key) {

@@ -1,6 +1,6 @@
 #pragma once
 // Session state behind the player popovers: mpv properties observed once (so panels never
-// call synchronous getters) and the tweaks Lumen manages itself (flip, stereo mode, crop,
+// call synchronous getters) and the tweaks Moonbow manages itself (flip, stereo mode, crop,
 // color effects, sleep timer, "stop after this item", setting presets).
 #include "app/Signal.h"
 #include "library/FileSettings.h"
@@ -41,7 +41,7 @@ public:
     void Start();
     void RefreshDevices();
 
-    // --- Lumen-managed video tweaks ---------------------------------------------------
+    // --- Moonbow-managed video tweaks ---------------------------------------------------
     int flip = 0;                          // 0 none, 1 horizontal, 2 vertical
     std::string zoomMode = "fit";          // fit, quarter, half, original, double
     std::string aspect = "auto";           // auto, 16:9, 4:3, ...

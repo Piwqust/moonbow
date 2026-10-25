@@ -1,16 +1,16 @@
-﻿# Soak test: one hidden Lumen instance goes through a loop of everyday actions for hours (videos and
+﻿# Soak test: one hidden Moonbow instance goes through a loop of everyday actions for hours (videos and
 # songs, seeks, the seek preview, side panels, menus, fullscreen, PiP, library pages, Settings, theme
 # switches) while its memory, handles, GDI and USER objects, threads and CPU are sampled once a round.
 # A steady climb after the warm-up is a leak; report.txt fits a line to each and flags the slopes.
 #
-# Usage: powershell -File qa\soak\soak.ps1 -Exe <Lumen.exe> -Out <folder in %TEMP%> [-Hours 8]
-#        [-Library %TEMP%\lumen-qa\media] [-WarmupMinutes 30]
+# Usage: powershell -File qa\soak\soak.ps1 -Exe <Moonbow.exe> -Out <folder in %TEMP%> [-Hours 8]
+#        [-Library %TEMP%\moonbow-qa\media] [-WarmupMinutes 30]
 #   or only the report of an earlier run: soak.ps1 -Out <folder> -ReportOnly
 # Writes <Out>\samples.csv, events.log (crashes, hangs, failed steps), handles-<round>.txt (HandleTypes.cs),
 # report.txt. Only --automation
 # instances (tools\dev\launch.ps1): nothing on screen, no sound, the real mouse untouched.
 param([string]$Exe = "", [Parameter(Mandatory = $true)][string]$Out, [double]$Hours = 8,
-      [string]$Library = (Join-Path $env:TEMP "lumen-qa\media"),
+      [string]$Library = (Join-Path $env:TEMP "moonbow-qa\media"),
       [int]$WarmupMinutes = 30, [switch]$ReportOnly)
 $ErrorActionPreference = "Stop"
 $dev = Join-Path $PSScriptRoot "..\..\tools\dev"
@@ -57,7 +57,7 @@ Add-Type -Namespace Soak -Name Native -MemberDefinition @'
 Add-Type -Path (Join-Path $PSScriptRoot "HandleTypes.cs")
 $ownCrashes = Join-Path $Out "crashes"
 New-Item -ItemType Directory -Force $ownCrashes | Out-Null
-$env:LUMEN_CRASH_DIR = (Resolve-Path $ownCrashes).Path
+$env:MOONBOW_CRASH_DIR = (Resolve-Path $ownCrashes).Path
 
 function Event([string]$text) {
   $line = "{0:HH:mm:ss} {1}" -f (Get-Date), $text

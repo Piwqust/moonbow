@@ -19,8 +19,8 @@
 
 // Source of truth: design/ref/Settings-*.png (19 frames) and design/ref/components/*.png.
 // English labels follow the design word for word, except for obvious typos and VLC branding:
-//   "Only allow one VLC window"   -> "Only allow one Lumen window"
-//   "Give VLC real-time priority" -> "Give Lumen real-time priority"
+//   "Only allow one VLC window"   -> "Only allow one Moonbow window"
+//   "Give VLC real-time priority" -> "Give Moonbow real-time priority"
 //   second "Last.fm username"     -> "Last.fm password" (copy-paste slip in the frame)
 //   "include subtitles"           -> "Include subtitles"
 //   "Full base"                   -> "Full bass" (EQ presets), "1 KHz" -> "1 kHz"
@@ -77,7 +77,7 @@ const char* LangMpv(std::string_view id) {
     return nullptr;
 }
 
-// "app" -> Lumen's interface language (what the user reads, whatever Windows is in); "system" ->
+// "app" -> Moonbow's interface language (what the user reads, whatever Windows is in); "system" ->
 // the Windows UI language; "original" -> nothing (mpv picks the default track).
 std::optional<std::string> LanguageList(const Config& c, const char* key) {
     std::string id = c.GetString(key);
@@ -219,7 +219,7 @@ std::optional<std::string> BuildScreenshotDir(const Config& c) {
     if (FAILED(SHGetKnownFolderPath(FOLDERID_Pictures, KF_FLAG_CREATE, nullptr, &base))) return std::nullopt;
     std::wstring path = base;
     CoTaskMemFree(base);
-    return json::ToUtf8(path + L"\\Lumen");
+    return json::ToUtf8(path + L"\\Moonbow");
 }
 
 // Buffering presets: {cache-secs, demuxer-max-bytes in MiB}.
@@ -277,7 +277,7 @@ std::optional<std::string> BuildYtdl(const Config& c) {
     return c.GetBool("network.ytdl") && !YtDlpPath().empty() ? "yes" : "no";
 }
 
-// mpv keeps one script-opts list: the yt-dlp Lumen found, then the user's own options (so they
+// mpv keeps one script-opts list: the yt-dlp Moonbow found, then the user's own options (so they
 // win). "%n%" quotes the path, which may contain commas.
 std::optional<std::string> BuildScriptOpts(const Config& c) {
     std::string out;
@@ -373,7 +373,7 @@ std::optional<std::string> BuildTscale(const Config& c) {
 
 // --- GPU shaders: built-in sharpening and the user's own (<data>\shaders) ---
 
-constexpr const char* kCasParam = "lumen_cas_sharpness";
+constexpr const char* kCasParam = "moonbow_cas_sharpness";
 
 // vo=gpu (legacy) has no shader parameters; there sharpening stays a CPU filter (BuildVf).
 bool GpuSharpen(const Config& c) {
@@ -399,7 +399,7 @@ std::vector<std::string> EnabledShaders(const Config& c) {
 std::optional<std::string> BuildGlslShaders(const Config& c) {
     std::string list;
     auto add = [&list](const std::wstring& path) { list += (list.empty() ? "" : ";") + json::ToUtf8(path); };
-    if (GpuSharpen(c)) add(DataDir() + L"\\cache\\shaders\\lumen-cas.glsl");
+    if (GpuSharpen(c)) add(DataDir() + L"\\cache\\shaders\\moonbow-cas.glsl");
     const std::wstring folder = DataDir() + L"\\shaders\\";
     for (const std::string& name : EnabledShaders(c)) {
         const std::wstring path = folder + json::ToWide(name);
@@ -452,10 +452,10 @@ std::optional<std::string> BuildVf(const Config& c) {
     if (f.empty()) return std::nullopt;
     std::string graph;
     for (const std::string& s : f) graph += (graph.empty() ? "" : ",") + s;
-    return "@lumen:lavfi=[" + graph + "]";
+    return "@moonbow:lavfi=[" + graph + "]";
 }
 
-// One lavfi graph for every audio filter Lumen manages. Order: equalizer, compressor
+// One lavfi graph for every audio filter Moonbow manages. Order: equalizer, compressor
 // (night mode), loudness normalization, stereo widening, spatial audio.
 std::optional<std::string> BuildAf(const Config& c) {
     std::vector<std::string> f;
@@ -513,7 +513,7 @@ std::optional<std::string> BuildAf(const Config& c) {
     if (f.empty()) return std::nullopt;
     std::string graph;
     for (const std::string& s : f) graph += (graph.empty() ? "" : ",") + s;
-    return "@lumen:lavfi=[" + graph + "]";
+    return "@moonbow:lavfi=[" + graph + "]";
 }
 
 // --- Schema builder -----------------------------------------------------------------------
@@ -744,16 +744,16 @@ void BuildApp(Builder& b) {
 
     b.Sec("windows", L"Windows integration", L"Интеграция с Windows");
     b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
-        .Desc(L"Look for a new version of Lumen once a day. Nothing else is sent.",
-              L"Раз в день проверять, вышла ли новая версия Lumen. Больше ничего не отправляется.")
+        .Desc(L"Look for a new version of Moonbow once a day. Nothing else is sent.",
+              L"Раз в день проверять, вышла ли новая версия Moonbow. Больше ничего не отправляется.")
         .Hidden();  // not implemented yet
-    b.Button("general.fileAssociations", L"Make Lumen the default video player", L"Открывать видео в Lumen по умолчанию",
+    b.Button("general.fileAssociations", L"Make Moonbow the default video player", L"Открывать видео в Moonbow по умолчанию",
              "file-associations", L"Set up", L"Настроить")
         .Inferred()
-        .Desc(L"Videos open in Lumen; music stays with your music app. If Windows doesn't allow it, its Default apps page opens.",
-              L"Видео будут открываться в Lumen, музыка останется в прежней программе. Если Windows не разрешит, откроются «Приложения по умолчанию».")
-        .Basic("play", L"Videos from File Explorer open in Lumen.",
-               L"Видео из Проводника будут открываться в Lumen.");
+        .Desc(L"Videos open in Moonbow; music stays with your music app. If Windows doesn't allow it, its Default apps page opens.",
+              L"Видео будут открываться в Moonbow, музыка останется в прежней программе. Если Windows не разрешит, откроются «Приложения по умолчанию».")
+        .Basic("play", L"Videos from File Explorer open in Moonbow.",
+               L"Видео из Проводника будут открываться в Moonbow.");
 
     b.Sec("diagnostics", L"Diagnostics", L"Диагностика");
     b.Toggle("general.developerMode", L"Playback statistics", L"Статистика воспроизведения", false)
@@ -762,9 +762,9 @@ void BuildApp(Builder& b) {
     b.Button("general.openLogs", L"Logs and crash reports", L"Журналы и отчёты о сбоях", "open-logs-folder",
              L"Open folder", L"Открыть папку")
         .Inferred()
-        .Desc(L"Lumen keeps a short log and, after a crash, a report on this computer. Nothing is sent. "
+        .Desc(L"Moonbow keeps a short log and, after a crash, a report on this computer. Nothing is sent. "
               L"To report a problem, send the files from this folder.",
-              L"Lumen ведёт короткий журнал, а после сбоя сохраняет отчёт. Всё остаётся на этом компьютере "
+              L"Moonbow ведёт короткий журнал, а после сбоя сохраняет отчёт. Всё остаётся на этом компьютере "
               L"и никуда не отправляется. Чтобы сообщить о проблеме, пришлите файлы из этой папки.");
     b.Toggle("general.saveLog", L"Detailed playback log", L"Подробный журнал воспроизведения", false)
         .Desc(L"Also write everything mpv reports to mpv.log. Useful when a file plays wrong; costs a little CPU.",
@@ -832,11 +832,11 @@ void BuildApp(Builder& b) {
            "white", ItemType::AccentPicker);
     // One widget (app/settings/SettingsSkins.cpp): the built-in skins with swatches, then "Custom file".
     b.Pick("interface.skin", L"Skin", L"Скин",
-           {{"lumen", L"Lumen", L"Lumen"},
+           {{"moonbow", L"Moonbow", L"Moonbow"},
             {"oled", L"OLED black", L"Чёрный OLED"},
             {"contrast", L"High contrast", L"Высокий контраст"},
             {"sepia", L"Sepia", L"Сепия"}},
-           "lumen")
+           "moonbow")
         .Desc(L"Colors and corner sizes of the whole app. Applies to every window at once.",
               L"Цвета и скругления всего приложения. Меняются сразу во всех окнах.")
         .Group("skin");
@@ -845,8 +845,8 @@ void BuildApp(Builder& b) {
               L"Заменить встроенное оформление цветами и размерами из файла скина.")
         .Group("skin");
     b.Path("interface.skinFile", L"Skin file", L"Файл скина", PathKind::File)
-        .Desc(L"A Lumen skin (.json) that overrides design tokens. Lumen reloads it when the file changes.",
-              L"Скин Lumen (.json), переопределяющий токены оформления. Lumen перечитывает его при каждом "
+        .Desc(L"A Moonbow skin (.json) that overrides design tokens. Moonbow reloads it when the file changes.",
+              L"Скин Moonbow (.json), переопределяющий токены оформления. Moonbow перечитывает его при каждом "
               L"изменении файла.")
         .When("interface.customSkin", "true")
         .Group("skin");
@@ -886,7 +886,7 @@ void BuildApp(Builder& b) {
         .Desc(L"Which monitor to use for fullscreen when you have several.",
               L"Какой монитор использовать для полного экрана, если их несколько.");
     // Moved from Library; the keys stay so saved values (and main.cpp's raw lookup) still apply.
-    b.Toggle("library.singleInstance", L"Only allow one Lumen window", L"Только одно окно Lumen", true)
+    b.Toggle("library.singleInstance", L"Only allow one Moonbow window", L"Только одно окно Moonbow", true)
         .Desc(L"Open new files in the window that is already running.",
               L"Открывать новые файлы в уже запущенном окне.");
     b.Toggle("library.singleInstanceFileManager", L"Apply to files opened from the file manager",
@@ -1021,7 +1021,7 @@ void BuildApp(Builder& b) {
               L"but is not endorsed or certified by TMDB.",
               L"Для видео, названных как фильм с годом или как серия (S01E02), название, год, сезон и серия "
               L"отправляются на themoviedb.org, постеры загружаются с image.tmdb.org. This product uses the TMDB API "
-              L"but is not endorsed or certified by TMDB (Lumen использует API TMDB, но не одобрен и не "
+              L"but is not endorsed or certified by TMDB (Moonbow использует API TMDB, но не одобрен и не "
               L"сертифицирован TMDB).")
         .Basic("tv", L"Posters and descriptions of films in the library.",
                L"Постеры и описания фильмов в медиатеке.");
@@ -1118,8 +1118,8 @@ void BuildApp(Builder& b) {
     b.inferred = true;
     b.Text("controls.webRemotePassword", L"Password", L"Пароль")
         .Secret()
-        .Desc(L"Required to control Lumen from a browser on another device.",
-              L"Нужен, чтобы управлять Lumen из браузера на другом устройстве.")
+        .Desc(L"Required to control Moonbow from a browser on another device.",
+              L"Нужен, чтобы управлять Moonbow из браузера на другом устройстве.")
         .When("controls.webRemote", "true")
         .Hidden();  // not implemented yet
 }
@@ -1413,9 +1413,9 @@ void BuildMedia(Builder& b) {
     // Enabled user shaders ("a.glsl|b.hook" in <data>\shaders); toggled in the player's quick settings.
     b.Sec("shaders", L"Shaders", L"Шейдеры");
     b.Text("video.shaders", L"Custom shaders", L"Свои шейдеры")
-        .Desc(L"Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Lumen. Put files there and turn "
+        .Desc(L"Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Moonbow. Put files there and turn "
               L"them on here or in the player's quick settings.",
-              L"Файлы шейдеров (.glsl, .hook) из папки shaders в %APPDATA%\\Lumen. Положите файлы туда и включайте "
+              L"Файлы шейдеров (.glsl, .hook) из папки shaders в %APPDATA%\\Moonbow. Положите файлы туда и включайте "
               L"их здесь или в быстрых настройках плеера.")
         .MpvBuild("glsl-shaders", BuildGlslShaders, "");
     b.inferred = false;
@@ -1499,7 +1499,7 @@ void BuildMedia(Builder& b) {
 
     b.Sec("screenshots", L"Screenshots", L"Скриншоты");
     b.Path("video.screenshotDir", L"Save screenshots to", L"Папка для скриншотов", PathKind::Folder)
-        .Hint(L"Pictures\\Lumen", L"Изображения\\Lumen")
+        .Hint(L"Pictures\\Moonbow", L"Изображения\\Moonbow")
         .MpvBuild("screenshot-dir", BuildScreenshotDir)
         .Basic("snapshot", L"Where frame snapshots are saved.",
                L"Куда сохраняются снимки кадра.");
@@ -1545,9 +1545,9 @@ void BuildMedia(Builder& b) {
         .Mpv("audio-channels");
     b.inferred = true;
     b.Toggle("audio.exclusive", L"Exclusive mode", L"Монопольный режим", false)
-        .Desc(L"Use the output device for Lumen alone (WASAPI exclusive): no Windows mixer, the file's own sample "
-              L"rate. Other apps are silent while Lumen plays.",
-              L"Занимать устройство вывода только для Lumen (монопольный WASAPI): без микшера Windows, с частотой "
+        .Desc(L"Use the output device for Moonbow alone (WASAPI exclusive): no Windows mixer, the file's own sample "
+              L"rate. Other apps are silent while Moonbow plays.",
+              L"Занимать устройство вывода только для Moonbow (монопольный WASAPI): без микшера Windows, с частотой "
               L"самого файла. Другие приложения в это время не слышны.")
         .MpvBool("audio-exclusive");
     b.Toggle("audio.gapless", L"Gapless playback", L"Воспроизведение без пауз", true)
@@ -1560,7 +1560,7 @@ void BuildMedia(Builder& b) {
               L"mode and passthrough turn it off.",
               L"Каждая песня плавно перетекает в следующую, и несколько секунд они звучат вместе. На видео не "
               L"действует; монопольный режим и передача на ресивер его отключают.")
-        .MpvBuild("user-data/lumen/crossfade", BuildCrossfade, "0")
+        .MpvBuild("user-data/moonbow/crossfade", BuildCrossfade, "0")
         .Basic("swap", L"Songs blend smoothly into each other.",
                L"Песни плавно перетекают одна в другую.");
     b.Slider("audio.crossfadeSeconds", L"Crossfade length", L"Длительность перехода", 1, 12, 1, 5)
@@ -1568,14 +1568,14 @@ void BuildMedia(Builder& b) {
         .Desc(L"How long the two songs overlap. A short song gets at most half of its length.",
               L"Сколько секунд песни звучат вместе. Короткой песне достаётся не больше половины её длины.")
         .When("audio.crossfade", "true")
-        .MpvBuild("user-data/lumen/crossfade", BuildCrossfade, "0");
+        .MpvBuild("user-data/moonbow/crossfade", BuildCrossfade, "0");
     b.Toggle("audio.crossfadeAlbums", L"Only between different albums", L"Только между разными альбомами", true)
         .Desc(L"Songs of one album keep playing gaplessly, as the album was made; the fade happens where the album "
               L"changes. Without album tags, songs in one folder count as one album.",
               L"Песни одного альбома идут без пауз, как задумано в альбоме, а переход звучит там, где альбом "
               L"меняется. Если тегов альбома нет, альбомом считается папка.")
         .When("audio.crossfade", "true")
-        .MpvBool("user-data/lumen/crossfade-albums");
+        .MpvBool("user-data/moonbow/crossfade-albums");
     b.Toggle("audio.passthrough", L"Send surround sound to the receiver", L"Передавать объёмный звук на ресивер", false)
         .Desc(L"Pass Dolby and DTS tracks undecoded over HDMI or S/PDIF and let the receiver decode them. Volume, the "
               L"equalizer and effects do not apply to these tracks.",
@@ -1606,7 +1606,7 @@ void BuildMedia(Builder& b) {
             {"fixed", L"Always starts at:", L"Всегда начинать с:"}},
            "remember")
         .Group("startupVolume")
-        .Desc(L"Volume to use when Lumen starts.", L"С какой громкостью запускается Lumen.")
+        .Desc(L"Volume to use when Moonbow starts.", L"С какой громкостью запускается Moonbow.")
         .MpvBuild("volume", BuildStartupVolume)
         .Startup();
     b.Number("audio.startupVolume", L"Always starts at:", L"Всегда начинать с:", 0, 200, 1, 100)
@@ -1623,9 +1623,9 @@ void BuildMedia(Builder& b) {
         .Unit(L"%", L"%")
         .Desc(L"How much the wheel and the arrow keys change the volume.",
               L"На сколько меняют громкость колесо мыши и стрелки.");
-    b.Toggle("audio.volumeKeys", L"Volume keys control Lumen", L"Клавиши громкости управляют Lumen", false)
-        .Desc(L"While Lumen is active, the keyboard's volume keys change its volume instead of the Windows volume.",
-              L"Пока Lumen активен, клавиши громкости на клавиатуре меняют его громкость, а не громкость Windows.");
+    b.Toggle("audio.volumeKeys", L"Volume keys control Moonbow", L"Клавиши громкости управляют Moonbow", false)
+        .Desc(L"While Moonbow is active, the keyboard's volume keys change its volume instead of the Windows volume.",
+              L"Пока Moonbow активен, клавиши громкости на клавиатуре меняют его громкость, а не громкость Windows.");
 
     b.Sec("loudness", L"Loudness", L"Выравнивание громкости");
     b.Toggle("audio.normalize", L"Normalize loudness", L"Выравнивать громкость", false)
@@ -1805,8 +1805,8 @@ void BuildMedia(Builder& b) {
             {"waveform", L"Waveform", L"Волна", "", "waveform_twotone"}},
            "disabled")
         .Desc(L"Animation in place of the cover while music plays (components/Audio_Visualizer). It listens to "
-              L"Lumen's own sound only, never to other apps.",
-              L"Анимация вместо обложки, пока играет музыка. Слушает только звук самого Lumen, а не других "
+              L"Moonbow's own sound only, never to other apps.",
+              L"Анимация вместо обложки, пока играет музыка. Слушает только звук самого Moonbow, а не других "
               L"приложений.")
         .Basic("spectrum_twotone", L"Animation to the music in place of the cover.",
                L"Анимация под музыку вместо обложки.");
@@ -1815,8 +1815,8 @@ void BuildMedia(Builder& b) {
         viz.Hidden();
         b.Info("audio.visualizerUnsupported", L"Visualization needs Windows 10 version 2004 or later",
                L"Для визуализации нужна Windows 10 версии 2004 или новее", "hint")
-            .Desc(L"Lumen listens to its own sound through a Windows feature that older versions don't have.",
-                  L"Lumen слушает свой звук через функцию Windows, которой нет в более старых версиях.");
+            .Desc(L"Moonbow listens to its own sound through a Windows feature that older versions don't have.",
+                  L"Moonbow слушает свой звук через функцию Windows, которой нет в более старых версиях.");
     }
     // Read by the music view; the spectrometer is drawn around the cover, so it always takes its place.
     ItemRef vizLayout = b.Pick("audio.visualizerLayout", L"Visualization layout", L"Где показывать визуализацию",
@@ -1838,12 +1838,12 @@ void BuildMedia(Builder& b) {
     // Read by the music view (app/player/MusicView.cpp); "auto" keeps what the style says.
     b.Sec("lyrics", L"Lyrics", L"Тексты песен");
     b.Pick("audio.lyricsStyle", L"Lyrics style", L"Стиль текста",
-           {{"lumen", L"Lumen", L"Lumen"},
+           {{"moonbow", L"Moonbow", L"Moonbow"},
             {"spotify", L"Like Spotify", L"Как в Spotify"},
             {"apple", L"Like Apple Music", L"Как в Apple Music"},
             {"yandex", L"Like Yandex Music", L"Как в Яндекс Музыке"},
             {"karaoke", L"Karaoke", L"Караоке"}},
-           "lumen")
+           "moonbow")
         .Desc(L"How synced lyrics follow the song next to the cover. The settings below change parts of the style.",
               L"Как синхронный текст идёт за песней рядом с обложкой. Настройки ниже меняют части стиля.");
     b.Text("audio.lyricsFont", L"Lyrics font", L"Шрифт текста")
@@ -2068,10 +2068,10 @@ void BuildMedia(Builder& b) {
 
     b.Sec("folders", L"Library folders", L"Папки медиатеки");
     b.Info("library.folders", L"Folders", L"Папки", "library-folders")
-        .Desc(L"The folders Lumen looks for videos and music in. Removing one leaves its files on disk.",
-              L"Папки, в которых Lumen ищет видео и музыку. Если убрать папку, файлы останутся на диске.")
-        .Basic("folder", L"Where Lumen looks for your videos and music.",
-               L"Где Lumen ищет ваши видео и музыку.");
+        .Desc(L"The folders Moonbow looks for videos and music in. Removing one leaves its files on disk.",
+              L"Папки, в которых Moonbow ищет видео и музыку. Если убрать папку, файлы останутся на диске.")
+        .Basic("folder", L"Where Moonbow looks for your videos and music.",
+               L"Где Moonbow ищет ваши видео и музыку.");
 
     b.Sec("opening", L"Opening files", L"Открытие файлов");
     b.Pick("library.openFolder", L"When opening a folder", L"При открытии папки",
@@ -2149,20 +2149,20 @@ void BuildSystem(Builder& b) {
     {
         const std::wstring& ytdlp = YtDlpPath();
         b.Toggle("network.ytdl", L"Open web pages with yt-dlp", L"Открывать веб-страницы через yt-dlp", true)
-            .Desc(ytdlp.empty() ? W(L"Play YouTube and similar links. Requires yt-dlp.exe next to Lumen or on PATH.")
+            .Desc(ytdlp.empty() ? W(L"Play YouTube and similar links. Requires yt-dlp.exe next to Moonbow or on PATH.")
                                 : L"Play YouTube and similar links with " + ytdlp,
-                  ytdlp.empty() ? W(L"Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Lumen "
+                  ytdlp.empty() ? W(L"Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Moonbow "
                                     L"или в PATH.")
                                 : L"Воспроизводить ссылки YouTube и похожих сайтов через " + ytdlp)
             .MpvBuild("ytdl", BuildYtdl, "no")
             .MpvBuild("script-opts", BuildScriptOpts);
-        // Lumen never downloads yt-dlp; without it, say where to put it.
-        ItemRef missing = b.Info("network.ytdlMissing", L"For YouTube links, put yt-dlp.exe next to Lumen.exe",
-                                 L"Для ссылок YouTube положите yt-dlp.exe рядом с Lumen.exe", "hint")
-                              .Desc(L"yt-dlp.exe was not found next to Lumen.exe or on PATH. Download it from the "
-                                    L"yt-dlp project yourself, put it there and restart Lumen.",
-                                    L"yt-dlp.exe не найден ни рядом с Lumen.exe, ни в PATH. Скачайте его с сайта "
-                                    L"проекта yt-dlp, положите туда и перезапустите Lumen.")
+        // Moonbow never downloads yt-dlp; without it, say where to put it.
+        ItemRef missing = b.Info("network.ytdlMissing", L"For YouTube links, put yt-dlp.exe next to Moonbow.exe",
+                                 L"Для ссылок YouTube положите yt-dlp.exe рядом с Moonbow.exe", "hint")
+                              .Desc(L"yt-dlp.exe was not found next to Moonbow.exe or on PATH. Download it from the "
+                                    L"yt-dlp project yourself, put it there and restart Moonbow.",
+                                    L"yt-dlp.exe не найден ни рядом с Moonbow.exe, ни в PATH. Скачайте его с сайта "
+                                    L"проекта yt-dlp, положите туда и перезапустите Moonbow.")
                               .When("network.ytdl", "true");
         if (!ytdlp.empty()) missing.Hidden();
     }
@@ -2253,7 +2253,7 @@ void BuildSystem(Builder& b) {
     b.Toggle("performance.frameDrop", L"Drop frames when the system can't keep up", L"Пропускать кадры при нехватке ресурсов",
              true)
         .MpvBool("framedrop", "vo", "no");
-    b.Toggle("performance.realtimePriority", L"Give Lumen real-time priority", L"Приоритет реального времени для Lumen",
+    b.Toggle("performance.realtimePriority", L"Give Moonbow real-time priority", L"Приоритет реального времени для Moonbow",
              false)
         .MpvBuild("priority", BuildPriority)
         .Startup();
@@ -2323,7 +2323,7 @@ void BuildSystem(Builder& b) {
 
     b.Sec("recording", L"Recording", L"Запись");
     b.Path("recording.folder", L"Save recordings to", L"Папка для записей", PathKind::Folder)
-        .Hint(L"Videos\\Lumen", L"Видео\\Lumen")
+        .Hint(L"Videos\\Moonbow", L"Видео\\Moonbow")
         .Desc(L"Folder for recorded streams and clips.", L"Папка для записанных потоков и фрагментов.");
     b.Toggle("recording.noReencode", L"Record without re-encoding when possible", L"Записывать без перекодирования", true)
         .Hidden();  // not implemented yet
@@ -2392,8 +2392,8 @@ void BuildSystem(Builder& b) {
 
     b.Sec("addons", L"Add-ons", L"Дополнения");
     b.Info("extensions.list", L"Add-ons", L"Дополнения", "addons-list")
-        .Desc(L"Lua and JavaScript mpv scripts from %APPDATA%\\Lumen\\scripts.",
-              L"Скрипты mpv на Lua и JavaScript из %APPDATA%\\Lumen\\scripts.");
+        .Desc(L"Lua and JavaScript mpv scripts from %APPDATA%\\Moonbow\\scripts.",
+              L"Скрипты mpv на Lua и JavaScript из %APPDATA%\\Moonbow\\scripts.");
     b.Button("extensions.findMore", L"Find more extensions", L"Найти расширения", "find-extensions",
              L"Find more extensions", L"Найти расширения")
         .Group("addonsToolbar");
@@ -2563,7 +2563,7 @@ const std::vector<KeyActionGroup>& KeyActionGroups() {
 const std::vector<KeyAction>& KeyActions() {
     // Ids of the old shortcut table, kept only so that older settings.json files are read
     // (ShortcutStore maps them onto app/Actions.cpp). The live keys are in Actions.cpp; the ones
-    // below repeat them (S stops, V cycles subtitles) or are empty where Lumen binds nothing.
+    // below repeat them (S stops, V cycles subtitles) or are empty where Moonbow binds nothing.
     static const std::vector<KeyAction> actions = {
         {"fullscreen", "basic", L"Toggle fullscreen", L"Полный экран", L"F"},
         {"exitFullscreen", "basic", L"Exit fullscreen / close dialog", L"Выйти из полного экрана / закрыть окно", L"Esc"},

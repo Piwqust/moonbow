@@ -24,7 +24,7 @@ using namespace ui;
 
 namespace {
 
-constexpr wchar_t kVideoClass[] = L"LumenVideo";
+constexpr wchar_t kVideoClass[] = L"MoonbowVideo";
 constexpr UINT WM_APP_CLOSED = WM_APP + 71;
 constexpr UINT kChromeHideMs = 2200;
 
@@ -566,7 +566,7 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
                 wchar_t tmp[MAX_PATH];
                 GetTempPathW(MAX_PATH, tmp);
                 const std::wstring path =
-                    std::wstring(tmp) + L"lumen-cmd-" + std::to_wstring(GetCurrentProcessId()) + L".txt";
+                    std::wstring(tmp) + L"moonbow-cmd-" + std::to_wstring(GetCurrentProcessId()) + L".txt";
                 if (HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
                                            FILE_ATTRIBUTE_NORMAL, nullptr);
                     f != INVALID_HANDLE_VALUE) {

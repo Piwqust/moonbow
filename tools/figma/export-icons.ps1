@@ -9,7 +9,7 @@ $tpl = Get-Content (Join-Path $PSScriptRoot "icons.js") -Raw
 $count = [int]((node $Bridge eval "return (await figma.getNodeByIdAsync('42:356')).children.length" | Out-String | ConvertFrom-Json).value)
 $seen = @{}; $ok = 0; $skipped = @()
 for ($start = 0; $start -lt $count; $start += $Chunk) {
-    $tmp = Join-Path $env:TEMP "lumen-icons-$start.js"
+    $tmp = Join-Path $env:TEMP "moonbow-icons-$start.js"
     [IO.File]::WriteAllText($tmp, $tpl.Replace("START", "$start").Replace("COUNT", "$Chunk"))
     $res = (node $Bridge run $tmp --timeout 90000 | Out-String) | ConvertFrom-Json
     Remove-Item $tmp

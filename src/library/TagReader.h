@@ -1,5 +1,5 @@
 #pragma once
-// Lumen's own tag reader, used by the library scan before the Windows property system.
+// Moonbow's own tag reader, used by the library scan before the Windows property system.
 //
 // Formats (sniffed from the content, not the extension):
 // - MP3: ID3v2.2/2.3/2.4 (all text encodings, unsynchronisation, TXXX, USLT, SYLT, APIC), APE and

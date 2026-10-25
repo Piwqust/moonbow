@@ -100,10 +100,10 @@ def resolve(dark, tone, skin):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("-v", action="store_true", help="print every pair, not only failures")
-    ap.add_argument("--skin", help="only this skin (lumen = no skin)")
+    ap.add_argument("--skin", help="only this skin (moonbow = no skin)")
     ap.add_argument("--pair", help="only pairs with this foreground token")
     args = ap.parse_args()
-    skins = {"lumen": None}
+    skins = {"moonbow": None}
     for f in sorted((root / "res/skins").glob("*.json")):
         skins[f.stem] = json.loads(f.read_text(encoding="utf-8"))
     failures = 0

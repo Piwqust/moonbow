@@ -1,5 +1,5 @@
 #pragma once
-// Recently played items: %APPDATA%\Lumen\history.json, newest first, at most 500 entries.
+// Recently played items: %APPDATA%\Moonbow\history.json, newest first, at most 500 entries.
 //
 // UI thread only. Changes mark the store dirty; call Flush() from a timer / at exit (the
 // destructor flushes when Load() was called).

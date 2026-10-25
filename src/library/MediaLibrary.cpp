@@ -282,7 +282,7 @@ std::unordered_map<std::wstring, CacheEntry> LoadCache() {
     if (!json::ReadFileUtf8(DataFilePath(L"library-cache.json"), &text)) return cache;
     std::optional<json::Value> doc = json::Parse(text);
     // Version 2 added track numbers and years, 3 disc numbers and the damaged flag, 4 genres and
-    // the MP3 disc number (PartOfSet), 5 album artists, first-seen times and Lumen's own tag
+    // the MP3 disc number (PartOfSet), 5 album artists, first-seen times and Moonbow's own tag
     // reader. Older caches are read again from the files; a version 4 cache still says which
     // files were already known, so an upgrade doesn't make every file "new".
     const int64_t version = doc ? doc->GetInt("version") : 0;

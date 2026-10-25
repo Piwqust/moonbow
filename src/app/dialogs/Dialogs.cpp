@@ -759,7 +759,7 @@ private:
             const bool waiting = m && m->state == MediaMeta::State::Queued;
             auto* l = Add<Label>(waiting ? Tr(L"Looking this video up on TMDB…")
                                  : m && m->state == MediaMeta::State::Failed
-                                     ? Tr(L"TMDB couldn't be reached. Lumen tries again next time.")
+                                     ? Tr(L"TMDB couldn't be reached. Moonbow tries again next time.")
                                  : m && m->manual ? Tr(L"Match reset: the file shows its own thumbnail.")
                                                   : Tr(L"TMDB has nothing for this file name."),
                                  TextStyle::Body, Tone::Tertiary);
@@ -986,7 +986,7 @@ void ShowNetworkStreamDialog() {
             hint->SetText(Fmt(Tr(L"Line {0} is not a link. Links look like https://, rtsp:// or udp://"),
                               {std::to_wstring(bad)}));
         else if (site && !SiteLinksPlayable())
-            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Lumen.exe (Settings › Network)."));
+            hint->SetText(Tr(L"Video site links need yt-dlp.exe next to Moonbow.exe (Settings › Network)."));
         else if (site && links.size() == 1)
             hint->SetText(Tr(L"The video page opens through yt-dlp."));
         else if (links.size() > 1)
@@ -1233,19 +1233,19 @@ private:
 void ShowAboutDialog(Host* host) {
     if (!host) host = TheApp().main();
     if (!host) return;
-    auto frame = std::make_unique<Frame>(Tr(L"About Lumen"), FitWidth(host, 560));
+    auto frame = std::make_unique<Frame>(Tr(L"About Moonbow"), FitWidth(host, 560));
     Frame* f = frame.get();
     Widget* body = f->Body();
     body->gap = 16;
 
     auto* top = Row(body, 14);
-    auto* logo = top->Add<IconView>("lumen", 40);
+    auto* logo = top->Add<IconView>("moonbow", 40);
     logo->width = Length::Px(48);
     logo->height = Length::Px(48);
     auto* names = top->Add<Widget>();
     names->dir = Dir::Column;
     names->gap = 2;
-    auto* title = names->Add<Label>(L"Lumen", TextStyle::Large);
+    auto* title = names->Add<Label>(L"Moonbow", TextStyle::Large);
     title->color = SoftText;
     names->Add<Label>(Fmt(Tr(L"Version {0}"), {AppVersion()}), TextStyle::Body, Tone::Tertiary);
     if (!setup::NotesBetween({}, AppVersion(), CurrentLanguage() == Language::Russian).empty()) {
@@ -1262,7 +1262,7 @@ void ShowAboutDialog(Host* host) {
     body->Add<InfoLine>(L"FFmpeg", ffmpeg.empty() ? later : ffmpeg);
 
     // The versions the setup keeps (src/setup): this exe switches (from a copy in %TEMP%) and closes
-    // this Lumen on the click of its window; a kept version may predate the switch command. Nothing
+    // this Moonbow on the click of its window; a kept version may predate the switch command. Nothing
     // for a build run from elsewhere (no versions folder).
     std::wstring dir = ExeDir();
     if (!dir.empty()) dir.pop_back();
@@ -1279,7 +1279,7 @@ void ShowAboutDialog(Host* host) {
             if (v == AppVersion()) continue;
             auto* go = row->Add<LinkButton>(CompareVersions(v, AppVersion()) < 0 ? Tr(L"Go back to it") : Tr(L"Switch to it"),
                                             TextStyle::Body);
-            const std::wstring exe = dir + L"\\Lumen.exe", args = L"--switch-version " + v;
+            const std::wstring exe = dir + L"\\Moonbow.exe", args = L"--switch-version " + v;
             go->onClick = [exe, args] { Host::ShellOpen(nullptr, L"open", exe.c_str(), args.c_str(), nullptr, SW_SHOWNORMAL); };
         }
     }
@@ -1290,7 +1290,7 @@ void ShowAboutDialog(Host* host) {
     links->dir = Dir::Column;
     links->gap = 6;
     links->width = Length::Grow();
-    links->Add<AboutLink>(Tr(L"Lumen: GNU GPL 3.0 or later"), L"https://www.gnu.org/licenses/gpl-3.0.html");
+    links->Add<AboutLink>(Tr(L"Moonbow: GNU GPL 3.0 or later"), L"https://www.gnu.org/licenses/gpl-3.0.html");
     links->Add<AboutLink>(Tr(L"mpv and libmpv: GPL 2.0 or later"), L"https://github.com/mpv-player/mpv/blob/master/Copyright");
     links->Add<AboutLink>(Tr(L"FFmpeg: LGPL 2.1 or later"), L"https://ffmpeg.org/legal.html");
     links->Add<AboutLink>(Tr(L"Inter typeface: SIL Open Font License 1.1"), L"https://openfontlicense.org");
@@ -1324,7 +1324,7 @@ void ShowWhatsNew(const std::wstring& since, Host* host) {
     const std::vector<std::wstring> lines =
         setup::NotesBetween(since, AppVersion(), CurrentLanguage() == Language::Russian);
     if (!host || lines.empty()) return;
-    auto frame = std::make_unique<Frame>(Fmt(Tr(L"What's new in Lumen {0}"), {AppVersion()}), FitWidth(host, 520));
+    auto frame = std::make_unique<Frame>(Fmt(Tr(L"What's new in Moonbow {0}"), {AppVersion()}), FitWidth(host, 520));
     Frame* f = frame.get();
     Widget* body = f->Body();
     body->gap = 10;

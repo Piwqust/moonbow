@@ -6,7 +6,7 @@
 // and a click on a line seeks to it; unsynced text stays put and scrolls with the wheel.
 // With Settings > Audio > Visualization on, a playing song shows the visualizer where the cover
 // is (spectrum bars, a radial spectrometer, an oscilloscope or a scrolling waveform), fed by
-// audio/LoopbackCapture from Lumen's own sound; a pause brings the cover back.
+// audio/LoopbackCapture from Moonbow's own sound; a pause brings the cover back.
 #include "Util.h"
 #include "app/App.h"
 #include "app/MainWindow.h"
@@ -838,7 +838,7 @@ private:
         none.enabled = false;
         none.note = true;
         items.push_back(std::move(none));
-        // Why, in one line: where Lumen looked.
+        // Why, in one line: where Moonbow looked.
         MenuItem why;
         why.label = !net::online::LyricsOn() ? Tr(L"No .lrc file, no lyrics in the tags, online search is off")
                     : onlineSerial_ == serial_ && !onlineReq_ ? Tr(L"No .lrc file, no lyrics in the tags or on LRCLIB")
@@ -1416,7 +1416,7 @@ Rect MusicToastSlot() {
 std::vector<MenuItem> LyricsStyleItems() {
     std::vector<MenuItem> items;
     const std::string cur = TheApp().config().GetString("audio.lyricsStyle");
-    for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"lumen", L"Lumen"},
+    for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"moonbow", L"Moonbow"},
                                        {"spotify", L"Like Spotify"},
                                        {"apple", L"Like Apple Music"},
                                        {"yandex", L"Like Yandex Music"},

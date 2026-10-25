@@ -1,6 +1,6 @@
 @echo off
-rem Builds build\Lumen.exe with MSVC. Usage: build.bat [release|debug]
-rem Set LUMEN_OUT to build into another folder (parallel builds in worktrees).
+rem Builds build\Moonbow.exe with MSVC. Usage: build.bat [release|debug]
+rem Set MOONBOW_OUT to build into another folder (parallel builds in worktrees).
 setlocal enabledelayedexpansion
 set "ROOT=%~dp0"
 set "CONFIG=%~1"
@@ -22,7 +22,7 @@ if not defined VCINSTALLDIR (
 )
 
 set "OUT=%ROOT%build"
-if defined LUMEN_OUT set "OUT=%LUMEN_OUT%"
+if defined MOONBOW_OUT set "OUT=%MOONBOW_OUT%"
 set "OBJ=%OUT%\obj\%CONFIG%"
 if not exist "%OBJ%" mkdir "%OBJ%"
 
@@ -45,7 +45,7 @@ if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /O1 /Zi /MT /DNDEBUG /fsanitize=address"
     set "LFLAGS=%LFLAGS% /DEBUG /INCREMENTAL:NO"
 ) else (
-    rem /Zi and /DEBUG only add Lumen.pdb, which crash dumps need; /OPT:REF,ICF keep the exe as small.
+    rem /Zi and /DEBUG only add Moonbow.pdb, which crash dumps need; /OPT:REF,ICF keep the exe as small.
     set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG /Zi"
     set "LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF /DEBUG"
 )
@@ -53,8 +53,8 @@ rem uiautomationcore.lib comes before windowsapp.lib, whose API-set imports of i
 set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib uiautomationcore.lib windowsapp.lib winhttp.lib crypt32.lib dbghelp.lib delayimp.lib"
 
 rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
-cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Lumen.exe" /link %LFLAGS% %LIBS% || exit /b 1
+cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Moonbow.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 copy /y "%ROOT%third_party\mpv\libmpv-2.dll" "%OUT%\" >nul || exit /b 1
 if /i "%CONFIG%"=="asan" copy /y "%VCToolsInstallDir%bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll" "%OUT%\" >nul
-echo Built %OUT%\Lumen.exe (%CONFIG%)
+echo Built %OUT%\Moonbow.exe (%CONFIG%)

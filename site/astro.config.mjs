@@ -4,7 +4,7 @@ import sitemap from '@astrojs/sitemap';
 
 // placeholder: the production URL (canonical, OG, sitemap depend on it)
 export default defineConfig({
-  site: 'https://lumen-player.example',
+  site: 'https://moonbow-player.example',
   integrations: [sitemap()],
   prefetch: { prefetchAll: true, defaultStrategy: 'hover' },
   build: { inlineStylesheets: 'auto' },

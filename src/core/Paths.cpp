@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cwchar>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 
@@ -34,10 +35,23 @@ std::wstring DataDir() {
     if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, KF_FLAG_CREATE, nullptr, &base))) return {};
     std::wstring path = base;
     CoTaskMemFree(base);
-    path += L"\\Lumen";
+    CopyOldDataDir(path + L"\\Lumen", path + L"\\Moonbow");
+    path += L"\\Moonbow";
     SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
     g_cached = path;
     return path;
+}
+
+bool CopyOldDataDir(const std::wstring& from, const std::wstring& to) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (fs::exists(to, ec) || !fs::is_directory(from, ec)) return false;
+    const std::wstring tmp = to + L".copy";
+    fs::remove_all(tmp, ec);
+    fs::copy(from, tmp, fs::copy_options::recursive, ec);
+    if (!ec && MoveFileW(tmp.c_str(), to.c_str())) return true;
+    fs::remove_all(tmp, ec);
+    return false;
 }
 
 std::wstring DataFilePath(std::wstring_view name) {
@@ -66,7 +80,7 @@ void ClaimDataDir() {
     const std::wstring dir = UpperPath(DataDir());
     if (dir.empty()) return;
     wchar_t name[64];
-    swprintf_s(name, L"Lumen.Data.%016llx", static_cast<unsigned long long>(std::hash<std::wstring>{}(dir)));
+    swprintf_s(name, L"Moonbow.Data.%016llx", static_cast<unsigned long long>(std::hash<std::wstring>{}(dir)));
     g_dataMutex = CreateMutexW(nullptr, TRUE, name);
     g_dataReadOnly = g_dataMutex && GetLastError() == ERROR_ALREADY_EXISTS;  // not owned then
 }
@@ -90,7 +104,7 @@ bool IsInDataDir(const std::wstring& path) {
 }
 
 std::wstring DataFileDisplayPath(std::wstring_view name) {
-    if (!DataDirOverridden()) return L"%APPDATA%\\Lumen\\" + std::wstring(name);
+    if (!DataDirOverridden()) return L"%APPDATA%\\Moonbow\\" + std::wstring(name);
     std::wstring full = DataFilePath(name);
     // Short forms keep the file name visible in a narrow field: %TEMP%\..., %USERPROFILE%\...
     wchar_t temp[MAX_PATH];

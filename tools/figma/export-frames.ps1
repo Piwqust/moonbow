@@ -23,7 +23,7 @@ for (const id of ids) {
 }
 return out;
 "@
-$tmp = Join-Path $env:TEMP "lumen-figma-job.js"
+$tmp = Join-Path $env:TEMP "moonbow-figma-job.js"
 Set-Content -Path $tmp -Value $job -Encoding UTF8
 $json = node $Bridge run $tmp --out $out --timeout 300000 | Out-String
 Remove-Item $tmp

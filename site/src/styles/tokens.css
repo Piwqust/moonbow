@@ -1,5 +1,5 @@
 /* Tokens: values from the player's own design/DESIGN.md. Monochrome on purpose: colour on this
-   site exists only inside screenshots, as in Lumen it exists only in the film. */
+   site exists only inside screenshots, as in Moonbow it exists only in the film. */
 :root {
   --c-bg: #090909;        /* bg.deep */
   --c-raised: #121212;
@@ -29,7 +29,7 @@
   --header-h: 4rem;
 
   --r-window: 8px;   /* Windows 11 window corner */
-  --r-pill: 999px;   /* Lumen's Play button */
+  --r-pill: 999px;   /* Moonbow's Play button */
 
   --ease-soft: cubic-bezier(0.215, 0.61, 0.355, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

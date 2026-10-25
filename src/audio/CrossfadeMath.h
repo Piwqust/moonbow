@@ -25,7 +25,7 @@ inline constexpr double kPreroll = 1.6;   // the helper plays this long (silent)
 inline constexpr double kArmLead = 3.0;   // the helper is started this long before S
 inline constexpr double kMinFade = 1.0;
 inline constexpr double kMaxFade = 12.0;
-inline constexpr double kMinDb = -150.0;  // mpv volume-gain-min that Lumen sets
+inline constexpr double kMinDb = -150.0;  // mpv volume-gain-min that Moonbow sets
 
 // The fade a song of `duration` seconds gets: at most half of it minus a second, so a short song
 // is never all fade; 0 = no crossfade.

@@ -11,7 +11,7 @@ public static class St {
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   public static IntPtr Find(uint pid) { IntPtr f = IntPtr.Zero;
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (p == pid && c.ToString() == "LumenHost" && GetWindow(h, 4) == IntPtr.Zero) { f = h; return false; } return true; }, IntPtr.Zero); return f; }
+      if (p == pid && c.ToString() == "MoonbowHost" && GetWindow(h, 4) == IntPtr.Zero) { f = h; return false; } return true; }, IntPtr.Zero); return f; }
   public static void Wheel(IntPtr h, int x, int y, int delta, int count, int sleepMs) {
     var pt = new POINT { X = x, Y = y }; ClientToScreen(h, ref pt);
     for (int i = 0; i < count; i++) { PostMessage(h, 0x20A, (IntPtr)((delta * 120) << 16), (IntPtr)((pt.Y << 16) | (pt.X & 0xFFFF))); System.Threading.Thread.Sleep(sleepMs); } }

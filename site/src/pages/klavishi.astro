@@ -4,7 +4,7 @@ import { keyGroups } from '../data/site';
 const total = keyGroups.reduce((n, g) => n + g.keys.length, 0);
 const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'действие' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'действия' : 'действий');
 ---
-<Base title="Горячие клавиши" description="Горячие клавиши Lumen: перемотка, кадры, дорожки, субтитры, окно и медиатека. Любую клавишу можно переназначить в настройках.">
+<Base title="Горячие клавиши" description="Горячие клавиши Moonbow: перемотка, кадры, дорожки, субтитры, окно и медиатека. Любую клавишу можно переназначить в настройках.">
   <div class="wrap page-head grid">
     <h1 class="display head__title" data-split="lines" data-intro>Клавиши</h1>
     <div class="head__side" data-reveal="fade" data-intro data-delay="0.2">
@@ -88,7 +88,7 @@ const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'действи�
     const count = document.querySelector<HTMLElement>('[data-key-count]')!;
     const empty = document.querySelector<HTMLElement>('[data-key-empty]')!;
     const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'действие' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'действия' : 'действий');
-    // Typing filters the list, like Lumen's own menus do.
+    // Typing filters the list, like Moonbow's own menus do.
     const run = () => {
       const q = input.value.trim().toLowerCase();
       let shown = 0;

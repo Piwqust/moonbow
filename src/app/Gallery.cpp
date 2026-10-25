@@ -1,4 +1,4 @@
-// Developer gallery of every UI control: `Lumen.exe --gallery`.
+// Developer gallery of every UI control: `Moonbow.exe --gallery`.
 #include "app/Gallery.h"
 
 #include "gfx/Gpu.h"
@@ -29,7 +29,7 @@ Label* Heading(Widget* parent, const wchar_t* text) {
 int RunGallery() {
     auto host = std::make_unique<Host>();
     HostOptions o;
-    o.title = L"Lumen — UI gallery";
+    o.title = L"Moonbow — UI gallery";
     o.width = 980;
     o.height = 760;
     if (!host->Create(o)) return 1;
@@ -47,7 +47,7 @@ int RunGallery() {
     title->pad = {16, 0, 0, 0};
     title->gap = 10;
     title->ncRole = NcRole::Caption;
-    title->Add<IconView>("lumen", 20, Tone::Primary);
+    title->Add<IconView>("moonbow", 20, Tone::Primary);
     title->Add<Label>(L"UI gallery", TextStyle::Body, Tone::Secondary)->width = Length::Grow();
     Host* h = host.get();
     auto* min = title->Add<IconButton>("minimize", L"Свернуть", 40, 20);
@@ -145,7 +145,7 @@ int RunGallery() {
 
     Heading(body, L"Typography");
     const std::pair<TextStyle, const wchar_t*> styles[] = {
-        {TextStyle::Display, L"Display — Добро пожаловать в Lumen"},
+        {TextStyle::Display, L"Display — Добро пожаловать в Moonbow"},
         {TextStyle::Title, L"Title — Настройки"},
         {TextStyle::Section, L"Section — Продолжить просмотр"},
         {TextStyle::Heading, L"Heading — Appearance"},

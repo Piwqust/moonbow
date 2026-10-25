@@ -4,9 +4,9 @@
 // the net workers, the memory cache also by the UI thread.
 //
 // Disk layout: <dir>\<16 hex of FNV-1a(key)>.bin, one file per entry:
-//   "LUMENCACHE1\n<expires unix seconds>\n<http status>\n<key length>\n<key>\n<body>"
+//   "MOONBOWCACHE1\n<expires unix seconds>\n<http status>\n<key length>\n<key>\n<body>"
 // The key is stored so a hash collision reads as a miss. Writes go through json::WriteFileAtomic
-// (refused while another Lumen owns the data folder).
+// (refused while another Moonbow owns the data folder).
 #include <cstdint>
 #include <list>
 #include <mutex>

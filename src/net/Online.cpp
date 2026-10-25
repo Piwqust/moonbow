@@ -106,7 +106,7 @@ std::wstring Failure(const Response& r, const wchar_t* service) {
         case Error::TooLarge:
             return app::Fmt(Tr(L"{0} sent an unexpectedly large answer."), {service});
         case Error::Blocked:
-            return app::Fmt(Tr(L"{0} sent an address Lumen does not open."), {service});
+            return app::Fmt(Tr(L"{0} sent an address Moonbow does not open."), {service});
         case Error::File:
             return Tr(L"Couldn't save the file.");
         default:
@@ -267,7 +267,7 @@ OsSession& Os() {
 
 std::wstring OsUserAgent() {
     // Their API refuses agents that aren't "App vX.Y".
-    return L"Lumen v" + AppVersion();
+    return L"Moonbow v" + AppVersion();
 }
 
 Request OsRequest(const std::wstring& url) {
@@ -398,7 +398,7 @@ void SearchSubtitles(const SubtitleSearch& search, std::function<void(const Subt
                 }
                 auto doc = json::Parse(resp.body);
                 if (!doc) {
-                    out.error = Tr(L"OpenSubtitles sent an answer Lumen couldn't read.");
+                    out.error = Tr(L"OpenSubtitles sent an answer Moonbow couldn't read.");
                     done(out);
                     return;
                 }
@@ -468,13 +468,13 @@ void DownloadSubtitle(const SubtitleResult& item, const std::wstring& videoPath,
                 return;
             }
             if (!resp.Ok() || d.link.empty()) {
-                out.error = resp.Ok() ? std::wstring(Tr(L"OpenSubtitles sent an answer Lumen couldn't read."))
+                out.error = resp.Ok() ? std::wstring(Tr(L"OpenSubtitles sent an answer Moonbow couldn't read."))
                                       : Failure(resp, L"OpenSubtitles");
                 done(out);
                 return;
             }
             if (!OsHostAllowed(d.link)) {
-                out.error = app::Fmt(Tr(L"{0} sent an address Lumen does not open."), {L"OpenSubtitles"});
+                out.error = app::Fmt(Tr(L"{0} sent an address Moonbow does not open."), {L"OpenSubtitles"});
                 done(out);
                 return;
             }

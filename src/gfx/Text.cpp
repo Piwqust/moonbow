@@ -87,7 +87,7 @@ void Text::InitAsync(HINSTANCE instance) {
     impl_ = new Impl();
     fontThread_ = std::thread([this, instance] {
         if (!LoadFonts(instance)) {
-            MessageBoxW(nullptr, L"DirectWrite is not available.", L"Lumen", MB_ICONERROR);
+            MessageBoxW(nullptr, L"DirectWrite is not available.", L"Moonbow", MB_ICONERROR);
             ExitProcess(1);
         }
     });

@@ -1,10 +1,10 @@
 #pragma once
 // Clicking a word in subtitles (MARKET.md P2-7, as in PotPlayer). mpv draws subtitles in its own
-// window, so Lumen has no word geometry: on pause it draws the current subtitle itself, in about
+// window, so Moonbow has no word geometry: on pause it draws the current subtitle itself, in about
 // the same place and style, and hides mpv's copy (sub-visibility) while it shows. Words under the
 // pointer underline; a click, a shift-click or a drag opens a menu: copy the word or the phrase,
 // look it up in a dictionary or a translator (the browser opens a link built from a template in
-// Settings > Subtitles; Lumen itself sends nothing). W does the same from the keyboard.
+// Settings > Subtitles; Moonbow itself sends nothing). W does the same from the keyboard.
 //
 // While playing it costs nothing: mpv properties are observed only while paused.
 #include "app/Signal.h"
@@ -66,7 +66,7 @@ public:
     void DebugInfo(std::string& out) const override;
 
 private:
-    // How one block is drawn, in window DIPs: from the Lumen style or the .ass script's style.
+    // How one block is drawn, in window DIPs: from the Moonbow style or the .ass script's style.
     struct Look {
         std::wstring font;
         float line = 20;  // line height: libass sizes fonts by it

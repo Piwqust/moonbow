@@ -174,7 +174,7 @@ protected:
         App& app = TheApp();
         if (app.library().Roots().empty()) {
             e.Set("new-folder", Tr(L"Add your media folders"),
-                  Tr(L"Lumen shows the videos from the folders you add. Nothing is moved or copied."),
+                  Tr(L"Moonbow shows the videos from the folders you add. Nothing is moved or copied."),
                   {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }},
                    {Tr(L"Open file"), ButtonKind::Secondary, "file", [] { TheApp().OpenFileDialog(); }}});
         } else if (app.library().Scanning()) {

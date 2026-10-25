@@ -1,4 +1,4 @@
-# Frame series of a Lumen --automation instance: launch, then PrintWindow the main window as
+# Frame series of a Moonbow --automation instance: launch, then PrintWindow the main window as
 # often as it can (~30-40 ms) and save numbered PNGs plus frames.txt. Check them with
 # tools\dev\frames-check.py <Out>.
 # Usage: frames.ps1 -Exe <exe> -Out <dir> -DataDir <dir> [-Library <dir>] [-Ms 3000]
@@ -7,7 +7,7 @@
 # frames.txt: "<ms> f<NNN> <w>x<h> at <x>,<y> [revealed] [video=x,y,w,h]" per frame, "<ms> OPEN" for -Open
 # (the client area: size, screen position; video = the shown mpv video window, in client pixels).
 # "revealed" = the window is on screen, i.e. a user would see it now: from its first GPU frame (the
-# plain background; its content fades in after it) on (the LumenRevealed window property;
+# plain background; its content fades in after it) on (the MoonbowRevealed window property;
 # --automation windows themselves stay cloaked). Builds without that property show their window at
 # once: every frame counts as seen.
 [CmdletBinding(PositionalBinding = $false)]
@@ -40,7 +40,7 @@ public static class FCap {
       uint p; GetWindowThreadProcessId(h, out p);
       if (p != pid || !IsWindowVisible(h)) return true;
       var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (c.ToString() != "LumenHost") return true;
+      if (c.ToString() != "MoonbowHost") return true;
       if (GetWindow(h, 4) != IntPtr.Zero) return true;  // owned (onboarding, settings)
       found = h; return false;
     }, IntPtr.Zero);
@@ -74,9 +74,9 @@ try {
       $co = New-Object FCap+POINT; [FCap]::ClientToScreen($h, [ref]$co) | Out-Null
       $w = $cr.R; $hh = $cr.B
       if ($w -gt 0 -and $hh -gt 0) {
-        $revealed = [FCap]::GetProp($h, "LumenRevealed") -ne [IntPtr]::Zero
+        $revealed = [FCap]::GetProp($h, "MoonbowRevealed") -ne [IntPtr]::Zero
         $video = ""
-        $vh = [FCap]::FindWindowEx($h, [IntPtr]::Zero, "LumenVideo", $null)
+        $vh = [FCap]::FindWindowEx($h, [IntPtr]::Zero, "MoonbowVideo", $null)
         if ($vh -ne [IntPtr]::Zero -and [FCap]::IsWindowVisible($vh)) {
           $vr = New-Object FCap+RECT; [FCap]::GetWindowRect($vh, [ref]$vr) | Out-Null
           if ($vr.R - $vr.L -gt 4) { $video = " video={0},{1},{2},{3}" -f ($vr.L - $co.X), ($vr.T - $co.Y), ($vr.R - $vr.L), ($vr.B - $vr.T) }

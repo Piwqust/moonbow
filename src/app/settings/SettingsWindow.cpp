@@ -166,7 +166,7 @@ class SettingsWindow : public Host {
 public:
     bool Open(const std::string& category) {
         HostOptions o;
-        o.title = std::wstring(Tr(L"Settings")) + L" — Lumen";
+        o.title = std::wstring(Tr(L"Settings")) + L" — Moonbow";
         MainWindow* main = TheApp().main();
         o.owner = main ? main->Hwnd() : nullptr;
         o.showInTaskbar = o.owner == nullptr;
@@ -186,7 +186,7 @@ public:
         configToken_ = Cfg().Subscribe("", [this](const std::string&) { ScheduleSync(); });
         langConn_ = Connect(TheApp().languageChanged, [this] {
             Post([this] {
-                SetTitle(std::wstring(Tr(L"Settings")) + L" — Lumen");
+                SetTitle(std::wstring(Tr(L"Settings")) + L" — Moonbow");
                 // Same page, same place: the scroll offset survives the rebuild.
                 const float offset = content_ ? content_->Offset() : 0.0f;
                 BuildUi();
@@ -356,7 +356,7 @@ private:
         aboutRow->pad = {16, 0, 16, 10};
         aboutRow->gap = 8;
         aboutRow->Add<Divider>();
-        auto* about = aboutRow->Add<LinkButton>(Tr(L"About Lumen"), TextStyle::Small);
+        auto* about = aboutRow->Add<LinkButton>(Tr(L"About Moonbow"), TextStyle::Small);
         about->id = "about";
         about->onClick = [this] { ShowAboutDialog(this); };
 

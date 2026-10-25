@@ -30,12 +30,12 @@ void OpenLog(std::wstring_view version) {
     if (DataDirReadOnly()) return;
     const std::wstring dir = LogDir();
     if (dir.empty()) return;
-    const std::wstring path = dir + L"\\lumen.log";
+    const std::wstring path = dir + L"\\moonbow.log";
     {
         std::lock_guard lock(g_mutex);
         if (g_file) return;
-        MoveFileExW(path.c_str(), (dir + L"\\lumen.1.log").c_str(), MOVEFILE_REPLACE_EXISTING);
-        g_file = _wfsopen(path.c_str(), L"wb", _SH_DENYWR);  // others can read it while Lumen runs
+        MoveFileExW(path.c_str(), (dir + L"\\moonbow.1.log").c_str(), MOVEFILE_REPLACE_EXISTING);
+        g_file = _wfsopen(path.c_str(), L"wb", _SH_DENYWR);  // others can read it while Moonbow runs
         g_written = 0;
     }
     using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
@@ -47,7 +47,7 @@ void OpenLog(std::wstring_view version) {
     SYSTEMTIME t;
     GetLocalTime(&t);
     char line[160];
-    snprintf(line, sizeof line, "Lumen %ls, Windows %lu.%lu.%lu, %04u-%02u-%02u", std::wstring(version).c_str(),
+    snprintf(line, sizeof line, "Moonbow %ls, Windows %lu.%lu.%lu, %04u-%02u-%02u", std::wstring(version).c_str(),
              os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, t.wYear, t.wMonth, t.wDay);
     Log(line);
 }

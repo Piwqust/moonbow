@@ -1,6 +1,6 @@
 // Unit tests for src/core, src/library and the LRC parser. Build and run with tests\build-tests.bat.
 // A tiny runner: CHECK() records failures and keeps going; the exit code is the failure count.
-// Every test works inside a fresh temp folder; SetDataDirForTests keeps %APPDATA%\Lumen untouched.
+// Every test works inside a fresh temp folder; SetDataDirForTests keeps %APPDATA%\Moonbow untouched.
 
 #include "../src/core/Config.h"
 #include "../src/core/Json.h"
@@ -138,7 +138,7 @@ HWND MessageWindow() {
         WNDCLASSW wc{};
         wc.lpfnWndProc = DefWindowProcW;
         wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = L"LumenTestsMsg";
+        wc.lpszClassName = L"MoonbowTestsMsg";
         RegisterClassW(&wc);
         return CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
     }();
@@ -311,7 +311,7 @@ void TestJsonErrors() {
 }
 
 void TestJsonRoundTrip() {
-    const char* doc = R"({"name":"Lumen","list":[1,2.5,-3,true,false,null,"","текст"],
+    const char* doc = R"({"name":"Moonbow","list":[1,2.5,-3,true,false,null,"","текст"],
         "nested":{"a":{"b":{"c":[[],{}]}}},"esc":"\u0007\u001f","num":1e-7})";
     auto v = json::Parse(doc);
     CHECK(v.has_value());
@@ -322,7 +322,7 @@ void TestJsonRoundTrip() {
         CHECK(json::Serialize(*again, pretty) == text);  // stable
     }
     std::string pretty = json::Serialize(*v, true);
-    CHECK(pretty.find("\n  \"name\": \"Lumen\"") != std::string::npos);
+    CHECK(pretty.find("\n  \"name\": \"Moonbow\"") != std::string::npos);
     CHECK(json::Value(1) == json::Value(1.0));
     CHECK(json::Value(1) != json::Value(true));
     CHECK(json::Value("a") != json::Value("b"));
@@ -486,7 +486,7 @@ void TestSchema() {
         if (!a.defaultKey.empty()) CHECK_MSG(defaults.insert(a.defaultKey).second, "%s key reused", a.id.c_str());
         CHECK(FindKeyAction(a.id) == &a);
     }
-    // The old table repeats Lumen's own keys (README.md): S stops, V cycles subtitles.
+    // The old table repeats Moonbow's own keys (README.md): S stops, V cycles subtitles.
     CHECK(FindKeyAction("stop") && FindKeyAction("stop")->defaultKey == L"S");
     CHECK(FindKeyAction("cycleSubtitles") && FindKeyAction("cycleSubtitles")->defaultKey == L"V");
 
@@ -770,6 +770,19 @@ void TestHiddenCondition() {
     CHECK(c.IsEnabled("general.logFile"));
 }
 
+// The first Moonbow start copies %APPDATA%\Lumen (the old name) once and leaves it as it was.
+void TestCopyOldDataDir() {
+    const std::wstring from = MakeDir(L"old-lumen"), to = g_temp + L"\\new-moonbow";
+    WriteFile(from + L"\\settings.json", "{}");
+    WriteFile(from + L"\\watch_later\\ABC", "start=12");
+    CHECK(!CopyOldDataDir(g_temp + L"\\missing", to) && !FileExists(to));
+    CHECK(CopyOldDataDir(from, to));
+    CHECK(FileExists(to + L"\\settings.json") && FileExists(to + L"\\watch_later\\ABC"));
+    CHECK(FileExists(from + L"\\settings.json") && !FileExists(to + L".copy"));
+    WriteFile(from + L"\\history.json", "[]");
+    CHECK(!CopyOldDataDir(from, to) && !FileExists(to + L"\\history.json"));  // only the first time
+}
+
 void TestCorruptBackup() {
     std::wstring dir = FreshDataDir(L"corrupt");
     TakeCorruptFileNotices();
@@ -888,13 +901,13 @@ void TestCorruptBackup() {
 
     // The log path hint follows a moved data folder.
     CHECK(DataDirOverridden());
-    const std::wstring shown = DataFileDisplayPath(L"lumen.log");
+    const std::wstring shown = DataFileDisplayPath(L"moonbow.log");
     CHECK(shown.rfind(L"%TEMP%\\", 0) == 0);  // the test data dir lives under %TEMP%
-    const std::wstring tail = L"\\data-corrupt\\lumen.log";
+    const std::wstring tail = L"\\data-corrupt\\moonbow.log";
     CHECK(shown.size() > tail.size() && shown.compare(shown.size() - tail.size(), tail.size(), tail) == 0);
     SetDataDirForTests({});
     CHECK(!DataDirOverridden());
-    CHECK(DataFileDisplayPath(L"lumen.log") == L"%APPDATA%\\Lumen\\lumen.log");
+    CHECK(DataFileDisplayPath(L"moonbow.log") == L"%APPDATA%\\Moonbow\\moonbow.log");
     SetDataDirForTests(dir);
 }
 
@@ -923,13 +936,13 @@ void TestConfigMpv() {
     c.SetDouble("performance.decodeThreads", 0);
     CHECK(FindOption(opts, "sub-color") == "#FFFFFFFF");
     CHECK(FindOption(opts, "deinterlace") == "auto");
-    CHECK(FindOption(opts, "save-position-on-quit").empty());  // Lumen saves positions itself
+    CHECK(FindOption(opts, "save-position-on-quit").empty());  // Moonbow saves positions itself
     CHECK(FindOption(opts, "pause") == "no");
     CHECK(FindOption(opts, "cache-secs") == "60");
     CHECK(FindOption(opts, "demuxer-max-bytes") == "150MiB");
     CHECK(FindOption(opts, "screenshot-format") == "png");
     CHECK(!FindOption(opts, "screenshot-dir").empty());
-    // Sound and subtitles prefer the language Lumen speaks, not Windows'; a language picked stays.
+    // Sound and subtitles prefer the language Moonbow speaks, not Windows'; a language picked stays.
     CHECK(FindOption(opts, "slang") == "ru,rus" && FindOption(opts, "alang") == "ru,rus");
     c.SetString("general.language", "en");
     CHECK(FindOption(MpvOptions(c), "slang") == "en,eng" && FindOption(MpvOptions(c), "alang") == "en,eng");
@@ -950,7 +963,7 @@ void TestConfigMpv() {
     c.SetBool("audio.normalize", true);
     auto live = MpvOptionFor(c, "audio.normalize");
     CHECK(live.size() == 1 && live[0].first == "af");
-    CHECK(!live.empty() && live[0].second == "@lumen:lavfi=[loudnorm=I=-23:TP=-1.5:LRA=11]");
+    CHECK(!live.empty() && live[0].second == "@moonbow:lavfi=[loudnorm=I=-23:TP=-1.5:LRA=11]");
     c.SetBool("audio.nightMode", true);
     std::string af = FindOption(MpvOptions(c), "af");
     CHECK(af.find("acompressor=") != std::string::npos && af.find("loudnorm") != std::string::npos);
@@ -987,17 +1000,17 @@ void TestConfigMpv() {
     c.SetDouble("video.sharpen", 5);
     FindOption(MpvOptions(c), "vf", &found);
     CHECK(!found);
-    CHECK(FindOption(MpvOptions(c), "glsl-shaders").find("cache\\shaders\\lumen-cas.glsl") != std::string::npos);
-    CHECK(FindOption(MpvOptionFor(c, "video.sharpen"), "glsl-shader-opts") == "lumen_cas_sharpness=0.5");
+    CHECK(FindOption(MpvOptions(c), "glsl-shaders").find("cache\\shaders\\moonbow-cas.glsl") != std::string::npos);
+    CHECK(FindOption(MpvOptionFor(c, "video.sharpen"), "glsl-shader-opts") == "moonbow_cas_sharpness=0.5");
     c.SetString("performance.vo", "gpu");  // legacy renderer: no shader parameters, CPU fallback
-    CHECK(FindOption(MpvOptions(c), "vf") == "@lumen:lavfi=[cas=strength=0.5]");
+    CHECK(FindOption(MpvOptions(c), "vf") == "@moonbow:lavfi=[cas=strength=0.5]");
     FindOption(MpvOptions(c), "glsl-shaders", &found);
     CHECK(!found);
     c.SetString("performance.vo", "gpu-next");
     c.SetDouble("video.sharpen", 0);
     CHECK(FindOption(MpvOptionFor(c, "video.sharpen"), "glsl-shaders").empty());  // reset clears the list
     c.SetString("video.deinterlaceMethod", "bwdif");
-    CHECK(FindOption(MpvOptions(c), "vf") == "@lumen:lavfi=[bwdif=deint=interlaced]");
+    CHECK(FindOption(MpvOptions(c), "vf") == "@moonbow:lavfi=[bwdif=deint=interlaced]");
     CHECK(FindOption(MpvOptions(c), "deinterlace") == "no");
     c.SetString("video.deinterlaceMethod", "auto");
     // User shaders: only plain names of files that exist in <data>\shaders.
@@ -1514,7 +1527,7 @@ void TestPlaylists() {
         CHECK(items[2].path == g_temp.substr(0, 2) + L"\\abs\\three.mkv");
         CHECK(items[3].path == L"C:\\x y.mkv");
     }
-    // Lumen.exe's manifest makes CP_ACP UTF-8 (this exe has none), so the code page is explicit.
+    // Moonbow.exe's manifest makes CP_ACP UTF-8 (this exe has none), so the code page is explicit.
     WriteFile(sub + L"\\ansi.m3u", "\xCF\xF0\xE8\xE2\xE5\xF2.mkv\n");  // "Привет.mkv" in cp1251
     CHECK(library::ReadM3u(sub + L"\\ansi.m3u", &items, 1251) && items.size() == 1 &&
           items[0].path == sub + L"\\Привет.mkv");
@@ -2146,7 +2159,7 @@ std::string Ape(const std::vector<std::pair<std::string, std::string>>& items) {
 }
 
 std::string Comments(const std::vector<std::string>& entries) {
-    std::string s = Le32(6) + "Lumen!" + Le32(static_cast<uint32_t>(entries.size()));
+    std::string s = Le32(8) + "Moonbow!" + Le32(static_cast<uint32_t>(entries.size()));
     for (const std::string& e : entries) s += Le32(static_cast<uint32_t>(e.size())) + e;
     return s;
 }
@@ -2919,8 +2932,8 @@ void TestPlayQueue() {
 }
 
 void TestShellText() {
-    const std::wstring suffix = L" — Lumen";
-    CHECK(FitShellText(L"Short", suffix, 128) == L"Short — Lumen");
+    const std::wstring suffix = L" — Moonbow";
+    CHECK(FitShellText(L"Short", suffix, 128) == L"Short — Moonbow");
     // Exactly full: 127 units + NUL.
     const std::wstring exact(127 - suffix.size(), L'a');
     CHECK(FitShellText(exact, suffix, 128) == exact + suffix);
@@ -3063,18 +3076,18 @@ void TestMusicSettings() {
     Config c;
     // Crossfade reaches Player as one pseudo option: seconds, 0 = off; the album rule is on.
     auto opts = MpvOptions(c);
-    CHECK(FindOption(opts, "user-data/lumen/crossfade") == "0");
-    CHECK(FindOption(opts, "user-data/lumen/crossfade-albums") == "yes");
+    CHECK(FindOption(opts, "user-data/moonbow/crossfade") == "0");
+    CHECK(FindOption(opts, "user-data/moonbow/crossfade-albums") == "yes");
     c.SetBool("audio.crossfade", true);
     auto live = MpvOptionFor(c, "audio.crossfade");
-    CHECK(live.size() == 1 && live[0].first == "user-data/lumen/crossfade" && live[0].second == "5");
+    CHECK(live.size() == 1 && live[0].first == "user-data/moonbow/crossfade" && live[0].second == "5");
     c.SetDouble("audio.crossfadeSeconds", 40);  // clamped to the slider's 12
-    CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeSeconds"), "user-data/lumen/crossfade") == "12");
+    CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeSeconds"), "user-data/moonbow/crossfade") == "12");
     c.SetBool("audio.crossfade", false);
-    CHECK(FindOption(MpvOptionFor(c, "audio.crossfade"), "user-data/lumen/crossfade") == "0");
+    CHECK(FindOption(MpvOptionFor(c, "audio.crossfade"), "user-data/moonbow/crossfade") == "0");
     CHECK(c.IsEnabled("audio.crossfadeSeconds") == false);
     c.SetBool("audio.crossfadeAlbums", false);
-    CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeAlbums"), "user-data/lumen/crossfade-albums") == "no");
+    CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeAlbums"), "user-data/moonbow/crossfade-albums") == "no");
     // The visualizer is a visible setting now, with the four styles of the design.
     const settings::Item* viz = settings::FindItem("audio.visualizer");
     CHECK(viz && viz->choices.size() == 5);
@@ -3237,7 +3250,7 @@ void TestSkinParse() {
     using namespace skin;
     // Every kind of key at once.
     ParseResult r = Parse(R"({
-        "lumenSkin": 1, "_comment": "ignored", "$schema": "x",
+        "moonbowSkin": 1, "_comment": "ignored", "$schema": "x",
         "name": {"en": "Test", "ru": "Тест"},
         "colors": {"accent": "#FF8800", "bg.base": "#101010"},
         "dark": {"bg.base": "#000", "text.primary": "#FFFFFFFF", "bg.hover": "#FFFFFF20"},
@@ -3274,7 +3287,7 @@ void TestSkinFallback() {
     using namespace skin;
     // Bad values fall back per key; the good keys around them still apply.
     ParseResult r = Parse(R"({
-        "lumenSkin": 7,
+        "moonbowSkin": 7,
         "colour": {}, "font": {"family": "Comic Sans MS"},
         "name": 5, "mode": "sideways",
         "colors": {"accent": "#12", "bg.panel": "#00FF00", "bg.nonsense": "#FFFFFF", "line": 12},
@@ -3286,7 +3299,7 @@ void TestSkinFallback() {
     })");
     CHECK(r.ok);
     const Skin& s = r.skin;
-    CHECK(HasWarning(r, "lumenSkin"));
+    CHECK(HasWarning(r, "moonbowSkin"));
     CHECK(HasWarning(r, "colour: unknown key"));
     CHECK(HasWarning(r, "font: fonts cannot be changed"));
     CHECK(HasWarning(r, "name:"));
@@ -3423,11 +3436,11 @@ void TestBuiltinSkins() {
     // Every built-in skin in res/skins parses without a warning and passes the contrast check
     // with every accent tone (a skin accent replaces the tone, so most repeat the same check).
     const settings::Item* item = settings::FindItem("interface.skin");
-    CHECK(item && item->def.AsString() == "lumen");
+    CHECK(item && item->def.AsString() == "moonbow");
     if (!item) return;
     int files = 0;
     for (const settings::Choice& ch : item->choices) {
-        if (ch.value == "lumen") continue;
+        if (ch.value == "moonbow") continue;
         std::string text;
         const std::wstring path = RepoPath((L"res\\skins\\" + json::ToWide(ch.value) + L".json").c_str());
         CHECK_MSG(json::ReadFileUtf8(path, &text), "%s", ch.value.c_str());
@@ -3728,7 +3741,7 @@ void TestSecretSettings() {
     SetDataDirForTests(g_temp + L"\\data");
 }
 
-// lumen.log: a header line, the previous session kept as lumen.1.log, the 4 MB cap.
+// moonbow.log: a header line, the previous session kept as moonbow.1.log, the 4 MB cap.
 void TestLogFile() {
     const std::wstring dir = FreshDataDir(L"log") + L"\\logs";
     Log("before open");  // dropped
@@ -3740,17 +3753,18 @@ void TestLogFile() {
     for (int i = 0; i < 5000; ++i) Log(big);
     CloseLog();
     std::string first, second;
-    CHECK(json::ReadFileUtf8(dir + L"\\lumen.1.log", &first));
-    CHECK(first.find("Lumen 9.9.9, Windows ") != std::string::npos);
+    CHECK(json::ReadFileUtf8(dir + L"\\moonbow.1.log", &first));
+    CHECK(first.find("Moonbow 9.9.9, Windows ") != std::string::npos);
     CHECK(first.find("first session") != std::string::npos && first.find("before open") == std::string::npos);
-    CHECK(json::ReadFileUtf8(dir + L"\\lumen.log", &second));
+    CHECK(json::ReadFileUtf8(dir + L"\\moonbow.log", &second));
     CHECK(second.find("first session") == std::string::npos);
     CHECK(second.size() > (4u << 20) && second.size() < (4u << 20) + 2000);
     CHECK(second.find("4 MB reached") != std::string::npos);
     SetDataDirForTests(g_temp + L"\\data");
 }
 
-// Vectors from a script that matched all 228 UserChoice hashes Windows wrote on a real PC.
+// Vectors from a script that matched all 228 UserChoice hashes Windows wrote on a real PC. They use the
+// old ProgIds (Lumen.*): the vectors test the hash, not the name.
 void TestUserChoiceHash() {
     const wchar_t sid[] = L"S-1-5-21-1000-2000-3000-1001";
     CHECK(UserChoiceHash(L".mp4", sid, L"Lumen.Video", 0x01d9f5a3b2c4e000ull) == L"8qvu2BJB1c8=");
@@ -3919,8 +3933,8 @@ std::string ReadAll(const std::wstring& path) {
     return data;
 }
 
-// A stand-in Lumen.exe of version 0.<minor>.0: cmd.exe with its VS_FIXEDFILEINFO rewritten.
-std::wstring FakeLumen(int minor) {
+// A stand-in Moonbow.exe of version 0.<minor>.0: cmd.exe with its VS_FIXEDFILEINFO rewritten.
+std::wstring FakeMoonbow(int minor) {
     wchar_t sys[MAX_PATH];
     GetSystemDirectoryW(sys, MAX_PATH);
     std::string exe = ReadAll(std::wstring(sys) + L"\\cmd.exe");
@@ -3929,7 +3943,7 @@ std::wstring FakeLumen(int minor) {
         memcpy(&exe[at + 8], &ms, 4);
         memcpy(&exe[at + 12], &ls, 4);
     }
-    const std::wstring path = g_temp + L"\\fake-lumen-" + std::to_wstring(minor) + L".exe";
+    const std::wstring path = g_temp + L"\\fake-moonbow-" + std::to_wstring(minor) + L".exe";
     WriteFile(path, exe);
     return path;
 }
@@ -3942,9 +3956,9 @@ setup::Package MakeSetup(int minor, const std::vector<std::pair<std::wstring, st
         WriteFile(src + L"\\" + name, data);
         paths.push_back(src + L"\\" + name);
     }
-    const std::wstring out = g_temp + L"\\Lumen-0." + std::to_wstring(minor) + L".0-setup.exe";
+    const std::wstring out = g_temp + L"\\Moonbow-0." + std::to_wstring(minor) + L".0-setup.exe";
     std::wstring error;
-    CHECK_MSG(setup::WritePackage(FakeLumen(minor), paths, out, &error), "%s", U8(error).c_str());
+    CHECK_MSG(setup::WritePackage(FakeMoonbow(minor), paths, out, &error), "%s", U8(error).c_str());
     setup::Package p;
     CHECK(setup::OpenPackage(out, &p));
     return p;
@@ -3961,19 +3975,19 @@ DWORD LinkCount(const std::wstring& path) {
 
 void TestSetupPackage() {
     setup::Package none;
-    CHECK(!setup::OpenPackage(FakeLumen(1), &none));
+    CHECK(!setup::OpenPackage(FakeMoonbow(1), &none));
     std::string big(3 << 20, '\0');
     for (size_t i = 0; i < big.size(); ++i) big[i] = static_cast<char>((i * 7) ^ (i >> 9));
     const setup::Package p = MakeSetup(1, {{L"libmpv-2.dll", big}, {L"README-BETA.txt", "hello"}});
     CHECK(p.version == L"0.1.0");
-    CHECK(p.files.size() == 3 && p.files[0].name == L"Lumen.exe" && p.files[1].name == L"libmpv-2.dll");
+    CHECK(p.files.size() == 3 && p.files[0].name == L"Moonbow.exe" && p.files[1].name == L"libmpv-2.dll");
     CHECK(p.files.size() == 3 && p.files[1].packedSize < p.files[1].size);
     std::vector<uint8_t> data;
     std::wstring error;
     CHECK(p.files.size() == 3 && setup::ReadPackedFile(p, p.files[1], &data, &error) &&
           std::string(data.begin(), data.end()) == big);
     CHECK(p.files.size() == 3 && setup::ReadPackedFile(p, p.files[0], &data, &error) &&
-          std::string(data.begin(), data.end()) == ReadAll(FakeLumen(1)));
+          std::string(data.begin(), data.end()) == ReadAll(FakeMoonbow(1)));
     // Files come out block by block (8 MB): the setup's progress moves through libmpv.
     const setup::Package big2 = MakeSetup(9, {{L"big.dll", std::string(17 << 20, 'x')}});
     std::vector<uint64_t> steps;
@@ -3986,7 +4000,7 @@ void TestSetupPackage() {
 }
 
 void TestSetupInstallSwitch() {
-    const std::wstring dir = MakeDir(L"install") + L"\\Lumen";
+    const std::wstring dir = MakeDir(L"install") + L"\\Moonbow";
     const setup::Target target{dir, false};
     const std::wstring data = FreshDataDir(L"setup");
     const std::string mpv(1 << 20, 'm');
@@ -4043,15 +4057,15 @@ void TestSetupInstallSwitch() {
     }
 
     CHECK_MSG(setup::Uninstall(target, false, &error), "%s", U8(error).c_str());
-    CHECK(!FileExists(dir + L"\\Lumen.exe") && !FileExists(dir + L"\\libmpv-2.dll") && !FileExists(dir + L"\\versions"));
+    CHECK(!FileExists(dir + L"\\Moonbow.exe") && !FileExists(dir + L"\\libmpv-2.dll") && !FileExists(dir + L"\\versions"));
     CHECK(ReadAll(dir + L"\\yt-dlp.exe") == "mine");
     CHECK(FileExists(data + L"\\settings.json"));
 }
 
 // The Inno beta's folder: plain files, no versions\. They are kept as a version of their own.
 void TestSetupFromInno() {
-    const std::wstring dir = MakeDir(L"inno") + L"\\Lumen";
-    WriteFile(dir + L"\\Lumen.exe", ReadAll(FakeLumen(1)));
+    const std::wstring dir = MakeDir(L"inno") + L"\\Moonbow";
+    WriteFile(dir + L"\\Moonbow.exe", ReadAll(FakeMoonbow(1)));
     WriteFile(dir + L"\\libmpv-2.dll", "old mpv");
     WriteFile(dir + L"\\README-BETA.txt", "old");
     WriteFile(dir + L"\\yt-dlp.exe", "mine");
@@ -4060,7 +4074,7 @@ void TestSetupFromInno() {
     CHECK_MSG(setup::Install(b, {dir, false}, nullptr, &error), "%s", U8(error).c_str());
     CHECK(setup::InstalledVersion(dir) == L"0.2.0" && ReadAll(dir + L"\\libmpv-2.dll") == "new mpv");
     CHECK(!FileExists(dir + L"\\README-BETA.txt"));
-    CHECK(FileExists(dir + L"\\versions\\0.1.0\\Lumen.exe") && !FileExists(dir + L"\\versions\\0.1.0\\yt-dlp.exe"));
+    CHECK(FileExists(dir + L"\\versions\\0.1.0\\Moonbow.exe") && !FileExists(dir + L"\\versions\\0.1.0\\yt-dlp.exe"));
     CHECK(setup::SwitchVersion({dir, false}, L"0.1.0", &error) && ReadAll(dir + L"\\libmpv-2.dll") == "old mpv");
     CHECK(ReadAll(dir + L"\\yt-dlp.exe") == "mine");
     // A reinstall of the same version with fewer files leaves none of the old ones behind.
@@ -4068,7 +4082,7 @@ void TestSetupFromInno() {
     CHECK_MSG(setup::Install(again, {dir, false}, nullptr, &error), "%s", U8(error).c_str());
     CHECK(!FileExists(dir + L"\\README-BETA.txt") && ReadAll(dir + L"\\libmpv-2.dll") == "new mpv");
     CHECK(setup::Uninstall({dir, false}, false, &error));
-    CHECK(!FileExists(dir + L"\\Lumen.exe") && ReadAll(dir + L"\\yt-dlp.exe") == "mine");
+    CHECK(!FileExists(dir + L"\\Moonbow.exe") && ReadAll(dir + L"\\yt-dlp.exe") == "mine");
 }
 
 struct TestCase {
@@ -4089,6 +4103,7 @@ const TestCase kTests[] = {
     {"config_persistence", TestConfigPersistence},
     {"config_mpv", TestConfigMpv},
     {"audio_subtitle_options", TestAudioSubtitleOptions},
+    {"copy_old_data_dir", TestCopyOldDataDir},
     {"corrupt_backup", TestCorruptBackup},
     {"hidden_condition", TestHiddenCondition},
     {"history", TestHistory},
@@ -4144,7 +4159,7 @@ int main(int argc, char** argv) {
 
     wchar_t tmp[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
-    g_temp = std::wstring(tmp) + L"lumen-tests-" + std::to_wstring(GetCurrentProcessId());
+    g_temp = std::wstring(tmp) + L"moonbow-tests-" + std::to_wstring(GetCurrentProcessId());
     DeleteTree(g_temp);
     SHCreateDirectoryExW(nullptr, g_temp.c_str(), nullptr);
     SetDataDirForTests(g_temp + L"\\data");

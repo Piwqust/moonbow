@@ -1,11 +1,11 @@
 # Library idle cost and open-from-library latency (mpv log: loadfile -> Starting playback).
-param([string]$Extra = "", [string]$Tag = "lib", [string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Lumen.exe"))
+param([string]$Extra = "", [string]$Tag = "lib", [string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Moonbow.exe"))
 $t = (Join-Path $PSScriptRoot "..\..\tools\dev")
-$log = "$env:TEMP\lumen-qa\mpv-$Tag.log"
+$log = "$env:TEMP\moonbow-qa\mpv-$Tag.log"
 Remove-Item $log -ErrorAction SilentlyContinue
 $opts = ("--log-file=" + $log.Replace('\', '/') + " " + $Extra).Trim()
 $json = @{ "general.extraOptions" = $opts } | ConvertTo-Json -Compress
-$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh -Settings $json -Library "$env:TEMP\lumen-qa\media"
+$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh -Settings $json -Library "$env:TEMP\moonbow-qa\media"
 Start-Sleep 4
 $p = Get-Process -Id $id
 $c0 = $p.TotalProcessorTime.TotalMilliseconds; Start-Sleep 4; $p.Refresh()

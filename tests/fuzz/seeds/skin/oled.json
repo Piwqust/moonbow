@@ -1,5 +1,5 @@
 {
-  "lumenSkin": 1,
+  "moonbowSkin": 1,
   "name": {"en": "OLED black", "ru": "Чёрный OLED"},
   "_comment": "True black for OLED screens: the dark theme with every background at or near #000.",
   "mode": "dark",

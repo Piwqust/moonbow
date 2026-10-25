@@ -1,13 +1,13 @@
 # First-scan time and CPU for the big library (biglib.ps1); -NoThumbs isolates the scan.
-# -Threads only worked with a temporary LUMEN_SCAN_THREADS override in MediaLibrary.cpp
+# -Threads only worked with a temporary MOONBOW_SCAN_THREADS override in MediaLibrary.cpp
 # (MetadataThreads); re-add it there when comparing thread counts.
 param([int]$Threads = 1, [switch]$NoThumbs)
 $t = (Join-Path $PSScriptRoot "..\..\tools\dev")
-$env:LUMEN_SCAN_THREADS = "$Threads"
+$env:MOONBOW_SCAN_THREADS = "$Threads"
 $set = if ($NoThumbs) { '{"library.thumbnails":false}' } else { '' }
-$d = "$env:TEMP\lumen-qa\perf-scan"
+$d = "$env:TEMP\moonbow-qa\perf-scan"
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$id = if ($set) { & "$t\launch.ps1" -DataDir $d -Fresh -Settings $set -Library "$env:TEMP\lumen-qa\big" } else { & "$t\launch.ps1" -DataDir $d -Fresh -Library "$env:TEMP\lumen-qa\big" }
+$id = if ($set) { & "$t\launch.ps1" -DataDir $d -Fresh -Settings $set -Library "$env:TEMP\moonbow-qa\big" } else { & "$t\launch.ps1" -DataDir $d -Fresh -Library "$env:TEMP\moonbow-qa\big" }
 $p = Get-Process -Id $id
 $last = 0; $quiet = 0
 for ($i = 0; $i -lt 240; $i++) {

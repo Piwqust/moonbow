@@ -47,7 +47,7 @@ std::vector<std::wstring> Arguments() {
 
 enum class Forward { NoWindow, Refused, Done };
 
-// Lumens on one data folder form a single-instance group. A hash of the folder, never 0.
+// Moonbows on one data folder form a single-instance group. A hash of the folder, never 0.
 uintptr_t InstanceGroup() {
     std::wstring dir = DataDir();
     if (!dir.empty()) CharUpperBuffW(dir.data(), static_cast<DWORD>(dir.size()));
@@ -59,19 +59,19 @@ uintptr_t InstanceGroup() {
 // files then played unseen.
 HWND FindMainWindow(uintptr_t group) {
     HWND w = nullptr;
-    while ((w = FindWindowExW(nullptr, w, L"LumenHost", nullptr)) != nullptr)
+    while ((w = FindWindowExW(nullptr, w, L"MoonbowHost", nullptr)) != nullptr)
         if (!GetWindow(w, GW_OWNER) && reinterpret_cast<uintptr_t>(GetPropW(w, app::kInstanceGroupProp)) == group)
             return w;
     return nullptr;
 }
 
-// Hands the files to an already running Lumen window.
+// Hands the files to an already running Moonbow window.
 Forward ForwardToRunningInstance(const std::vector<std::wstring>& args, uintptr_t group) {
     HWND other = FindMainWindow(group);
     if (!other) return Forward::NoWindow;
     std::wstring payload;
     for (const auto& a : args)
-        if (a == L"--enqueue" || (!a.empty() && a[0] != L'-')) payload += a + L"\n";  // Explorer's "Add to the Lumen queue"
+        if (a == L"--enqueue" || (!a.empty() && a[0] != L'-')) payload += a + L"\n";  // Explorer's "Add to the Moonbow queue"
     DWORD pid = 0;
     GetWindowThreadProcessId(other, &pid);
     AllowSetForegroundWindow(pid);
@@ -86,7 +86,7 @@ Forward ForwardToRunningInstance(const std::vector<std::wstring>& args, uintptr_
                : Forward::Refused;
 }
 
-// "Only allow one Lumen window" (library.singleInstance). Read straight from the
+// "Only allow one Moonbow window" (library.singleInstance). Read straight from the
 // settings file: parsing the whole config here would cost startup time.
 bool SingleInstanceDisabled() {
     const std::wstring path = DataFilePath(L"settings.json");
@@ -112,7 +112,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     const std::vector<std::wstring> args = Arguments();
     const bool gallery = !args.empty() && args[0] == L"--gallery";
     // Developer flags: --new-instance (skip single-instance hand-off) and
-    // --data-dir <dir> (settings, history... somewhere other than %APPDATA%\Lumen).
+    // --data-dir <dir> (settings, history... somewhere other than %APPDATA%\Moonbow).
     bool newInstance = gallery;
     for (size_t i = 0; i < args.size(); ++i) {
         if (args[i] == L"--new-instance") newInstance = true;
@@ -153,9 +153,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (!newInstance && SingleInstanceDisabled()) newInstance = true;
     const uintptr_t group = InstanceGroup();
     // The real profile keeps the old name; a --data-dir group gets a mutex of its own.
-    wchar_t mutexName[64] = L"Lumen.SingleInstance.v2";
+    wchar_t mutexName[64] = L"Moonbow.SingleInstance.v2";
     if (DataDirOverridden())
-        swprintf_s(mutexName, L"Lumen.SingleInstance.v2.%016llx", static_cast<unsigned long long>(group));
+        swprintf_s(mutexName, L"Moonbow.SingleInstance.v2.%016llx", static_cast<unsigned long long>(group));
     HANDLE mutex = newInstance ? nullptr : CreateMutexW(nullptr, FALSE, mutexName);
     if (!newInstance) app::g_instanceGroup = group;
     if (mutex && GetLastError() == ERROR_ALREADY_EXISTS) {

@@ -298,7 +298,7 @@ void AddScripts(Host* host) {
         const std::wstring dst = dir + L"\\" + (slash == std::wstring::npos ? src : src.substr(slash + 1));
         if (CopyFileW(src.c_str(), dst.c_str(), FALSE)) ++copied;
     }
-    if (copied && host) ShowToast(host, Tr(L"Add-ons load at the next start of Lumen"), "plugins");
+    if (copied && host) ShowToast(host, Tr(L"Add-ons load at the next start of Moonbow"), "plugins");
     if (g_list) g_list->Rescan();
 }
 

@@ -212,7 +212,7 @@ std::wstring DecodeLyricsFile(std::string_view bytes, unsigned codePage) {
     std::wstring w = widen(bytes, CP_UTF8, MB_ERR_INVALID_CHARS);
     if (!w.empty() || bytes.empty()) return w;
     if (!codePage) {
-        // Not CP_ACP: the manifest makes that UTF-8 inside Lumen.exe (json::LegacyCodePage).
+        // Not CP_ACP: the manifest makes that UTF-8 inside Moonbow.exe (json::LegacyCodePage).
         DWORD cp = 0;
         GetLocaleInfoEx(LOCALE_NAME_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
                         reinterpret_cast<LPWSTR>(&cp), sizeof(cp) / sizeof(wchar_t));

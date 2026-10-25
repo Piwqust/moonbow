@@ -73,10 +73,10 @@ bool RunSettingsAction(const std::string& action) {
         if (!RegisterFileAssociations()) {
             toast(L"Couldn't register file types", "info");
         } else if (SetDefaultPlayer()) {
-            toast(L"Lumen is now the default video player", "check_selected");
+            toast(L"Moonbow is now the default video player", "check_selected");
         } else {
             OpenDefaultAppsSettings();
-            toast(L"Lumen is registered. Pick it in Default apps.", "check_selected");
+            toast(L"Moonbow is registered. Pick it in Default apps.", "check_selected");
         }
         return true;
     }

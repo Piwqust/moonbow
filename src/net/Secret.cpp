@@ -12,7 +12,8 @@ namespace net {
 namespace {
 
 constexpr std::string_view kPrefix = "dpapi:";
-// Ties the blobs to Lumen: another program running as the same user must pass the same entropy.
+// Ties the blobs to Moonbow: another program running as the same user must pass the same entropy.
+// Keeps the old name Lumen: keys saved before the rename must still decrypt.
 const char kEntropy[] = "Lumen settings secret v1";
 
 DATA_BLOB EntropyBlob() {
@@ -33,7 +34,7 @@ std::string ProtectSecret(std::string_view plain) {
     DATA_BLOB in{static_cast<DWORD>(plain.size()), reinterpret_cast<BYTE*>(const_cast<char*>(plain.data()))};
     DATA_BLOB entropy = EntropyBlob();
     DATA_BLOB out{};
-    if (!CryptProtectData(&in, L"Lumen", &entropy, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out)) return {};
+    if (!CryptProtectData(&in, L"Moonbow", &entropy, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out)) return {};
     DWORD len = 0;
     std::string result;
     if (CryptBinaryToStringA(out.pbData, out.cbData, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &len) && len) {

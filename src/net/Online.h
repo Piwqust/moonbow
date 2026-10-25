@@ -1,5 +1,5 @@
 #pragma once
-// Lumen's online features on top of net/Http.h, each off by default and opt-in in
+// Moonbow's online features on top of net/Http.h, each off by default and opt-in in
 // Settings › Privacy › Network, with the user's own API key where the service needs one:
 //
 // - LRCLIB (lrclib.net, no key): synced lyrics for songs that have none of their own.

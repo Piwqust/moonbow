@@ -20,7 +20,7 @@ namespace app {
 
 struct BuiltinSkin {
     std::string id;  // interface.skin value
-    std::shared_ptr<const skin::Skin> skin;  // nullptr for "lumen"
+    std::shared_ptr<const skin::Skin> skin;  // nullptr for "moonbow"
     std::wstring name, nameRu;
 };
 

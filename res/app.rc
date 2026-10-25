@@ -1,7 +1,7 @@
 #include <winres.h>
 
 1 RT_MANIFEST "app.manifest"
-1 ICON "lumen.ico"
+1 ICON "moonbow.ico"
 
 // Inter (OFL), see res/fonts/Inter-LICENSE.txt. Ids are read by src/gfx/Text.cpp.
 201 RCDATA "fonts/Inter-Light.ttf"
@@ -10,12 +10,12 @@
 204 RCDATA "fonts/Inter-SemiBold.ttf"
 
 // GPU sharpening shader, written to <data>\cache\shaders by src/Player.cpp.
-LUMEN_CAS RCDATA "shaders/lumen-cas.glsl"
+MOONBOW_CAS RCDATA "shaders/moonbow-cas.glsl"
 
 // Built-in skins (design/SKINS.md), read by src/app/Skins.cpp.
-LUMEN_SKIN_OLED RCDATA "skins/oled.json"
-LUMEN_SKIN_CONTRAST RCDATA "skins/contrast.json"
-LUMEN_SKIN_SEPIA RCDATA "skins/sepia.json"
+MOONBOW_SKIN_OLED RCDATA "skins/oled.json"
+MOONBOW_SKIN_CONTRAST RCDATA "skins/contrast.json"
+MOONBOW_SKIN_SEPIA RCDATA "skins/sepia.json"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 0,1,0,0
@@ -27,9 +27,9 @@ BEGIN
     BEGIN
         BLOCK "041904b0"
         BEGIN
-            VALUE "FileDescription", "Lumen"
+            VALUE "FileDescription", "Moonbow"
             VALUE "FileVersion", "0.1.0"
-            VALUE "ProductName", "Lumen"
+            VALUE "ProductName", "Moonbow"
             VALUE "ProductVersion", "0.1.0"
             VALUE "LegalCopyright", "GPL-3.0-or-later"
         END

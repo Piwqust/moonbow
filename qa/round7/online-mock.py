@@ -1,7 +1,7 @@
-"""Local mock of the LRCLIB, OpenSubtitles and TMDB APIs for testing Lumen's online features without keys.
+"""Local mock of the LRCLIB, OpenSubtitles and TMDB APIs for testing Moonbow's online features without keys.
 
 Binds 127.0.0.1 only. Answers have the shape of the real services (recorded from their docs).
-Point a --automation Lumen at it with the hidden settings:
+Point a --automation Moonbow at it with the hidden settings:
   privacy.lrclibServer        = http://127.0.0.1:<port>
   privacy.opensubtitlesServer = http://127.0.0.1:<port>/api/v1
   privacy.tmdbServer          = http://127.0.0.1:<port>/3
@@ -13,7 +13,7 @@ The image folder holds poster.jpg, backdrop.jpg and still.jpg (any JPEGs).
 Error switches, by key or by query text:
   key "bad"              -> 401 (both services)
   query containing "ratelimit" -> 429 with Retry-After: 3
-  query containing "slow"      -> answers after 25 s (Lumen times out at 15)
+  query containing "slow"      -> answers after 25 s (Moonbow times out at 15)
   OpenSubtitles downloads: 3 per run, then 406 with the quota message.
 Every request is appended to the log as one JSON line (method, path, a few headers).
 """
@@ -153,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send(404, {"message": "not found"})
 
     def lrclib(self, path, q):
-        # Lumen's own test lines (not a real song), synced.
+        # Moonbow's own test lines (not a real song), synced.
         record = {"id": 1, "trackName": q.get("track_name", [""])[0], "artistName": q.get("artist_name", [""])[0],
                   "albumName": q.get("album_name", [""])[0], "duration": float(q.get("duration", ["0"])[0] or 0),
                   "instrumental": False,

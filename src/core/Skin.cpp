@@ -213,8 +213,8 @@ ParseResult Parse(std::string_view text) {
         const std::string& k = m.key;
         const json::Value& v = m.value;
         if (Ignored(k) || k == "colors") continue;
-        if (k == "lumenSkin") {
-            if (!v.IsNumber() || v.AsNumber() != 1) w.push_back("lumenSkin: this Lumen reads version 1; trying anyway");
+        if (k == "moonbowSkin" || k == "lumenSkin") {  // lumenSkin: skins written before the rename
+            if (!v.IsNumber() || v.AsNumber() != 1) w.push_back(k + ": this Moonbow reads version 1; trying anyway");
         } else if (k == "name") {
             if (v.IsString()) {
                 s.name = Wide(v.AsString());

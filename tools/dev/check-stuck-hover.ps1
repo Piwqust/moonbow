@@ -2,11 +2,11 @@
 # drag tooltip, the mini player's overlay, the volume slider popup, a control bar hidden mid-drag.
 # Drives invisible --automation instances with posted input (input.ps1) and reads the widget tree
 # (dump-tree.ps1) after each case. Prints PASS/FAIL per case; exit code 1 when one fails.
-# Usage: tools\dev\check-stuck-hover.ps1 -Exe <Lumen.exe> [-Work <folder in %TEMP%>]
+# Usage: tools\dev\check-stuck-hover.ps1 -Exe <Moonbow.exe> [-Work <folder in %TEMP%>]
 [CmdletBinding(PositionalBinding = $false)]
-param([Parameter(Mandatory)][string]$Exe, [string]$Work = "$env:TEMP\lumen-qa\stuck-hover")
+param([Parameter(Mandatory)][string]$Exe, [string]$Work = "$env:TEMP\moonbow-qa\stuck-hover")
 $tools = $PSScriptRoot
-$videos = "$env:TEMP\lumen-qa\media\Videos"
+$videos = "$env:TEMP\moonbow-qa\media\Videos"
 New-Item -ItemType Directory -Force $Work | Out-Null
 $script:failed = 0
 
@@ -34,8 +34,8 @@ function Leftovers($lines, [bool]$previewAllowed = $false) {
   if (-not $previewAllowed -and $seek -and $seek -match ' text=') { $p += "seek preview still shown: $($seek.Trim())" }
   return $p
 }
-function Start-Lumen([string]$name, [string]$settings, [string[]]$files) {
-  $id = & "$tools\launch.ps1" -Exe $Exe -DataDir "$Work\data-$name" -Fresh -Settings $settings -Library "$env:TEMP\lumen-qa\media" @files
+function Start-Moonbow([string]$name, [string]$settings, [string[]]$files) {
+  $id = & "$tools\launch.ps1" -Exe $Exe -DataDir "$Work\data-$name" -Fresh -Settings $settings -Library "$env:TEMP\moonbow-qa\media" @files
   $deadline = [DateTime]::Now.AddSeconds(20)
   while ($true) {
     try {
@@ -51,7 +51,7 @@ function Start-Lumen([string]$name, [string]$settings, [string[]]$files) {
 }
 
 # --- the floating bar (the default) -------------------------------------------------------------
-$id = Start-Lumen "bar" '{"interface.autoHide":"never"}' @("$videos\Long Seek Test 10min.mp4", "$videos\Chaptered Demo (1080p).mkv")
+$id = Start-Moonbow "bar" '{"interface.autoHide":"never"}' @("$videos\Long Seek Test 10min.mp4", "$videos\Chaptered Demo (1080p).mkv")
 try {
   & "$tools\input.ps1" -ProcessId $id -Key Space  # paused: the times below stay put
   $lines = Dump $id
@@ -140,7 +140,7 @@ try {
 } finally { Stop-Process -Id $id -ErrorAction SilentlyContinue }
 
 # --- the minimal bar, hiding by itself: the volume slider popup and a drag held still ----------
-$id = Start-Lumen "minimal" '{"interface.barStyle":"minimal","interface.autoHide":"always","interface.hideDelay":0.5}' @("$videos\Long Seek Test 10min.mp4")
+$id = Start-Moonbow "minimal" '{"interface.barStyle":"minimal","interface.autoHide":"always","interface.hideDelay":0.5}' @("$videos\Long Seek Test 10min.mp4")
 try {
   $lines = Dump $id
   $bar = RectOf (Find $lines '^\s+app::SeekBar \[\d+,\d+ [1-9]')
@@ -189,7 +189,7 @@ New-Item -ItemType Directory -Force $dd | Out-Null
 $items = @("Long Seek Test 10min.mp4", "Chaptered Demo (1080p).mkv", "Vertical phone clip.mp4") | ForEach-Object { @{ path = "$videos\$_" } }
 $pl = @{ version = 1; playlists = @(@{ id = "p1"; name = "Drag"; created = 1789000000; modified = 1789000000; items = @($items) }) }
 [IO.File]::WriteAllText("$dd\playlists.json", ($pl | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
-$id = & "$tools\launch.ps1" -Exe $Exe -DataDir $dd -Library "$env:TEMP\lumen-qa\media"
+$id = & "$tools\launch.ps1" -Exe $Exe -DataDir $dd -Library "$env:TEMP\moonbow-qa\media"
 try {
   $deadline = [DateTime]::Now.AddSeconds(20)
   while ($true) {

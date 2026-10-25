@@ -2,7 +2,7 @@
 // Per-file settings (playback.perFile): what the user changed for one file (tracks, delays and,
 // with playback.perFileAll, speed, picture transforms, deinterlacing, the A-B loop and the
 // subtitle position and size), restored the next time that file opens.
-// %APPDATA%\Lumen\file-settings.json, at most 5000 files, the least recently used go first.
+// %APPDATA%\Moonbow\file-settings.json, at most 5000 files, the least recently used go first.
 //
 // UI thread only. A file is identified by its path (PathKey: case-insensitive). Changes mark the
 // store dirty; call Flush() from a timer / at exit (the destructor flushes when Load() was called).
@@ -17,7 +17,7 @@
 
 namespace library {
 
-// Every field is optional: unset = the file opens with Lumen's defaults for it.
+// Every field is optional: unset = the file opens with Moonbow's defaults for it.
 struct FileOptions {
     // mpv track ids, 0 = off. A sidecar track is kept by its file instead (its id is only the
     // order it was added in).

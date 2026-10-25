@@ -1,7 +1,7 @@
 // "Add Subtitles" dialog (design/ref/Add_Subtitles_to_Playlist_Folder_*.png) and the
 // memory of video -> subtitle pairs.
 //
-// Pairs live in %APPDATA%\Lumen\subtitle-pairs.json:
+// Pairs live in %APPDATA%\Moonbow\subtitle-pairs.json:
 //   {"version": 1, "pairs": [{"video": "D:\\...\\E01.mkv", "subs": ["D:\\...\\E01.en.srt"]}]}
 // Whenever a file finishes loading, its remembered subtitles are added with sub-add
 // (InstallSubtitleMemory, called from InitDialogs).
@@ -897,7 +897,7 @@ private:
         Store().Save();
         if (MainWindow* w = TheApp().main()) {
             std::wstring msg = Fmt(Tr(L"Subtitles downloaded: {0}"), {library::FileNameOf(f.path)});
-            if (f.inDataDir) msg = Fmt(Tr(L"Subtitles saved to Lumen's data folder: {0}"), {library::FileNameOf(f.path)});
+            if (f.inDataDir) msg = Fmt(Tr(L"Subtitles saved to Moonbow's data folder: {0}"), {library::FileNameOf(f.path)});
             if (const int left = net::online::LastSubtitleQuota(); left >= 0)
                 msg += L". " + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(left)});
             ShowToast(w, msg, "subtitles", 3000);

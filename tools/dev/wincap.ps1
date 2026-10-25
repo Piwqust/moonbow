@@ -1,4 +1,4 @@
-# Captures one --automation Lumen window as DWM composes it (Windows Graphics Capture through
+# Captures one --automation Moonbow window as DWM composes it (Windows Graphics Capture through
 # ffmpeg 9 gfxcapture), 60 frames/s, while actions are posted to it. Unlike PrintWindow
 # (frames.ps1) it sees composition-level faults: a frame of an old picture after a size change, a
 # bare GDI background, mpv's video a frame late. The window stays cloaked: nothing shows on screen.
@@ -10,7 +10,7 @@
 #                   [-Settings <json>] [-Library <dir>] [-Exe <exe>]
 # Actions "ms:what": F, esc, space, pip (Ctrl+Shift+P), side (Ctrl+B), max, restore.
 # Check with wincap-stale.py <dir>.
-param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Lumen.exe"), [string]$Mode = "scale", [string]$Out, [string[]]$Actions = @(), [int]$Seconds = 4, [string]$File = "$env:TEMP\lumen-test-media\The Wand S01\The_Wand_S01E01.mkv", [string]$Settings = "", [string]$Library = "")
+param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Moonbow.exe"), [string]$Mode = "scale", [string]$Out, [string[]]$Actions = @(), [int]$Seconds = 4, [string]$File = "$env:TEMP\moonbow-test-media\The Wand S01\The_Wand_S01E01.mkv", [string]$Settings = "", [string]$Library = "")
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class Wg {
@@ -24,13 +24,13 @@ public static class Wg {
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   public static IntPtr Find(uint pid) { IntPtr f = IntPtr.Zero; EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p);
       if (p != pid || !IsWindowVisible(h)) return true; var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (c.ToString() != "LumenHost" || GetWindow(h, 4) != IntPtr.Zero) return true; f = h; return false; }, IntPtr.Zero); return f; }
+      if (c.ToString() != "MoonbowHost" || GetWindow(h, 4) != IntPtr.Zero) return true; f = h; return false; }, IntPtr.Zero); return f; }
 }
 "@
 [Wg]::SetProcessDPIAware() | Out-Null
 $tools = $PSScriptRoot
 Remove-Item -Recurse -Force $Out -ErrorAction SilentlyContinue; New-Item -ItemType Directory $Out | Out-Null
-$a = @{ DataDir = "$env:TEMP\lumen-qa\wgc-data"; Fresh = $true; Exe = $Exe }
+$a = @{ DataDir = "$env:TEMP\moonbow-qa\wgc-data"; Fresh = $true; Exe = $Exe }
 if ($Settings) { $a.Settings = $Settings }
 if ($Library) { $a.Library = $Library }
 $id = if ($File) { & "$tools\launch.ps1" @a $File } else { & "$tools\launch.ps1" @a }

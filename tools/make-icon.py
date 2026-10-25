@@ -1,6 +1,6 @@
-"""Renders the Lumen app icon (res/lumen.ico) with Pillow.
+"""Renders the Moonbow app icon (res/moonbow.ico) with Pillow.
 
-Same mark as design/icons/lumen.svg: a rounded play triangle with an arc of
+Same mark as design/icons/moonbow.svg: a rounded play triangle with an arc of
 light on its left, white on a near-black rounded square.
 Usage: python -I tools/make-icon.py
 """
@@ -62,9 +62,9 @@ def master():
 def main():
     img = master()
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-    out = ROOT / "res" / "lumen.ico"
+    out = ROOT / "res" / "moonbow.ico"
     img.resize((256, 256), Image.LANCZOS).save(out, sizes=[(s, s) for s in sizes])
-    img.resize((512, 512), Image.LANCZOS).save(ROOT / "design" / "lumen-logo.png")
+    img.resize((512, 512), Image.LANCZOS).save(ROOT / "design" / "moonbow-logo.png")
     print("wrote", out, out.stat().st_size, "bytes")
 
 

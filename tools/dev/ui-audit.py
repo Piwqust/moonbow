@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic layout audit of a Lumen widget-tree dump (METHOD.md, layer 1).
+"""Deterministic layout audit of a Moonbow widget-tree dump (METHOD.md, layer 1).
 
     python tools/dev/ui-audit.py <tree.txt> [--hitmap hitmap.txt] [--allow qa/round5/audit-allow.json]
                                  [--json out.json] [--state normal|maximized|fullscreen] [--context NAME]

@@ -8,7 +8,7 @@
 //
 // Scan order: (1) enumerate files (FindFirstFileExW + FIND_FIRST_EX_LARGE_FETCH, recursive,
 // hidden/system skipped) and publish; (2) read duration and tags (title, artist, album, album
-// artist, genre, track, disc, year) with Lumen's own reader (TagReader.h) and publish again. The
+// artist, genre, track, disc, year) with Moonbow's own reader (TagReader.h) and publish again. The
 // Windows property system is the fallback for the formats the reader doesn't cover (MKV, AVI,
 // WMA...) and for durations it can't get cheaply. Step 2 is skipped
 // for files whose size and modification time match library-cache.json. If the first files show
@@ -168,7 +168,7 @@ public:
     MediaLibrary(const MediaLibrary&) = delete;
     MediaLibrary& operator=(const MediaLibrary&) = delete;
 
-    // Root folders, persisted in %APPDATA%\Lumen\library.json.
+    // Root folders, persisted in %APPDATA%\Moonbow\library.json.
     bool Load();
     bool Save() const;
     const std::vector<std::wstring>& Roots() const { return roots_; }

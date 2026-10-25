@@ -181,7 +181,7 @@ bool PrepareOutputFolder(const std::wstring& dir) {
     if (made != ERROR_SUCCESS && made != ERROR_ALREADY_EXISTS && made != ERROR_FILE_EXISTS) return false;
     const DWORD attr = GetFileAttributesW(dir.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) return false;
-    const std::wstring probe = dir + L"\\.lumen-write-test";
+    const std::wstring probe = dir + L"\\.moonbow-write-test";
     HANDLE h = CreateFileW(probe.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                            FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
     if (h == INVALID_HANDLE_VALUE) return false;
@@ -645,7 +645,7 @@ void Run(Action a) {
         case Action::Snapshot: {
             if (!s.fileLoaded) break;
             std::wstring dir = Utf8ToWide(app.config().GetString("video.screenshotDir"));
-            if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
+            if (dir.empty()) dir = KnownFolderPath(FOLDERID_Pictures, L"Moonbow");
             if (!PrepareOutputFolder(dir)) {
                 CantSaveToast(dir, "video");
                 break;
@@ -670,7 +670,7 @@ void Run(Action a) {
             const bool start = p.GetPropertyString("stream-record").empty();
             if (start) {
                 dir = Utf8ToWide(app.config().GetString("recording.folder"));
-                if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Lumen");
+                if (dir.empty()) dir = KnownFolderPath(FOLDERID_Videos, L"Moonbow");
                 if (!PrepareOutputFolder(dir)) {
                     CantSaveToast(dir, "recording");
                     break;
@@ -678,7 +678,7 @@ void Run(Action a) {
                 SYSTEMTIME t;
                 GetLocalTime(&t);
                 wchar_t name[64];
-                swprintf_s(name, L"\\Lumen %04d-%02d-%02d %02d-%02d-%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                swprintf_s(name, L"\\Moonbow %04d-%02d-%02d %02d-%02d-%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
                            t.wSecond);
                 // Two recordings within one second: mpv would overwrite the first.
                 file = dir + name + L".mkv";

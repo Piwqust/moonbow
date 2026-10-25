@@ -57,7 +57,7 @@ html.frame-away .site-header { translate: 0 -110%; }
 .seek:focus-visible::after, .seek[aria-current='page']::after { scale: 1 1; }
 .seek[aria-current='page'] { color: var(--c-fg); }
 
-/* Primary button: a pill like Lumen's Play; on hover the fill runs left to right like playback. */
+/* Primary button: a pill like Moonbow's Play; on hover the fill runs left to right like playback. */
 .btn {
   position: relative; isolation: isolate; overflow: clip;
   display: inline-flex; align-items: center; gap: 0.7rem;
@@ -85,7 +85,7 @@ html.frame-away .site-header { translate: 0 -110%; }
 .btn:active { color: var(--c-on-accent); }
 .btn--solid:active { color: var(--c-fg); }
 
-/* A Lumen window (real screenshot). Picture-area overlay lets the site replay the start-up. */
+/* A Moonbow window (real screenshot). Picture-area overlay lets the site replay the start-up. */
 .shot { position: relative; }
 .shot__frame {
   position: relative; border-radius: var(--r-window); overflow: hidden;

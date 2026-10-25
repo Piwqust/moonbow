@@ -30,7 +30,7 @@ std::wstring FileName(const std::wstring& path) {
 }
 
 const wchar_t* Caption(const std::string& id) {
-    if (id == "lumen") return Tr(L"Monochrome, the default");
+    if (id == "moonbow") return Tr(L"Monochrome, the default");
     if (id == "oled") return Tr(L"Black page, always the dark theme");
     if (id == "contrast") return Tr(L"Brighter text and lines");
     if (id == "sepia") return Tr(L"Warm tones, softer corners");
@@ -205,7 +205,7 @@ private:
         if (s.CustomActive() && (s.Failed() || !s.Warnings().empty())) {
             std::wstring tip;
             for (const std::string& w : s.Warnings()) tip += (tip.empty() ? L"" : L"\n") + json::ToWide(w);
-            std::wstring text = s.Failed() ? std::wstring(Tr(L"The skin file could not be used, so Lumen is shown."))
+            std::wstring text = s.Failed() ? std::wstring(Tr(L"The skin file could not be used, so Moonbow is shown."))
                                            : Fmt(Tr(L"Notes on the skin file: {0}."), {std::to_wstring(s.Warnings().size())});
             if (!s.LogPath().empty()) text += L" " + Fmt(Tr(L"Details are in {0}."), {FileName(s.LogPath())});
             AddNote(status_, std::move(text), std::move(tip));
@@ -228,11 +228,11 @@ private:
             auto* reset = bar->Add<Button>(Tr(L"Reset"), ButtonKind::Secondary);
             reset->id = "skin-reset";
             reset->minW = kSmallButtonW;
-            reset->tooltip = Tr(L"Go back to the Lumen skin");
+            reset->tooltip = Tr(L"Go back to the Moonbow skin");
             // Posted: applying the skin rebuilds this status, and with it the button running the click.
             reset->onClick = [host = page_.host] {
                 auto apply = [] {
-                    Cfg().SetString("interface.skin", "lumen");
+                    Cfg().SetString("interface.skin", "moonbow");
                     Cfg().SetBool("interface.customSkin", false);
                 };
                 if (host) host->Post(apply);

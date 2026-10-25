@@ -4,13 +4,13 @@
 // crash-<time>.dmp (a minidump: thread stacks and loaded modules, no heap) and crash-<time>.txt
 // (version, exception, module + offset) to LogDir(), then ends the process without Windows'
 // "stopped working" dialog. Nothing is sent anywhere. Read a dump with WinDbg and the matching
-// Lumen.pdb (tools\package-beta.ps1 keeps one per build).
+// Moonbow.pdb (tools\package-beta.ps1 keeps one per build).
 
 #include <string>
 
 namespace app {
 
-// After --data-dir is applied. The LUMEN_CRASH_DIR environment variable (an existing folder)
+// After --data-dir is applied. The MOONBOW_CRASH_DIR environment variable (an existing folder)
 // redirects the reports, for test runs.
 void InstallCrashHandler(const std::wstring& version);
 

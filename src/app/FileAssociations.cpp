@@ -19,10 +19,10 @@ namespace app {
 
 namespace {
 
-constexpr wchar_t kVideoProgId[] = L"Lumen.Video";
-constexpr wchar_t kAudioProgId[] = L"Lumen.Audio";
-constexpr wchar_t kPlaylistProgId[] = L"Lumen.Playlist";
-constexpr wchar_t kCapabilities[] = L"Software\\Lumen\\Capabilities";
+constexpr wchar_t kVideoProgId[] = L"Moonbow.Video";
+constexpr wchar_t kAudioProgId[] = L"Moonbow.Audio";
+constexpr wchar_t kPlaylistProgId[] = L"Moonbow.Playlist";
+constexpr wchar_t kCapabilities[] = L"Software\\Moonbow\\Capabilities";
 
 const wchar_t* const kVideo[] = {L".mkv", L".mp4", L".m4v", L".avi", L".mov", L".webm", L".wmv", L".flv", L".ts",
                                  L".m2ts", L".mts", L".mpg", L".mpeg", L".vob", L".ogv", L".3gp", L".rmvb", L".hevc"};
@@ -50,18 +50,18 @@ bool WriteProgId(const wchar_t* progId, const wchar_t* friendly, const std::wstr
     const std::wstring command = L"\"" + exe + L"\" \"%1\"";
     // Player: Explorer offers the verb for any number of selected files (Document stops at 15).
     return SetValue(base, nullptr, friendly) && SetValue(base + L"\\DefaultIcon", nullptr, L"\"" + exe + L"\",0") &&
-           SetValue(base + L"\\shell", nullptr, L"open") && SetValue(base + L"\\shell\\open", L"FriendlyAppName", L"Lumen") &&
+           SetValue(base + L"\\shell", nullptr, L"open") && SetValue(base + L"\\shell\\open", L"FriendlyAppName", L"Moonbow") &&
            SetValue(base + L"\\shell\\open", L"MultiSelectModel", L"Player") &&
            SetValue(base + L"\\shell\\open\\command", nullptr, command);
 }
 
-// "Play in Lumen" and "Add to the Lumen queue" under `shell` (a perceived type or Directory):
-// shown whichever player is the default. Each selected item starts a Lumen that hands it to the
+// "Play in Moonbow" and "Add to the Moonbow queue" under `shell` (a perceived type or Directory):
+// shown whichever player is the default. Each selected item starts a Moonbow that hands it to the
 // running one (main.cpp), which joins them into one queue (App::OnCopyData).
 bool WriteVerbs(const std::wstring& shell, const std::wstring& exe) {
     bool ok = true;
-    for (const auto& [verb, label, args] : {std::tuple{L"Lumen.play", Tr(L"Play in Lumen"), L""},
-                                            std::tuple{L"Lumen.enqueue", Tr(L"Add to the Lumen queue"), L"--enqueue "}}) {
+    for (const auto& [verb, label, args] : {std::tuple{L"Moonbow.play", Tr(L"Play in Moonbow"), L""},
+                                            std::tuple{L"Moonbow.enqueue", Tr(L"Add to the Moonbow queue"), L"--enqueue "}}) {
         const std::wstring key = shell + L"\\" + verb;
         ok &= SetValue(key, L"MUIVerb", label) && SetValue(key, L"Icon", L"\"" + exe + L"\",0") &&
               SetValue(key, L"MultiSelectModel", L"Player") &&
@@ -83,14 +83,14 @@ bool WriteTypes(const wchar_t* const (&exts)[N], const wchar_t* progId) {
     for (const wchar_t* ext : exts) {
         ok &= SetEmpty(std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids", progId);
         ok &= SetValue(std::wstring(kCapabilities) + L"\\FileAssociations", ext, progId);
-        ok &= SetEmpty(L"Software\\Classes\\Applications\\Lumen.exe\\SupportedTypes", ext);
+        ok &= SetEmpty(L"Software\\Classes\\Applications\\Moonbow.exe\\SupportedTypes", ext);
     }
     return ok;
 }
 
 constexpr wchar_t kFileExts[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\";
-// The apps that were the defaults before Lumen took over, by extension ("" = Windows' own default).
-constexpr wchar_t kPreviousDefaults[] = L"Software\\Lumen\\PreviousDefaults";
+// The apps that were the defaults before Moonbow took over, by extension ("" = Windows' own default).
+constexpr wchar_t kPreviousDefaults[] = L"Software\\Moonbow\\PreviousDefaults";
 constexpr uint64_t kMinute = 600000000;  // FILETIME ticks
 
 // ProgId of the user's current choice for ext, "" when there is none.
@@ -102,8 +102,8 @@ std::wstring CurrentChoice(const wchar_t* ext) {
                                                                                                                     : L"";
 }
 
-bool IsLumen(const std::wstring& progId) {
-    return _wcsnicmp(progId.c_str(), L"Lumen.", 6) == 0;
+bool IsMoonbow(const std::wstring& progId) {
+    return _wcsnicmp(progId.c_str(), L"Moonbow.", 6) == 0;
 }
 
 uint64_t Ticks(FILETIME ft) {
@@ -167,17 +167,17 @@ bool OpensWith(const wchar_t* ext, const wchar_t* progId) {
 
 bool RegisterFileAssociations() {
     const std::wstring exe = ExePath();
-    bool ok = WriteProgId(kVideoProgId, L"Lumen video", exe) && WriteProgId(kAudioProgId, L"Lumen audio", exe) &&
-              WriteProgId(kPlaylistProgId, L"Lumen playlist", exe);
-    ok &= SetValue(L"Software\\Classes\\Applications\\Lumen.exe\\shell\\open\\command", nullptr, L"\"" + exe + L"\" \"%1\"");
-    ok &= SetValue(L"Software\\Classes\\Applications\\Lumen.exe", L"FriendlyAppName", L"Lumen");
-    ok &= SetValue(kCapabilities, L"ApplicationName", L"Lumen");
+    bool ok = WriteProgId(kVideoProgId, L"Moonbow video", exe) && WriteProgId(kAudioProgId, L"Moonbow audio", exe) &&
+              WriteProgId(kPlaylistProgId, L"Moonbow playlist", exe);
+    ok &= SetValue(L"Software\\Classes\\Applications\\Moonbow.exe\\shell\\open\\command", nullptr, L"\"" + exe + L"\" \"%1\"");
+    ok &= SetValue(L"Software\\Classes\\Applications\\Moonbow.exe", L"FriendlyAppName", L"Moonbow");
+    ok &= SetValue(kCapabilities, L"ApplicationName", L"Moonbow");
     ok &= SetValue(kCapabilities, L"ApplicationDescription", L"Fast, minimal video and music player");
     ok &= SetValue(kCapabilities, L"ApplicationIcon", L"\"" + exe + L"\",0");
     ok &= WriteTypes(kVideo, kVideoProgId) && WriteTypes(kAudio, kAudioProgId) && WriteTypes(kPlaylists, kPlaylistProgId);
     for (const wchar_t* shell : {L"SystemFileAssociations\\video\\shell", L"SystemFileAssociations\\audio\\shell", L"Directory\\shell"})
         ok &= WriteVerbs(std::wstring(L"Software\\Classes\\") + shell, exe);
-    ok &= SetValue(L"Software\\RegisteredApplications", L"Lumen", kCapabilities);
+    ok &= SetValue(L"Software\\RegisteredApplications", L"Moonbow", kCapabilities);
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;
 }
@@ -187,11 +187,11 @@ bool UnregisterFileAssociations() {
     auto gone = [](LSTATUS s) { return s == ERROR_SUCCESS || s == ERROR_FILE_NOT_FOUND; };
     auto removeTree = [&](const std::wstring& key) { return gone(RegDeleteTreeW(HKEY_CURRENT_USER, key.c_str())); };
     bool ok = true;
-    // First, while the backup still exists: types that still open in Lumen go back to the app they
+    // First, while the backup still exists: types that still open in Moonbow go back to the app they
     // had before; a type the user moved elsewhere since is theirs and stays.
     const std::wstring sid = UserSid();
     ForEachType([&](const wchar_t* ext, const wchar_t*) {
-        if (!IsLumen(CurrentChoice(ext))) return;
+        if (!IsMoonbow(CurrentChoice(ext))) return;
         wchar_t prev[256];
         DWORD n = sizeof(prev);
         if (RegGetValueW(HKEY_CURRENT_USER, kPreviousDefaults, ext, RRF_RT_REG_SZ, nullptr, prev, &n) == ERROR_SUCCESS &&
@@ -200,16 +200,16 @@ bool UnregisterFileAssociations() {
         else  // Windows' own default, or Windows then asks which app to use
             ok &= gone(RegDeleteKeyW(HKEY_CURRENT_USER, (std::wstring(kFileExts) + ext + L"\\UserChoice").c_str()));
     });
-    for (const wchar_t* key : {L"Software\\Classes\\Lumen.Video", L"Software\\Classes\\Lumen.Audio",
-                               L"Software\\Classes\\Lumen.Playlist", L"Software\\Classes\\Applications\\Lumen.exe", L"Software\\Lumen"})
+    for (const wchar_t* key : {L"Software\\Classes\\Moonbow.Video", L"Software\\Classes\\Moonbow.Audio",
+                               L"Software\\Classes\\Moonbow.Playlist", L"Software\\Classes\\Applications\\Moonbow.exe", L"Software\\Moonbow"})
         ok &= removeTree(key);
     for (const wchar_t* shell : {L"SystemFileAssociations\\video\\shell", L"SystemFileAssociations\\audio\\shell", L"Directory\\shell"})
-        for (const wchar_t* verb : {L"Lumen.play", L"Lumen.enqueue"})
+        for (const wchar_t* verb : {L"Moonbow.play", L"Moonbow.enqueue"})
             ok &= removeTree(std::wstring(L"Software\\Classes\\") + shell + L"\\" + verb);
     ForEachType([&](const wchar_t* ext, const wchar_t* progId) {
         ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), progId));
     });
-    ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Lumen"));
+    ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Moonbow"));
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;
 }
@@ -220,8 +220,8 @@ bool SetDefaultPlayer() {
     bool ok = true;
     // Video only (the owner's call): music and playlists stay with the user's music app.
     for (const wchar_t* ext : kVideo) {
-        // A type already on Lumen keeps its backup: pressing the button twice must not save Lumen as "before".
-        if (const std::wstring prev = CurrentChoice(ext); !IsLumen(prev)) ok &= SetValue(kPreviousDefaults, ext, prev);
+        // A type already on Moonbow keeps its backup: pressing the button twice must not save Moonbow as "before".
+        if (const std::wstring prev = CurrentChoice(ext); !IsMoonbow(prev)) ok &= SetValue(kPreviousDefaults, ext, prev);
         ok &= WriteUserChoice(ext, kVideoProgId, sid);
     }
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
@@ -230,7 +230,7 @@ bool SetDefaultPlayer() {
 }
 
 void OpenDefaultAppsSettings() {
-    ui::Host::ShellOpen(nullptr, L"open", L"ms-settings:defaultapps?registeredAppUser=Lumen", nullptr, nullptr, SW_SHOWNORMAL);
+    ui::Host::ShellOpen(nullptr, L"open", L"ms-settings:defaultapps?registeredAppUser=Moonbow", nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 }  // namespace app

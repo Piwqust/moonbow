@@ -10,13 +10,13 @@ import '../styles/site.css';
 
 interface Props { title?: string; description?: string; image?: string }
 const { title, description = site.description, image = '/og.png' } = Astro.props;
-const fullTitle = title ? `${title} | Lumen` : `Lumen: ${site.tagline.toLowerCase()}`;
+const fullTitle = title ? `${title} | Moonbow` : `Moonbow: ${site.tagline.toLowerCase()}`;
 const canonical = new URL(Astro.url.pathname, Astro.site ?? site.url).href;
 const ogImage = new URL(image, Astro.site ?? site.url).href;
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: 'Lumen',
+  name: 'Moonbow',
   applicationCategory: 'MultimediaApplication',
   operatingSystem: 'Windows 10, Windows 11',
   softwareVersion: download.version,
@@ -40,7 +40,7 @@ const jsonLd = {
     <link rel="sitemap" href="/sitemap-index.xml" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ru_RU" />
-    <meta property="og:site_name" content="Lumen" />
+    <meta property="og:site_name" content="Moonbow" />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />

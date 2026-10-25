@@ -1,14 +1,14 @@
 #pragma once
-// Installs, switches and removes Lumen versions for one user, no admin rights.
+// Installs, switches and removes Moonbow versions for one user, no admin rights.
 //
-// <dir>\Lumen.exe, libmpv-2.dll...   the current version: shortcuts, pins, file types and the jump list
+// <dir>\Moonbow.exe, libmpv-2.dll...   the current version: shortcuts, pins, file types and the jump list
 //                                    point here, so they never change across versions
 // <dir>\versions\<version>\          every kept version, current included; files equal across versions
 //                                    (libmpv) are hard links of one file, as the current files are
 // DataDir()\backups\<version>\       the settings files (*.json) as they were when that version was left
 //
 // Switching first fills versions\<new>, then moves its files over the current ones one by one; a
-// failure puts the previous version back. Lumen must be closed (CloseRunningLumen).
+// failure puts the previous version back. Moonbow must be closed (CloseRunningMoonbow).
 
 #include "Package.h"
 
@@ -24,10 +24,10 @@ struct Target {
     bool system = true;   // uninstall entry, Start menu shortcut, file types; tests turn it off
 };
 
-// Where Lumen is installed (the uninstall entry's folder), else %LOCALAPPDATA%\Programs\Lumen.
+// Where Moonbow is installed (the uninstall entry's folder), else %LOCALAPPDATA%\Programs\Moonbow.
 std::wstring DefaultInstallDir();
 
-// The version of <dir>\Lumen.exe; empty when there is none.
+// The version of <dir>\Moonbow.exe; empty when there is none.
 std::wstring InstalledVersion(const std::wstring& dir);
 // Versions in <dir>\versions, newest first.
 std::vector<std::wstring> StoredVersions(const std::wstring& dir);
@@ -48,9 +48,9 @@ bool SwitchVersion(const Target& target, const std::wstring& version, std::wstri
 // Removes the program; the data folder too when removeData.
 bool Uninstall(const Target& target, bool removeData, std::wstring* error);
 
-// Asks every Lumen running from `dir` to close and waits up to `timeoutMs`; true when none is left.
-bool CloseRunningLumen(const std::wstring& dir, unsigned timeoutMs);
-bool LumenRunning(const std::wstring& dir);
+// Asks every Moonbow running from `dir` to close and waits up to `timeoutMs`; true when none is left.
+bool CloseRunningMoonbow(const std::wstring& dir, unsigned timeoutMs);
+bool MoonbowRunning(const std::wstring& dir);
 
 // Settings files of DataDir() copied to / back from backups\<version>.
 bool SnapshotData(const std::wstring& version);

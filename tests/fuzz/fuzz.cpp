@@ -1,10 +1,10 @@
-// Fuzz targets for the parsers that read bytes Lumen does not control: tags inside media files,
+// Fuzz targets for the parsers that read bytes Moonbow does not control: tags inside media files,
 // JSON (data files and the online services' answers), .lrc, skins, ASS subtitle text, .m3u and
 // episode file names. Build and run with tests\fuzz\build-fuzz.bat.
 //
 // Each target has libFuzzer's shape. Built with /fsanitize=address,fuzzer (needs Visual Studio's
 // C++ AddressSanitizer component) the same targets run coverage-guided, the target picked by
-// LUMEN_FUZZ_TARGET. Without it, main() below mutates the seed files itself while the debug CRT
+// MOONBOW_FUZZ_TARGET. Without it, main() below mutates the seed files itself while the debug CRT
 // checks indexes, iterators and the heap.
 //
 //   fuzz.exe <target> <seed dir> [seconds] [crash dir]   mutate for that long (default 60 s)
@@ -92,7 +92,7 @@ void FuzzM3u(const uint8_t* d, size_t n) {
     static const std::wstring path = [] {
         wchar_t tmp[MAX_PATH];
         GetTempPathW(MAX_PATH, tmp);
-        return std::wstring(tmp) + L"lumen-fuzz-" + std::to_wstring(GetCurrentProcessId()) + L".m3u";
+        return std::wstring(tmp) + L"moonbow-fuzz-" + std::to_wstring(GetCurrentProcessId()) + L".m3u";
     }();
     {
         std::ofstream f(path, std::ios::binary | std::ios::trunc);
@@ -129,10 +129,10 @@ const Target* Find(const char* name) {
 
 }  // namespace
 
-#ifdef LUMEN_LIBFUZZER
+#ifdef MOONBOW_LIBFUZZER
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* d, size_t n) {
-    static const Target* t = Find(std::getenv("LUMEN_FUZZ_TARGET"));
+    static const Target* t = Find(std::getenv("MOONBOW_FUZZ_TARGET"));
     if (!t) std::abort();
     t->fn(d, n);
     return 0;

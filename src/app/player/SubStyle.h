@@ -1,5 +1,5 @@
 #pragma once
-// The Lumen subtitle style of Settings > Subtitles as Direct2D draws it: the word overlay
+// The Moonbow subtitle style of Settings > Subtitles as Direct2D draws it: the word overlay
 // (SubWords.cpp), the Settings preview and the player's subtitle band read it here, once.
 #include "ui/Types.h"
 

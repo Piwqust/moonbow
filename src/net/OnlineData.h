@@ -1,7 +1,7 @@
 #pragma once
 // The pure parts of the online features, unit-tested in tests/core_tests.cpp: the OpenSubtitles
 // moviehash, guessing a movie or an episode from a file name, request query strings and the
-// mapping of each service's JSON to Lumen's records. No I/O except MovieHash().
+// mapping of each service's JSON to Moonbow's records. No I/O except MovieHash().
 #include "../core/Json.h"
 
 #include <cstdint>

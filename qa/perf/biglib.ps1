@@ -1,6 +1,6 @@
-# Builds a large synthetic library of hard links (no extra disk space) in %TEMP%\lumen-qa\big.
-$src = "$env:TEMP\lumen-qa\media"
-$dst = "$env:TEMP\lumen-qa\big"
+# Builds a large synthetic library of hard links (no extra disk space) in %TEMP%\moonbow-qa\big.
+$src = "$env:TEMP\moonbow-qa\media"
+$dst = "$env:TEMP\moonbow-qa\big"
 if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
 $vids = @("$src\Videos\Series S01\Series S01E01.mp4", "$src\Videos\Vertical phone clip.mp4", "$src\Videos\Chaptered Demo (1080p).mkv")
 $songs = Get-ChildItem "$src\Music" -Recurse -File | ForEach-Object FullName

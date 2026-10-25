@@ -1,5 +1,5 @@
 #pragma once
-// User playlists: %APPDATA%\Lumen\playlists.json, plus .m3u / .m3u8 import and export.
+// User playlists: %APPDATA%\Moonbow\playlists.json, plus .m3u / .m3u8 import and export.
 //
 // UI thread only. Changes mark the store dirty; call Flush() from a timer / at exit (the
 // destructor flushes when Load() was called).

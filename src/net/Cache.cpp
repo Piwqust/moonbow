@@ -47,7 +47,7 @@ bool ParseEntry(const std::string& data, const std::string& key, CacheEntry* out
         return true;
     };
     std::string magic, expires, status, keyLen;
-    if (!line(&magic) || magic != "LUMENCACHE1" || !line(&expires) || !line(&status) || !line(&keyLen)) return false;
+    if (!line(&magic) || magic != "MOONBOWCACHE1" || !line(&expires) || !line(&status) || !line(&keyLen)) return false;
     const size_t n = static_cast<size_t>(std::strtoull(keyLen.c_str(), nullptr, 10));
     if (pos + n + 1 > data.size() || data.compare(pos, n, key) != 0 || data[pos + n] != '\n') return false;
     out->expires = std::strtoll(expires.c_str(), nullptr, 10);
@@ -76,7 +76,7 @@ bool DiskCache::Get(const std::string& key, CacheEntry* out, int64_t now) {
 
 bool DiskCache::Put(const std::string& key, int status, std::string_view body, int64_t ttlSeconds, int64_t now) {
     if (dir_.empty() || ttlSeconds <= 0) return false;
-    std::string data = "LUMENCACHE1\n" + std::to_string(now + ttlSeconds) + "\n" + std::to_string(status) + "\n" +
+    std::string data = "MOONBOWCACHE1\n" + std::to_string(now + ttlSeconds) + "\n" + std::to_string(status) + "\n" +
                        std::to_string(key.size()) + "\n" + key + "\n";
     data.append(body);
     std::lock_guard lock(mutex_);
@@ -115,7 +115,7 @@ size_t DiskCache::Prune(int64_t now) {
         if (!json::ReadFileUtf8(file, &data)) continue;
         // The expiry is the second line; the key does not matter here.
         const size_t a = data.find('\n'), b = a == std::string::npos ? a : data.find('\n', a + 1);
-        if (data.rfind("LUMENCACHE1\n", 0) != 0 || b == std::string::npos ||
+        if (data.rfind("MOONBOWCACHE1\n", 0) != 0 || b == std::string::npos ||
             std::strtoll(data.substr(a + 1, b - a - 1).c_str(), nullptr, 10) <= now) {
             if (DeleteFileW(file.c_str())) ++removed;
         }

@@ -602,8 +602,8 @@ private:
                 empty_->Set("warning", Tr(L"Library folder unavailable"),
                             Tr(L"Its videos and music will be back here when the folder is."), std::move(buttons));
             else if (noRoots)
-                empty_->Set("lumen", Tr(L"Welcome to Lumen"),
-                            Tr(L"Add a folder with videos or music and Lumen will keep it in order here. "
+                empty_->Set("moonbow", Tr(L"Welcome to Moonbow"),
+                            Tr(L"Add a folder with videos or music and Moonbow will keep it in order here. "
                                L"Nothing is moved or copied."),
                             std::move(buttons));
             else

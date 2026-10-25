@@ -10,7 +10,7 @@ namespace app {
 //  - System Media Transport Controls (media keys, the volume flyout card);
 //  - the notification area icon (interface.trayIcon / minimizeToTray / notifyTrackChange);
 //  - the taskbar jump list's recent files.
-// --automation instances get none of it; with LUMEN_TRACE they trace what they would send.
+// --automation instances get none of it; with MOONBOW_TRACE they trace what they would send.
 class SystemIntegration {
 public:
     SystemIntegration();

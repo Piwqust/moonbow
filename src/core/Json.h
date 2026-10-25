@@ -1,5 +1,5 @@
 #pragma once
-// Small JSON DOM for Lumen's settings and library files.
+// Small JSON DOM for Moonbow's settings and library files.
 //
 // - Numbers are doubles (integers up to 2^53 round-trip exactly).
 // - Strings are UTF-8 std::string; \uXXXX escapes (incl. surrogate pairs) are decoded on parse.
@@ -125,7 +125,7 @@ std::string FormatNumber(double d);
 std::wstring ToWide(std::string_view utf8);
 std::string ToUtf8(std::wstring_view wide);
 
-// The system's legacy ANSI code page (1251 on Russian Windows). Not GetACP(): Lumen's manifest
+// The system's legacy ANSI code page (1251 on Russian Windows). Not GetACP(): Moonbow's manifest
 // sets activeCodePage to UTF-8, so CP_ACP is 65001 inside the app.
 unsigned LegacyCodePage();
 

@@ -613,7 +613,7 @@ bool ReadFileUtf8(const std::wstring& path, std::string* out) {
 }
 
 bool WriteFileAtomic(const std::wstring& path, std::string_view data) {
-    if (DataDirReadOnly() && IsInDataDir(path)) {  // another Lumen owns the data folder
+    if (DataDirReadOnly() && IsInDataDir(path)) {  // another Moonbow owns the data folder
         SetLastError(ERROR_ACCESS_DENIED);
         return false;
     }

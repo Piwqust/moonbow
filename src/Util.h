@@ -21,5 +21,5 @@ std::vector<std::wstring> ListSiblingMedia(const std::wstring& path, std::string
 // Known folder + subfolder, created if missing. Empty string on failure.
 std::wstring KnownFolderPath(REFKNOWNFOLDERID id, const wchar_t* sub);
 
-// Directory that contains Lumen.exe, with trailing backslash.
+// Directory that contains Moonbow.exe, with trailing backslash.
 std::wstring ExeDir();

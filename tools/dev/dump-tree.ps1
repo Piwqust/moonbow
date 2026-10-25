@@ -1,12 +1,12 @@
-# Writes the widget tree of a Lumen window and prints it (UTF-8). Only --automation instances
-# answer (launch.ps1 starts them that way); a normal Lumen ignores the request.
+# Writes the widget tree of a Moonbow window and prints it (UTF-8). Only --automation instances
+# answer (launch.ps1 starts them that way); a normal Moonbow ignores the request.
 # Usage:
 #   tools\dev\dump-tree.ps1 -ProcessId 1234              main window
 #   tools\dev\dump-tree.ps1 -ProcessId 1234 -All         every visible window (Settings, dialogs...)
 #   tools\dev\dump-tree.ps1 -ProcessId 1234 -Out x.txt   also copy the dump(s) to x.txt
 #   add -Quiet to skip printing.
-# Each window writes %TEMP%\lumen-tree-<pid>-<hwnd as decimal>.txt; the main window also writes
-# the old %TEMP%\lumen-tree-<pid>.txt. The message is sent synchronously: the file is complete
+# Each window writes %TEMP%\moonbow-tree-<pid>-<hwnd as decimal>.txt; the main window also writes
+# the old %TEMP%\moonbow-tree-<pid>.txt. The message is sent synchronously: the file is complete
 # when this script reads it.
 #
 # Format (v2). First line of every window:
@@ -32,7 +32,7 @@
 param([Parameter(Mandatory = $true)][int]$ProcessId, [switch]$All, [string]$Out = "", [switch]$Quiet)
 Add-Type @"
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
-public static class LumenDump {
+public static class MoonbowDump {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
@@ -41,12 +41,12 @@ public static class LumenDump {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageTimeoutW")]
   public static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint flags, uint ms, out IntPtr result);
-  // Visible LumenHost windows of the process, the main (unowned) one first.
+  // Visible MoonbowHost windows of the process, the main (unowned) one first.
   public static List<IntPtr> Windows(uint pid) {
     var list = new List<IntPtr>();
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p);
       var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (p == pid && c.ToString() == "LumenHost" && IsWindowVisible(h)) {
+      if (p == pid && c.ToString() == "MoonbowHost" && IsWindowVisible(h)) {
         if (GetWindow(h, 4) == IntPtr.Zero) list.Insert(0, h); else list.Add(h);
       }
       return true; }, IntPtr.Zero);
@@ -54,15 +54,15 @@ public static class LumenDump {
   }
 }
 "@
-$wins = [LumenDump]::Windows([uint32]$ProcessId)
-if ($wins.Count -eq 0) { throw "no visible LumenHost window for process $ProcessId" }
+$wins = [MoonbowDump]::Windows([uint32]$ProcessId)
+if ($wins.Count -eq 0) { throw "no visible MoonbowHost window for process $ProcessId" }
 if (-not $All) { $wins = @($wins[0]) }
 $text = @()
 foreach ($h in $wins) {
   $r = [IntPtr]::Zero
-  $ok = [LumenDump]::SendMessageTimeout($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero, 2, 5000, [ref]$r)
+  $ok = [MoonbowDump]::SendMessageTimeout($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero, 2, 5000, [ref]$r)
   if ($ok -eq [IntPtr]::Zero) { Write-Warning "window $($h.ToInt64()) did not answer"; continue }
-  $file = Join-Path $env:TEMP "lumen-tree-$ProcessId-$($h.ToInt64()).txt"
+  $file = Join-Path $env:TEMP "moonbow-tree-$ProcessId-$($h.ToInt64()).txt"
   $text += [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
 }
 $joined = $text -join ""

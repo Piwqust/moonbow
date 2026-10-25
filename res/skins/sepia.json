@@ -1,5 +1,5 @@
 {
-  "lumenSkin": 1,
+  "moonbowSkin": 1,
   "name": {"en": "Sepia", "ru": "Сепия"},
   "_comment": "Warm paper tones with softer corners; both themes.",
   "radius": {"control": 5, "card": 8, "popup": 14, "window": 16},

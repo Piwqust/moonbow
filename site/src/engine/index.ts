@@ -4,7 +4,7 @@
 //   enter()                after the new page is in the DOM: init → enter animation → intro
 // onPage(fn): fn runs on every page load inside a gsap.context, so its tweens and
 // ScrollTriggers are reverted automatically. Return a cleanup for the rest.
-// No loader on purpose: Lumen shows its window at the first frame, so does the site.
+// No loader on purpose: Moonbow shows its window at the first frame, so does the site.
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initScroll, resetScroll, startScroll, stopScroll } from './scroll';

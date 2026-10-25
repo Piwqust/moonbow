@@ -35,13 +35,13 @@ double NowMs() {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-// LUMEN_TRACE: preview timings in %TEMP%\lumen-preview.txt ("<ms> <what>").
+// MOONBOW_TRACE: preview timings in %TEMP%\moonbow-preview.txt ("<ms> <what>").
 void PreviewTrace(double ms, const char* what) {
-    static const bool enabled = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+    static const bool enabled = GetEnvironmentVariableW(L"MOONBOW_TRACE", nullptr, 0) > 0;
     if (!enabled) return;
     wchar_t path[MAX_PATH];
     GetTempPathW(MAX_PATH, path);
-    wcscat_s(path, L"lumen-preview.txt");
+    wcscat_s(path, L"moonbow-preview.txt");
     FILE* f = nullptr;
     if (_wfopen_s(&f, path, L"a") == 0 && f) {
         fprintf(f, "%.1f %s\n", ms, what);

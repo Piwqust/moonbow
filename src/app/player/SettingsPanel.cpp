@@ -506,7 +506,7 @@ std::unique_ptr<Widget> PlaybackTab() {
                 [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); },
                 [](double v) { return FormatNumber(v) + L"x"; });
 
-    // What Lumen remembers for the playing file (playback.perFile, LiveState).
+    // What Moonbow remembers for the playing file (playback.perFile, LiveState).
     AddSectionLine(page);
     AddSectionTitle(page, Tr(L"This File's Settings"));
     Widget* fs = AddSection(page);

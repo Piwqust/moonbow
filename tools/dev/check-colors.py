@@ -4,7 +4,7 @@
    exactly bg. Over a picture (the blurred cover of the music view, video, thumbnails) the real
    background differs and the grey sits on it as a dull patch. Such text and lines must be a
    translucent color (white.Fade(0.4)) instead. Flags Color::Mix calls that take videoBg, the
-   color Lumen assumes under pictures, directly or through a local variable set from it.
+   color Moonbow assumes under pictures, directly or through a local variable set from it.
 2. The palette's text tones are made for the theme's own surfaces: the light theme's are
    near-black. Files that paint straight over the video or the cover (OVER_PICTURE) must not use
    them, nor a Tone:: (which picks one). A line that draws on an opaque plate of its own can say

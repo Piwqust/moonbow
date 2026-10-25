@@ -40,7 +40,7 @@ std::wstring LyricsPathFor(const std::wstring& mediaPath);
 // Blocking file I/O: call it off the UI thread.
 Lyrics LoadLyricsFile(const std::wstring& lrcPath);
 
-// Lyrics stored in the file itself, read with Lumen's tag reader: ID3 SYLT (synced) first, then
+// Lyrics stored in the file itself, read with Moonbow's tag reader: ID3 SYLT (synced) first, then
 // USLT, Vorbis LYRICS / UNSYNCEDLYRICS, MP4 ©lyr or APE Lyrics (LRC text in them stays synced).
 // Blocking file I/O: call it off the UI thread.
 Lyrics LoadEmbeddedLyrics(const std::wstring& mediaPath);

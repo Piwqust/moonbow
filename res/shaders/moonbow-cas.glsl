@@ -1,8 +1,8 @@
-// Lumen: contrast-adaptive sharpening (after AMD FidelityFX CAS, MIT) on the luma plane.
+// Moonbow: contrast-adaptive sharpening (after AMD FidelityFX CAS, MIT) on the luma plane.
 // Runs on the GPU inside mpv's renderer, so hardware-decoded frames never leave video memory.
-// Installed into <data>\cache\shaders by Lumen; strength comes from --glsl-shader-opts.
+// Installed into <data>\cache\shaders by Moonbow; strength comes from --glsl-shader-opts.
 
-//!PARAM lumen_cas_sharpness
+//!PARAM moonbow_cas_sharpness
 //!TYPE float
 //!MINIMUM 0.0
 //!MAXIMUM 1.0
@@ -10,7 +10,7 @@
 
 //!HOOK LUMA
 //!BIND HOOKED
-//!DESC Lumen sharpen (CAS)
+//!DESC Moonbow sharpen (CAS)
 
 vec4 hook() {
     // a b c
@@ -39,7 +39,7 @@ vec4 hook() {
     amp = sqrt(amp);
 
     // Filter shape:  0 w 0 / w 1 w / 0 w 0
-    float peak = -1.0 / mix(8.0, 5.0, lumen_cas_sharpness);
+    float peak = -1.0 / mix(8.0, 5.0, moonbow_cas_sharpness);
     float w = amp * peak;
     float result = (b * w + d * w + f * w + h * w + e) / (1.0 + 4.0 * w);
     return vec4(clamp(result, 0.0, 1.0), 0.0, 0.0, 1.0);

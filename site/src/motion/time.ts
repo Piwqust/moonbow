@@ -1,6 +1,6 @@
 // Time helpers shared by the server render and the client driver (no DOM access).
 
-/** Player timecode H:MM:SS.mmm, as Lumen's statistics overlay counts it. */
+/** Player timecode H:MM:SS.mmm, as Moonbow's statistics overlay counts it. */
 export function fmt(t: number) {
   const ms = Math.round(t * 1000);
   const h = Math.floor(ms / 3600000);

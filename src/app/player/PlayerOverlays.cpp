@@ -63,7 +63,7 @@ std::wstring W(const std::string& s) {
 
 constexpr float kStatsPad = 12, kStatsLine = 18;
 
-// "@lumen:lavfi=[bwdif=deint=all,deblock=...]" -> "bwdif, deblock".
+// "@moonbow:lavfi=[bwdif=deint=all,deblock=...]" -> "bwdif, deblock".
 std::wstring GraphFilters(const std::string& graph) {
     std::wstring out;
     size_t start = 0;
@@ -595,7 +595,7 @@ void NextEpisodeCard::CarryLanguages() {
             subsOff_ = stored->subsOff;
             hadSubs_ = subsOff_ || !subLang_.empty();
         }
-        // Lumen's own picks (quiet): what the file remembers for itself wins over the series.
+        // Moonbow's own picks (quiet): what the file remembers for itself wins over the series.
         if ((next || stored) && !Live().FileSettingsStored().HasTracks()) {
             auto pick = [&s](const wchar_t* type, const std::wstring& lang, const std::wstring& title) -> const Track* {
                 const Track* best = nullptr;

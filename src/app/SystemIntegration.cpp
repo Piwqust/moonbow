@@ -99,7 +99,7 @@ std::wstring ResumePath() {
     return {};
 }
 
-// The taskbar jump list's "Recent": links to Lumen with the newest local files of the history,
+// The taskbar jump list's "Recent": links to Moonbow with the newest local files of the history,
 // written off the UI thread (the shell's COM objects take a while to load). A list of our own:
 // the shell's automatic one shows only file types registered to the app, and SHAddToRecentDocs
 // also fills Windows' Recent items, which "Clear history" could only take back by wiping every
@@ -262,7 +262,7 @@ struct SystemIntegration::Impl {
     bool shownPlaying = false, shownPrev = true, shownNext = true;
     wm::SystemMediaTransportControls smtc{nullptr};
     winrt::event_token buttonToken{}, seekToken{};
-    bool trace = false;      // --automation with LUMEN_TRACE: no shell integration, traces what it would send
+    bool trace = false;      // --automation with MOONBOW_TRACE: no shell integration, traces what it would send
     std::wstring smtcPath;   // the item the media flyout shows (empty: disabled)
     bool smtcCover = false;  // ...with its picture
     int smtcFlags = -1;      // previous | next << 1 | shuffle << 2 | repeat << 3, as last sent
@@ -377,7 +377,7 @@ struct SystemIntegration::Impl {
         nid.uCallbackMessage = WM_APP_TRAY;
         const int px = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(hwnd));
         nid.hIcon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1), IMAGE_ICON, px, px, 0));
-        wcscpy_s(nid.szTip, trayTip.empty() ? L"Lumen" : trayTip.c_str());
+        wcscpy_s(nid.szTip, trayTip.empty() ? L"Moonbow" : trayTip.c_str());
         trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
         if (trayAdded) {
             nid.uVersion = NOTIFYICON_VERSION_4;
@@ -407,7 +407,7 @@ struct SystemIntegration::Impl {
     // The notification shows the file's cover: it is asked for now and waited for a moment.
     void NotifyTrack(const std::wstring& path, const std::wstring& text) {
         if (!trayAdded || !TheApp().config().GetBool("interface.notifyTrackChange")) return;
-        // Only worth a notification when Lumen isn't what the user is looking at.
+        // Only worth a notification when Moonbow isn't what the user is looking at.
         if (GetForegroundWindow() == hwnd && !IsIconic(hwnd)) return;
         notifyPath = path;
         notifyText = text;
@@ -446,7 +446,7 @@ struct SystemIntegration::Impl {
         HMENU menu = CreatePopupMenu();
         const bool playing = s.fileLoaded && !s.paused;
         const UINT media = MF_STRING | (s.fileLoaded ? 0u : static_cast<UINT>(MF_GRAYED));
-        AppendMenuW(menu, MF_STRING, kTrayShow, Tr(L"Show Lumen"));
+        AppendMenuW(menu, MF_STRING, kTrayShow, Tr(L"Show Moonbow"));
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, media, kTrayPlay, playing ? Tr(L"Pause") : Tr(L"Play"));
         AppendMenuW(menu, media, kTrayPrev, Tr(L"Previous"));
@@ -571,7 +571,7 @@ void SystemIntegration::Attach(HWND window) {
         if (!impl_->notifyText.empty() && CachedCover(impl_->notifyPath)) impl_->SendNotification();
     });
     if (ui::Host::Automation()) {
-        impl_->trace = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+        impl_->trace = GetEnvironmentVariableW(L"MOONBOW_TRACE", nullptr, 0) > 0;
         return;
     }
     impl_->taskbarCreated = RegisterWindowMessageW(L"TaskbarButtonCreated");
@@ -622,7 +622,7 @@ void SystemIntegration::SettingsChanged() {
 bool SystemIntegration::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) {
     Impl& d = *impl_;
     // Closing: the window is hidden and mpv is being destroyed on another thread. The tray icon
-    // goes at once ("Show Lumen" would bring back a dying window), and no tray, thumbnail-button
+    // goes at once ("Show Moonbow" would bring back a dying window), and no tray, thumbnail-button
     // or media-key command reaches the player.
     if (TheApp().Quitting()) {
         d.RemoveTray();
@@ -750,8 +750,8 @@ void SystemIntegration::Update(unsigned changes) {
 
     // Tray tooltip and track notification (once per file).
     if (changes & (kChangeFile | kChangeMeta)) {
-        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" вЂ” Lumen", std::size(NOTIFYICONDATAW{}.szTip))
-                                                     : L"Lumen");
+        d.SetTrayTip(s.fileLoaded && !title.empty() ? FitShellText(title, L" — Moonbow", std::size(NOTIFYICONDATAW{}.szTip))
+                                                     : L"Moonbow");
         if ((changes & kChangeFile) && s.fileLoaded && item && item->path != d.notifiedPath) {
             d.notifiedPath = item->path;
             d.NotifyTrack(item->path, tags.artist.empty() ? title : title + L"\n" + tags.artist);

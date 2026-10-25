@@ -7,7 +7,7 @@
 
 // libmpv is loaded at runtime with LoadLibrary, so the window can appear
 // before the (large) DLL is mapped, and no MinGW import library is needed.
-#define LUMEN_MPV_FUNCS(X)      \
+#define MOONBOW_MPV_FUNCS(X)      \
     X(mpv_error_string)         \
     X(mpv_free)                 \
     X(mpv_create)               \
@@ -25,27 +25,27 @@
     X(mpv_set_wakeup_callback)
 
 struct MpvApi {
-#define LUMEN_MPV_PTR(name) decltype(&::name) name = nullptr;
-    LUMEN_MPV_FUNCS(LUMEN_MPV_PTR)
-#undef LUMEN_MPV_PTR
+#define MOONBOW_MPV_PTR(name) decltype(&::name) name = nullptr;
+    MOONBOW_MPV_FUNCS(MOONBOW_MPV_PTR)
+#undef MOONBOW_MPV_PTR
 
     HMODULE module = nullptr;
 
     bool Load(const std::wstring& dllPath, std::wstring* error) {
         module = LoadLibraryExW(dllPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!module) {
-            *error = L"Не найден libmpv-2.dll рядом с Lumen.exe";
+            *error = L"Не найден libmpv-2.dll рядом с Moonbow.exe";
             return false;
         }
-#define LUMEN_MPV_RESOLVE(name)                                                         \
+#define MOONBOW_MPV_RESOLVE(name)                                                         \
     name = reinterpret_cast<decltype(name)>(GetProcAddress(module, #name));             \
     if (!name) {                                                                        \
         *error = L"В libmpv-2.dll нет функции ";                                        \
         for (const char* c = #name; *c; ++c) error->push_back(static_cast<wchar_t>(*c)); \
         return false;                                                                   \
     }
-        LUMEN_MPV_FUNCS(LUMEN_MPV_RESOLVE)
-#undef LUMEN_MPV_RESOLVE
+        MOONBOW_MPV_FUNCS(MOONBOW_MPV_RESOLVE)
+#undef MOONBOW_MPV_RESOLVE
         return true;
     }
 };

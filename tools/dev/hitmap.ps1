@@ -1,12 +1,12 @@
-# Asks a Lumen window what WM_NCHITTEST answers across its whole client area, the way the
+# Asks a Moonbow window what WM_NCHITTEST answers across its whole client area, the way the
 # real mouse does before any click arrives. Posted input (input.ps1) skips this step, so a
 # region that answers HTCAPTION or a resize border swallows real clicks while tests pass.
 # Prints every region that is not plain client area, with the widgets under it.
-# Usage: tools\dev\hitmap.ps1 -ProcessId 1234 [-Step 8] [-Title "Lumen"]
+# Usage: tools\dev\hitmap.ps1 -ProcessId 1234 [-Step 8] [-Title "Moonbow"]
 param([Parameter(Mandatory = $true)][int]$ProcessId, [int]$Step = 8, [string]$Title = "")
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
-public static class LumenHit {
+public static class MoonbowHit {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
@@ -24,7 +24,7 @@ public static class LumenHit {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p);
       if (p != pid || !IsWindowVisible(h)) return true;
-      var c = new StringBuilder(64); GetClassName(h, c, 64); if (c.ToString() != "LumenHost") return true;
+      var c = new StringBuilder(64); GetClassName(h, c, 64); if (c.ToString() != "MoonbowHost") return true;
       var t = new StringBuilder(256); GetWindowText(h, t, 256);
       if (title.Length > 0 && !t.ToString().Contains(title)) return true;
       found = h; return false; }, IntPtr.Zero);
@@ -39,19 +39,19 @@ public static class LumenHit {
 "@
 $names = @{ 0 = "HTNOWHERE"; 1 = "HTCLIENT"; 2 = "HTCAPTION"; 9 = "HTMAXBUTTON"; 10 = "HTLEFT"; 11 = "HTRIGHT"; 12 = "HTTOP";
             13 = "HTTOPLEFT"; 14 = "HTTOPRIGHT"; 15 = "HTBOTTOM"; 16 = "HTBOTTOMLEFT"; 17 = "HTBOTTOMRIGHT"; -1 = "HTTRANSPARENT" }
-$h = [LumenHit]::Find([uint32]$ProcessId, $Title)
-if ($h -eq [IntPtr]::Zero) { throw "no visible LumenHost window for process $ProcessId" }
-$scale = [LumenHit]::GetDpiForWindow($h) / 96.0
-$rc = New-Object LumenHit+RECT; [LumenHit]::GetClientRect($h, [ref]$rc) | Out-Null
+$h = [MoonbowHit]::Find([uint32]$ProcessId, $Title)
+if ($h -eq [IntPtr]::Zero) { throw "no visible MoonbowHost window for process $ProcessId" }
+$scale = [MoonbowHit]::GetDpiForWindow($h) / 96.0
+$rc = New-Object MoonbowHit+RECT; [MoonbowHit]::GetClientRect($h, [ref]$rc) | Out-Null
 
 # Widget tree (rects are window DIPs); a hidden ancestor hides its subtree.
 # Sent, not posted: the dump file is complete when this returns (a fixed wait could read the old one).
 $sr = [IntPtr]::Zero
-if ([LumenHit]::SendMessageTimeout($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero, 2, 5000, [ref]$sr) -eq [IntPtr]::Zero) {
+if ([MoonbowHit]::SendMessageTimeout($h, 0x8000 + 43, [IntPtr]::Zero, [IntPtr]::Zero, 2, 5000, [ref]$sr) -eq [IntPtr]::Zero) {
   throw "window $($h.ToInt64()) did not answer the tree dump"
 }
 $nodes = @(); $hiddenDepth = -1; $popup = $false
-foreach ($line in Get-Content (Join-Path $env:TEMP "lumen-tree-$ProcessId-$($h.ToInt64()).txt") -Encoding UTF8) {
+foreach ($line in Get-Content (Join-Path $env:TEMP "moonbow-tree-$ProcessId-$($h.ToInt64()).txt") -Encoding UTF8) {
   # v2 header: the DIP scale, including the --scale test override.
   if ($line -match '^=== window .* scale=([\d.]+)') { $scale = [double]$matches[1]; continue }
   if ($line -eq "--- popup") { $popup = $true; $hiddenDepth = -1; continue }
@@ -75,7 +75,7 @@ function Under([double]$x, [double]$y) {
 $regions = @{}
 for ($y = [int]($Step / 2); $y -lt $rc.B; $y += $Step) {
   for ($x = [int]($Step / 2); $x -lt $rc.R; $x += $Step) {
-    $code = [LumenHit]::Hit($h, $x, $y)
+    $code = [MoonbowHit]::Hit($h, $x, $y)
     if ($code -eq 1) { continue }
     $n = $names[[int]$code]; if (-not $n) { $n = "HT$code" }
     $what = Under ($x / $scale) ($y / $scale)

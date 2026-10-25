@@ -1,6 +1,6 @@
 #pragma once
-// Per-file bookmarks (%APPDATA%\Lumen\bookmarks.json) and favorite paths
-// (%APPDATA%\Lumen\favorites.json). Paths compare case-insensitively.
+// Per-file bookmarks (%APPDATA%\Moonbow\bookmarks.json) and favorite paths
+// (%APPDATA%\Moonbow\favorites.json). Paths compare case-insensitively.
 //
 // UI thread only. Changes mark the store dirty; call Flush() from a timer / at exit (the
 // destructors flush when Load() was called).

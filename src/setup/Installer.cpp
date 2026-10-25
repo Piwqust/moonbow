@@ -18,8 +18,8 @@ namespace {
 
 namespace fs = std::filesystem;
 
-constexpr wchar_t kUninstallKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Lumen";
-// The Inno Setup beta (tools/installer/lumen.iss, now in git history) used the same folder and this entry.
+constexpr wchar_t kUninstallKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Moonbow";
+// The Inno Setup beta of Lumen, the old name (tools/installer/lumen.iss, now in git history), used this entry.
 constexpr wchar_t kInnoKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{0E08DF8D-068E-44DF-96DD-AFDC2CCD259A}_is1";
 
@@ -99,12 +99,12 @@ void RemoveTree(const std::wstring& path) {
     fs::remove_all(path, ec);
 }
 
-// Lumen's own files in the install folder, also from layouts without versions\ (the Inno beta).
-// A yt-dlp.exe the user put next to Lumen.exe (Config.cpp FindYtDlp) is theirs: it never follows
+// Moonbow's own files in the install folder, also from layouts without versions\ (the Inno beta).
+// A yt-dlp.exe the user put next to Moonbow.exe (Config.cpp FindYtDlp) is theirs: it never follows
 // version switches and an uninstall leaves it.
-bool IsLumenFile(const std::wstring& name) {
+bool IsMoonbowFile(const std::wstring& name) {
     const std::wstring lower = Lower(name);
-    return lower == L"lumen.exe" || EndsWith(lower, L".dll") || (lower.rfind(L"readme", 0) == 0 && EndsWith(lower, L".txt"));
+    return lower == L"moonbow.exe" || EndsWith(lower, L".dll") || (lower.rfind(L"readme", 0) == 0 && EndsWith(lower, L".txt"));
 }
 
 // The Inno beta and older layouts had no versions\ folder: the current files are kept there first,
@@ -117,7 +117,7 @@ void KeepCurrent(const std::wstring& dir, const std::wstring& current) {
     fs::create_directories(tmp, ec);
     bool ok = !ec;
     for (const std::wstring& name : FilesIn(dir))
-        if (IsLumenFile(name)) ok = ok && LinkOrCopy(dir + L"\\" + name, tmp + L"\\" + name);
+        if (IsMoonbowFile(name)) ok = ok && LinkOrCopy(dir + L"\\" + name, tmp + L"\\" + name);
     if (ok && MoveFileW(tmp.c_str(), VersionDir(dir, current).c_str())) return;
     RemoveTree(tmp);
 }
@@ -175,14 +175,14 @@ bool Extract(const Package& package, const std::wstring& dir, const Progress& pr
 bool Activate(const std::wstring& dir, const std::vector<std::wstring>& old, const std::wstring& to, std::wstring* error) {
     const std::wstring src = VersionDir(dir, to);
     const std::vector<std::wstring> files = FilesIn(src);
-    if (std::find(files.begin(), files.end(), L"Lumen.exe") == files.end())
-        return *error = L"no Lumen.exe in " + src, false;
+    if (std::find(files.begin(), files.end(), L"Moonbow.exe") == files.end())
+        return *error = L"no Moonbow.exe in " + src, false;
     for (const std::wstring& name : files) {
         const std::wstring dest = dir + L"\\" + name, next = dest + L".new";
         if (!LinkOrCopy(src + L"\\" + name, next) ||
             !MoveFileExW(next.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
             DeleteFileW(next.c_str());
-            *error = L"cannot replace " + dest + L" (is Lumen still running?)";
+            *error = L"cannot replace " + dest + L" (is Moonbow still running?)";
             return false;
         }
     }
@@ -229,7 +229,7 @@ std::wstring KnownFolder(REFKNOWNFOLDERID id) {
 
 std::wstring ShortcutPath() {
     const std::wstring programs = KnownFolder(FOLDERID_Programs);
-    return programs.empty() ? programs : programs + L"\\Lumen.lnk";
+    return programs.empty() ? programs : programs + L"\\Moonbow.lnk";
 }
 
 bool CreateShortcut(const std::wstring& exe) {
@@ -238,7 +238,7 @@ bool CreateShortcut(const std::wstring& exe) {
     if (path.empty() || FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))))
         return false;
     link->SetPath(exe.c_str());
-    link->SetDescription(L"Lumen");
+    link->SetDescription(L"Moonbow");
     IPersistFile* file = nullptr;
     const bool ok = SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file))) && SUCCEEDED(file->Save(path.c_str(), TRUE));
     if (file) file->Release();
@@ -256,7 +256,7 @@ bool SetDword(const wchar_t* name, DWORD value) {
 }
 
 bool WriteUninstallEntry(const std::wstring& dir, const std::wstring& version) {
-    const std::wstring exe = dir + L"\\Lumen.exe";
+    const std::wstring exe = dir + L"\\Moonbow.exe";
     uint64_t bytes = 0;
     for (const std::wstring& name : FilesIn(dir)) {
         WIN32_FILE_ATTRIBUTE_DATA a{};
@@ -267,8 +267,8 @@ bool WriteUninstallEntry(const std::wstring& dir, const std::wstring& version) {
     GetLocalTime(&now);
     wchar_t date[16];
     swprintf_s(date, L"%04u%02u%02u", now.wYear, now.wMonth, now.wDay);
-    return SetString(L"DisplayName", L"Lumen") && SetString(L"DisplayVersion", version) &&
-           SetString(L"Publisher", L"Lumen") && SetString(L"DisplayIcon", L"\"" + exe + L"\",0") &&
+    return SetString(L"DisplayName", L"Moonbow") && SetString(L"DisplayVersion", version) &&
+           SetString(L"Publisher", L"Moonbow") && SetString(L"DisplayIcon", L"\"" + exe + L"\",0") &&
            SetString(L"InstallLocation", dir) && SetString(L"InstallDate", date) &&
            SetString(L"UninstallString", L"\"" + exe + L"\" --uninstall") &&
            SetString(L"QuietUninstallString", L"\"" + exe + L"\" --uninstall --silent") && SetDword(L"NoModify", 1) &&
@@ -285,10 +285,10 @@ void RemoveInno(const std::wstring& dir) {
     }
 }
 
-// File types point at <dir>\Lumen.exe, which registers them itself (its path, its language).
+// File types point at <dir>\Moonbow.exe, which registers them itself (its path, its language).
 bool Integrate(const Target& target, const std::wstring& version, std::wstring* error) {
     if (!target.system) return true;
-    const std::wstring exe = target.dir + L"\\Lumen.exe";
+    const std::wstring exe = target.dir + L"\\Moonbow.exe";
     RemoveInno(target.dir);
     if (RunAndWait(exe, L"--register-file-types") != 0) return *error = L"cannot register the file types", false;
     if (!WriteUninstallEntry(target.dir, version)) return *error = L"cannot write the uninstall entry", false;
@@ -310,15 +310,15 @@ bool CopyJson(const std::wstring& from, const std::wstring& to) {
     return ok;
 }
 
-// Lumen.exe processes started from `dir` (any version inside it), not this one.
-std::vector<DWORD> LumenProcesses(const std::wstring& dir) {
+// Moonbow.exe processes started from `dir` (any version inside it), not this one.
+std::vector<DWORD> MoonbowProcesses(const std::wstring& dir) {
     std::vector<DWORD> pids;
     const std::wstring prefix = Lower(dir) + L"\\";
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return pids;
     PROCESSENTRY32W e{sizeof(e)};
     for (BOOL more = Process32FirstW(snap, &e); more; more = Process32NextW(snap, &e)) {
-        if (e.th32ProcessID == GetCurrentProcessId() || _wcsicmp(e.szExeFile, L"Lumen.exe") != 0) continue;
+        if (e.th32ProcessID == GetCurrentProcessId() || _wcsicmp(e.szExeFile, L"Moonbow.exe") != 0) continue;
         HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, e.th32ProcessID);
         if (!p) continue;
         wchar_t path[MAX_PATH * 4];
@@ -345,11 +345,11 @@ std::wstring DefaultInstallDir() {
         }
     }
     const std::wstring programs = KnownFolder(FOLDERID_UserProgramFiles);
-    return programs.empty() ? programs : programs + L"\\Lumen";
+    return programs.empty() ? programs : programs + L"\\Moonbow";
 }
 
 std::wstring InstalledVersion(const std::wstring& dir) {
-    const std::wstring exe = dir + L"\\Lumen.exe";
+    const std::wstring exe = dir + L"\\Moonbow.exe";
     return IsFile(exe) ? FileVersion(exe) : std::wstring();
 }
 
@@ -359,7 +359,7 @@ std::vector<std::wstring> StoredVersions(const std::wstring& dir) {
     for (const auto& e : fs::directory_iterator(dir + L"\\versions", ec)) {
         const std::wstring name = e.path().filename().wstring();
         if (e.is_directory(ec) && !EndsWith(name, L".tmp") && !EndsWith(name, L".old") &&
-            IsFile(e.path().wstring() + L"\\Lumen.exe"))
+            IsFile(e.path().wstring() + L"\\Moonbow.exe"))
             versions.push_back(name);
     }
     std::sort(versions.begin(), versions.end(),
@@ -395,7 +395,7 @@ bool Install(const Package& package, const Target& target, const Progress& progr
     std::error_code ec;
     fs::create_directories(dir, ec);
     if (!IsDir(dir)) return *error = L"cannot create " + dir, false;
-    if (LumenRunning(dir)) return *error = L"Lumen is running", false;
+    if (MoonbowRunning(dir)) return *error = L"Moonbow is running", false;
     const std::wstring current = InstalledVersion(dir);
     KeepCurrent(dir, current);
     const std::vector<std::wstring> old = CurrentFiles(dir, current);
@@ -408,8 +408,8 @@ bool Install(const Package& package, const Target& target, const Progress& progr
 
 bool SwitchVersion(const Target& target, const std::wstring& version, std::wstring* error) {
     const std::wstring& dir = target.dir;
-    if (!IsDir(VersionDir(dir, version))) return *error = L"Lumen " + version + L" is not kept", false;
-    if (LumenRunning(dir)) return *error = L"Lumen is running", false;
+    if (!IsDir(VersionDir(dir, version))) return *error = L"Moonbow " + version + L" is not kept", false;
+    if (MoonbowRunning(dir)) return *error = L"Moonbow is running", false;
     const std::wstring current = InstalledVersion(dir);
     KeepCurrent(dir, current);
     if (!current.empty() && current != version) SnapshotData(current);
@@ -421,40 +421,40 @@ bool SwitchVersion(const Target& target, const std::wstring& version, std::wstri
 
 bool Uninstall(const Target& target, bool removeData, std::wstring* error) {
     const std::wstring& dir = target.dir;
-    if (LumenRunning(dir)) return *error = L"Lumen is running", false;
+    if (MoonbowRunning(dir)) return *error = L"Moonbow is running", false;
     if (target.system) {
-        if (IsFile(dir + L"\\Lumen.exe")) RunAndWait(dir + L"\\Lumen.exe", L"--unregister-file-types");
+        if (IsFile(dir + L"\\Moonbow.exe")) RunAndWait(dir + L"\\Moonbow.exe", L"--unregister-file-types");
         DeleteFileW(ShortcutPath().c_str());
         RegDeleteTreeW(HKEY_CURRENT_USER, kUninstallKey);
         RemoveInno(dir);
     }
-    // Lumen's files only: anything else the user put in the folder stays, and so does the folder then.
+    // Moonbow's files only: anything else the user put in the folder stays, and so does the folder then.
     std::vector<std::wstring> ours;
     for (const std::wstring& v : StoredVersions(dir))
         for (const std::wstring& name : FilesIn(VersionDir(dir, v))) ours.push_back(name);
     for (const std::wstring& name : FilesIn(dir))
-        if (IsLumenFile(name) || std::find(ours.begin(), ours.end(), name) != ours.end() || EndsWith(name, L".new"))
+        if (IsMoonbowFile(name) || std::find(ours.begin(), ours.end(), name) != ours.end() || EndsWith(name, L".new"))
             DeleteFileW((dir + L"\\" + name).c_str());
     RemoveTree(dir + L"\\versions");
     RemoveDirectoryW(dir.c_str());
     if (removeData && !DataDir().empty()) RemoveTree(DataDir());
-    if (IsFile(dir + L"\\Lumen.exe")) return *error = L"cannot delete " + dir + L"\\Lumen.exe", false;
+    if (IsFile(dir + L"\\Moonbow.exe")) return *error = L"cannot delete " + dir + L"\\Moonbow.exe", false;
     return true;
 }
 
-bool LumenRunning(const std::wstring& dir) {
-    return !LumenProcesses(dir).empty();
+bool MoonbowRunning(const std::wstring& dir) {
+    return !MoonbowProcesses(dir).empty();
 }
 
-bool CloseRunningLumen(const std::wstring& dir, unsigned timeoutMs) {
-    const std::vector<DWORD> pids = LumenProcesses(dir);
+bool CloseRunningMoonbow(const std::wstring& dir, unsigned timeoutMs) {
+    const std::vector<DWORD> pids = MoonbowProcesses(dir);
     if (pids.empty()) return true;
     std::vector<HANDLE> handles;
     for (DWORD pid : pids)
         if (HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid)) handles.push_back(h);
     // Its main window's close is a full quit (MainWindow onCloseRequest): settings and watch-later saved.
     HWND w = nullptr;
-    while ((w = FindWindowExW(nullptr, w, L"LumenHost", nullptr)) != nullptr) {
+    while ((w = FindWindowExW(nullptr, w, L"MoonbowHost", nullptr)) != nullptr) {
         DWORD pid = 0;
         GetWindowThreadProcessId(w, &pid);
         if (!GetWindow(w, GW_OWNER) && std::find(pids.begin(), pids.end(), pid) != pids.end())
@@ -463,7 +463,7 @@ bool CloseRunningLumen(const std::wstring& dir, unsigned timeoutMs) {
     if (!handles.empty())
         WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), TRUE, timeoutMs);
     for (HANDLE h : handles) CloseHandle(h);
-    return !LumenRunning(dir);
+    return !MoonbowRunning(dir);
 }
 
 bool SnapshotData(const std::wstring& version) {

@@ -121,10 +121,10 @@ private:
     bool danger_;
 };
 
-// The app menu: the logo with a chevron, so it reads as "Lumen's menu" and not as the page's "⋯".
+// The app menu: the logo with a chevron, so it reads as "Moonbow's menu" and not as the page's "⋯".
 class AppMenuButton : public IconButton {
 public:
-    AppMenuButton() : IconButton("lumen", Tr(L"Lumen menu"), 40, 20) {
+    AppMenuButton() : IconButton("moonbow", Tr(L"Moonbow menu"), 40, 20) {
         width = Length::Px(44);
     }
     void Paint(Painter& p) override {
@@ -132,7 +132,7 @@ public:
         if (IsPressed()) p.Fill(rect, P().press, 4);
         else if (hot) p.Fill(rect, P().hover, 4);
         PaintFocusRing(p, rect, 4);
-        p.Icon("lumen", {rect.x + 6, rect.Cy() - 10, 20, 20}, P().textPrimary);
+        p.Icon("moonbow", {rect.x + 6, rect.Cy() - 10, 20, 20}, P().textPrimary);
         p.Icon("chevron_down", {rect.x + 27, rect.Cy() - 6, 12, 12}, hot ? P().textPrimary : P().textSecondary);
     }
 };
@@ -209,7 +209,7 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     routeConn_ = Connect(TheApp().routeChanged, [this] { Refresh(); });
     screenConn_ = Connect(TheApp().screenChanged, [this] { Refresh(); });
     // Tooltips are translated when set: again on a language switch (maximize's in Refresh).
-    tips_ = {{moreBtn_, L"Lumen menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
+    tips_ = {{moreBtn_, L"Moonbow menu"}, {sidebarBtn_, L"Toggle sidebar"}, {crumb_, L"Show in library"},
              {min, L"Minimize"}, {close, L"Close"}};
     langConn_ = Connect(TheApp().languageChanged, [this] {
         for (const auto& [w, english] : tips_) w->tooltip = Tr(english);
@@ -245,8 +245,8 @@ void TitleBar::Refresh() {
     if (media && !tags.artist.empty() && !s.hasVideo) title += L" · " + tags.artist;
     if (std::wstring episode = media ? episodes::Title(item->path) : std::wstring(); !episode.empty()) title = episode;
     if (!app.config().GetBool("interface.titleFileName")) title.clear();
-    title_->SetText(title.empty() ? L"Lumen" : title);
-    std::wstring caption = title.empty() ? L"Lumen" : title + L" — Lumen";
+    title_->SetText(title.empty() ? L"Moonbow" : title);
+    std::wstring caption = title.empty() ? L"Moonbow" : title + L" — Moonbow";
     if (window_ && caption != windowTitle_) {
         windowTitle_ = std::move(caption);
         window_->SetTitle(windowTitle_);
@@ -300,7 +300,7 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Customize player", "edit", Action::CustomizePlayer));
     items.push_back(item(L"Keyboard shortcuts", "hotkeys", Action::KeyboardShortcuts));
     items.push_back(item(L"Settings", "settings", Action::Settings));
-    MenuItem about{Tr(L"About Lumen"), L"", "info"};
+    MenuItem about{Tr(L"About Moonbow"), L"", "info"};
     about.action = [] { ShowAboutDialog(); };
     items.push_back(std::move(about));
     items.push_back(MenuItem::Separator());

@@ -63,7 +63,7 @@ FileOptions ReadOptions(const json::Value& v) {
     ReadNum(v, "abB", &o.abB);
     ReadNum(v, "subPos", &o.subPos);
     ReadNum(v, "subScale", &o.subScale);
-    // The strings go into mpv's loadfile options ("a=1,b=2"): only the values Lumen writes.
+    // The strings go into mpv's loadfile options ("a=1,b=2"): only the values Moonbow writes.
     if (o.aspect && o.aspect->find_first_not_of("0123456789.:") != std::string::npos) o.aspect.reset();
     if (o.zoomMode && *o.zoomMode != "quarter" && *o.zoomMode != "half" && *o.zoomMode != "original" &&
         *o.zoomMode != "double")

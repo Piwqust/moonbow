@@ -1,4 +1,4 @@
-# Lumen architecture
+# Moonbow architecture
 
 Native Windows player: C++20, Win32, Direct2D/DirectWrite/DirectComposition UI, libmpv playback.
 Design source: `design/DESIGN.md` (tokens), `design/ref/*.png` (57 screens, 1 px = 1 DIP),
@@ -6,9 +6,9 @@ Design source: `design/DESIGN.md` (tokens), `design/ref/*.png` (57 screens, 1 px
 
 ## Build
 `build.bat` (MSVC, VS 2022) compiles every `.cpp` under `src/` into one exe; object files share a
-folder, so **file basenames must be unique**. `/W4` must stay warning-free. `LUMEN_OUT=<dir>` builds
+folder, so **file basenames must be unique**. `/W4` must stay warning-free. `MOONBOW_OUT=<dir>` builds
 elsewhere (parallel builds). After editing `design/icons`, run `tools/gen-icons.ps1`.
-`Lumen.exe --gallery` shows every control. `LUMEN_TRACE=1` writes startup timings to `%TEMP%\lumen-trace.txt`.
+`Moonbow.exe --gallery` shows every control. `MOONBOW_TRACE=1` writes startup timings to `%TEMP%\moonbow-trace.txt`.
 
 ## Layers
 ```
@@ -75,7 +75,7 @@ Player.h/.cpp  libmpv wrapper (all commands async; ProcessEvents → PlayerChang
   Add Russian translations to your area's file in `src/app/strings/*.inc` as
   `{L"Continue Watching", L"Продолжить просмотр"},`. `Fmt(Tr(L"{0} items"), n)`, `CountItems(n)`,
   `Plural(n, one, few, many)`.
-- Persistence: `core/Config` (settings, schema-driven), `library/*` services (JSON in `%APPDATA%\Lumen`).
+- Persistence: `core/Config` (settings, schema-driven), `library/*` services (JSON in `%APPDATA%\Moonbow`).
 
 ## Rules
 - UI thread only for widgets, Player calls and services (unless a service says otherwise).
@@ -87,7 +87,7 @@ Player.h/.cpp  libmpv wrapper (all commands async; ProcessEvents → PlayerChang
 ## Testing without disturbing the desktop
 Run an isolated instance and drive it with posted messages (the real mouse and focus are untouched):
 ```
-build\Lumen.exe --new-instance --automation --data-dir %TEMP%\lumen-test-<you> [file]
+build\Moonbow.exe --new-instance --automation --data-dir %TEMP%\moonbow-test-<you> [file]
 powershell -File tools\dev\input.ps1 -ProcessId <pid> -Click 300,200 [-Right|-Double] | -Move x,y | -Wheel x,y -Delta -1 | -Drag x1,y1,x2,y2 | -Key Space | -Type "text"
 powershell -File tools\dev\capture.ps1 -ProcessId <pid> -Out shot.png [-Title "Settings"] [-Scale 0.6]
 ```

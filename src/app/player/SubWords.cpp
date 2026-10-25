@@ -322,7 +322,7 @@ void SubtitleWords::ReadStyle() {
 }
 
 // A native .ass track is drawn with its own styles (sub-ass-extradata), unless Settings apply
-// the Lumen style to it. Read once per track: a synchronous read, but only on a pause.
+// the Moonbow style to it. Read once per track: a synchronous read, but only on a pause.
 void SubtitleWords::ReadAssHeader() {
     const Track* sub = SelectedSub();
     const bool native = sub && (sub->codec == L"ass" || sub->codec == L"ssa") && !Cfg().GetBool("subtitles.assOverride");
@@ -412,7 +412,7 @@ void SubtitleWords::Rebuild() {
     const float sizeScale = static_cast<float>(subScale_ > 0 ? subScale_ : 1);
     auto snap = [scale](float v) { return std::round(v * scale) / scale; };
 
-    // The Lumen style: mpv's sizes are pixels of a 720-line frame, of the window ("Relative")
+    // The Moonbow style: mpv's sizes are pixels of a 720-line frame, of the window ("Relative")
     // or of the picture. The lift over the control bar is in sub-margin-y.
     const float unit = (Cfg().GetString("subtitles.sizeMode") == "pixels" ? pic.h : video_.h) / 720.0f;
     Look plain;

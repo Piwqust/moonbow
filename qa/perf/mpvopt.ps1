@@ -1,12 +1,12 @@
 # Plays one file with extra mpv options, prints CPU/memory and key mpv log lines.
-param([string]$File = "$env:TEMP\lumen-qa\media\Videos\Chaptered Demo (1080p).mkv", [string]$Extra = "", [string]$Tag = "opt",
-      [string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Lumen.exe"))
+param([string]$File = "$env:TEMP\moonbow-qa\media\Videos\Chaptered Demo (1080p).mkv", [string]$Extra = "", [string]$Tag = "opt",
+      [string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Moonbow.exe"))
 $t = (Join-Path $PSScriptRoot "..\..\tools\dev")
-$log = "$env:TEMP\lumen-qa\mpv-$Tag.log"
+$log = "$env:TEMP\moonbow-qa\mpv-$Tag.log"
 Remove-Item $log -ErrorAction SilentlyContinue
 $opts = ("--log-file=" + $log.Replace('\', '/') + " " + $Extra).Trim()
 $json = @{ "general.extraOptions" = $opts } | ConvertTo-Json -Compress
-$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh -Settings $json $File
+$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh -Settings $json $File
 Start-Sleep 3
 $p = Get-Process -Id $id
 $c0 = $p.TotalProcessorTime.TotalMilliseconds; Start-Sleep 5; $p.Refresh()

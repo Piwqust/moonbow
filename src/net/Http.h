@@ -1,5 +1,5 @@
 #pragma once
-// Small asynchronous HTTPS client for Lumen's online features (LRCLIB, OpenSubtitles, TMDB).
+// Small asynchronous HTTPS client for Moonbow's online features (LRCLIB, OpenSubtitles, TMDB).
 //
 // - WinHTTP on a pool of at most two worker threads. The threads start with the first request
 //   and exit after 20 s without work, so a session that never goes online has no thread, no
@@ -51,7 +51,7 @@ struct Request {
     // response body is then empty. Existing files are replaced.
     std::wstring saveTo;
     bool keepExisting = false;  // with saveTo: an existing file answers 200 without the network
-    std::wstring userAgent;  // empty = "Lumen/<version>"
+    std::wstring userAgent;  // empty = "Moonbow/<version>"
     bool allowLoopbackHttp = false;  // http://127.0.0.1 (test mock servers, --automation only)
 };
 
@@ -80,7 +80,7 @@ void Cancel(uint64_t id);
 // download, loading a store). UI thread.
 void Async(std::function<void()> work, std::function<void()> done = {});
 
-// LUMEN_TRACE: every request that reaches the network is logged to %TEMP%\lumen-net-<pid>.txt as
+// MOONBOW_TRACE: every request that reaches the network is logged to %TEMP%\moonbow-net-<pid>.txt as
 // "<ms> <method> <host><path without the query> -> <status or error>" (no keys, no query values).
 
 // Whether a recent request failed to connect (requests are skipped for a minute).
@@ -91,7 +91,7 @@ size_t Pending();
 uint64_t NetworkRequests();
 uint64_t CacheHits();
 
-// "Lumen/0.1.0" from the VERSIONINFO resource ("Lumen/?" without one, e.g. in unit tests).
+// "Moonbow/0.1.0" from the VERSIONINFO resource ("Moonbow/?" without one, e.g. in unit tests).
 const std::wstring& UserAgent();
 std::wstring AppVersion();
 

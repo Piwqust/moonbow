@@ -439,7 +439,7 @@ protected:
         }
         if (TheApp().library().Roots().empty()) {
             e.Set("songs", Tr(L"Add your music folders"),
-                  Tr(L"Lumen shows the music from the folders you add. Nothing is moved or copied."),
+                  Tr(L"Moonbow shows the music from the folders you add. Nothing is moved or copied."),
                   {{Tr(L"Add folder"), ButtonKind::Primary, "new-folder", [] { AddFolderToLibrary(); }}});
             return;
         }

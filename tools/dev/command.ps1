@@ -1,13 +1,13 @@
-# Sends a test command to a Lumen --automation instance and prints "ok" or "failed" plus the
+# Sends a test command to a Moonbow --automation instance and prints "ok" or "failed" plus the
 # app's reply. Exit code 0 = ok, 1 = failed. Only --automation runs accept commands.
 # Usage:
 #   tools\dev\command.ps1 -ProcessId 1234 -Command "nav music songs"
 #   tools\dev\command.ps1 -ProcessId 1234 -Command "wait-idle" [-TimeoutMs 10000]
 #   add -Quiet to print nothing (use the exit code).
 #
-# Transport: WM_COPYDATA to the main LumenHost window (the unowned one), dwData = 0x4C554D,
+# Transport: WM_COPYDATA to the main MoonbowHost window (the unowned one), dwData = 0x4C554D,
 # lpData = the command as UTF-16. SendMessageTimeout returns TRUE on success; the reply text is
-# in %TEMP%\lumen-cmd-<pid>.txt ("ok"/"failed" on the first line, then details).
+# in %TEMP%\moonbow-cmd-<pid>.txt ("ok"/"failed" on the first line, then details).
 # Commands run synchronously on the UI thread: the state has changed when this returns, but the
 # next layout/frame (and anything asynchronous, like loading a file) happens afterwards, so
 # follow a command with "wait-idle" before a capture or a dump.
@@ -56,7 +56,7 @@
 #                         set general.theme light | set interface.autoHide always
 #                         set interface.decorations false | set general.language en
 #   menu <name>           open a menu without a click:
-#     app (the Lumen logo menu in the title bar), more / sort (library header), add (sidebar "Add"),
+#     app (the Moonbow logo menu in the title bar), more / sort (library header), add (sidebar "Add"),
 #     player (video right-click menu; player screen), pip (PiP menu; PiP only), close
 #   click <selector>      OnClick() on the first visible match (topmost popup first, then the
 #                         window), walking up to an interactive ancestor:
@@ -76,7 +76,7 @@ param([Parameter(Mandatory = $true)][int]$ProcessId, [Parameter(Mandatory = $tru
       [int]$TimeoutMs = 10000, [switch]$Quiet)
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;
-public static class LumenCmd {
+public static class MoonbowCmd {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct COPYDATASTRUCT { public IntPtr dwData; public int cbData; public IntPtr lpData; }
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
@@ -90,7 +90,7 @@ public static class LumenCmd {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p);
       var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (p == pid && c.ToString() == "LumenHost" && GetWindow(h, 4) == IntPtr.Zero) { found = h; return false; }
+      if (p == pid && c.ToString() == "MoonbowHost" && GetWindow(h, 4) == IntPtr.Zero) { found = h; return false; }
       return true; }, IntPtr.Zero);
     return found;
   }
@@ -108,14 +108,14 @@ public static class LumenCmd {
   }
 }
 "@
-$h = [LumenCmd]::FindMain([uint32]$ProcessId)
-if ($h -eq [IntPtr]::Zero) { throw "no main LumenHost window for process $ProcessId" }
+$h = [MoonbowCmd]::FindMain([uint32]$ProcessId)
+if ($h -eq [IntPtr]::Zero) { throw "no main MoonbowHost window for process $ProcessId" }
 # Only --automation instances (WS_EX_NOACTIVATE windows, ui/Host.cpp) take commands; say so instead of waiting.
-if (([LumenCmd]::GetWindowLong($h, -20) -band 0x08000000) -eq 0) { throw "process $ProcessId is not a --automation instance" }
-$replyFile = Join-Path $env:TEMP "lumen-cmd-$ProcessId.txt"
+if (([MoonbowCmd]::GetWindowLong($h, -20) -band 0x08000000) -eq 0) { throw "process $ProcessId is not a --automation instance" }
+$replyFile = Join-Path $env:TEMP "moonbow-cmd-$ProcessId.txt"
 $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
 while ($true) {
-  $res = [LumenCmd]::Send($h, $Command, [uint32][Math]::Max(1000, $TimeoutMs))
+  $res = [MoonbowCmd]::Send($h, $Command, [uint32][Math]::Max(1000, $TimeoutMs))
   if ($res -ne 0 -or $Command.Trim() -ne "wait-idle" -or [DateTime]::UtcNow -ge $deadline) { break }
   Start-Sleep -Milliseconds 25
 }

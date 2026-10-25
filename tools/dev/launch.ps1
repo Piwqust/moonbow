@@ -1,5 +1,5 @@
-# Starts an isolated Lumen test instance and prints its PID.
-# Usage: tools\dev\launch.ps1 -DataDir $env:TEMP\lumen-test-x [-Exe path] [-Fresh] [-Settings '{"key":value}'] [files...]
+# Starts an isolated Moonbow test instance and prints its PID.
+# Usage: tools\dev\launch.ps1 -DataDir $env:TEMP\moonbow-test-x [-Exe path] [-Fresh] [-Settings '{"key":value}'] [files...]
 #   -Fresh      wipe the data dir first
 #   -Settings   JSON object merged into settings.json "values" (startup volume is forced to 0)
 #   -Library    library root folder written to library.json
@@ -9,7 +9,7 @@
 param([Parameter(Mandatory = $true)][string]$DataDir, [string]$Exe = "",
       [switch]$Fresh, [string]$Settings = "", [string]$Library = "", [switch]$Onboarding, [double]$Scale = 0,
       [Parameter(ValueFromRemainingArguments = $true)][string[]]$Files)
-if (-not $Exe) { $Exe = Join-Path $PSScriptRoot "..\..\build\Lumen.exe" }
+if (-not $Exe) { $Exe = Join-Path $PSScriptRoot "..\..\build\Moonbow.exe" }
 # -Fresh deletes the folder and settings.json is always rewritten: never the real profile.
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
 $full = [IO.Path]::GetFullPath($DataDir).TrimEnd('\') + '\'

@@ -499,7 +499,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     }
     if (const std::wstring crash = TakeCrashNotice(); !crash.empty()) {
         Log("the previous session crashed: " + json::ToUtf8(crash));
-        ShowToast(main_.get(), Tr(L"Lumen crashed last time."), "info", 10000, Tr(L"Show report"),
+        ShowToast(main_.get(), Tr(L"Moonbow crashed last time."), "info", 10000, Tr(L"Show report"),
                   [] { RunSettingsAction("open-logs-folder"); });
     }
     if (UiValue("onboarded") != "1") {
@@ -1164,14 +1164,14 @@ void App::OnCopyData(const std::wstring& payload) {
         if (end > start) files.push_back(payload.substr(start, end - start));
         start = end + 1;
     }
-    // Explorer's "Add to the Lumen queue". With nothing playing yet the files open as below.
+    // Explorer's "Add to the Moonbow queue". With nothing playing yet the files open as below.
     const bool enqueue = std::erase(files, L"--enqueue") > 0;
     if (files.empty()) return;
     if ((enqueue || config_.GetBool("library.enqueue")) && player_.State().fileLoaded) {
         Enqueue(files);
         return;
     }
-    // Explorer starts one Lumen per file when several are opened together, and each hands its
+    // Explorer starts one Moonbow per file when several are opened together, and each hands its
     // file over moments after the others: together they are one queue, as if opened at once.
     const double now = ui::AnimFloat::Now();
     const bool together = now - forwardedAt_ < 1000 && !forwarded_.empty();

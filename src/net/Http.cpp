@@ -102,7 +102,7 @@ HWND Window() {
     WNDCLASSW wc{};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"LumenNet";
+    wc.lpszClassName = L"MoonbowNet";
     RegisterClassW(&wc);
     s.wnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
     return s.wnd;
@@ -201,13 +201,13 @@ void NoteRateLimit(const std::wstring& host, const Response& r) {
 }
 
 void TraceRequest(const std::wstring& method, const std::wstring& host, const std::wstring& path, const Response& r) {
-    static const bool enabled = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+    static const bool enabled = GetEnvironmentVariableW(L"MOONBOW_TRACE", nullptr, 0) > 0;
     if (!enabled) return;
     static std::mutex mu;
     static const int64_t start = NowMs();
     wchar_t temp[MAX_PATH];
     if (!GetTempPathW(MAX_PATH, temp)) return;
-    const std::wstring file = std::wstring(temp) + L"lumen-net-" + std::to_wstring(GetCurrentProcessId()) + L".txt";
+    const std::wstring file = std::wstring(temp) + L"moonbow-net-" + std::to_wstring(GetCurrentProcessId()) + L".txt";
     std::wstring shown = path.substr(0, path.find(L'?'));
     std::string line = std::to_string(NowMs() - start) + " " + json::ToUtf8(method) + " " + json::ToUtf8(host) +
                        json::ToUtf8(shown) + " -> " +
@@ -543,7 +543,7 @@ std::wstring AppVersion() {
 }
 
 const std::wstring& UserAgent() {
-    static const std::wstring ua = L"Lumen/" + AppVersion();
+    static const std::wstring ua = L"Moonbow/" + AppVersion();
     return ua;
 }
 

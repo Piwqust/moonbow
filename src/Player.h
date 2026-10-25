@@ -136,7 +136,7 @@ public:
     bool TracksConfirmed() const { return tracksSerial_ != 0 && tracksSerial_ == state_.loadSerial; }
     // Track choices made through Player (SetTrack, CycleTrack, AddAudio/AddSubtitle, SetProperty of
     // aid/sid/secondary-sid), counted per kind: 0 audio, 1 subtitles, 2 secondary subtitles.
-    // `quiet` picks are Lumen's own (restoring or carrying a choice): not counted.
+    // `quiet` picks are Moonbow's own (restoring or carrying a choice): not counted.
     uint32_t TrackChoices(int kind) const { return kind >= 0 && kind < 3 ? trackChoices_[kind] : 0; }
     // Runs with each counted choice ("aid", "sid", "secondary-sid"): the message naming the track.
     std::function<void(const char* prop)> onTrackChoice;
@@ -204,7 +204,7 @@ public:
 
     const MpvApi& Api() const { return api_; }
 
-    // The music view's visualizer listens to Lumen's own output, which carries mpv's volume. While
+    // The music view's visualizer listens to Moonbow's own output, which carries mpv's volume. While
     // a tap is on, volume 0 is sent to mpv as kTapVolume (-300 dB: digital silence at the device,
     // yet the float samples keep the waveform), and the visualizer scales by OutputGain().
     void SetSignalTap(bool on);
@@ -213,7 +213,7 @@ public:
 
 private:
     // Crossfade between songs (audio/Crossfader.h). Settings arrive as the pseudo options
-    // "user-data/lumen/crossfade" (seconds, 0 = off) and "user-data/lumen/crossfade-albums".
+    // "user-data/moonbow/crossfade" (seconds, 0 = off) and "user-data/moonbow/crossfade-albums".
     bool CrossfadeOption(const std::string& name, const std::string& value);
     void CheckCrossfade();
     void CancelCrossfade();

@@ -666,7 +666,7 @@ public:
         out->vt = VT_EMPTY;
         Ctx c;
         if (!Load(c)) return UIA_E_ELEMENTNOTAVAILABLE;
-        if (id == UIA_FrameworkIdPropertyId) return Str(out, L"Lumen");
+        if (id == UIA_FrameworkIdPropertyId) return Str(out, L"Moonbow");
         if (id == UIA_CulturePropertyId && g_culture) {
             out->vt = VT_I4;
             out->lVal = static_cast<LONG>(g_culture);
@@ -1218,7 +1218,7 @@ void Announce(Host* host, const std::wstring& text) {
     if (!g_connected || !host || !host->Hwnd() || text.empty() || !UiaClientsAreListening()) return;
     Node* n = Node::Make(host->Hwnd(), {});
     BSTR t = SysAllocStringLen(text.data(), static_cast<UINT>(text.size()));
-    BSTR id = SysAllocString(L"lumen.status");
+    BSTR id = SysAllocString(L"moonbow.status");
     UiaRaiseNotificationEvent(n, NotificationKind_ActionCompleted, NotificationProcessing_ImportantMostRecent, t, id);
     SysFreeString(t);
     SysFreeString(id);

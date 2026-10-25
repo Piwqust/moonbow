@@ -15,22 +15,22 @@ namespace app {
 namespace {
 
 constexpr UINT kMsgChanged = WM_APP + 1;
-constexpr wchar_t kNotifyClass[] = L"LumenSkinWatch";
+constexpr wchar_t kNotifyClass[] = L"MoonbowSkinWatch";
 
-// Built-in skins: res/skins/*.json, embedded by res/app.rc. "lumen" is the brand itself.
+// Built-in skins: res/skins/*.json, embedded by res/app.rc. "moonbow" is the brand itself.
 struct BuiltinDef {
     const char* id;
     const wchar_t* resource;
 };
 constexpr BuiltinDef kBuiltins[] = {
-    {"lumen", nullptr},
-    {"oled", L"LUMEN_SKIN_OLED"},
-    {"contrast", L"LUMEN_SKIN_CONTRAST"},
-    {"sepia", L"LUMEN_SKIN_SEPIA"},
+    {"moonbow", nullptr},
+    {"oled", L"MOONBOW_SKIN_OLED"},
+    {"contrast", L"MOONBOW_SKIN_CONTRAST"},
+    {"sepia", L"MOONBOW_SKIN_SEPIA"},
 };
 
 // The contrast theme's colours. --automation runs can't switch the theme (a system setting):
-// LUMEN_TEST_SYSTEM_COLORS="#window,#text,#highlight,#highlightText,#hotlight,#grayText,#buttonFace" stands in.
+// MOONBOW_TEST_SYSTEM_COLORS="#window,#text,#highlight,#highlightText,#hotlight,#grayText,#buttonFace" stands in.
 skin::SystemColors ReadSystemColors() {
     const int ids[] = {COLOR_WINDOW, COLOR_WINDOWTEXT, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT,
                        COLOR_HOTLIGHT, COLOR_GRAYTEXT, COLOR_BTNFACE};
@@ -40,7 +40,7 @@ skin::SystemColors ReadSystemColors() {
         c[i] = skin::Rgba::Hex((GetRValue(v) << 16) | (GetGValue(v) << 8) | GetBValue(v));
     }
     wchar_t test[128] = {};
-    if (ui::Host::Automation() && GetEnvironmentVariableW(L"LUMEN_TEST_SYSTEM_COLORS", test, 128)) {
+    if (ui::Host::Automation() && GetEnvironmentVariableW(L"MOONBOW_TEST_SYSTEM_COLORS", test, 128)) {
         const wchar_t* p = test;
         for (int i = 0; i < 7 && (p = wcschr(p, L'#')) != nullptr; ++i, ++p)
             c[i] = skin::Rgba::Hex(static_cast<uint32_t>(wcstoul(p + 1, nullptr, 16)));
@@ -131,7 +131,7 @@ const std::vector<BuiltinSkin>& Skins::Builtins() {
             b.nameRu = r.skin.nameRu;
             if (r.ok) b.skin = std::make_shared<const skin::Skin>(std::move(r.skin));
         } else {
-            b.name = L"Lumen";
+            b.name = L"Moonbow";
         }
         if (b.name.empty()) b.name = json::ToWide(b.id);
         builtins_.push_back(std::move(b));
@@ -176,7 +176,7 @@ void Skins::Apply(bool reload) {
         std::string text;
         if (!json::ReadFileUtf8(file, &text)) {
             failed_ = true;
-            warnings_.push_back("cannot read the file; the Lumen skin is used");
+            warnings_.push_back("cannot read the file; the Moonbow skin is used");
         } else {
             skin::ParseResult r = skin::Parse(text);
             warnings_ = std::move(r.warnings);
@@ -200,7 +200,7 @@ void Skins::Apply(bool reload) {
 
 void Skins::WriteLog(const std::wstring& path) {
     // Skin authors read this: what was ignored and why, and what fails the contrast check.
-    std::string log = "Lumen skin log\r\nfile: " + json::ToUtf8(path) + "\r\n";
+    std::string log = "Moonbow skin log\r\nfile: " + json::ToUtf8(path) + "\r\n";
     if (warnings_.empty()) log += "no warnings\r\n";
     for (const std::string& w : warnings_) log += "warning: " + w + "\r\n";
     if (!failed_) {
@@ -210,7 +210,7 @@ void Skins::WriteLog(const std::wstring& path) {
     }
     logPath_ = DataFilePath(L"skin.log");
     if (!logPath_.empty() && !json::WriteFileAtomic(logPath_, log)) logPath_.clear();
-    for (const std::string& w : warnings_) OutputDebugStringA(("Lumen skin: " + w + "\n").c_str());
+    for (const std::string& w : warnings_) OutputDebugStringA(("Moonbow skin: " + w + "\n").c_str());
 }
 
 LRESULT CALLBACK Skins::NotifyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {

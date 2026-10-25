@@ -8,7 +8,7 @@
 
 // `text` + `suffix` in at most `capacity - 1` UTF-16 units (capacity counts the NUL). A text that
 // doesn't fit is cut at a character boundary, without trailing spaces, and ends with "…" before
-// the suffix, so " — Lumen" stays visible.
+// the suffix, so " — Moonbow" stays visible.
 inline std::wstring FitShellText(std::wstring_view text, std::wstring_view suffix, size_t capacity) {
     if (capacity <= 1) return {};  // room for the terminator only
     const size_t max = capacity - 1;

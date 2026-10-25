@@ -91,7 +91,7 @@ def media_seeds():
     if not ffmpeg:
         print("ffmpeg not found: no media seeds for 'tags'")
         return
-    tmp = tempfile.mkdtemp(prefix="lumen-seeds-")
+    tmp = tempfile.mkdtemp(prefix="moonbow-seeds-")
     cover = os.path.join(tmp, "cover.png")
     run = lambda *a: subprocess.run([ffmpeg, "-v", "error", "-y", *a], check=True)
     run("-f", "lavfi", "-i", "color=c=gray:s=8x8", "-frames:v", "1", cover)

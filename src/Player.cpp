@@ -84,7 +84,7 @@ bool NodeFlag(const mpv_node* n) {
 // only when the exe carries a different version.
 void InstallBuiltinShaders(const std::wstring& dataDir) {
     if (dataDir.empty()) return;
-    HRSRC res = FindResourceW(nullptr, L"LUMEN_CAS", RT_RCDATA);
+    HRSRC res = FindResourceW(nullptr, L"MOONBOW_CAS", RT_RCDATA);
     HGLOBAL mem = res ? LoadResource(nullptr, res) : nullptr;
     const char* data = mem ? static_cast<const char*>(LockResource(mem)) : nullptr;
     if (!data) return;
@@ -92,7 +92,7 @@ void InstallBuiltinShaders(const std::wstring& dataDir) {
     const std::wstring dir = dataDir + L"\\cache\\shaders";
     CreateDirectoryW((dataDir + L"\\cache").c_str(), nullptr);
     CreateDirectoryW(dir.c_str(), nullptr);
-    const std::wstring path = dir + L"\\lumen-cas.glsl";
+    const std::wstring path = dir + L"\\moonbow-cas.glsl";
     std::string current;
     if (json::ReadFileUtf8(path, &current) && current == text) return;
     json::WriteFileAtomic(path, text);
@@ -184,9 +184,9 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("input-cursor", "no");
     opt("cursor-autohide", "no");
     opt("load-scripts", "no");
-    // mpv's built-in clients Lumen has its own UI for: each is a Lua VM (or thread) to start and
+    // mpv's built-in clients Moonbow has its own UI for: each is a Lua VM (or thread) to start and
     // tear down with every launch and exit. mpv's own media session would also sit next to
-    // Lumen's in the Windows media flyout (app/SystemIntegration).
+    // Moonbow's in the Windows media flyout (app/SystemIntegration).
     for (const char* name : {"load-stats-overlay", "load-console", "load-select", "load-positioning",
                              "load-commands", "load-context-menu", "media-controls"})
         opt(name, "no");
@@ -194,7 +194,7 @@ bool Player::InitOnWorker(int64_t wid) {
     opt("terminal", "no");
     opt("volume-max", "150");
     opt("volume-gain-min", "-150");  // the crossfade's silent end (audio/CrossfadeMath.h kMinDb)
-    // Lumen writes watch-later itself (SaveWatchLater / Shutdown): mpv's own save also fired
+    // Moonbow writes watch-later itself (SaveWatchLater / Shutdown): mpv's own save also fired
     // when a finished file was replaced by the next one, so finished files resumed at the end.
     opt("save-position-on-quit", "no");
     // Per file only the position and the chosen tracks; delays, mute and the
@@ -218,7 +218,7 @@ bool Player::InitOnWorker(int64_t wid) {
         CreateDirectoryW(watchLater.c_str(), nullptr);
         opt("watch-later-dir", WideToUtf8(watchLater));
     }
-    std::wstring shots = KnownFolderPath(FOLDERID_Pictures, L"Lumen");
+    std::wstring shots = KnownFolderPath(FOLDERID_Pictures, L"Moonbow");
     if (!shots.empty()) opt("screenshot-dir", WideToUtf8(shots));
 
     std::string hwdec = settings::kAutoHwdec, vf;
@@ -240,7 +240,7 @@ bool Player::InitOnWorker(int64_t wid) {
         Log("mpv: " + WideToUtf8(error_));
         return false;
     }
-    // Warnings and errors go to Lumen's log. Not verbose: that makes every mpv module format its
+    // Warnings and errors go to Moonbow's log. Not verbose: that makes every mpv module format its
     // verbose lines (+2% of a core at 1080p).
     if (requestLog_) requestLog_(mpv_, "warn");
     // A .lrc next to a song is its lyrics (the music view shows them), not a subtitle track.
@@ -661,7 +661,7 @@ void Player::Open(const std::wstring& path) {
 
 std::string Player::LoadfileOptions(const std::wstring& path) const {
     std::string opts = fileOptions && !path.empty() ? fileOptions(path) : std::string();
-    // Songs always start from the top, also when an older Lumen saved a position for them.
+    // Songs always start from the top, also when an older Moonbow saved a position for them.
     if (IsMusic(path)) opts += opts.empty() ? "resume-playback=no" : ",resume-playback=no";
     return opts;
 }
@@ -910,12 +910,12 @@ void Player::Shutdown() {
 
 bool Player::CrossfadeOption(const std::string& name, const std::string& value) {
     if (name == "audio-exclusive") exclusive_ = value == "yes";  // passed on to mpv as well
-    if (name == "user-data/lumen/crossfade") {
+    if (name == "user-data/moonbow/crossfade") {
         xfSeconds_ = std::atof(value.c_str());
         if (xfSeconds_ <= 0) CancelCrossfade();
         return true;
     }
-    if (name == "user-data/lumen/crossfade-albums") {
+    if (name == "user-data/moonbow/crossfade-albums") {
         xfAlbums_ = value == "yes";
         return true;
     }

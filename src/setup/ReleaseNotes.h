@@ -1,5 +1,5 @@
 #pragma once
-// What each version brings: the setup shows it before an update, Lumen once after one.
+// What each version brings: the setup shows it before an update, Moonbow once after one.
 // When the version in res/app.rc goes up, add its entry on top: one plain line per change.
 
 #include "Installer.h"

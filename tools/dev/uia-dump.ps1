@@ -1,4 +1,4 @@
-# Prints what screen readers see: the UI Automation tree of every Lumen window of a process, one
+# Prints what screen readers see: the UI Automation tree of every Moonbow window of a process, one
 # element per line. Runs as a UIA client only (no mouse, keys or focus), so it works on invisible
 # --automation instances.
 # Usage:
@@ -16,7 +16,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 Add-Type @"
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
-public static class LumenUia {
+public static class MoonbowUia {
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
@@ -27,7 +27,7 @@ public static class LumenUia {
     EnumWindows((h, l) => {
       uint p; GetWindowThreadProcessId(h, out p);
       var c = new StringBuilder(64); GetClassName(h, c, 64);
-      if (p == pid && IsWindowVisible(h) && c.ToString() == "LumenHost") list.Add(h);
+      if (p == pid && IsWindowVisible(h) && c.ToString() == "MoonbowHost") list.Add(h);
       return true;
     }, IntPtr.Zero);
     return list;
@@ -86,8 +86,8 @@ function Walk($e, [int]$depth) {
   }
 }
 
-$hwnds = [LumenUia]::Windows([uint32]$ProcessId)
-if ($hwnds.Count -eq 0) { throw "no visible LumenHost window for process $ProcessId" }
+$hwnds = [MoonbowUia]::Windows([uint32]$ProcessId)
+if ($hwnds.Count -eq 0) { throw "no visible MoonbowHost window for process $ProcessId" }
 foreach ($h in $hwnds) { Walk ($A::FromHandle($h)) 0 }
 $lines | ForEach-Object { $_ }
 "elements: $($script:count)"

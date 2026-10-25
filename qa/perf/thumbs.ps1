@@ -1,8 +1,8 @@
 ﻿# Fast scroll through a 400-video folder; checks that bottom thumbnails arrive quickly.
-param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Lumen.exe"), [string]$Tag = "th")
-$t = (Join-Path $PSScriptRoot "..\..\tools\dev"); $o = "$env:TEMP\lumen-qa\v"
+param([string]$Exe = (Join-Path $PSScriptRoot "..\..\build\Moonbow.exe"), [string]$Tag = "th")
+$t = (Join-Path $PSScriptRoot "..\..\tools\dev"); $o = "$env:TEMP\moonbow-qa\v"
 . "$PSScriptRoot\stlib.ps1"
-$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\lumen-qa\perf-$Tag" -Fresh -Library "$env:TEMP\lumen-qa\flat"
+$id = & "$t\launch.ps1" -Exe $Exe -DataDir "$env:TEMP\moonbow-qa\perf-$Tag" -Fresh -Library "$env:TEMP\moonbow-qa\flat"
 Start-Sleep 4
 $h = [St]::Find([uint32]$id)
 & "$t\input.ps1" -ProcessId $id -Click "100,114" | Out-Null; Start-Sleep 1

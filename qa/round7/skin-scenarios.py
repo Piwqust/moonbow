@@ -12,7 +12,7 @@ import sys
 root = pathlib.Path(__file__).resolve().parents[2]
 src = root / "qa/round5/scenarios.json"
 out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(".")
-skins = sys.argv[2:] or ["lumen", "oled", "contrast", "sepia"]
+skins = sys.argv[2:] or ["moonbow", "oled", "contrast", "sepia"]
 out.mkdir(parents=True, exist_ok=True)
 for skin in skins:
     doc = json.loads(src.read_text(encoding="utf-8"))

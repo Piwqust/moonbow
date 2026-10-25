@@ -1,6 +1,6 @@
 // Declarative motion through data attributes:
 //   data-split="lines|words"   masked text reveal (SplitText), on scroll or on intro
-//   data-reveal="fade|up"      block reveal; "fade" develops from black like Lumen's picture
+//   data-reveal="fade|up"      block reveal; "fade" develops from black like Moonbow's picture
 //   data-intro                 play with the page intro instead of on scroll
 //   data-delay="0.2"           extra delay (seconds)
 // Skipped under reduced motion; CSS keeps content visible without JS.

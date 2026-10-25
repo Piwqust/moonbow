@@ -51,7 +51,7 @@ std::wstring TempDir() {
 // The copies RelaunchFromTemp left: a running exe can't delete itself, so the next run does.
 void DeleteOldTempCopies() {
     WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((TempDir() + L"Lumen-setup-*.exe").c_str(), &fd);
+    HANDLE h = FindFirstFileW((TempDir() + L"Moonbow-setup-*.exe").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do DeleteFileW((TempDir() + fd.cFileName).c_str());  // fails on the running one: fine
     while (FindNextFileW(h, &fd));
@@ -61,7 +61,7 @@ void DeleteOldTempCopies() {
 // The exe inside the install folder cannot replace or delete its own files: a copy in %TEMP% does
 // the work and this one exits.
 int RelaunchFromTemp(const std::vector<std::wstring>& args, const std::wstring& dir) {
-    const std::wstring copy = TempDir() + L"Lumen-setup-" + std::to_wstring(GetCurrentProcessId()) + L".exe";
+    const std::wstring copy = TempDir() + L"Moonbow-setup-" + std::to_wstring(GetCurrentProcessId()) + L".exe";
     if (!CopyFileW(SelfPath().c_str(), copy.c_str(), FALSE)) return 1;
     std::wstring cmd = L"\"" + copy + L"\"";
     for (const std::wstring& a : args) cmd += L" \"" + a + L"\"";
@@ -75,7 +75,7 @@ int RelaunchFromTemp(const std::vector<std::wstring>& args, const std::wstring& 
     return 0;
 }
 
-// This exe is inside `dir` (the current Lumen.exe or a kept version's).
+// This exe is inside `dir` (the current Moonbow.exe or a kept version's).
 bool RunsFrom(const std::wstring& dir) {
     const std::wstring self = SelfPath();
     return self.size() > dir.size() && _wcsnicmp(self.c_str(), (dir + L"\\").c_str(), dir.size() + 1) == 0;
@@ -90,7 +90,7 @@ void WaitForParent(const std::vector<std::wstring>& args) {
     }
 }
 
-// Silent runs close a running Lumen themselves; the window says it will and does it on the click.
+// Silent runs close a running Moonbow themselves; the window says it will and does it on the click.
 int Fail(const wchar_t* what, const std::wstring& error) {
     Print(std::wstring(what) + L": " + error);
     return 1;
@@ -107,9 +107,9 @@ int RunInstall(const Package& package, const std::vector<std::wstring>& args) {
     if (!Has(args, L"--silent")) return RunWindow({Op::Install, &package, {}, target, Value(args, L"--setup-page")});
     const Action action = Classify(InstalledVersion(dir), package.version);
     std::wstring error;
-    if (!CloseRunningLumen(dir, 15000)) return Fail(L"Lumen setup", L"Lumen did not close");
-    if (!Install(package, target, nullptr, &error)) return Fail(L"Lumen setup", error);
-    // A rollback keeps the newer version's settings unless asked: older Lumen ignores what it does not know.
+    if (!CloseRunningMoonbow(dir, 15000)) return Fail(L"Moonbow setup", L"Moonbow did not close");
+    if (!Install(package, target, nullptr, &error)) return Fail(L"Moonbow setup", error);
+    // A rollback keeps the newer version's settings unless asked: older Moonbow ignores what it does not know.
     if (action == Action::Rollback && Has(args, L"--restore-data")) RestoreData(package.version);
     return 0;
 }
@@ -122,9 +122,9 @@ int RunUninstall(const std::vector<std::wstring>& args) {
     const Target target = TargetOf(args, dir);
     if (!Has(args, L"--silent")) return RunWindow({Op::Uninstall, nullptr, {}, target, Value(args, L"--setup-page")});
     std::wstring error;
-    if (!CloseRunningLumen(dir, 15000)) return Fail(L"Lumen uninstall", L"Lumen did not close");
+    if (!CloseRunningMoonbow(dir, 15000)) return Fail(L"Moonbow uninstall", L"Moonbow did not close");
     // A silent uninstall keeps the data: only a person who said yes loses their library.
-    if (!Uninstall(target, Has(args, L"--remove-data"), &error)) return Fail(L"Lumen uninstall", error);
+    if (!Uninstall(target, Has(args, L"--remove-data"), &error)) return Fail(L"Moonbow uninstall", error);
     return 0;
 }
 
@@ -138,14 +138,14 @@ int RunSwitch(const std::vector<std::wstring>& args) {
     if (!Has(args, L"--silent")) return RunWindow({Op::Switch, nullptr, version, target, Value(args, L"--setup-page")});
     const std::wstring installed = InstalledVersion(dir);
     std::wstring error;
-    if (!CloseRunningLumen(dir, 15000)) return Fail(L"Lumen switch", L"Lumen did not close");
-    if (!SwitchVersion(target, version, &error)) return Fail(L"Lumen switch", error);
+    if (!CloseRunningMoonbow(dir, 15000)) return Fail(L"Moonbow switch", L"Moonbow did not close");
+    if (!SwitchVersion(target, version, &error)) return Fail(L"Moonbow switch", error);
     if (CompareVersions(version, installed) < 0 && Has(args, L"--restore-data")) RestoreData(version);
     return 0;
 }
 
 int RunMakeSetup(const std::vector<std::wstring>& args) {
-    if (args.size() < 3) return Fail(L"make-setup", L"usage: Lumen.exe --make-setup <out.exe> <file>...");
+    if (args.size() < 3) return Fail(L"make-setup", L"usage: Moonbow.exe --make-setup <out.exe> <file>...");
     std::wstring error;
     if (WritePackage(SelfPath(), {args.begin() + 2, args.end()}, args[1], &error)) return 0;
     return Fail(L"make-setup", error);

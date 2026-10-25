@@ -5,10 +5,10 @@
 // Set()/Reset*()/Load*() on the calling thread. Worker threads that need a setting should be
 // handed a copy of the value.
 //
-// Persistence: %APPDATA%\Lumen\settings.json (see Paths.h), only non-default values are written.
+// Persistence: %APPDATA%\Moonbow\settings.json (see Paths.h), only non-default values are written.
 // Changes are not saved immediately: Set() marks the store dirty and the UI calls Flush() from a
 // timer and at exit (the destructor flushes too). Unknown keys found in the file are kept and
-// written back, so a newer settings.json survives a round-trip through an older Lumen.
+// written back, so a newer settings.json survives a round-trip through an older Moonbow.
 
 #include "Json.h"
 #include "SettingsSchema.h"
@@ -121,7 +121,7 @@ using MpvOption = std::pair<std::string, std::string>;
 
 // Every mpv option derived from the current settings, in schema order, each option once.
 // Settings at a value that means "mpv default" are omitted. Pass these to mpv_set_option_string
-// before mpv_initialize (after Lumen's fixed options such as wid / osc / input-*).
+// before mpv_initialize (after Moonbow's fixed options such as wid / osc / input-*).
 std::vector<MpvOption> MpvOptions(const Config& config);
 
 // Options to set at runtime (mpv_set_property_string) after `key` changed. Usually one pair;
@@ -133,7 +133,7 @@ std::vector<MpvOption> MpvOptionFor(const Config& config, std::string_view key);
 // Splits "--name=value --flag name2=value2" (quotes allowed) into options; "--flag" -> "yes".
 std::vector<MpvOption> ParseMpvArgs(std::string_view args);
 
-// yt-dlp.exe next to Lumen.exe or in a local folder on PATH; empty when there is none. Looked up
-// once per process (network drives on PATH are skipped so the lookup cannot stall). Lumen never
+// yt-dlp.exe next to Moonbow.exe or in a local folder on PATH; empty when there is none. Looked up
+// once per process (network drives on PATH are skipped so the lookup cannot stall). Moonbow never
 // downloads it. Thread-safe.
 const std::wstring& YtDlpPath();

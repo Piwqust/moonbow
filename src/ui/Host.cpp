@@ -24,7 +24,7 @@ namespace ui {
 
 namespace {
 
-constexpr wchar_t kHostClass[] = L"LumenHost";
+constexpr wchar_t kHostClass[] = L"MoonbowHost";
 constexpr UINT WM_APP_POST = WM_APP + 41;
 // The resize band along the top, inside the title bar (the frame Windows keeps is on the other
 // sides, outside the visible edge); over a button only its top pixel.
@@ -41,8 +41,8 @@ float g_textScale = 1.0f;
 bool g_systemRead = false;
 
 // Windows "Animation effects", high contrast and "Text size". --automation runs can't switch them
-// (system settings): the variables LUMEN_TEST_NO_ANIMATION / LUMEN_TEST_HIGH_CONTRAST /
-// LUMEN_TEST_TEXT_SCALE (1.5, or 150) stand in there.
+// (system settings): the variables MOONBOW_TEST_NO_ANIMATION / MOONBOW_TEST_HIGH_CONTRAST /
+// MOONBOW_TEST_TEXT_SCALE (1.5, or 150) stand in there.
 void ReadSystemSettings() {
     g_systemRead = true;
     BOOL animations = TRUE;
@@ -56,10 +56,10 @@ void ReadSystemSettings() {
         percent = 100;
     float textScale = static_cast<float>(percent) / 100.0f;
     if (g_automation) {
-        if (GetEnvironmentVariableW(L"LUMEN_TEST_NO_ANIMATION", nullptr, 0)) animations = FALSE;
-        if (GetEnvironmentVariableW(L"LUMEN_TEST_HIGH_CONTRAST", nullptr, 0)) g_highContrast = true;
+        if (GetEnvironmentVariableW(L"MOONBOW_TEST_NO_ANIMATION", nullptr, 0)) animations = FALSE;
+        if (GetEnvironmentVariableW(L"MOONBOW_TEST_HIGH_CONTRAST", nullptr, 0)) g_highContrast = true;
         wchar_t v[16] = {};
-        if (GetEnvironmentVariableW(L"LUMEN_TEST_TEXT_SCALE", v, 16)) {
+        if (GetEnvironmentVariableW(L"MOONBOW_TEST_TEXT_SCALE", v, 16)) {
             textScale = wcstof(v, nullptr);
             if (textScale > 4.0f) textScale /= 100.0f;
         }
@@ -145,9 +145,9 @@ namespace {
 unsigned g_automationMods = 0;
 float g_scaleOverride = 1.0f;
 
-constexpr wchar_t kFittedProp[] = L"LumenFitted";
+constexpr wchar_t kFittedProp[] = L"MoonbowFitted";
 // Set when the window is revealed: tools/dev/frames.ps1 reads it from outside.
-constexpr wchar_t kRevealedProp[] = L"LumenRevealed";
+constexpr wchar_t kRevealedProp[] = L"MoonbowRevealed";
 
 // Keeps a window's normal rect inside its monitor's work area (minus `margin` px), centred when
 // it had to shrink or stood off the screen; never below the minimum size. A first run at 200 %
@@ -894,13 +894,13 @@ void Host::DoLayout() {
 
 namespace {
 
-// LUMEN_TRACE frame statistics: once a second, frame count and the worst layout,
+// MOONBOW_TRACE frame statistics: once a second, frame count and the worst layout,
 // paint and present times (ms) go to the trace file.
 struct FrameStats {
     int frames = 0;
     double layout = 0, paint = 0, present = 0, maxLayout = 0, maxPaint = 0, maxPresent = 0, since = 0;
     void Add(double l, double p, double pr) {
-        static const bool enabled = GetEnvironmentVariableW(L"LUMEN_TRACE", nullptr, 0) > 0;
+        static const bool enabled = GetEnvironmentVariableW(L"MOONBOW_TRACE", nullptr, 0) > 0;
         if (!enabled) return;
         ++frames;
         layout += l, paint += p, present += pr;
@@ -1624,7 +1624,7 @@ void Host::DumpTree(const std::wstring& path) {
 std::wstring Host::WriteTreeDump() {
     wchar_t tmp[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
-    const std::wstring base = std::wstring(tmp) + L"lumen-tree-" + std::to_wstring(GetCurrentProcessId());
+    const std::wstring base = std::wstring(tmp) + L"moonbow-tree-" + std::to_wstring(GetCurrentProcessId());
     const std::wstring path =
         base + L"-" + std::to_wstring(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(hwnd_))) + L".txt";
     DumpTree(path);
@@ -2059,7 +2059,7 @@ LRESULT Host::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (!gpu.FinishDevice()) {
                 if (gpu.DeviceFailed()) {
                     for (Host* h : Registry()) h->Reveal();  // nothing will ever be drawn: show what there is
-                    MessageBoxW(hwnd_, L"Direct3D 11 / DirectComposition is not available.", L"Lumen", MB_ICONERROR);
+                    MessageBoxW(hwnd_, L"Direct3D 11 / DirectComposition is not available.", L"Moonbow", MB_ICONERROR);
                 }
                 return 0;
             }

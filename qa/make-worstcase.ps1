@@ -2,7 +2,7 @@
 # layouts. Everything is generated with ffmpeg (nothing is downloaded); the total stays well under
 # 300 MB. Idempotent: files that already exist are kept, so a second run only fills gaps. -Force
 # rebuilds everything.
-# Usage: powershell -File qa\make-worstcase.ps1 [-Out %TEMP%\lumen-qa\worst] [-Force]
+# Usage: powershell -File qa\make-worstcase.ps1 [-Out %TEMP%\moonbow-qa\worst] [-Force]
 #
 # Layout (library roots: Music, Videos, Big, Broken, or the whole folder):
 #   Music\    long, diacritic, CJK, RTL, emoji and unbreakable names in tags and file names; no tags;
@@ -13,7 +13,7 @@
 #   Big\      one folder with 1284 tiny untagged tracks (1000+ items, the "1284 файла" plural)
 #   Broken\   a 0-byte file, a text file named .mp4, an audio file named .mkv
 [CmdletBinding()]
-param([string]$Out = (Join-Path $env:TEMP "lumen-qa\worst"), [switch]$Force)
+param([string]$Out = (Join-Path $env:TEMP "moonbow-qa\worst"), [switch]$Force)
 $ErrorActionPreference = "Stop"
 $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 if (-not $ffmpeg) { throw "ffmpeg is not on PATH (where ffmpeg)" }

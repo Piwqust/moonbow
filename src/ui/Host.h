@@ -14,7 +14,7 @@
 namespace ui {
 
 struct HostOptions {
-    std::wstring title = L"Lumen";
+    std::wstring title = L"Moonbow";
     float width = 1280, height = 800;  // DIP, client area
     float minWidth = 480, minHeight = 320;
     bool resizable = true;
@@ -24,7 +24,7 @@ struct HostOptions {
     bool center = true;
     bool showInTaskbar = true;
     // The app's main window: --automation commands go to it and its tree dump is also written
-    // to the old %TEMP%\lumen-tree-<pid>.txt.
+    // to the old %TEMP%\moonbow-tree-<pid>.txt.
     bool mainWindow = false;
 };
 
@@ -114,8 +114,8 @@ public:
     // device and attaches every window's surface.
     static constexpr UINT kDeviceReadyMessage = WM_APP + 42;
     // Debug aid, --automation runs only: sending or posting this to a host window writes its
-    // widget tree (type, rect, state, the text it shows) to %TEMP%\lumen-tree-<pid>-<hwnd>.txt,
-    // and for the main window also to %TEMP%\lumen-tree-<pid>.txt. Handled synchronously:
+    // widget tree (type, rect, state, the text it shows) to %TEMP%\moonbow-tree-<pid>-<hwnd>.txt,
+    // and for the main window also to %TEMP%\moonbow-tree-<pid>.txt. Handled synchronously:
     // SendMessage returns once the file is written. See tools/dev/dump-tree.ps1 for the format.
     static constexpr UINT kDumpTreeMessage = WM_APP + 43;
     // Any thread may post this to ask the window for a repaint.
@@ -130,7 +130,7 @@ public:
     bool IsMainWindow() const { return options_.mainWindow; }
     // The window is on screen (Reveal): cloaked only until its first GPU frame (the background),
     // so never a blank or skeleton frame. --automation windows stay cloaked; tests read the
-    // LumenRevealed window property (or revealed=1 in the tree dump) instead.
+    // MoonbowRevealed window property (or revealed=1 in the tree dump) instead.
     bool Revealed() const { return revealed_; }
     // The widget tree is drawn, at ContentAppear() opacity (0 to 1 over 140 ms, once; ContentReady).
     bool ContentShown() const { return contentShown_; }

@@ -2,15 +2,15 @@
 import Base from '../layouts/Base.astro';
 import { download, dataFiles, credits, source } from '../data/site';
 ---
-<Base title="Скачать" description="Как скачать или собрать Lumen для Windows 10 и 11: требования, сборка из исходников за два шага, где хранятся данные и что плеер отправляет в сеть.">
+<Base title="Скачать" description="Как скачать или собрать Moonbow для Windows 10 и 11: требования, сборка из исходников за два шага, где хранятся данные и что плеер отправляет в сеть.">
   <div class="wrap page-head grid">
     <h1 class="display head__title" data-split="lines" data-intro>Скачать</h1>
     <div class="head__side" data-reveal="fade" data-intro data-delay="0.2">
-      <p class="lead">Lumen для Windows 10 и 11, 64 бит. Установщик не нужен: распакуйте папку и откройте Lumen.exe.</p>
+      <p class="lead">Moonbow для Windows 10 и 11, 64 бит. Установщик не нужен: распакуйте папку и откройте Moonbow.exe.</p>
       <a class="btn btn--solid" href="#sborka">
         <span class="btn__fill" aria-hidden="true"></span>
         <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
-        Собрать Lumen {download.version}
+        Собрать Moonbow {download.version}
       </a>
       <p class="label">Готовой сборки на сайте пока нет. Собрать её можно за три шага, ниже. <a class="link" href={source.url}>{source.label}</a>.</p>
     </div>
@@ -38,7 +38,7 @@ import { download, dataFiles, credits, source } from '../data/site';
         <p class="steps__n time">3</p>
         <div>
           <h3>Сборка</h3>
-          <p class="prose">Результат: build\Lumen.exe и рядом libmpv-2.dll. Отладочная сборка: <code>build.bat debug</code>.</p>
+          <p class="prose">Результат: build\Moonbow.exe и рядом libmpv-2.dll. Отладочная сборка: <code>build.bat debug</code>.</p>
           <pre><code>build.bat</code></pre>
         </div>
       </li>
@@ -48,7 +48,7 @@ import { download, dataFiles, credits, source } from '../data/site';
   <section class="wrap block grid" aria-labelledby="data-h">
     <h2 class="block__title" id="data-h">Где лежат ваши данные</h2>
     <div class="block__body">
-      <p class="prose">Всё хранится в <code>%APPDATA%\Lumen</code>, обычными JSON-файлами. Файлы с фильмами и музыкой Lumen не перемещает и не меняет никогда.</p>
+      <p class="prose">Всё хранится в <code>%APPDATA%\Moonbow</code>, обычными JSON-файлами. Файлы с фильмами и музыкой Moonbow не перемещает и не меняет никогда.</p>
       <dl class="files">
         {dataFiles.map(([f, d]) => (
           <div><dt class="time">{f}</dt><dd>{d}</dd></div>
@@ -60,14 +60,14 @@ import { download, dataFiles, credits, source } from '../data/site';
   <section class="wrap block grid" aria-labelledby="net-h">
     <h2 class="block__title" id="net-h">Что уходит в сеть</h2>
     <div class="block__body">
-      <p class="prose">Тексты песен из LRCLIB, субтитры из OpenSubtitles и постеры из TMDB работают, только если вы их включите. Ключи для OpenSubtitles и TMDB вводятся свои и хранятся зашифрованными средствами Windows. Ссылки на YouTube и другие сайты открываются, если рядом с Lumen лежит <code>yt-dlp.exe</code>; сам Lumen ничего не скачивает.</p>
+      <p class="prose">Тексты песен из LRCLIB, субтитры из OpenSubtitles и постеры из TMDB работают, только если вы их включите. Ключи для OpenSubtitles и TMDB вводятся свои и хранятся зашифрованными средствами Windows. Ссылки на YouTube и другие сайты открываются, если рядом с Moonbow лежит <code>yt-dlp.exe</code>; сам Moonbow ничего не скачивает.</p>
     </div>
   </section>
 
   <section class="wrap block grid" id="avtory" aria-labelledby="cred-h">
     <h2 class="block__title" id="cred-h">Откуда кадры на скриншотах</h2>
     <div class="block__body">
-      <p class="prose">Скриншоты сняты с настоящего Lumen. Фильм «Вечер у воды», сериал «Тихий берег» и альбомы Савы Ветрова сделаны для демонстрации: это фотографии с Unsplash, превращённые в видео и обложки.</p>
+      <p class="prose">Скриншоты сняты с настоящего Moonbow. Фильм «Вечер у воды», сериал «Тихий берег» и альбомы Савы Ветрова сделаны для демонстрации: это фотографии с Unsplash, превращённые в видео и обложки.</p>
       <ul class="credits">
         {credits.map((c) => (
           <li><span>{c.what}</span> <a class="link" href={c.href} rel="noopener">{c.who}</a></li>

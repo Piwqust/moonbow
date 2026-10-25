@@ -31,7 +31,7 @@ double NowSeconds() {
     return static_cast<double>(t.QuadPart) / freq;
 }
 
-// The album tag, read the way the library reads it: Lumen's own tag reader, then the Windows
+// The album tag, read the way the library reads it: Moonbow's own tag reader, then the Windows
 // property system for the formats it doesn't cover (Matroska). Empty when unknown.
 std::wstring AlbumOf(const std::wstring& path) {
     library::TagInfo tags;
@@ -191,7 +191,7 @@ bool Crossfader::PrepareHelper() {
     auto opt = [this](const char* name, const std::string& value) {
         api_.mpv_set_option_string(helper_, name, value.c_str());
     };
-    // Audio only, one file, no media session next to Lumen's own.
+    // Audio only, one file, no media session next to Moonbow's own.
     SetQuietMpvOptions(api_, helper_);
     for (const char* name : {"keep-open", "audio-display", "gapless-audio", "prefetch-playlist", "audio-pitch-correction"})
         opt(name, "no");

@@ -4,13 +4,13 @@ import Shot from '../components/Shot.astro';
 import { features, download } from '../data/site';
 
 const shots: Record<string, { name: string; alt: string; caption: string }> = {
-  pleer: { name: 'player-seek-preview', alt: 'Превью кадра над полосой перемотки Lumen', caption: 'Превью кадра появляется, как только курсор касается полосы.' },
-  muzyka: { name: 'music-album', alt: 'Страница альбома «Огни» в медиатеке Lumen: обложка, диски и треки', caption: 'Альбом с шапкой, дисками и треками.' },
-  mediateka: { name: 'library-series', alt: 'Сериал «Тихий берег» в медиатеке Lumen, серии разложены по сезонам', caption: 'Сериал сам собрался по сезонам из папок.' },
-  zvuk: { name: 'music-visualizer', alt: 'Экран музыки Lumen с визуализацией спектра', caption: 'Визуализация: спектр, круг, осциллограф или волна.' },
+  pleer: { name: 'player-seek-preview', alt: 'Превью кадра над полосой перемотки Moonbow', caption: 'Превью кадра появляется, как только курсор касается полосы.' },
+  muzyka: { name: 'music-album', alt: 'Страница альбома «Огни» в медиатеке Moonbow: обложка, диски и треки', caption: 'Альбом с шапкой, дисками и треками.' },
+  mediateka: { name: 'library-series', alt: 'Сериал «Тихий берег» в медиатеке Moonbow, серии разложены по сезонам', caption: 'Сериал сам собрался по сезонам из папок.' },
+  zvuk: { name: 'music-visualizer', alt: 'Экран музыки Moonbow с визуализацией спектра', caption: 'Визуализация: спектр, круг, осциллограф или волна.' },
 };
 ---
-<Base title="Возможности" description="Всё, что умеет Lumen: перемотка с превью кадров, главы и следующая серия, обработка видео на видеокарте, объёмный звук, тексты песен, медиатека с сезонами.">
+<Base title="Возможности" description="Всё, что умеет Moonbow: перемотка с превью кадров, главы и следующая серия, обработка видео на видеокарте, объёмный звук, тексты песен, медиатека с сезонами.">
   <div class="wrap page-head grid">
     <h1 class="display head__title" data-split="lines" data-intro>Возможности</h1>
     <p class="lead head__lead" data-reveal="fade" data-intro data-delay="0.2">Полный список, разложенный так же, как настройки в самом плеере. Ничего из этого не включено поверх картинки без спроса.</p>
@@ -42,7 +42,7 @@ const shots: Record<string, { name: string; alt: string; caption: string }> = {
   </div>
 
   <section class="wrap end">
-    <p class="end__text">Всё это: один Lumen.exe и libmpv рядом с ним.</p>
+    <p class="end__text">Всё это: один Moonbow.exe и libmpv рядом с ним.</p>
     <a class="btn" href={download.url}>
       <span class="btn__fill" aria-hidden="true"></span>
       <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
