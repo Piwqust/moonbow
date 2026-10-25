@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Журнал изменений Lumen</title>
-<meta name="description" content="Что происходило с плеером Lumen с 17 по 23 октября 2026: 32 главы, по одной на раунд правок, с рисунком к каждой.">
+<title>Журнал изменений Moonbow</title>
+<meta name="description" content="Что происходило с плеером Moonbow (до 25 октября Lumen) с 17 по 25 октября 2026: 33 главы, по одной на раунд правок, с рисунком к каждой.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect width='18' height='18' rx='4' fill='%230E0E0E'/%3E%3Cpath d='M7 5.5v7l5.5-3.5z' fill='%23EDEDED'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -396,13 +396,13 @@ h2.t:focus { outline: none; }
 
 <div class="wrap">
   <header class="top">
-    <span class="mark"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v7l5.5-3.5z" fill="currentColor"/></svg>Lumen</span>
-    <span>17.10 → 23.10.2026 · 32 главы</span>
+    <span class="mark"><svg viewBox="0 0 24 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 11.5a9.5 9.5 0 0 1 19 0"/><path d="M5.5 11.5a6.5 6.5 0 0 1 13 0"/><path d="M8.5 11.5a3.5 3.5 0 0 1 7 0"/></g></svg>Moonbow</span>
+    <span>17.10 → 25.10.2026 · 33 главы</span>
   </header>
 
   <section class="hero grid" id="now" aria-labelledby="h1">
-    <h1 id="h1">Lumen,<br>глава за главой</h1>
-    <p class="lede"><strong>Lumen</strong>: минималистичный видео- и аудиоплеер для Windows с медиатекой, на C++20, Direct2D и libmpv, в монохроме «белый на графите». Здесь всё, что с ним произошло с 17 по 23 октября: глава на каждый раунд правок, от новых к старым.</p>
+    <h1 id="h1">Moonbow,<br>глава за главой</h1>
+    <p class="lede"><strong>Moonbow</strong> (до 25 октября он назывался Lumen): минималистичный видео- и аудиоплеер для Windows с медиатекой, на C++20, Direct2D и libmpv, в монохроме «белый на чёрном». Здесь всё, что с ним произошло с 17 по 25 октября: глава на каждый раунд правок, от новых к старым.</p>
     <aside class="now" aria-labelledby="now-h">
       <h2 id="now-h">Где проект сейчас, 23.10</h2>
       <dl>
@@ -433,6 +433,49 @@ h2.t:focus { outline: none; }
 </div>
 
 <main id="chapters" class="wrap" tabindex="-1">
+
+<!-- 33 -->
+<article class="ch grid flip" id="ch-33" data-n="33" data-topic="release" data-date="25.10" aria-labelledby="t33">
+  <div class="meta"><span class="num">33</span><span class="date">25.10.2026</span><span class="tag">Имя</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t33" tabindex="-1">Lumen стал Moonbow</h2>
+    <p class="say">У плеера новое имя, знак и цвет. Лунная радуга кажется глазу белой, её цвета видно только на долгой выдержке. Так и в плеере: интерфейс белый на чёрном, а весь цвет в кадре. Ваши настройки, история и ключи переезжают сами.</p>
+    <ul>
+      <li>Имя Moonbow везде, где его видно: окна, меню, трей, «Открыть с помощью», установщик, файл Moonbow.exe, папка %APPDATA%\Moonbow.</li>
+      <li>Первый запуск копирует %APPDATA%\Lumen в новую папку и не трогает старую: Lumen из резервной копии продолжает работать со своими данными.</li>
+      <li>Знак: белая радуга из трёх полос, в заголовке окна, в «О программе» и в приветствии. Значок программы: ночная плитка со звёздами и бледным спектром.</li>
+      <li>Цвет: чёрный стал «ночью» с еле заметной синевой (#0B0C10), белый текст стал «лунным светом» (#EEF1F6), светлая тема стала тёплой бумагой. Контраст везде прежний или выше.</li>
+      <li>Шрифт Onest для текста. Его размеры подобраны так, что строки занимают ту же ширину, что в Inter. Inter остался для таймкодов: цифры не прыгают.</li>
+      <li>Lumen сохранён: метка lumen-final в git и папка lumen-backup рядом с проектом, в ней установщик, переносная сборка, весь код одним файлом и копия настроек.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>174</dd><dt>файла с новым именем</dt></div>
+      <div><dd>58/58</dd><dt>тестов</dt></div>
+      <div><dd>0</dd><dt>новых проблем контраста</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6с; <a href="../design/brand-exploration-2026-10-25/moonbow.html">бренд Moonbow</a></p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,86;20,176;20,250" viewBox="0 0 480 300" role="img" aria-label="Слева знак и имя Lumen, стрелка, справа белая радуга и имя Moonbow; ниже два образца чёрного, старый и новый, и смена шрифта Inter на Onest">
+        <rect class="pn" x="40" y="44" width="170" height="84" rx="8"/>
+        <circle class="lm" cx="76" cy="86" r="16" style="stroke-width:2"/><path d="M72 78v16l12-8z" style="fill:var(--muted)"/>
+        <text class="tm" x="104" y="92">Lumen</text>
+        <path class="ls" d="M222 86H262M254 79l8 7-8 7"/>
+        <rect class="pn" x="274" y="44" width="170" height="84" rx="8"/><rect class="lk" x="274.75" y="44.75" width="168.5" height="82.5" rx="8" style="stroke-width:1.5"/>
+        <g class="lk" style="stroke-width:4"><path d="M290 100a20 20 0 0 1 40 0"/><path d="M297 100a13 13 0 0 1 26 0"/><path d="M304 100a6 6 0 0 1 12 0"/></g>
+        <text class="tr" x="340" y="92">Moonbow</text>
+        <rect x="40" y="156" width="170" height="40" rx="6" style="fill:#0E0E0E;stroke:var(--line)"/><text class="t" x="56" y="181">#0E0E0E</text>
+        <path class="ls" d="M222 176H262M254 169l8 7-8 7"/>
+        <rect x="274" y="156" width="170" height="40" rx="6" style="fill:#0B0C10;stroke:var(--line-strong)"/><text class="tr" x="290" y="181">#0B0C10 ночь</text>
+        <text class="t" x="40" y="254">шрифт</text><text class="tm" x="104" y="254">Inter</text>
+        <path class="ls" d="M222 250H262M254 243l8 7-8 7"/>
+        <text class="tr" x="274" y="254">Onest, таймкоды в Inter</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Имя и знак: белая радуга из трёх полос вместо круга с Play</li><li data-k="2">Чёрный стал на тон синее, как ночное небо; соседние оттенки сдвинуты так же</li><li data-k="3">Текст в Onest, цифры таймкодов в Inter</li></ol>
+  </figure>
+</article>
 
 <!-- 32 -->
 <article class="ch grid" id="ch-32" data-n="32" data-topic="release" data-date="23.10" aria-labelledby="t32">
@@ -1797,7 +1840,7 @@ h2.t:focus { outline: none; }
 </main>
 
 <footer class="wrap foot">
-  <p>Собрано из <a href="../STATUS.md">STATUS.md</a>, отчётов в <a href="../qa/">qa/</a> и истории git: 564 коммита с 17 по 23 октября.</p>
+  <p>Собрано из <a href="../STATUS.md">STATUS.md</a>, отчётов в <a href="../qa/">qa/</a> и истории git: 576 коммитов с 17 по 25 октября.</p>
   <p>Шрифт Inter и цвета из <a href="../design/DESIGN.md">design/DESIGN.md</a>, как в самом плеере. Как добавить главу: <a href="README.md">changelog/README.md</a>.</p>
 </footer>
 
