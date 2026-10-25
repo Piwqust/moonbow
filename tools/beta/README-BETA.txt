@@ -1,7 +1,13 @@
 Moonbow — бета-версия для тестирования
-====================================
+======================================
 
 Спасибо, что помогаете. Это ранняя сборка: в ней могут быть ошибки, ради их поиска она и нужна.
+
+ЕСЛИ У ВАС СТОЯЛ LUMEN
+Moonbow — это тот же плеер под новым именем. При первом запуске он сам забирает настройки,
+историю, медиатеку и сохранённые ключи из Lumen; сам Lumen остаётся как был. Когда убедитесь, что
+всё на месте, Lumen можно удалить: Параметры Windows → Приложения → Установленные приложения.
+Тогда снова выберите Moonbow плеером по умолчанию (шаг 3 ниже), если файлы открывались в Lumen.
 
 КАК УСТАНОВИТЬ
 1. Запустите Moonbow-...-setup.exe. Права администратора не нужны. Windows может предупредить
@@ -55,7 +61,9 @@ Moonbow распространяется по лицензии GPL-3.0-or-later.
 
 
 Moonbow — beta for testers (English)
-----------------------------------
+------------------------------------
+Had Lumen? Moonbow is the same player under a new name: the first start takes Lumen's settings,
+history, library and saved keys, and leaves Lumen as it was. Uninstall Lumen once all is there.
 Run Moonbow-...-setup.exe and press Install (no admin rights; or unzip the .zip and run Moonbow.exe).
 The build is not signed yet: on the SmartScreen warning choose "More info" → "Run anyway". Videos
 then open in Moonbow, music stays as it was ("Install options" turns that off; Windows' Default apps
