@@ -1,6 +1,6 @@
-# Lumen — brief for reviewer agents
+# Moonbow — brief for reviewer agents
 
-Lumen is a new minimalist media player for Windows (C++20, Win32, Direct2D/DirectComposition, libmpv).
+Moonbow is a new minimalist media player for Windows (C++20, Win32, Direct2D/DirectComposition, libmpv).
 Design reference: a Figma "VLC Redesign" file, re-styled to a strict **monochrome** palette
 (white accent on graphite; light theme mirrors it). Goal: polished, fast, MPC-HC-like simplicity
 with a modern library. The app is in Russian by default (English available in Settings).
@@ -9,9 +9,9 @@ You are a **demanding new user**. Be harsh and concrete. You do not fix code; yo
 
 ## What you test
 
-- Executable: `%TEMP%\lumen-qa\build-rN\Lumen.exe` (N = round number given in your task).
+- Executable: `%TEMP%\moonbow-qa\build-rN\Moonbow.exe` (N = round number given in your task).
   This is a frozen copy — do not use `C:\Users\wheny\Desktop\CODE\lumen-player\build`.
-- Test media (generated, safe to use): `%TEMP%\lumen-qa\media\` — Videos (chapters, 2 audio + 2 subtitle
+- Test media (generated, safe to use): `%TEMP%\moonbow-qa\media\` — Videos (chapters, 2 audio + 2 subtitle
   tracks, 10-min file, vertical, 4K, unicode name with sidecar .srt, a 3-episode series), Music
   (tagged mp3 album with covers, flac with Cyrillic tags), Mixed (wav, opus, vp9 without audio, a
   truncated mp4, a fake .mkv, an .m3u playlist).
@@ -26,13 +26,13 @@ You are a **demanding new user**. Be harsh and concrete. You do not fix code; yo
 Always start your own isolated instance:
 
 ```powershell
-$dd = "$env:TEMP\lumen-qa\data-<yourname>"   # your own settings/history/library
+$dd = "$env:TEMP\moonbow-qa\data-<yourname>"   # your own settings/history/library
 New-Item -ItemType Directory -Force $dd | Out-Null
-$p = Start-Process "$env:TEMP\lumen-qa\build-rN\Lumen.exe" -ArgumentList "--new-instance","--automation","--data-dir",$dd,"`"<optional file>`"" -PassThru
+$p = Start-Process "$env:TEMP\moonbow-qa\build-rN\Moonbow.exe" -ArgumentList "--new-instance","--automation","--data-dir",$dd,"`"<optional file>`"" -PassThru
 ```
 
 - To skip onboarding put `{"onboarded":"1"}` in `$dd\ui.json` (or test onboarding on purpose with an empty dir).
-- Library roots: `$dd\library.json` = `{"version":1,"roots":["C:\\Users\\wheny\\AppData\\Local\\Temp\\lumen-qa\\media"]}`.
+- Library roots: `$dd\library.json` = `{"version":1,"roots":["C:\\Users\\wheny\\AppData\\Local\\Temp\\moonbow-qa\\media"]}`.
 - Settings file: `$dd\settings.json` = `{"version":1,"values":{"key":value}}` (keys: see `src\core\SettingsSchema.cpp`).
   Set `"audio.startupVolumeMode":"fixed","audio.startupVolume":0` so nothing plays out loud.
 - Shortcut that does all of the above and prints the new PID:
@@ -59,14 +59,14 @@ Window resizing: use `SetWindowPos` via a small Add-Type helper on **your** wind
 
 ## Hard rules
 
-1. Kill/close only processes you started (by PID). Never `taskkill /IM Lumen.exe`; other Lumen instances
+1. Kill/close only processes you started (by PID). Never `taskkill /IM Moonbow.exe`; other Moonbow instances
    belong to the owner or other reviewers. Close yours at the end (`$p.CloseMainWindow()`, then `Stop-Process -Id`).
 2. Never move the real mouse, never `SetForegroundWindow`/focus windows, never send global input (SendInput, SendKeys).
-3. Do NOT click: "Make Lumen the default player" / "Настроить" (file associations — writes the registry),
+3. Do NOT click: "Make Moonbow the default player" / "Настроить" (file associations — writes the registry),
    "Show in File Explorer", "Open scripts folder", Browse… buttons, "Add folder", "Open file", "Custom color…",
    or anything that opens a native Windows dialog or Explorer. If a native dialog opens by accident, close it
    by posting WM_CLOSE to that dialog window of **your** process only.
-4. Never modify, move or delete media files, and never use media outside `%TEMP%\lumen-qa\media`.
+4. Never modify, move or delete media files, and never use media outside `%TEMP%\moonbow-qa\media`.
 5. No system setting changes, no registry writes, no installs, no network uploads.
 6. Keep volume at 0 / muted.
 

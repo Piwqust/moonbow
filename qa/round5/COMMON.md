@@ -1,6 +1,6 @@
-COMMON RULES (Lumen round 5: the UI bug hunt)
+COMMON RULES (Moonbow round 5: the UI bug hunt)
 
-Lumen is a Windows media player built with:
+Moonbow is a Windows media player built with:
 - C++20 and Win32;
 - Direct2D/DirectWrite and DirectComposition;
 - libmpv (`--wid` child window).
@@ -26,7 +26,7 @@ Code style: match the surrounding code. UI strings take an English key plus a Ru
 
 Build. A worktree must first copy third_party\mpv from the main checkout. Build with:
 
-`cmd /c "set LUMEN_OUT=<dir>\build&& <dir>\build.bat"`
+`cmd /c "set MOONBOW_OUT=<dir>\build&& <dir>\build.bat"`
 
 The build must have no warnings at /W4. Then run:
 - tests\build-tests.bat;
@@ -37,7 +37,7 @@ The build must have no warnings at /W4. Then run:
 Hunters who don't change code use the prebuilt exe given in their brief. They never build into C:\Users\wheny\Desktop\CODE\lumen-player\build, because the owner runs that exe.
 
 Testing tools, all background and invisible:
-- `powershell -File tools\dev\launch.ps1 -Exe <exe> -DataDir %TEMP%\lumen-qa\<yourprefix>-<n> -Fresh [-Settings '{"key":value}'] [-Library <folder>] [files]` prints the PID.
+- `powershell -File tools\dev\launch.ps1 -Exe <exe> -DataDir %TEMP%\moonbow-qa\<yourprefix>-<n> -Fresh [-Settings '{"key":value}'] [-Library <folder>] [files]` prints the PID.
 - tools\dev\input.ps1: click, move, drag, wheel, keys, type.
 - tools\dev\capture.ps1: PNG; use -Scale 1 for crops.
 - tools\dev\dump-tree.ps1: widget tree with rects in DIPs.
@@ -45,18 +45,18 @@ Testing tools, all background and invisible:
 - tools\dev\hitmap.ps1: WM_NCHITTEST sweep.
 
 Test media:
-- %TEMP%\lumen-qa\media: videos with chapters, tracks and subtitles; tagged music; broken files;
-- %TEMP%\lumen-qa\media2;
-- the worst-case set, when it exists: %TEMP%\lumen-qa\worst.
+- %TEMP%\moonbow-qa\media: videos with chapters, tracks and subtitles; tagged music; broken files;
+- %TEMP%\moonbow-qa\media2;
+- the worst-case set, when it exists: %TEMP%\moonbow-qa\worst.
 
-You may generate more media with ffmpeg into %TEMP%\lumen-qa\<yourprefix>-media. Use your own unique prefix for every data dir and temp file.
+You may generate more media with ffmpeg into %TEMP%\moonbow-qa\<yourprefix>-media. Use your own unique prefix for every data dir and temp file.
 
 HARD RULES:
 - Never touch the real mouse, keyboard, focus or clipboard.
 - Never open native dialogs (file or folder pickers, Explorer, colour picker).
 - Never press the file-associations button.
-- Kill only PIDs you started. Never `taskkill /IM Lumen.exe`, and never touch a Lumen started from build\Lumen.exe by the owner.
-- Never modify %TEMP%\lumen-qa\media, media2 or any user files.
+- Kill only PIDs you started. Never `taskkill /IM Moonbow.exe`, and never touch a Moonbow started from build\Moonbow.exe by the owner.
+- Never modify %TEMP%\moonbow-qa\media, media2 or any user files.
 - No registry or system setting changes.
 - Startup volume stays 0.
 - Download and install nothing; no network services.
