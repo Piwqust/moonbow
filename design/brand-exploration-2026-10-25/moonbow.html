@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moonbow · бренд</title>
+<meta name="description" content="Небольшой бренд плеера Moonbow: позиционирование, знак, цвет, шрифт и как это выглядит на нынешней раскладке плеера.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: ночной гайд в одну колонку с оглавлением слева; знак и значок нарисованы SVG-символами внизу страницы, макеты повторяют раскладку Lumen */
+  :root {
+    --night: #0b0c10;
+    --dusk: #111318;
+    --panel: #15171d;
+    --line: #23262e;
+    --moon: #eef1f6;
+    --mist: #8e939c;
+    --s1: #f6cbbb;
+    --s2: #f2e6c4;
+    --s3: #d3ead0;
+    --s4: #c6dcf4;
+    --s5: #d2c8f2;
+    --ui: "Onest", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color-scheme: dark;
+  }
+  body { margin: 0; background: var(--night); color: var(--moon); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+  .wrap {
+    max-width: 1180px; margin: 0 auto;
+    padding-block: 40px 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 48px;
+  }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; gap: 24px; } nav.toc { display: none; } }
+  nav.toc { position: sticky; top: 24px; align-self: start; display: grid; gap: 4px; }
+  nav.toc a { color: var(--mist); text-decoration: none; font: 500 12px/1.4 var(--mono); padding: 4px 0; }
+  nav.toc a:hover { color: var(--moon); }
+  nav.toc b { font: 500 11px var(--mono); color: var(--moon); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+
+  main { display: grid; gap: 80px; min-width: 0; }
+  section { display: grid; gap: 20px; min-width: 0; scroll-margin-top: 24px; }
+  .eyebrow { font: 500 11px var(--mono); color: var(--mist); text-transform: uppercase; letter-spacing: 0.1em; }
+  h2 { margin: 0; font-weight: 500; font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.025em; line-height: 1.1; text-wrap: balance; }
+  h3 { margin: 0; font-weight: 500; font-size: 16px; }
+  p { margin: 0; color: var(--mist); font-size: 16px; line-height: 1.65; max-width: 66ch; }
+  p strong { color: var(--moon); font-weight: 500; }
+  svg.sym { display: block; }
+
+  /* Hero */
+  .hero { position: relative; min-height: 520px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line);
+    background: radial-gradient(90% 70% at 70% 0%, #1a2133 0%, #0e1119 45%, #08090c 100%); display: grid; align-content: end; padding: 48px; gap: 18px; }
+  .hero .sky { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero > *:not(.sky) { position: relative; }
+  .hero .icon { width: 132px; height: 132px; }
+  .hero h1 { margin: 0; font-weight: 500; font-size: clamp(56px, 10vw, 120px); letter-spacing: -0.05em; line-height: 0.9; }
+  .hero .tag { font-size: clamp(20px, 2.4vw, 26px); color: var(--moon); letter-spacing: -0.01em; }
+  .hero p { max-width: 54ch; }
+  @media (max-width: 600px) { .hero { padding: 24px; min-height: 460px; } .hero .icon { width: 96px; height: 96px; } }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .facts div { background: var(--panel); padding: 18px; display: grid; gap: 8px; align-content: start; }
+  .facts b { font: 500 11px var(--mono); color: var(--mist); letter-spacing: 0.06em; text-transform: uppercase; }
+  .facts p { font-size: 15px; }
+  .facts ul { margin: 0; padding-left: 18px; color: var(--mist); font-size: 15px; line-height: 1.55; display: grid; gap: 4px; }
+  .voice { display: flex; flex-wrap: wrap; gap: 8px; }
+  .voice span { font-size: 15px; padding: 9px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
+
+  .spectrum { height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--s5), var(--s4), var(--s3), var(--s2), var(--s1)); }
+  .story { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+  .story figure { margin: 0; display: grid; gap: 10px; }
+  .story .ph { aspect-ratio: 4/3; border-radius: 12px; border: 1px solid var(--line); overflow: hidden; }
+  @media (max-width: 700px) { .story { grid-template-columns: 1fr; } }
+  .cap { font: 500 12px/1.5 var(--mono); color: var(--mist); }
+
+  .plates { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  @media (max-width: 420px) { .plates { grid-template-columns: 1fr; } }
+  .plate { border-radius: 14px; border: 1px solid var(--line); min-height: 220px; display: grid; place-items: center; padding: 24px; gap: 12px; position: relative; }
+  .plate .cap { position: absolute; left: 14px; bottom: 12px; }
+  .plate.dark { background: var(--panel); color: var(--moon); }
+  .plate.light { background: #f4f3ef; color: #121317; }
+  .plate.light .cap { color: #6b6e75; }
+  .lockup { display: flex; align-items: center; gap: 0.32em; font-size: 44px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
+  .lockup svg { width: 1.4em; height: 0.7em; flex: none; margin-bottom: 0.02em; }
+  .stack { display: grid; justify-items: center; gap: 14px; font-size: 40px; font-weight: 500; letter-spacing: -0.04em; }
+  .stack svg { width: 2.2em; height: 1.1em; }
+  .sizes { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+
+  .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .sw { border-radius: 12px; border: 1px solid var(--line); padding: 64px 12px 10px; font: 12px/1.45 var(--mono); }
+  .sw b { display: block; font: 500 14px var(--ui); margin-bottom: 2px; }
+  .sw span { opacity: 0.72; }
+
+  .type { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .type > div { border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: grid; gap: 10px; align-content: start; background: var(--panel); }
+  .type .big { font-size: 64px; font-weight: 500; letter-spacing: -0.045em; line-height: 1; color: var(--moon); }
+  .type .ui { font-size: 22px; line-height: 1.35; color: var(--moon); }
+  .type .ui small { display: block; font-size: 15px; color: var(--mist); }
+
+  /* Окно плеера: раскладка Lumen; 1em = 1/120 ширины кадра */
+  .shots { display: grid; gap: 22px; }
+  .shot { margin: 0; display: grid; gap: 10px; }
+  .frame { container-type: inline-size; border-radius: 12px; overflow: hidden; box-shadow: 0 40px 90px -50px rgba(0,0,0,.9); border: 1px solid var(--line); }
+  .win { font-size: calc(100cqw / 120); aspect-ratio: 16/10; display: grid; grid-template-rows: 3.33em 1fr; color: var(--moon); font-family: var(--ui); overflow: hidden;
+    background: radial-gradient(60% 80% at 0% 0%, #161b27 0%, #0b0c10 45%); }
+  .win svg.ic { width: 1.67em; height: 1.67em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .tb { display: flex; align-items: center; gap: 1.6em; padding: 0 1.6em; background: #111318; border-bottom: 1px solid #1c1f26; font-size: 1.17em; }
+  .tb .logo { width: 2em; height: 1em; color: var(--moon); flex: none; }
+  .tb .mid { flex: 1; text-align: center; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tb .wc { display: flex; gap: 2.2em; color: var(--mist); font-size: .95em; }
+  .tb .ic { color: var(--mist); }
+  .app { display: grid; grid-template-columns: 16em 1fr; min-height: 0; }
+  .nav { margin: .7em; border-radius: .7em; background: rgba(36,40,50,.55); padding: .6em; display: grid; gap: .25em; align-content: start; }
+  .nav a { display: flex; align-items: center; gap: 1em; padding: .8em 1em; border-radius: .6em; color: var(--moon); text-decoration: none; font-size: 1.17em; }
+  .nav a .ic { width: 1.45em; height: 1.45em; color: var(--mist); }
+  .nav a.on { background: rgba(255,255,255,.08); }
+  .nav a.on .ic { color: var(--moon); }
+  .main { min-width: 0; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .hdr { display: flex; align-items: center; gap: 1.6em; padding: 1.6em 2.4em; border-bottom: 1px solid #1c1f26; }
+  .hdr .t { font-size: 1.25em; font-weight: 500; flex: 1; }
+  .hdr .ic { color: var(--mist); }
+  .search { display: flex; align-items: center; gap: .8em; width: 27em; padding: .65em 1em; border-radius: .6em; background: #14161c; color: var(--mist); font-size: 1.1em; }
+  .search .ic { width: 1.3em; height: 1.3em; }
+  .cnt { padding: 2.4em; display: grid; gap: 2.6em; align-content: start; min-height: 0; overflow: hidden; }
+  .sec h4 { margin: 0 0 1.1em; font-weight: 500; font-size: 1.6em; }
+  .row { display: grid; gap: 1.6em; }
+  .c { min-width: 0; }
+  .c .th { position: relative; border-radius: 1em; background: var(--pic); aspect-ratio: 16/9; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,.06); }
+  .c b { display: block; margin-top: .7em; font-weight: 500; font-size: 1.25em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c small { display: block; color: var(--mist); font-size: 1.05em; margin-top: .15em; }
+  .c .pr { position: absolute; left: 0; bottom: 0; height: .3em; background: #fff; }
+  .c .pr::after { content: ""; position: absolute; left: 100%; right: -999em; top: 0; bottom: 0; background: rgba(255,255,255,.18); }
+  .dur { position: absolute; right: .6em; bottom: .7em; font-size: 1em; padding: .15em .45em; border-radius: .35em; background: rgba(0,0,0,.72); color: #fff; font-variant-numeric: tabular-nums; }
+  .player { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  .vid { position: relative; margin: 0 .8em; background: var(--pic); overflow: hidden; }
+  .ctl { display: flex; align-items: center; gap: 1.8em; padding: 1.3em 2.4em 1.5em; font-size: 1.17em; }
+  .ctl .ic { width: 1.5em; height: 1.5em; }
+  .pill { display: grid; place-items: center; width: 4.6em; height: 2.4em; border-radius: .5em; background: #fff; color: #0b0c10; flex: none; }
+  .pill svg { width: 1.3em; height: 1.3em; }
+  .tm { color: var(--mist); font-variant-numeric: tabular-nums; min-width: 2.8em; }
+  .seek { position: relative; flex: 1; height: 2em; border-radius: .3em; background: #14161c; }
+  .seek i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .3em; background: #2a2e37; }
+  .seek .knob { position: absolute; top: -.25em; bottom: -.25em; width: .3em; border-radius: .2em; background: var(--moon); }
+  .note { position: absolute; left: 1em; bottom: .8em; font-family: var(--mono); font-size: .9em; color: #fff; opacity: .5; }
+  .shot figcaption { font-size: 14px; color: var(--mist); max-width: 80ch; line-height: 1.55; }
+
+  .kit { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .kit > div { border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: grid; gap: 14px; align-content: start; background: var(--panel); }
+  .task { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: #202020; width: max-content; max-width: 100%; }
+  .task span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; }
+  .task span.me { background: rgba(255,255,255,.08); position: relative; }
+  .task span.me::after { content: ""; position: absolute; bottom: -5px; left: 13px; width: 8px; height: 3px; border-radius: 2px; background: #9ab; }
+  .task svg { width: 24px; height: 24px; }
+  .task .gl { fill: none; stroke: #9aa; stroke-width: 1.6; }
+
+  .dodont { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .dodont ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .dodont li { font-size: 15px; line-height: 1.5; color: var(--mist); padding-left: 22px; position: relative; }
+  .dodont li::before { position: absolute; left: 0; font: 500 13px var(--mono); }
+  .dodont .ok li::before { content: "+"; color: var(--s3); }
+  .dodont .no li::before { content: "×"; color: var(--s1); }
+  .dodont h3 { margin-bottom: 12px; }
+  footer { font: 12px/1.6 var(--mono); color: var(--mist); border-top: 1px solid var(--line); padding-top: 20px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Знак: три полукруглые полосы, центр (21,21), радиусы 19/13/7, толщина 3.6 -->
+    <symbol id="mark" viewBox="0 0 42 21"><g fill="none" stroke="currentColor" stroke-width="3.6"><path d="M2 21a19 19 0 0 1 38 0"/><path d="M8 21a13 13 0 0 1 26 0"/><path d="M14 21a7 7 0 0 1 14 0"/></g></symbol>
+
+    <!-- Значок программы, 256 × 256: ночная плитка, белая радуга с едва заметным спектром -->
+    <linearGradient id="g-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e2638"/><stop offset=".55" stop-color="#0e121b"/><stop offset="1" stop-color="#07080b"/></linearGradient>
+    <linearGradient id="g-top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".10"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="g-fade" gradientUnits="userSpaceOnUse" x1="0" y1="96" x2="0" y2="184"><stop offset=".55" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <mask id="m-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256"><rect width="256" height="256" fill="url(#g-fade)"/></mask>
+    <filter id="f-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter>
+    <linearGradient id="g-mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9d6f0" stop-opacity="0"/><stop offset=".5" stop-color="#c9d6f0" stop-opacity=".10"/><stop offset="1" stop-color="#c9d6f0" stop-opacity="0"/></linearGradient>
+    <symbol id="icon" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#g-sky)"/>
+      <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#g-top)"/>
+      <g fill="#fff"><circle cx="64" cy="58" r="1.6" opacity=".7"/><circle cx="184" cy="46" r="1.2" opacity=".55"/><circle cx="206" cy="92" r="1.6" opacity=".65"/><circle cx="96" cy="88" r="1" opacity=".5"/><circle cx="150" cy="70" r="1" opacity=".45"/><circle cx="44" cy="120" r="1.2" opacity=".5"/></g>
+      <g mask="url(#m-fade)" fill="none" stroke-width="15">
+        <g filter="url(#f-glow)" opacity=".75"><path d="M44 182a84 84 0 0 1 168 0" stroke="#f6cbbb"/><path d="M68 182a60 60 0 0 1 120 0" stroke="#e8eedc"/><path d="M92 182a36 36 0 0 1 72 0" stroke="#c6dcf4"/></g>
+        <path d="M44 182a84 84 0 0 1 168 0" stroke="#fbe7df"/>
+        <path d="M68 182a60 60 0 0 1 120 0" stroke="#f6f7ee"/>
+        <path d="M92 182a36 36 0 0 1 72 0" stroke="#e3ecfb"/>
+      </g>
+      <rect x="8" y="160" width="240" height="44" fill="url(#g-mist)"/>
+      <rect x="8.75" y="8.75" width="238.5" height="238.5" rx="55.25" fill="none" stroke="#fff" stroke-opacity=".10" stroke-width="1.5"/>
+    </symbol>
+    <!-- Значок для 16–32 px: та же плитка, плоский белый знак без свечения -->
+    <symbol id="icon-s" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#g-sky)"/>
+      <g fill="none" stroke="#eef1f6" stroke-width="24"><path d="M38 186a90 90 0 0 1 180 0"/><path d="M78 186a50 50 0 0 1 100 0"/></g>
+    </symbol>
+
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17V5l10-2v12M9 17a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0M19 15a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0"/></symbol>
+    <symbol id="i-net" viewBox="0 0 24 24"><path d="M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9M4.6 4.6a10.5 10.5 0 0 0 0 14.8M19.4 4.6a10.5 10.5 0 0 1 0 14.8"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h16M4 12h11M4 18h7M16 15v6l5-3z"/></symbol>
+    <symbol id="i-recent" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4M12 8v4l3 2"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="M5 11a6 6 0 1 0 12 0a6 6 0 1 0-12 0M20 20l-4.5-4.5"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14M19 5l-9 7 9 7z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M5 5l9 7-9 7z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16.5 9.5a3.5 3.5 0 0 1 0 5"/></symbol>
+    <symbol id="i-subs" viewBox="0 0 24 24"><path d="M3 6h18v12H3zM7 14h4M13 14h4"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3"/></symbol>
+    <symbol id="i-side" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM9 5v14"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Оглавление">
+    <b>moonbow</b>
+    <a href="#position">Позиционирование</a>
+    <a href="#story">Откуда идея</a>
+    <a href="#mark">Знак</a>
+    <a href="#color">Цвет</a>
+    <a href="#type">Шрифт</a>
+    <a href="#app">В плеере</a>
+    <a href="#icon">Значок</a>
+    <a href="#rules">Правила</a>
+  </nav>
+
+  <main id="main">
+    <section class="hero" aria-label="Moonbow">
+      <svg class="sky" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="g-hfade" gradientUnits="userSpaceOnUse" x1="0" y1="200" x2="0" y2="560"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <mask id="m-hfade" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="600"><rect width="1000" height="600" fill="url(#g-hfade)"/></mask>
+          <filter id="f-hglow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="14"/></filter>
+        </defs>
+        <g fill="none" mask="url(#m-hfade)">
+          <g stroke-width="40" opacity=".10" filter="url(#f-hglow)" stroke="#dfe7f7"><path d="M330 600a370 370 0 0 1 740 0"/><path d="M392 600a308 308 0 0 1 616 0"/><path d="M454 600a246 246 0 0 1 492 0"/></g>
+          <g stroke-width="26" opacity=".09" stroke="#fff"><path d="M330 600a370 370 0 0 1 740 0"/><path d="M392 600a308 308 0 0 1 616 0"/><path d="M454 600a246 246 0 0 1 492 0"/></g>
+        </g>
+        <g fill="#fff"><circle cx="120" cy="70" r="1.4" opacity=".6"/><circle cx="260" cy="40" r="1" opacity=".5"/><circle cx="420" cy="96" r="1.2" opacity=".5"/><circle cx="880" cy="60" r="1.4" opacity=".7"/><circle cx="640" cy="34" r="1" opacity=".45"/><circle cx="960" cy="150" r="1.1" opacity=".5"/></g>
+      </svg>
+      <svg class="icon sym" role="img" aria-label="Значок Moonbow"><use href="#icon"/></svg>
+      <h1>moonbow</h1>
+      <div class="tag">Весь цвет — в кадре.</div>
+      <p>Тихий плеер для Windows. Интерфейс чёрно-белый, поэтому единственный цвет на экране — ваш фильм. Открывается сразу на первом кадре и играет всё, что вы в него бросите.</p>
+    </section>
+
+    <section id="position">
+      <div class="eyebrow">01 · Позиционирование</div>
+      <h2>Красивый плеер, которого на Windows нет</h2>
+      <p>У Mac есть IINA и Infuse. На Windows выбор такой: VLC с меню из 2005 года, PotPlayer с рекламой и сотней пунктов или «Кино и ТВ», которое почти ничего не умеет. <strong>Moonbow закрывает этот пробел:</strong> играет всё, как VLC, и при этом его приятно держать открытым весь вечер.</p>
+      <div class="facts">
+        <div><b>Для кого</b><p>Для тех, кто смотрит своё кино и сериалы с диска и слушает свою музыку. Замечает, когда вещь сделана аккуратно, и выбирает программы по ощущению.</p></div>
+        <div><b>Что заменяет</b><p>VLC, PotPlayer, MPC-HC и «Кино и ТВ».</p></div>
+        <div><b>На чём держится</b><ul><li>окно открывается сразу на первом кадре, без мигания</li><li>играет всё, что играет mpv</li><li>продолжает с места, где вы остановились</li><li>сам находит субтитры и тексты песен</li><li>бесплатный и открытый, GPL</li></ul></div>
+      </div>
+      <p><strong>Голос.</strong> Говорит коротко и спокойно, как человек, который выключил свет и сел рядом. Без восклицаний и без лунных шуток в интерфейсе: луна живёт в имени и знаке, а в тексте её нет.</p>
+      <div class="voice" aria-label="Как звучит Moonbow"><span>Открыл и смотришь.</span><span>Продолжить с 41:07</span><span>Субтитры нашлись: русские</span><span>Здесь появятся ваши фильмы. Перетащите папку.</span><span>Следующая серия через 8 с</span></div>
+    </section>
+
+    <section id="story">
+      <div class="eyebrow">02 · Откуда идея</div>
+      <h2>Лунная радуга кажется глазу белой</h2>
+      <div class="story">
+        <figure><div class="ph"><svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Белая радуга ночью: так её видит глаз">
+          <rect width="400" height="300" fill="#07080b"/><rect width="400" height="300" fill="url(#g-sky)" opacity=".8"/>
+          <g fill="none" stroke-width="16" opacity=".42"><path d="M60 300a140 140 0 0 1 280 0" stroke="#e9ecf2"/></g>
+          <g fill="none" stroke-width="26" opacity=".28" filter="url(#f-glow)"><path d="M60 300a140 140 0 0 1 280 0" stroke="#fff"/></g>
+          <g fill="#fff"><circle cx="60" cy="50" r="1.3" opacity=".6"/><circle cx="320" cy="40" r="1.1" opacity=".5"/><circle cx="210" cy="80" r="1" opacity=".5"/></g></svg></div>
+          <figcaption class="cap">Глазом. В темноте мы почти не различаем цвета, поэтому дуга выглядит белой.</figcaption></figure>
+        <figure><div class="ph"><svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Та же радуга на длинной выдержке: видны цвета">
+          <rect width="400" height="300" fill="#0c1220"/><rect width="400" height="300" fill="url(#g-sky)" opacity=".5"/>
+          <g fill="none" stroke-width="3.6" opacity=".9"><path d="M60 300a140 140 0 0 1 280 0" stroke="#f3a08a"/><path d="M63.6 300a136.4 136.4 0 0 1 272.8 0" stroke="#f1d58e"/><path d="M67.2 300a132.8 132.8 0 0 1 265.6 0" stroke="#a9dca6"/><path d="M70.8 300a129.2 129.2 0 0 1 258.4 0" stroke="#93c4ee"/><path d="M74.4 300a125.6 125.6 0 0 1 251.2 0" stroke="#b9a6ee"/></g>
+          <g fill="#fff"><circle cx="60" cy="50" r="1.3" opacity=".8"/><circle cx="320" cy="40" r="1.1" opacity=".7"/><circle cx="210" cy="80" r="1" opacity=".7"/></g></svg></div>
+          <figcaption class="cap">На длинной выдержке. Цвета были там всё время, просто их не видно.</figcaption></figure>
+      </div>
+      <p>Лунная радуга бывает ночью, при полной луне, чаще всего у водопадов. <strong>Отсюда главное правило бренда:</strong> интерфейс белый на чёрном, а цвет появляется только в кадре. Знак — та же белая радуга. Спектр в нём едва заметен и проступает только на большом значке, как на долгой выдержке.</p>
+    </section>
+
+    <section id="mark">
+      <div class="eyebrow">03 · Знак</div>
+      <h2>Белая радуга из трёх полос</h2>
+      <p>Три полукруга с общим центром, радиусы 19, 13 и 7, толщина полосы 3,6. Концы ровные и стоят на одной линии, как радуга на горизонте. Знак читается и с 16 px. Буквы в имени строчные, Onest 500, трекинг −4&nbsp;%.</p>
+      <div class="plates">
+        <div class="plate dark"><div class="lockup"><svg class="sym" aria-hidden="true"><use href="#mark"/></svg>moonbow</div><span class="cap">Логотип, на тёмном</span></div>
+        <div class="plate light"><div class="lockup"><svg class="sym" aria-hidden="true"><use href="#mark"/></svg>moonbow</div><span class="cap">Логотип, на светлом</span></div>
+        <div class="plate dark"><div class="stack"><svg class="sym" aria-hidden="true"><use href="#mark"/></svg>moonbow</div><span class="cap">В столбик: установщик, заставка</span></div>
+        <div class="plate dark"><div class="sizes" style="color:var(--moon)"><svg class="sym" width="96" height="48" aria-hidden="true"><use href="#mark"/></svg><svg class="sym" width="48" height="24" aria-hidden="true"><use href="#mark"/></svg><svg class="sym" width="32" height="16" aria-hidden="true"><use href="#mark"/></svg><svg class="sym" width="16" height="8" aria-hidden="true"><use href="#mark"/></svg></div><span class="cap">96 · 48 · 32 · 16 px</span></div>
+      </div>
+    </section>
+
+    <section id="color">
+      <div class="eyebrow">04 · Цвет</div>
+      <h2>Ночь, лунный свет и спрятанный спектр</h2>
+      <p>Основа — чёрный с еле заметной синевой ночного неба и белый лунный свет. Спектр из пяти бледных цветов живёт только в знаке и значке. В интерфейсе его нет: там цвет даёт кадр.</p>
+      <div class="swatches">
+        <div class="sw" style="background:#0b0c10;color:#eef1f6"><b>Ночь</b>#0B0C10<br><span>фон окна</span></div>
+        <div class="sw" style="background:#15171d;color:#eef1f6"><b>Сумерки</b>#15171D<br><span>панели, меню</span></div>
+        <div class="sw" style="background:#23262e;color:#eef1f6"><b>Линия</b>#23262E<br><span>рамки, разделители</span></div>
+        <div class="sw" style="background:#8e939c;color:#0b0c10"><b>Туман</b>#8E939C<br><span>вторичный текст</span></div>
+        <div class="sw" style="background:#eef1f6;color:#0b0c10"><b>Лунный свет</b>#EEF1F6<br><span>текст, знак</span></div>
+        <div class="sw" style="background:#ffffff;color:#0b0c10"><b>Play</b>#FFFFFF<br><span>только кнопка Play</span></div>
+      </div>
+      <div class="swatches">
+        <div class="sw" style="background:#f6cbbb;color:#0b0c10"><b>Персик</b>#F6CBBB</div>
+        <div class="sw" style="background:#f2e6c4;color:#0b0c10"><b>Песок</b>#F2E6C4</div>
+        <div class="sw" style="background:#d3ead0;color:#0b0c10"><b>Мята</b>#D3EAD0</div>
+        <div class="sw" style="background:#c6dcf4;color:#0b0c10"><b>Лёд</b>#C6DCF4</div>
+        <div class="sw" style="background:#d2c8f2;color:#0b0c10"><b>Сирень</b>#D2C8F2</div>
+      </div>
+      <div class="spectrum" role="img" aria-label="Лунный спектр: сирень, лёд, мята, песок, персик"></div>
+      <p>Светлая тема та же, только наоборот: бумага <code style="font-family:var(--mono);color:var(--moon)">#F4F3EF</code>, текст <code style="font-family:var(--mono);color:var(--moon)">#121317</code>, вторичный <code style="font-family:var(--mono);color:var(--moon)">#6B6E75</code>. Кнопка Play в светлой теме чёрная.</p>
+    </section>
+
+    <section id="type">
+      <div class="eyebrow">05 · Шрифт</div>
+      <h2>Onest для всего</h2>
+      <div class="type">
+        <div><span class="cap">Имя и заголовки · Onest 500</span><span class="big">moonbow</span><p>Мягкий геометрический гротеск с хорошей кириллицей. Его круглые «о» повторяют дугу знака.</p></div>
+        <div><span class="cap">Интерфейс · Onest 400 и 500</span><span class="ui">Дом у моря · S01E04<small>Осталось 12 минут · субтитры: русские</small></span><p>Ровнее системного Segoe UI, но такой же спокойный. В подписях и цифрах таймлайна — табличные цифры.</p></div>
+      </div>
+    </section>
+
+    <section id="app">
+      <div class="eyebrow">06 · В плеере</div>
+      <h2>Раскладка остаётся, меняется свет</h2>
+      <p>Окна те же, что у Lumen: заголовок, меню слева, сетка карточек, нижняя панель с белой кнопкой. Меняются знак в заголовке, шрифт и оттенок чёрного. Это самый дешёвый путь: почти весь интерфейс уже такой.</p>
+      <div class="shots">
+        <figure class="shot">
+          <div class="frame"><div class="win" role="img" aria-label="Главная Moonbow: меню слева, ряд «Продолжить» с полосками прогресса, недавно добавленные">
+            <div class="tb"><svg class="logo sym" aria-hidden="true"><use href="#mark"/></svg><svg class="ic"><use href="#i-dots"/></svg><svg class="ic"><use href="#i-side"/></svg><span class="mid">moonbow</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+            <div class="app">
+              <nav class="nav"><a class="on"><svg class="ic"><use href="#i-home"/></svg>Главная</a><a><svg class="ic"><use href="#i-video"/></svg>Видео</a><a><svg class="ic"><use href="#i-music"/></svg>Музыка</a><a><svg class="ic"><use href="#i-net"/></svg>Сеть</a><a><svg class="ic"><use href="#i-list"/></svg>Плейлисты</a><a><svg class="ic"><use href="#i-recent"/></svg>Недавние</a><a><svg class="ic"><use href="#i-add"/></svg>Добавить</a></nav>
+              <div class="main">
+                <div class="hdr"><svg class="ic"><use href="#i-back"/></svg><svg class="ic"><use href="#i-fwd"/></svg><span class="t">Главная</span><span class="search"><svg class="ic"><use href="#i-search"/></svg>Поиск</span></div>
+                <div class="cnt">
+                  <div class="sec"><h4>Продолжить</h4>
+                    <div class="row" style="grid-template-columns:repeat(3,1fr)">
+                      <div class="c"><div class="th" style="--pic:linear-gradient(180deg,#0E1A2E 0%,#284466 48%,#E59C67 64%,#141820 66%,#07080A 100%)"><i class="pr" style="width:72%"></i></div><b>Дом у моря · S01E04</b><small>осталось 12 мин</small></div>
+                      <div class="c"><div class="th" style="--pic:linear-gradient(115deg,#2B2622 0%,#5A4636 38%,#C99C6A 52%,#3A2E25 53%,#1A1715 100%)"><i class="pr" style="width:41%"></i></div><b>Глубина резкости</b><small>осталось 58 мин</small></div>
+                      <div class="c"><div class="th" style="--pic:linear-gradient(140deg,#1C2A33,#4F6B73 50%,#0F1417)"><i class="pr" style="width:18%"></i></div><b>Северный ветер · S02E01</b><small>осталось 39 мин</small></div>
+                    </div>
+                  </div>
+                  <div class="sec"><h4>Недавно добавленные</h4>
+                    <div class="row" style="grid-template-columns:repeat(4,1fr)">
+                      <div class="c"><div class="th" style="--pic:linear-gradient(160deg,#2A1A14,#6B3A22 60%,#120D0A)"><span class="dur">1:48:02</span></div><b>Последний трамвай</b></div>
+                      <div class="c"><div class="th" style="--pic:linear-gradient(200deg,#1A2230,#5D6F86 55%,#0C0F14)"><span class="dur">42:10</span></div><b>Тишина в эфире · S01E01</b></div>
+                      <div class="c"><div class="th" style="--pic:linear-gradient(120deg,#2A1E2E,#7A4A5C 55%,#140F14)"><span class="dur">4:09</span></div><b>Lunar Drift · Glass Hours</b></div>
+                      <div class="c"><div class="th" style="--pic:linear-gradient(170deg,#1E2418,#55613F 50%,#0E100B)"><span class="dur">1:32:40</span></div><b>Короткие дни</b></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+          <figcaption>Главная. Всё цветное здесь — обложки и кадры. Полоски прогресса белые, выделение в меню — белое на 8&nbsp;%.</figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="frame"><div class="win" role="img" aria-label="Плеер Moonbow: кадр и нижняя панель с белой кнопкой Play">
+            <div class="tb"><svg class="logo sym" aria-hidden="true"><use href="#mark"/></svg><svg class="ic"><use href="#i-dots"/></svg><svg class="ic"><use href="#i-side"/></svg><span class="mid">Дом у моря · S01E04 · Маяк</span><span class="wc"><span>_</span><span>▢</span><span>✕</span></span></div>
+            <div class="player">
+              <div class="vid" style="--pic:radial-gradient(40% 30% at 70% 64%,rgba(245,194,122,.9) 0,rgba(245,194,122,0) 70%),linear-gradient(180deg,#0E1A2E 0%,#284466 50%,#E59C67 66%,#141820 68%,#07080A 100%)"><span class="note">кадр условный</span></div>
+              <div class="ctl"><svg class="ic"><use href="#i-prev"/></svg><span class="pill"><svg><use href="#i-play"/></svg></span><svg class="ic"><use href="#i-next"/></svg><span class="tm">33:41</span><span class="seek"><i style="width:72%"></i><span class="knob" style="left:72%"></span></span><span class="tm">46:10</span><svg class="ic"><use href="#i-vol"/></svg><svg class="ic"><use href="#i-subs"/></svg><svg class="ic"><use href="#i-gear"/></svg><svg class="ic"><use href="#i-queue"/></svg></div>
+            </div>
+          </div></div>
+          <figcaption>Плеер. Белая кнопка Play остаётся главной деталью интерфейса. Знак отвечает за имя, Play — за дело, их не смешиваем.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="icon">
+      <div class="eyebrow">07 · Значок</div>
+      <h2>Ночная плитка с белой радугой</h2>
+      <p>Плитка Windows 11 со скруглением 56 из 256: небо от тёмно-синего к чёрному, несколько звёзд, белая радуга, которая растворяется в тумане у горизонта. Каждая полоса тронута своим цветом спектра. Это та самая «длинная выдержка». С 32 px и меньше остаются только плитка и две белые полосы, без свечения и звёзд.</p>
+      <div class="kit">
+        <div><span class="cap">Крупный · 64 · 48 · 32 · 16 px</span>
+          <div class="sizes"><svg class="sym" width="160" height="160" role="img" aria-label="Значок 256"><use href="#icon"/></svg><svg class="sym" width="64" height="64" aria-hidden="true"><use href="#icon"/></svg><svg class="sym" width="48" height="48" aria-hidden="true"><use href="#icon"/></svg><svg class="sym" width="32" height="32" aria-hidden="true"><use href="#icon-s"/></svg><svg class="sym" width="16" height="16" aria-hidden="true"><use href="#icon-s"/></svg></div>
+        </div>
+        <div><span class="cap">Панель задач, 24 px</span>
+          <div class="task" aria-label="Значок на панели задач"><span><svg viewBox="0 0 24 24" class="gl"><path d="M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z"/></svg></span><span class="me"><svg class="sym" aria-hidden="true"><use href="#icon-s"/></svg></span><span><svg viewBox="0 0 24 24" class="gl"><path d="M3 6h6l2 2h10v11H3z"/></svg></span><span><svg viewBox="0 0 24 24" class="gl"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="rules">
+      <div class="eyebrow">08 · Правила</div>
+      <h2>Можно и нельзя</h2>
+      <div class="dodont">
+        <div class="ok"><h3>Можно</h3><ul>
+          <li>Показывать спектр в значке, на заставке установщика и на сайте.</li>
+          <li>Ставить знак в заголовок окна, на пустые экраны и в «О программе».</li>
+          <li>Писать имя строчными: <code style="font-family:var(--mono);color:var(--moon)">moonbow</code>. В обычном тексте можно Moonbow.</li>
+        </ul></div>
+        <div class="no"><h3>Нельзя</h3><ul>
+          <li>Красить интерфейс в цвета спектра: кнопки, полосы прогресса, выделение остаются белыми.</li>
+          <li>Рисовать радугу насыщенной и яркой: это лунная радуга, она бледная.</li>
+          <li>Добавлять в интерфейс луну, звёзды и шутки про ночь.</li>
+          <li>Ставить Play внутрь знака: у Play своё место, белая кнопка.</li>
+        </ul></div>
+      </div>
+    </section>
+
+    <footer>moonbow · раунд 7 · небольшой бренд: позиционирование, знак, цвет, шрифт, макеты на раскладке Lumen</footer>
+  </main>
+</div>
+</body>
+</html>
