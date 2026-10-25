@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Имя для плеера</title>
+<meta name="description" content="Имена для плеера из природы и науки: звёзды, созвездия, камни, звери, латинские роды и явления неба. С проверкой, не занято ли имя другим плеером.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: лист миллиметровки как в anglebird/marks.html; сверху стили имён, ниже сетка карточек, внизу то, что уже занято */
+  :root {
+    --paper: #f2f2f0;
+    --sheet: #f7f7f5;
+    --grid: rgba(20, 20, 18, 0.07);
+    --ink: #141413;
+    --muted: #6d6d68;
+    --line: rgba(20, 20, 18, 0.14);
+    --chip: rgba(20, 20, 18, 0.06);
+    --ok: #2f7d4f;
+    --near: #9a6a12;
+    --no: #b23a2c;
+    --display: "Geist", "Inter", "Helvetica Neue", Arial, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #131312; --sheet: #191918; --grid: rgba(240, 240, 235, 0.06);
+      --ink: #ededea; --muted: #9a9a94; --line: rgba(240, 240, 235, 0.16); --chip: rgba(240, 240, 235, 0.08);
+      --ok: #7fd4a0; --near: #e6b45c; --no: #ff8a7a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #131312; --sheet: #191918; --grid: rgba(240, 240, 235, 0.06);
+    --ink: #ededea; --muted: #9a9a94; --line: rgba(240, 240, 235, 0.16); --chip: rgba(240, 240, 235, 0.08);
+    --ok: #7fd4a0; --near: #e6b45c; --no: #ff8a7a;
+    color-scheme: dark;
+  }
+
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--display); -webkit-font-smoothing: antialiased; }
+  .wrap {
+    max-width: 1180px; margin: 0 auto;
+    padding-block: 56px 72px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 24px;
+  }
+
+  header { display: grid; gap: 16px; max-width: 70ch; }
+  header h1 { margin: 0; font-weight: 500; font-size: clamp(30px, 5vw, 44px); letter-spacing: -0.02em; line-height: 1.05; text-wrap: balance; }
+  header p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+  header p b { color: var(--ink); font-weight: 500; }
+
+  .switch {
+    display: flex; flex-wrap: wrap; gap: 4px; padding: 4px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--sheet);
+    width: fit-content; max-width: 100%;
+  }
+  .switch button {
+    font: 500 14px/1 var(--display); color: var(--muted); background: none; border: 0; border-radius: 8px;
+    padding: 9px 14px; cursor: pointer;
+  }
+  .switch button:hover { color: var(--ink); background: var(--chip); }
+  .switch button[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
+  .switch button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--muted); max-width: 72ch; }
+
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .tools .label { font: 500 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; }
+  .seg button { font: 500 12px/1 var(--mono); color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 7px 9px; cursor: pointer; }
+  .seg button:hover { background: var(--chip); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .seg button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+  }
+  @media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
+  .empty { background: var(--sheet); padding: 32px 18px; color: var(--muted); font-size: 14px; }
+
+  .card { background: var(--sheet); display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+  .plate {
+    height: 150px; display: grid; place-items: center; align-content: center; gap: 10px; overflow: hidden; padding-inline: 16px; position: relative;
+    background-color: var(--sheet);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 16px 16px; background-position: -1px -1px;
+  }
+  .name { font-size: 44px; font-weight: 500; letter-spacing: -0.015em; line-height: 1; white-space: nowrap; }
+  .say { font: 500 12px var(--mono); color: var(--muted); }
+  .rank { position: absolute; left: 14px; top: 12px; font: 500 12px var(--mono); color: var(--muted); }
+  .star {
+    position: absolute; right: 8px; top: 6px; width: 40px; height: 40px; border: 0; background: none; cursor: pointer;
+    font-size: 20px; line-height: 1; color: var(--muted); border-radius: 8px;
+  }
+  .star:hover { background: var(--chip); color: var(--ink); }
+  .star[aria-pressed="true"] { color: #e0a412; }
+  .star:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .meta { padding: 14px 18px 18px; display: grid; gap: 8px; border-top: 1px solid var(--line); min-width: 0; align-content: start; }
+  .kind { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .why { margin: 0; font-size: 14px; line-height: 1.5; }
+  .status { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .status b { flex: none; font: 500 11px var(--mono); padding: 3px 6px; border-radius: 5px; border: 1px solid currentColor; }
+  .status.ok b { color: var(--ok); }
+  .status.near b { color: var(--near); }
+  .status.no b { color: var(--no); }
+  .status.unk b { color: var(--muted); }
+  .card.no .name { text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: var(--no); }
+
+  section.taken { display: grid; gap: 12px; margin-top: 24px; }
+  section.taken h2 { margin: 0; font-weight: 500; font-size: 22px; letter-spacing: -0.01em; }
+  .taken ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 24px; }
+  .taken li { font-size: 14px; line-height: 1.5; color: var(--muted); }
+  .taken li b { color: var(--ink); font-weight: 500; }
+  footer { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 72ch; }
+</style>
+</head>
+<body>
+<main class="wrap" id="main">
+  <header>
+    <h1>Имя для плеера</h1>
+    <p>Как в знаках anglebird: имя берётся из природы, у него есть настоящее научное название и одно свойство, которое совпадает с делом плеера. Он показывает свет в темноте, держит вместе звук и картинку и играет всё подряд.</p>
+    <p><b>36 имён в шести стилях.</b> 19 из них проверены поиском 25 октября 2026 года по мерке «нет плеера или видеоприложения с таким именем». Домены и товарные знаки не проверялись. ★ отмечает имя: избранное запоминается в этом браузере.</p>
+  </header>
+
+  <nav class="switch" id="switch" aria-label="Стиль имён"></nav>
+  <p class="note" id="note"></p>
+
+  <div class="tools">
+    <span class="label">Написание</span>
+    <div class="seg" role="group" aria-label="Написание" data-field="spell">
+      <button type="button" data-value="lower" aria-pressed="true">albireo</button>
+      <button type="button" data-value="title" aria-pressed="false">Albireo</button>
+      <button type="button" data-value="upper" aria-pressed="false">ALBIREO</button>
+    </div>
+    <span class="label">Показать</span>
+    <div class="seg" role="group" aria-label="Фильтр" data-field="filter">
+      <button type="button" data-value="all" aria-pressed="true">все</button>
+      <button type="button" data-value="free" aria-pressed="false">свободные</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="taken" aria-labelledby="taken-h">
+    <h2 id="taken-h">Хорошие имена, которые уже заняты плеерами</h2>
+    <ul>
+      <li><b>Kinora</b> — открытый плеер на libmpv на GitHub, то есть ровно наша ниша. Ещё медиацентр Kinora на Rust.</li>
+      <li><b>Laterna</b> — самостоятельный медиасервер для фильмов и музыки, и AI-видеостудия laterna.io.</li>
+      <li><b>Pictor</b> — Pictor Player, плеер для рекламных экранов на Windows.</li>
+      <li><b>Pavo</b> — Pavo Player, видеоплеер для Android.</li>
+      <li><b>Bowerbird</b> — BowerBird, плеер эфира и записей для Tvheadend.</li>
+      <li><b>Selenite</b> — Selenite, плеер Spotify для macOS.</li>
+      <li><b>Foxfire</b> — foxfire music player в Amazon Appstore.</li>
+      <li><b>Lyrebird</b> — старый плеер Lyrebird для рекламных экранов и Lyrebird Studio с фото- и видеоприложениями.</li>
+    </ul>
+  </section>
+
+  <footer>Статусы: «свободно» — плееров и видеоприложений с этим именем не нашлось; «есть тёзки» — плееров нет, но имя носит заметная компания или программа из другой области; «занято» — есть плеер или видеопрограмма; «не проверено» — поиск не делался, в строке написано, что известно и так.</footer>
+</main>
+
+<script>
+/* [имя, произношение, что это, почему плеер, статус ok|near|no|unk, что нашлось] */
+const TABS = {
+  pick: {
+    label: "Мой выбор",
+    note: "Шесть имён, которые и звучат, и свободны. По порядку: первое я бы взял сразу. Albireo — самая точная история, Moonbow — самое простое английское слово, Galena и Upupa — короткие звучные имена в духе mpv и IINA.",
+    items: ["Albireo", "Moonbow", "Galena", "Upupa", "Gloaming", "Tyto"]
+  },
+  stars: {
+    label: "Звёзды",
+    note: "Собственные имена звёзд, чаще арабские. Звучат древне и мягко, как Vega или Altair. Короткие, но таких имён в софте много, поэтому почти всё упирается в проверку.",
+    items: [
+      ["Albireo", "альби́рео", "Albireo · двойная звезда в клюве Лебедя", "В бинокль одна точка распадается на две звезды: золотую и голубую. Плеер тоже держит в одной точке две вещи, картинку и звук.", "ok", "Был клиент аниме-сервера Albireo для Android, его сняли в 2021. Остальное — музыканты."],
+      ["Vega", "ве́га", "Vega · ярчайшая звезда Лиры", "Лира — музыка, а свет Веги взяли за ноль шкалы яркости: остальные звёзды меряют по ней.", "unk", "Рядом видеоредактор Vegas Pro, и само слово очень частое."],
+      ["Mira", "ми́ра", "Mira · «удивительная», переменная звезда в Ките", "За 11 месяцев то разгорается, то почти гаснет. Как затемнение кадра в начале и в конце фильма.", "unk", "Очень частое имя для приложений."],
+      ["Deneb", "де́неб", "Deneb · «хвост» Лебедя", "Одна из самых мощных известных звёзд: она очень далеко, а видна простым глазом.", "unk", ""],
+      ["Capella", "капе́лла", "Capella · «козочка», шестая по яркости", "Звучит как a cappella, то есть сразу про музыку.", "unk", "Есть нотный редактор capella."],
+      ["Alcor", "алько́р", "Alcor · звезда-проверка зрения рядом с Мицаром", "Кто различает её простым глазом, у того острое зрение.", "no", "AlcorVideo, видеоредактор в браузере."]
+    ]
+  },
+  sky: {
+    label: "Созвездия",
+    note: "Латинские имена созвездий, как Cygnus и Aquila в знаках anglebird. Звучат научно и спокойно. Самые очевидные для плеера, Pictor и Pavo, уже заняты.",
+    items: [
+      ["Volans", "во́ланс", "Volans · Летучая Рыба", "Выпрыгивает из воды и летит над волнами, живёт в двух стихиях. Плеер тоже живёт в двух: звук и картинка.", "near", "Программа 3D-визуализации для аэропортов, прицел ночного видения, видеоагентство в Стамбуле."],
+      ["Lyra", "ли́ра", "Lyra · лира Орфея", "Музыкальный инструмент на небе. Самое прямое созвездие для плеера.", "unk", "Есть голосовой кодек Lyra от Google."],
+      ["Vela", "ве́ла", "Vela · Паруса корабля Арго", "Внутри — пульсар Паруса, он мигает 11 раз в секунду, как кадры старой плёнки.", "unk", ""],
+      ["Carina", "кари́на", "Carina · Киль корабля Арго", "В нём туманность Киля: её «Космические скалы» стали одним из первых снимков телескопа «Уэбб».", "unk", ""],
+      ["Pictor", "пи́ктор", "Pictor · Живописец, мольберт художника", "Звучит как picture.", "no", "Pictor Player, плеер для рекламных экранов на Windows."],
+      ["Pavo", "па́во", "Pavo · Павлин", "На хвосте сотня «глаз».", "no", "Pavo Player, видеоплеер для Android."]
+    ]
+  },
+  stones: {
+    label: "Камни",
+    note: "Минералы с английскими и греческими названиями. В каждом есть свойство света или звука. Звучат весомо и спокойно.",
+    items: [
+      ["Galena", "гале́на", "Galena · свинцовый блеск, галенит", "Первые радиоприёмники играли звук через кристалл галенита и тонкую проволочку, без батареек. Звук прямо из камня.", "ok", "Есть известная болгарская певица Galena. Программ с таким именем нет."],
+      ["Iolite", "ио́лит", "Iolite · кордиерит, «камень викингов»", "Через него по поляризованному свету находили солнце за облаками. Видит свет там, где его не видно.", "ok", "iolite — научная программа для геохимии, совсем другая область."],
+      ["Beryl", "бери́л", "Beryl · берилл", "Из берилла шлифовали первые очки, отсюда немецкое Brille, «очки». Плеер как очки для ваших фильмов.", "unk", "Был оконный менеджер Beryl для Linux, 2006–2007."],
+      ["Opal", "опа́л", "Opal · опал", "Ювелиры зовут его переливы play of color, «игра цвета». В названии свойства уже есть play.", "unk", "Очень частое имя: камера Opal, приложение Opal."],
+      ["Fluorite", "флюори́т", "Fluorite · флюорит", "Светится под ультрафиолетом. От него произошло слово «флуоресценция».", "unk", ""],
+      ["Selenite", "селени́т", "Selenite · «лунный камень», гипс", "Прозрачный, как экран, и светится по краям.", "no", "Selenite, плеер Spotify для macOS."]
+    ]
+  },
+  beasts: {
+    label: "Звери и птицы",
+    note: "Английские бытовые имена, как Swallow и Gannet в знаках anglebird. Самые тёплые и запоминаемые, но и самые занятые: у двух лучших по смыслу уже есть плееры.",
+    items: [
+      ["Tarsier", "та́рсиер", "Tarsier · долгопят", "Самые большие глаза относительно тела: каждый глаз больше мозга. Видит в полной темноте.", "near", "Tarsier Studios (Little Nightmares), защищённый чат, медиа-компания. Плееров нет."],
+      ["Potoo", "поту́", "Potoo · исполинский козодой", "Ночная птица с огромными глазами, днём притворяется сучком. Смешное звучное имя.", "near", "Приложение для Mac «не засыпать», ИИ-видеонаблюдение Potoo, игровая студия."],
+      ["Cuttlefish", "ка́тлфиш", "Cuttlefish · каракатица", "Кожа как живой экран: миллионы пигментных клеток меняют цвет, почти пиксели.", "unk", "Так называется виртуальный Android от Google."],
+      ["Starling", "ста́рлинг", "Starling · скворец", "Повторяет любые звуки, а стаи скворцов рисуют в небе мурмурацию.", "unk", "Есть Starling Bank."],
+      ["Lyrebird", "ла́йрбёрд", "Lyrebird · лирохвост", "Повторяет любой звук леса, даже затвор камеры. «Играет всё» — прямо про mpv.", "no", "Старый плеер Lyrebird для рекламных экранов, Lyrebird Studio с фото- и видеоприложениями на 50 млн установок."],
+      ["Bowerbird", "ба́уэрбёрд", "Bowerbird · шалашник", "Собирает коллекцию вещей и раскладывает её по цветам. Медиатека в одной птице.", "no", "BowerBird, плеер эфира и записей для Tvheadend."]
+    ]
+  },
+  latin: {
+    label: "Латынь",
+    note: "Латинские названия родов, как в определителе. Короткие, странные и научные. Это ближе всего к «звуку» вроде mpv или IINA.",
+    items: [
+      ["Tyto", "ти́то", "Tyto · род сипух", "Слышит мышь под снегом и видит в темноте. Четыре буквы, как у mpv.", "near", "Рабочий мессенджер Tyto, музыкальная библиотека TYTO Music, игра Tyto. Плееров нет."],
+      ["Upupa", "у́пупа", "Upupa · удод, Upupa epops", "Латынь повторяет его крик «уп-уп-уп». Весёлое короткое слово, которое трудно забыть.", "ok", "Сайт уроков игры на бонго, игра Upupa Bird Ninja. Плееров нет."],
+      ["Alcedo", "альсе́до", "Alcedo · род зимородков", "Ныряет за рыбой точно в цель и выныривает с ней.", "near", "Alcedo Studio, редактор RAW-фото. Студия Alcedo Apps делала музыкальный плеер, но под другим именем."],
+      ["Sepia", "се́пия", "Sepia · род каракатиц", "Из их чернил делали коричневую краску, отсюда тон старых фотографий.", "unk", "Так называют фильтры в любом фоторедакторе."],
+      ["Apus", "а́пус", "Apus · стриж, «безногий»", "Почти всю жизнь проводит в воздухе. И ещё созвездие Райской Птицы.", "unk", ""],
+      ["Noctiluca", "ноктилу́ка", "Noctiluca · «ночной свет», морская искра", "Планктон, от которого ночью светятся волны.", "no", "Noctiluca, удалённый рабочий стол с видеопотоком для macOS (2026), и производитель OLED."]
+    ]
+  },
+  light: {
+    label: "Свет и небо",
+    note: "Явления природы, как Murmuration и Tailwind в знаках anglebird. Простые английские слова из двух частей: понятны без словаря и звучат тепло.",
+    items: [
+      ["Moonbow", "му́нбоу", "Moonbow · лунная радуга", "Та же радуга, только ночью и от света Луны. Свет в темноте, и это простое английское слово.", "ok", "Кофейня, приложение для родителей, музыканты. Плееров нет."],
+      ["Gloaming", "гло́уминг", "Gloaming · шотландское «сумерки»", "Час, когда гасят свет и включают кино.", "ok", "Ирландская группа The Gloaming, VR-спектакль. Программ нет."],
+      ["Alpenglow", "а́льпенглоу", "Alpenglow · альпийское сияние", "Горы горят розовым, когда солнце уже село.", "unk", ""],
+      ["Phosphene", "фосфе́н", "Phosphene · фосфен", "Свет, который видишь с закрытыми глазами. Научное и странное слово.", "unk", ""],
+      ["Sundog", "са́ндог", "Sundog · ложное солнце, паргелий", "Два светлых пятна по бокам от настоящего солнца.", "unk", ""],
+      ["Foxfire", "фо́ксфайр", "Foxfire · свечение гнилушек", "Ночной лес, где светится старое дерево.", "no", "foxfire music player в Amazon Appstore."]
+    ]
+  }
+};
+
+const STATUS = { ok: "свободно", near: "есть тёзки", no: "занято", unk: "не проверено" };
+const ALL = Object.values(TABS).flatMap(t => Array.isArray(t.items[0]) ? t.items : []);
+const byName = Object.fromEntries(ALL.map(r => [r[0], r]));
+const state = { tab: "pick", spell: "lower", filter: "all" };
+
+let stars = new Set();
+try { stars = new Set(JSON.parse(localStorage.getItem("player-names-stars") || "[]")); } catch (e) {}
+const saveStars = () => { try { localStorage.setItem("player-names-stars", JSON.stringify([...stars])); } catch (e) {} };
+
+const spell = n => state.spell === "upper" ? n.toUpperCase() : state.spell === "title" ? n : n.toLowerCase();
+const grid = document.getElementById("grid"), note = document.getElementById("note"), nav = document.getElementById("switch");
+
+function rows() {
+  const t = TABS[state.tab];
+  const list = state.tab === "pick" ? t.items.map(n => byName[n]) : state.tab === "fav" ? ALL.filter(r => stars.has(r[0])) : t.items;
+  return state.filter === "free" ? list.filter(r => r[4] === "ok" || r[4] === "near") : list;
+}
+
+function render() {
+  note.textContent = TABS[state.tab].note;
+  const list = rows();
+  if (!list.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = state.tab === "fav" ? "Пока пусто. Нажмите ★ на карточке, и имя появится здесь." : "В этом стиле нет свободных имён.";
+    grid.replaceChildren(e);
+  } else grid.replaceChildren(...list.map(([name, say, kind, why, st, found], i) => {
+    const el = document.createElement("article");
+    el.className = "card " + st;
+    el.innerHTML = `
+      <div class="plate"><span class="rank"></span><span class="name"></span><span class="say"></span><button type="button" class="star"></button></div>
+      <div class="meta"><div class="kind"></div><p class="why"></p><div class="status"><b></b><span></span></div></div>`;
+    el.querySelector(".rank").textContent = state.tab === "pick" ? String(i + 1).padStart(2, "0") : "";
+    el.querySelector(".name").textContent = spell(name);
+    el.querySelector(".say").textContent = "«" + say + "»";
+    el.querySelector(".kind").textContent = kind;
+    el.querySelector(".why").textContent = why;
+    const s = el.querySelector(".status");
+    s.classList.add(st);
+    s.querySelector("b").textContent = STATUS[st];
+    s.querySelector("span").textContent = found;
+    const b = el.querySelector(".star");
+    b.dataset.name = name;
+    b.textContent = stars.has(name) ? "★" : "☆";
+    b.setAttribute("aria-pressed", String(stars.has(name)));
+    b.setAttribute("aria-label", "Отметить " + name);
+    return el;
+  }));
+  nav.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.key === state.tab)));
+  favButton.textContent = `★ Избранное · ${stars.size}`;
+}
+
+TABS.fav = { label: "★ Избранное", note: "Имена, отмеченные звёздочкой. Хранятся только в этом браузере.", items: [] };
+Object.entries(TABS).forEach(([key, t]) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.dataset.key = key; b.textContent = t.label;
+  b.addEventListener("click", () => {
+    state.tab = key;
+    render();
+    try { history.replaceState(null, "", "#" + key); } catch (e) {}
+  });
+  nav.appendChild(b);
+});
+const favButton = nav.querySelector('[data-key="fav"]');
+nav.addEventListener("keydown", e => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const bs = [...nav.querySelectorAll("button")], i = bs.indexOf(document.activeElement);
+  if (i < 0) return;
+  const n = bs[(i + (e.key === "ArrowRight" ? 1 : bs.length - 1)) % bs.length];
+  n.focus(); n.click();
+});
+
+document.querySelectorAll(".seg[data-field]").forEach(seg => seg.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  state[seg.dataset.field] = b.dataset.value;
+  seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  render();
+}));
+grid.addEventListener("click", e => {
+  const b = e.target.closest(".star");
+  if (!b) return;
+  const n = b.dataset.name;
+  if (stars.has(n)) stars.delete(n); else stars.add(n);
+  saveStars();
+  render();
+});
+
+const start = location.hash.slice(1);
+if (TABS[start]) state.tab = start;
+render();
+</script>
+</body>
+</html>
