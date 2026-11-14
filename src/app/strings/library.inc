@@ -5,7 +5,7 @@
 {L"Frequently Visited Folders", L"Частые папки"},
 {L"Frequently Visited Playlists", L"Частые плейлисты"},
 {L"Frequently Listened Artists", L"Частые исполнители"},
-{L"Recently Added", L"Недавно добавленные"},
+{L"Recently Added Videos", L"Недавно добавленные видео"},
 {L"Search results", L"Результаты поиска"},
 {L"Videos · {0}", L"Видео · {0}"},
 {L"Music · {0}", L"Музыка · {0}"},

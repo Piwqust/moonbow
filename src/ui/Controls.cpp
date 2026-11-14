@@ -254,6 +254,7 @@ void IconButton::Paint(Painter& p) {
 LinkButton::LinkButton(std::wstring t, TextStyle s) : text(std::move(t)), style(s) {
     interactive = true;
     focusable = true;
+    cursor = IDC_HAND;
 }
 
 Size LinkButton::MeasureContent(float, float) {
@@ -267,6 +268,9 @@ void LinkButton::Paint(Painter& p) {
     const Color c = hot ? P().textPrimary : P().textSecondary;
     const float tw = gfx::Text::Get().Measure(text, style).width;
     p.Text(text, {rect.x, rect.y, tw + 1, rect.h}, style, c, HAlign::Leading, VAlign::Center, 0);
+    // Grey text that only turns white reads as a label: the underline says it is a link. 1 DIP
+    // and faded, so it is not taken for the 2 DIP search-match mark (PaintTextMarks).
+    if (hot) p.Fill({rect.x, std::round(rect.Cy() + p.Measure(text, style).height / 2 - 1), tw, 1}, c.Fade(0.6f));
     if (!trailingIcon.empty()) p.Icon(trailingIcon, {rect.x + tw + 4, rect.Cy() - 10, 20, 20}, c);
     PaintFocusRing(p, rect, 4);
 }

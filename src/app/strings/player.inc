@@ -319,6 +319,7 @@
 {L"The file was moved or deleted.", L"Файл перемещён или удалён."},
 {L"The stream is unavailable. Check the link and your connection.", L"Поток недоступен. Проверьте ссылку и подключение."},
 {L"The file is damaged or its format isn't supported.", L"Файл повреждён или его формат не поддерживается."},
+{L"The file is empty: it was probably not fully downloaded or copied.", L"Файл пустой: скорее всего, он не до конца скачался или скопировался."},
 {L"More details", L"Подробнее"},
 {L"off", L"выкл."},
 {L"End of the list", L"Конец списка"},

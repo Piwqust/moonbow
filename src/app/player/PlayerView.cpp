@@ -264,7 +264,8 @@ bool TipIs(const std::wstring& text, const std::wstring& a, const std::wstring& 
 void ShowShortcutHint(MainWindow* w, UINT delay, bool afterToast) {
     w->StartTimer(delay, [w, afterToast] {
         if (!TheApp().PlayerShown()) return;
-        if (ToastShown(w)) return ShowShortcutHint(w, 250, true);
+        // A toast is the top popup: opened over a dialog or menu it would sit on top of it.
+        if (ToastShown(w) || w->HasInteractivePopup()) return ShowShortcutHint(w, 250, true);
         if (afterToast) return ShowShortcutHint(w, 600, false);
         ShowToast(w,
                   Fmt(Tr(L"{0} — pause · {1} — fullscreen · {2} — all shortcuts"),
@@ -518,11 +519,16 @@ public:
         App& app = TheApp();
         title_->SetText(Fmt(Tr(L"Can't open “{0}”"), {FileNameOf(app.FailedPath())}));
         const std::wstring& err = app.FailedError();
-        const bool missing = app.FailedPath().find(L"://") == std::wstring::npos && !lib::MaybeExists(app.FailedPath());
-        body_->SetText(missing ? Tr(L"The file was moved or deleted.")
-                       : app.FailedPath().find(L"://") != std::wstring::npos
-                           ? Tr(L"The stream is unavailable. Check the link and your connection.")
-                           : Tr(L"The file is damaged or its format isn't supported."));
+        const std::wstring& path = app.FailedPath();
+        const bool stream = path.find(L"://") != std::wstring::npos;
+        const bool missing = !stream && !lib::MaybeExists(path);
+        // A 0-byte file is a download or copy that never finished: "damaged or unsupported" would
+        // send the person to look for another player.
+        const bool empty = !stream && !missing && lib::IsEmptyLocalFile(path);
+        body_->SetText(missing  ? Tr(L"The file was moved or deleted.")
+                       : stream ? Tr(L"The stream is unavailable. Check the link and your connection.")
+                       : empty  ? Tr(L"The file is empty: it was probably not fully downloaded or copied.")
+                                : Tr(L"The file is damaged or its format isn't supported."));
         detail_->SetText(err.empty() ? std::wstring() : L"mpv: " + err);
         more_->text = Tr(L"More details");  // here, not when built: after a language switch too
         next_->SetText(Tr(L"Next file"));

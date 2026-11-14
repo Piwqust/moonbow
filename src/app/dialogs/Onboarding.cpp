@@ -453,7 +453,7 @@ private:
                                        std::vector<Choice>{{L"Русский", "ru", {}}, {L"English", "en", {}}}, en ? 1 : 0);
         lang->onChange = [](int i) { Cfg().SetString("general.language", i == 1 ? "en" : "ru"); };  // relabels
 
-        pg->At<Label>(Rect{248, 452, 595, 17}, Tr(L"Choose a Media Folder to get started with"), TextStyle::Body,
+        pg->At<Label>(Rect{248, 452, 595, 17}, Tr(L"Choose a folder with your media to start"), TextStyle::Body,
                       Tone::Secondary);
         folderBox_ = pg->At<TextBox>(Rect{248, 480, 471, 36}, Tr(L"Folder with your videos or music"), "folder");
         folderBox_->SetText(folder_);

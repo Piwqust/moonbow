@@ -45,6 +45,8 @@ std::wstring ShortQuery(const std::wstring& query);
 // count as present without a look: with the NAS off, GetFileAttributesW blocks the UI thread
 // for the network timeout on every page rebuild.
 bool MaybeExists(const std::wstring& path);
+// A 0-byte file on a local drive; false for network paths, without a look (as above).
+bool IsEmptyLocalFile(const std::wstring& path);
 // Albums are told apart by name and folder ("Greatest Hits" by Queen and by ABBA are two). A
 // "CD1" / "Disc 2" subfolder counts as its parent, so a multi-disc album stays one.
 std::wstring AlbumFolderKey(const library::MediaItem& m);  // PathKey of that folder

@@ -202,13 +202,26 @@ void SearchDebounce::Cancel() {
     timer_ = 0;
 }
 
-bool MaybeExists(const std::wstring& path) {
+namespace {
+// Asking about a network path can block for the network timeout while the share is down.
+bool OnNetwork(const std::wstring& path) {
     if (PathIsUNCW(path.c_str())) return true;
     if (path.size() >= 3 && path[1] == L':') {
         const wchar_t root[4] = {path[0], L':', L'\\', 0};
         if (GetDriveTypeW(root) == DRIVE_REMOTE) return true;
     }
-    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+    return false;
+}
+}  // namespace
+
+bool MaybeExists(const std::wstring& path) {
+    return OnNetwork(path) || GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+bool IsEmptyLocalFile(const std::wstring& path) {
+    WIN32_FILE_ATTRIBUTE_DATA a{};
+    return !OnNetwork(path) && GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a) &&
+           !(a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && a.nFileSizeHigh == 0 && a.nFileSizeLow == 0;
 }
 
 std::wstring AlbumFolderKey(const library::MediaItem& m) {

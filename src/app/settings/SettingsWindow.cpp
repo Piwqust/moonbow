@@ -508,10 +508,12 @@ private:
         if (basic) {
             auto* more = footer->Add<LinkButton>(Tr(L"Show all settings"));
             more->id = "show-all";
+            more->trailingIcon = "chevron_right";
             more->onClick = [this] { Post([this] { SetBasicMode(false); }); };  // the rebuild deletes this link
         }
         footer->Add<Spacer>();
-        auto* reset = footer->Add<Button>(Tr(L"Reset to defaults"), ButtonKind::Outline, "refresh");
+        // Ghost: a rare, undoable-only-by-hand action must not be the loudest thing on every page.
+        auto* reset = footer->Add<Button>(Tr(L"Reset to defaults"), ButtonKind::Ghost, "refresh");
         reset->id = "reset-category";
         const std::string id = cat.id;
         const std::wstring label = cat.Label(lang);

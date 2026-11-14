@@ -7,7 +7,7 @@
  L"Moonbow — быстрый и спокойный плеер для видео и музыки. Он открывает почти любой файл, папку или сетевой "
  L"поток, помнит, где вы остановились, и держит медиатеку в порядке."},
 {L"Interface language", L"Язык интерфейса"},
-{L"Choose a Media Folder to get started with", L"Выберите папку с медиа, чтобы начать"},
+{L"Choose a folder with your media to start", L"Выберите папку с медиа, чтобы начать"},
 {L"Folder with your videos or music", L"Папка с видео или музыкой"},
 {L"Browse", L"Обзор"},
 {L"You can add folders later from the sidebar.", L"Папки можно добавить и позже, на боковой панели."},

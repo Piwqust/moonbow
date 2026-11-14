@@ -176,7 +176,7 @@ public:
         playlists_ = AddSection(L"Frequently Visited Playlists", Route{Section::Playlists, {}}, GridStyle::SquareCards);
         artists_ = AddSection(L"Frequently Listened Artists", Route{Section::Music, L"artists"}, GridStyle::SquareCards);
         artists_->Grid()->roundImages = true;
-        added_ = AddSection(L"Recently Added", Route{Section::Videos, {}}, GridStyle::VideoCards);
+        added_ = AddSection(L"Recently Added Videos", Route{Section::Videos, {}}, GridStyle::VideoCards);
         addedMusic_ = AddSection(L"Recently Added Music", Route{Section::Music, L"songs"}, GridStyle::SquareCards);
         results_[0]->SetGridStyle(GridStyle::SquareCards, 1);
         results_[1]->SetGridStyle(GridStyle::SquareCards, 1);
@@ -568,7 +568,7 @@ private:
             added_->AddEntry(std::move(e));
             ++n;
         }
-        added_->Commit(Tr(L"Recently Added"));
+        added_->Commit(Tr(L"Recently Added Videos"));
 
         // New music, when there's no listening history to show yet.
         if (!listen_->visible) {
