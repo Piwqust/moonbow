@@ -1828,7 +1828,15 @@ public:
         if (Host* h = GetHost()) availW = std::min(availW, std::max(240.0f, ToastBandOf(h).w - 32));
         float w = gfx::Text::Get().Measure(text_, TextStyle::Body).width + 32 + (icon_.empty() ? 0 : 28);
         if (action_) w += action_->Measure(availW, 32).w + 4;
-        return {std::min({w, availW, kToastMaxW}), FitRow(40, TextStyle::Body, 20)};
+        w = std::min({w, availW, kToastMaxW});
+        // A message wider than the toast can be (a narrow window beside a panel) wraps to a second
+        // line instead of losing its end; a longer one is cut there.
+        const float row = FitRow(40, TextStyle::Body, 20);
+        const float textW = std::max(0.0f, w - 32 - (icon_.empty() ? 0.0f : 28.0f) -
+                                                (action_ ? action_->Measure(availW, 32).w + 4 : 0.0f));
+        const gfx::TextMetrics m = gfx::Text::Get().Measure(text_, TextStyle::Body, textW, gfx::kTextWrap);
+        wrapped_ = m.lines > 1;
+        return {w, wrapped_ ? std::ceil(row + m.height / m.lines) : row};  // two lines at most
     }
     void OnLayout() override {
         if (!action_) return;
@@ -1846,11 +1854,12 @@ public:
         }
         const float right = action_ ? action_->rect.x - 4 : rect.Right() - 16;
         p.Text(text_, {x, rect.y, std::max(0.0f, right - x), rect.h}, TextStyle::Body, P().textPrimary, HAlign::Leading,
-               VAlign::Center, gfx::kTextEllipsis);
+               VAlign::Center, wrapped_ ? gfx::kTextWrap | gfx::kTextEllipsis : gfx::kTextEllipsis);
     }
 
 private:
     static constexpr float kToastMaxW = 600;
+    bool wrapped_ = false;
     std::wstring text_;
     std::string icon_;
     Button* action_ = nullptr;
