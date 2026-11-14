@@ -1283,6 +1283,7 @@ void TestFileSettings() {
         all.abB = 30;
         all.subPos = 80;
         all.subScale = 1.5;
+        all.lyricsDelay = -1.5;
         CHECK(fs.Put(L"E:\\Сериал\\s01e01.mkv", all));
         CHECK(fs.size() == 2);
         CHECK(fs.Flush() && !fs.Dirty());
@@ -1301,7 +1302,8 @@ void TestFileSettings() {
         CHECK(f && f->audioFile == L"E:\\Сериал\\s01e01.rus.mka" && f->subFile == L"E:\\Сериал\\s01e01.eng.srt");
         CHECK(f && f->secondarySid == 3 && f->audioDelay == -0.25 && f->speed == 1.25 && f->aspect == "2.35:1");
         CHECK(f && f->zoomMode == "half" && f->panX == 0.1 && f->panY == -0.2 && f->rotate == 90 && f->flip == 1);
-        CHECK(f && f->deinterlace == "yes" && f->abA == 12.5 && f->abB == 30 && f->subPos == 80 && f->subScale == 1.5);
+        CHECK(f && f->deinterlace == "yes" && f->abA == 12.5 && f->abB == 30 && f->subPos == 80 && f->subScale == 1.5 &&
+              f->lyricsDelay == -1.5);
         CHECK(f && !f->aid && !f->sid && !f->zoom);
         const library::FileOptions* g = fs.Find(L"D:\\Видео\\Фильм.mkv");
         CHECK(g && *g == a);
@@ -2701,6 +2703,43 @@ void TestLyricsFill() {
     CHECK(l.SungFraction(2, 1000) == 1);  // the last line
     CHECK(l.SungFraction(-1, 10) == 0 && l.SungFraction(3, 10) == 0);
     CHECK(app::ParseLyrics(L"plain words").SungFraction(0, 5) == 0);
+    CHECK(l.SungChars(0, 10.5) == -1);  // no word stamps
+}
+
+void TestLyricsWords() {
+    // Enhanced LRC: the first word starts at the line's stamp, a stamp at the end closes the last one.
+    const app::Lyrics l = app::ParseLyrics(
+        L"[offset:+500]\n[00:10.00]One <00:11.00>two <00:12.00>three<00:13.00>\n[00:20.00]<00:20.50> Far  <00:21.00>end\n"
+        L"[00:30.00][00:40.00]Again <00:31.00>here\n[00:50.00]<00:52.00>a<00:51.00>b\n[00:59.00]plain");
+    CHECK_MSG(l.lines.size() == 6, "%zu lines", l.lines.size());
+    if (l.lines.size() != 6) return;
+    const app::LyricLine& a = l.lines[0];
+    CHECK(a.text == L"One two three");
+    CHECK_MSG(a.words.size() == 4, "%zu words", a.words.size());
+    if (a.words.size() == 4) {
+        CHECK(a.words[0].first == 0 && std::abs(a.words[0].second - 9.5) < 1e-9);
+        CHECK(a.words[1].first == 4 && std::abs(a.words[1].second - 10.5) < 1e-9);
+        CHECK(a.words[3].first == 13 && std::abs(a.words[3].second - 12.5) < 1e-9);
+    }
+    CHECK(l.SungChars(0, 9) == 0);
+    CHECK(std::abs(l.SungChars(0, 10.0) - 2) < 1e-9);  // halfway through "One "
+    CHECK(std::abs(l.SungChars(0, 10.5) - 4) < 1e-9);
+    CHECK(l.SungChars(0, 100) == 13);
+    // Blanks before the first word are trimmed and the offsets follow them.
+    const app::LyricLine& b = l.lines[1];
+    CHECK(b.text == L"Far  end" && b.words.size() == 2);
+    if (b.words.size() == 2) CHECK(b.words[0].first == 0 && b.words[1].first == 5);
+    // The last word with no closing stamp ends ~0.3 s + 0.075 s a character later, before the next line.
+    const double endB = 20.5 + 0.3 + 0.075 * 3;
+    CHECK(std::abs(l.SungChars(1, (20.5 + endB) / 2) - 6.5) < 1e-9);
+    // A repeated line: its words move with it.
+    CHECK(l.lines[2].text == L"Again here" && l.lines[3].text == L"Again here");
+    CHECK(l.lines[3].words.size() == 2 && std::abs(l.lines[3].words.back().second - 40.5) < 1e-9);
+    // A stamp going back in time is dropped, so the fill never runs backwards.
+    const app::LyricLine& d = l.lines[4];
+    CHECK(d.text == L"ab");
+    for (size_t i = 1; i < d.words.size(); ++i) CHECK(d.words[i].second >= d.words[i - 1].second);
+    CHECK(l.lines[5].words.empty() && l.SungChars(5, 60) == -1);
 }
 
 void TestLyricsLrc() {
@@ -4124,6 +4163,7 @@ const TestCase kTests[] = {
     {"thumbnails", TestThumbnails},
     {"folder_order", TestFolderOrder},
     {"lyrics_fill", TestLyricsFill},
+    {"lyrics_words", TestLyricsWords},
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
     {"shell_text", TestShellText},

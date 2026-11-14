@@ -392,6 +392,7 @@ std::wstring FileSettingsText() {
     if (o.secondarySid) line(L"Secondary Subtitles", track(L"sub", *o.secondarySid));
     if (o.audioDelay) line(L"Audio Track Delay", FormatSeconds(*o.audioDelay));
     if (o.subDelay) line(L"Subtitle Track Delay", FormatSeconds(*o.subDelay));
+    if (o.lyricsDelay) line(L"Lyrics Shift", FormatSeconds(*o.lyricsDelay, 1));
     if (o.speed) line(L"Speed", FormatNumber(*o.speed) + L"x");
     if (o.aspect) line(L"Aspect Ratio", Utf8ToWide(*o.aspect));
     if (o.zoomMode) {

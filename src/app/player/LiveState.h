@@ -111,6 +111,10 @@ public:
     // `path`: the episode playing, for privacy.excludePatterns.
     const library::ShowLanguages* ShowLanguagesFor(const std::wstring& show, const std::wstring& path);
     void RememberShowLanguages(const std::wstring& show, const std::wstring& path, const library::ShowLanguages& langs);
+    // The playing song's lyrics show this many seconds later (negative: earlier), for an .lrc that
+    // runs off the song. Remembered for the file like the subtitle delay; 0 for each new file.
+    double LyricsDelay() const { return lyricsDelay_; }
+    void SetLyricsDelay(double seconds);
 
 private:
     LiveState();
@@ -164,6 +168,7 @@ private:
     bool trackFixPending_ = false; // the stored tracks are still to be checked, sidecars picked or added
     bool tracksTrusted_ = false;   // State().tracks is this file's (switched on mid-file)
     double lastSpeed_ = 0;
+    double lyricsDelay_ = 0;
     uintptr_t captureTimer_ = 0, saveTimer_ = 0;
 };
 

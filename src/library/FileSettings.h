@@ -24,6 +24,7 @@ struct FileOptions {
     std::optional<int64_t> aid, sid, secondarySid;
     std::optional<std::wstring> audioFile, subFile;
     std::optional<double> audioDelay, subDelay;  // seconds
+    std::optional<double> lyricsDelay;           // seconds the song's lyrics show later (music view)
     // playback.perFileAll
     std::optional<double> speed;
     std::optional<std::string> aspect;    // "16:9" ... (video-aspect-override)
@@ -38,7 +39,7 @@ struct FileOptions {
 
     bool Empty() const { return *this == FileOptions{}; }
     bool HasTracks() const { return aid || sid || secondarySid || audioFile || subFile; }
-    bool HasBasic() const { return HasTracks() || audioDelay || subDelay; }  // what playback.perFile covers
+    bool HasBasic() const { return HasTracks() || audioDelay || subDelay || lyricsDelay; }  // what playback.perFile covers
     bool operator==(const FileOptions&) const = default;
 };
 

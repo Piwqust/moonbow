@@ -70,21 +70,44 @@ bool ParseStamp(std::wstring_view s, double* seconds) {
     return true;
 }
 
-// Removes enhanced-LRC word stamps: "<00:12.30>word".
-std::wstring StripWordStamps(std::wstring_view s) {
+// Takes enhanced-LRC word stamps ("<00:12.30>word") out of a line's text into `words`; the first
+// word starts at the line's own stamp `start` when no word stamp comes before it. The text is
+// trimmed and the offsets follow it.
+std::wstring TakeWordStamps(std::wstring_view s, double start, std::vector<std::pair<uint32_t, double>>* words) {
     std::wstring out;
     out.reserve(s.size());
+    words->clear();
     for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] == L'<') {
             const size_t close = s.find(L'>', i);
             double t = 0;
             if (close != std::wstring_view::npos && ParseStamp(s.substr(i + 1, close - i - 1), &t)) {
+                words->push_back({static_cast<uint32_t>(out.size()), t});
                 i = close;
                 continue;
             }
         }
         out += s[i];
     }
+    size_t lead = 0;
+    while (lead < out.size() && std::iswspace(out[lead])) ++lead;
+    out.erase(0, lead);
+    while (!out.empty() && std::iswspace(out.back())) out.pop_back();
+    const uint32_t size = static_cast<uint32_t>(out.size());
+    for (auto& w : *words) w.first = std::min(size, w.first > lead ? w.first - static_cast<uint32_t>(lead) : 0u);
+    if (words->empty() || out.empty()) {
+        words->clear();
+        return out;
+    }
+    if (words->front().first > 0) words->insert(words->begin(), {0u, start});
+    // Keep the stamps in order of both text and time: a stamp that goes back in time or two at
+    // one place (a broken file) would make the fill run backwards.
+    std::vector<std::pair<uint32_t, double>> kept;
+    for (const auto& w : *words) {
+        if (!kept.empty() && w.first == kept.back().first) kept.back().second = std::max(kept.back().second, w.second);
+        else if (kept.empty() || w.second >= kept.back().second) kept.push_back(w);
+    }
+    *words = kept.size() >= 2 || (kept.size() == 1 && kept[0].first < size) ? std::move(kept) : decltype(kept){};
     return out;
 }
 
@@ -109,12 +132,34 @@ int Lyrics::LineAt(double t) const {
 double Lyrics::SungFraction(int line, double t) const {
     if (!synced || line < 0 || line >= static_cast<int>(lines.size())) return 0;
     const LyricLine& l = lines[static_cast<size_t>(line)];
-    // shortcut: line stamps only (the parser drops enhanced-LRC word stamps), so the fill is even
-    // across the line; keep the word stamps if lyrics with them become common.
+    // Even across the line; lines with word stamps use SungChars instead.
     double end = l.time + 0.9 + 0.075 * static_cast<double>(l.text.size());  // ~13 characters a second
     if (static_cast<size_t>(line) + 1 < lines.size()) end = std::min(end, lines[static_cast<size_t>(line) + 1].time);
     if (end <= l.time) return 1;
     return std::clamp((t - l.time) / (end - l.time), 0.0, 1.0);
+}
+
+double Lyrics::SungChars(int line, double t) const {
+    if (!synced || line < 0 || line >= static_cast<int>(lines.size())) return -1;
+    const LyricLine& l = lines[static_cast<size_t>(line)];
+    if (l.words.empty()) return -1;
+    const auto& w = l.words;
+    if (t <= w.front().second) return w.front().first;
+    for (size_t i = 0; i + 1 < w.size(); ++i) {
+        if (t >= w[i + 1].second) continue;
+        const double span = w[i + 1].second - w[i].second;
+        const double f = span > 0 ? (t - w[i].second) / span : 1;
+        return w[i].first + (w[i + 1].first - w[i].first) * f;
+    }
+    // The last word, when no stamp says where it ends: about as long as it takes to sing, never
+    // past the next line.
+    const auto& last = w.back();
+    const double chars = static_cast<double>(l.text.size() - last.first);
+    if (chars <= 0) return static_cast<double>(l.text.size());
+    double end = last.second + 0.3 + 0.075 * chars;
+    if (static_cast<size_t>(line) + 1 < lines.size()) end = std::min(end, lines[static_cast<size_t>(line) + 1].time);
+    if (end <= last.second) return static_cast<double>(l.text.size());
+    return last.first + chars * std::clamp((t - last.second) / (end - last.second), 0.0, 1.0);
 }
 
 Lyrics ParseLyrics(std::wstring_view text) {
@@ -154,8 +199,14 @@ Lyrics ParseLyrics(std::wstring_view text) {
             rest = Trim(rest.substr(close + 1));
         }
         if (!stamps.empty()) {
-            const std::wstring words(Trim(StripWordStamps(rest)));
-            for (double t : stamps) timed.push_back({t, words});
+            std::vector<std::pair<uint32_t, double>> stamped;
+            const std::wstring words = TakeWordStamps(rest, stamps.front(), &stamped);
+            for (double t : stamps) {
+                // A line sung again ("[00:12.00][01:30.00]"): its words move with it.
+                LyricLine l{t, words, stamped};
+                for (auto& w : l.words) w.second += t - stamps.front();
+                timed.push_back(std::move(l));
+            }
         } else if (!idTag || !rest.empty()) {
             plain.emplace_back(Trim(line));
         }
@@ -165,7 +216,10 @@ Lyrics ParseLyrics(std::wstring_view text) {
     if (!timed.empty()) {
         out.synced = true;
         std::stable_sort(timed.begin(), timed.end(), [](const LyricLine& a, const LyricLine& b) { return a.time < b.time; });
-        for (LyricLine& l : timed) l.time = std::max(0.0, l.time - offset);
+        for (LyricLine& l : timed) {
+            l.time = std::max(0.0, l.time - offset);
+            for (auto& w : l.words) w.second = std::max(0.0, w.second - offset);
+        }
         // Blank stamps before the first words and repeated blanks only mark silence.
         for (LyricLine& l : timed) {
             if (l.text.empty() && (out.lines.empty() || out.lines.back().text.empty())) continue;

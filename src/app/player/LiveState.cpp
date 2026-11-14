@@ -831,6 +831,7 @@ library::FileOptions LiveState::FileSettingsStored() const {
     o.subFile = fileOpts_.subFile;
     o.audioDelay = fileOpts_.audioDelay;
     o.subDelay = fileOpts_.subDelay;
+    o.lyricsDelay = fileOpts_.lyricsDelay;
     return o;
 }
 
@@ -909,6 +910,7 @@ void LiveState::BeginFile(bool loaded) {
     trackFixPending_ = loaded && on && fileOpts_.HasTracks();
     lastSpeed_ = s.speed;
     if (loaded) {
+        lyricsDelay_ = on && fileOpts_.lyricsDelay ? *fileOpts_.lyricsDelay : 0;
         // The transforms are per file (reset-on-next-file in Player.cpp; flip is our filter, which
         // mpv keeps): back to the defaults, or to what this file had, which mpv got with loadfile.
         zoomMode = all && fileOpts_.zoomMode ? *fileOpts_.zoomMode : "fit";
@@ -966,6 +968,21 @@ void LiveState::FixTracks() {
     }
     if (o.secondarySid && *o.secondarySid > 0 && !byId(L"sub", *o.secondarySid))
         p.ApplySetting("secondary-sid", "no");
+}
+
+void LiveState::SetLyricsDelay(double seconds) {
+    lyricsDelay_ = std::isfinite(seconds) ? std::round(seconds * 1000) / 1000 : 0;
+    if (fileOpen_) {
+        library::FileOptions o = fileOpts_;
+        if (std::abs(lyricsDelay_) < 0.0005) o.lyricsDelay.reset();
+        else o.lyricsDelay = lyricsDelay_;
+        if (o != fileOpts_) {
+            fileOpts_ = o;
+            Store().Put(filePath_, o);
+            ScheduleSave();
+        }
+    }
+    Repaint();
 }
 
 void LiveState::ScheduleCapture() {
@@ -1099,6 +1116,7 @@ void LiveState::ResetFileSettings() {
     if (old.secondarySid) p.SetProperty("secondary-sid", std::string("no"));
     if (old.audioDelay) p.SetProperty("audio-delay", 0.0);
     if (old.subDelay) p.SetProperty("sub-delay", 0.0);
+    if (old.lyricsDelay) lyricsDelay_ = 0;
     if (old.speed) p.SetSpeed(DefaultSpeed());
     if (old.aspect) SetAspect("auto");
     if (old.zoomMode || old.zoom) SetZoomMode("fit");

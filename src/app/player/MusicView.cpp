@@ -12,6 +12,7 @@
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
+#include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
 #include "app/player/Lyrics.h"
 #include "app/player/NowPlaying.h"
@@ -516,6 +517,28 @@ public:
         if (e.button == MouseButton::Right && box_.w > 0 && box_.Contains(e.x, e.y) && GetHost()) {
             std::vector<MenuItem> items = LyricsStyleItems();
             items.push_back(MenuItem::Separator());
+            if (lyrics_.synced) {
+                // For an .lrc that runs ahead of the song or behind it; remembered for the file.
+                const double d = Live().LyricsDelay();
+                MenuItem earlier;
+                earlier.label = Tr(L"Show lyrics 0.5 s earlier");
+                earlier.icon = "arrow_up";
+                earlier.action = [this, d] { ShiftLyrics(d - 0.5); };
+                items.push_back(std::move(earlier));
+                MenuItem later;
+                later.label = Tr(L"Show lyrics 0.5 s later");
+                later.icon = "arrow_down";
+                later.action = [this, d] { ShiftLyrics(d + 0.5); };
+                items.push_back(std::move(later));
+                if (std::abs(d) >= 0.0005) {
+                    MenuItem reset;
+                    reset.label = Fmt(Tr(L"Reset lyrics timing ({0})"), {ShiftText(d)});
+                    reset.icon = "refresh";
+                    reset.action = [this] { ShiftLyrics(0); };
+                    items.push_back(std::move(reset));
+                }
+                items.push_back(MenuItem::Separator());
+            }
             MenuItem more;
             more.label = Tr(L"Lyrics settings…");
             more.icon = "settings";
@@ -538,7 +561,7 @@ public:
         if (e.button != MouseButton::Left) return false;
         const int hit = LineAt(e.x, e.y);
         if (hit < 0) return false;
-        TheApp().player().SeekAbsolute(lyrics_.lines[static_cast<size_t>(hit)].time, true);
+        TheApp().player().SeekAbsolute(lyrics_.lines[static_cast<size_t>(hit)].time + Live().LyricsDelay(), true);
         ClearHover();  // the column glides to the line: no second highlight next to the sung one
         return true;
     }
@@ -950,7 +973,7 @@ private:
         hovered_ = -1;
         cursor = IDC_ARROW;
         staticScroll_ = 0;
-        current_ = lyrics_.LineAt(TheApp().player().State().position + kLead);
+        current_ = lyrics_.LineAt(LyricsTime(TheApp().player().State().position) + kLead);
         scroll_.Set(static_cast<float>(current_));
         Invalidate();
     }
@@ -960,7 +983,7 @@ private:
         TakeLoadedLyrics();
         const double pos = TheApp().player().State().position;
         if (!lyrics_.synced) return;
-        const int line = lyrics_.LineAt(pos + kLead);
+        const int line = lyrics_.LineAt(LyricsTime(pos) + kLead);
         if (line == current_) return;
         // Far jumps (a seek) move quicker than the next line coming up.
         const int dist = std::abs(line - current_);
@@ -969,6 +992,23 @@ private:
         ClearHover();
         scroll_.To(static_cast<float>(line), dist > 3 ? 260.0f : 340.0f, Ease::InOut);
         Invalidate();
+    }
+
+    // Where the song is in the lyrics' own time: the file's lyrics shift taken off.
+    static double LyricsTime(double position) { return position - Live().LyricsDelay(); }
+
+    static std::wstring ShiftText(double d) {
+        return (d > 0 ? L"+" : d < 0 ? L"−" : L"") + panel::FormatSeconds(std::abs(d), 1);
+    }
+
+    void ShiftLyrics(double d) {
+        d = std::clamp(d, -30.0, 30.0);
+        Live().SetLyricsDelay(d);
+        FollowTime();
+        Invalidate();
+        ShowToast(TheApp().main(),
+                  std::abs(d) < 0.0005 ? Tr(L"Lyrics timing reset") : Fmt(Tr(L"Lyrics shifted {0}"), {ShiftText(d)}),
+                  "info", 2500);
     }
 
     // The playback position for a smooth fill: mpv reports it in steps, so a clock of our own
@@ -1089,9 +1129,11 @@ private:
             // Reduced motion: the sung line lights up whole, as the column jumps line by line
             // (AnimFloat::To does not glide then).
             if (synced && k.fill && static_cast<int>(i) == current_ && !AnimFloat::ReducedMotion()) {
-                const double sung = lyrics_.SungFraction(current_, SmoothTime());
-                filling = sung < 1;
-                PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), white.Fade(k.ahead), a, shown);
+                const double t = LyricsTime(SmoothTime());
+                const double chars = lyrics_.SungChars(current_, t);
+                const double sung = chars >= 0 ? 0 : lyrics_.SungFraction(current_, t);
+                filling = chars >= 0 ? chars < static_cast<double>(lyrics_.lines[i].text.size()) : sung < 1;
+                PaintFill(ctx, layout, {r.x, r.y}, static_cast<float>(sung), chars, white.Fade(k.ahead), a, shown);
             } else if (ID2D1SolidColorBrush* brush = LineBrush(ctx, white.Fade(a), shown)) {
                 ctx->DrawTextLayout({r.x, r.y}, layout, brush);
             }
@@ -1103,12 +1145,13 @@ private:
     }
 
     // A line lit (white at `lit`) from the left up to `sung` of its words, with a soft edge,
-    // over its unlit color; wrapped parts fill one after another.
-    void PaintFill(ID2D1DeviceContext5* ctx, IDWriteTextLayout* layout, D2D1_POINT_2F o, float sung, Color unlit,
-                   float lit, float opacity) {
+    // over its unlit color; wrapped parts fill one after another. With word stamps `chars` (>= 0)
+    // says where the fill is instead: up to that character, lit through the word being sung.
+    void PaintFill(ID2D1DeviceContext5* ctx, IDWriteTextLayout* layout, D2D1_POINT_2F o, float sung, double chars,
+                   Color unlit, float lit, float opacity) {
         if (ID2D1SolidColorBrush* brush = LineBrush(ctx, unlit, opacity)) ctx->DrawTextLayout(o, layout, brush);
         ID2D1LinearGradientBrush* edge = FillBrush(ctx);
-        if (!edge || sung <= 0) return;
+        if (!edge || (chars < 0 && sung <= 0) || chars == 0) return;
         edge->SetOpacity(lit * opacity);
         UINT32 n = 0;
         layout->GetLineMetrics(nullptr, 0, &n);
@@ -1117,6 +1160,7 @@ private:
         // Where each wrapped part's words start and end.
         struct Part {
             float x, w, y, h;
+            UINT32 pos, len;
         };
         std::vector<Part> parts;
         float total = 0, y = 0;
@@ -1134,7 +1178,7 @@ private:
                     x1 = std::max(x1, hm[j].left + hm[j].width);
                 }
             }
-            parts.push_back({x0, x1 - x0, y, l.height});
+            parts.push_back({x0, x1 - x0, y, l.height, pos, l.length});
             total += x1 - x0;
             y += l.height;
             pos += l.length;
@@ -1142,6 +1186,28 @@ private:
         // The soft edge runs past each part's end, so a finished part is lit to its last letter.
         const float soft = look_.size * 0.8f;
         float left = sung * (total + soft * static_cast<float>(parts.size()));
+        if (chars >= 0) {
+            // The parts before the one being sung are lit whole; in it, up to the character's x
+            // (between two letters for a fraction) and half the soft edge past it.
+            left = 0;
+            const UINT32 c = static_cast<UINT32>(chars);
+            for (const Part& part : parts) {
+                if (c >= part.pos + part.len && &part != &parts.back()) {
+                    left += part.w + soft;
+                    continue;
+                }
+                auto xAt = [layout](UINT32 i) {
+                    FLOAT x = 0, y = 0;
+                    DWRITE_HIT_TEST_METRICS m{};
+                    layout->HitTestTextPosition(i, FALSE, &x, &y, &m);
+                    return std::make_pair(x, m.width);
+                };
+                const auto [x, w] = xAt(std::min(c, part.pos + part.len));
+                const float frac = static_cast<float>(chars - static_cast<double>(c));
+                left += std::clamp(x + w * frac - part.x, 0.0f, part.w) + soft * 0.5f;
+                break;
+            }
+        }
         const float lineW = layout->GetMaxWidth();
         for (const Part& part : parts) {
             const float done = std::min(left, part.w + soft);

@@ -1,6 +1,8 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // Song lyrics for the music view: an LRC file next to the track or an embedded LYRICS /
@@ -10,6 +12,9 @@ namespace app {
 struct LyricLine {
     double time = -1;  // seconds; -1 in unsynced lyrics
     std::wstring text;
+    // Enhanced LRC ("<00:12.30>word"): when each word starts, by its offset in `text`, in order; an
+    // entry at text.size() is when the last word ends. Empty when the line has only its own stamp.
+    std::vector<std::pair<uint32_t, double>> words;
 };
 
 struct Lyrics {
@@ -22,11 +27,15 @@ struct Lyrics {
     // How much of `line` is sung at `t`, 0..1, for the karaoke fill: it runs evenly from the line's
     // stamp to the next one, at most about as long as the words take to sing. 0 when unsynced.
     double SungFraction(int line, double t) const;
+    // For a line with word stamps: how far the fill has come at `t`, in characters of its text
+    // (fractional inside a word, so the fill runs through it); -1 for lines without word stamps.
+    double SungChars(int line, double t) const;
 };
 
 // LRC: "[mm:ss.xx]text" with any number of stamps per line ("[00:12.00][01:30.5]chorus"),
 // "[offset:+250]" in milliseconds, ID tags ("[ar:...]") skipped, enhanced-LRC word stamps
-// ("<00:12.30>") removed. Text without a single time stamp becomes unsynced lyrics.
+// ("<00:12.30>") taken out of the text into LyricLine::words. Text without a single time stamp
+// becomes unsynced lyrics.
 Lyrics ParseLyrics(std::wstring_view text);
 
 // The bytes of a .lrc file as text: UTF-8 (with or without BOM), UTF-16 with a BOM, otherwise

@@ -49,6 +49,7 @@ FileOptions ReadOptions(const json::Value& v) {
     ReadWStr(v, "subFile", &o.subFile);
     ReadNum(v, "audioDelay", &o.audioDelay);
     ReadNum(v, "subDelay", &o.subDelay);
+    ReadNum(v, "lyricsDelay", &o.lyricsDelay);
     ReadNum(v, "speed", &o.speed);
     ReadStr(v, "aspect", &o.aspect);
     ReadStr(v, "zoomMode", &o.zoomMode);
@@ -84,6 +85,7 @@ void WriteOptions(json::Value& v, const FileOptions& o) {
     if (o.subFile) v.Set("subFile", json::ToUtf8(*o.subFile));
     WriteNum(v, "audioDelay", o.audioDelay);
     WriteNum(v, "subDelay", o.subDelay);
+    WriteNum(v, "lyricsDelay", o.lyricsDelay);
     WriteNum(v, "speed", o.speed);
     if (o.aspect) v.Set("aspect", *o.aspect);
     if (o.zoomMode) v.Set("zoomMode", *o.zoomMode);
