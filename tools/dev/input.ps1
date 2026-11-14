@@ -32,6 +32,7 @@ public static class MoonbowIn {
   [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="PostMessageW")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", EntryPoint="GetWindowLongW")] public static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   public static IntPtr Find(uint pid, string title) {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, l) => {
@@ -47,6 +48,9 @@ public static class MoonbowIn {
   }
 }
 "@
+# A DPI-unaware sender gets its posted mouse coordinates scaled by Windows (they turn into DIPs on a
+# 125 % screen): aware, the numbers stay the client pixels this script promises, in every caller.
+[MoonbowIn]::SetProcessDPIAware() | Out-Null
 $h = [MoonbowIn]::Find([uint32]$ProcessId, $Title)
 if ($h -eq [IntPtr]::Zero) { throw "no visible MoonbowHost window for process $ProcessId" }
 # Never the owner's Moonbow: only --automation instances, whose windows are WS_EX_NOACTIVATE (ui/Host.cpp).

@@ -120,6 +120,7 @@ public:
     void OnMouseEnter() override;
     void OnMouseLeave() override;
     void Describe(ui::A11y& a) override;
+    void DebugInfo(std::string& out) const override;  // " overlay" while its buttons are drawn
 
 private:
     ui::Rect VideoBox() const;  // video or cover art

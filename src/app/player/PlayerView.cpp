@@ -1124,6 +1124,10 @@ float MiniPlayer::OverlayShown() const {
     return onButton ? 1.0f : hover_.Get();
 }
 
+void MiniPlayer::DebugInfo(std::string& out) const {
+    if (!compact_ && OverlayShown() > 0.01f) out += " overlay";
+}
+
 void MiniPlayer::OnMouseEnter() {
     hover_.To(1, 120);
     InvalidateLayout();

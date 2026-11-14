@@ -130,11 +130,13 @@ try {
     $close = RectOf (Find $lines 'MiniOverlayButton #close')
     & "$tools\input.ps1" -ProcessId $id -Move (Px ($m.x + $m.w / 2) ($m.y + $m.h / 2))
     & "$tools\input.ps1" -ProcessId $id -Move (Px ($close.x + $close.w / 2) ($close.y + $close.h / 2))
-    & "$tools\input.ps1" -ProcessId $id -Move (Px ($m.x - 60) ($close.y + $close.h / 2))
-    $lines = Dump $id
-    $i = [Array]::IndexOf($lines, (Find $lines '^\s+app::MiniPlayer \['))
+    # The overlay stays in the tree (Tab, UIA) and is only not drawn: the mini player says " overlay".
     $p = @()
-    if ($lines[$i + 1] -notmatch ' hidden') { $p += "overlay still shown: $($lines[$i + 1].Trim())" }
+    if ((Find (Dump $id) '^\s+app::MiniPlayer \[') -notmatch ' overlay( |$)') { $p += "no overlay over its own button" }
+    & "$tools\input.ps1" -ProcessId $id -Move (Px ($m.x - 60) ($close.y + $close.h / 2))
+    & "$tools\command.ps1" -ProcessId $id -Command "wait-idle" -Quiet  # the overlay fades out (160 ms)
+    $mini = Find (Dump $id) '^\s+app::MiniPlayer \['
+    if ($mini -match ' overlay( |$)') { $p += "overlay still shown: $($mini.Trim())" }
     Report "mini player overlay after leaving through a button" $p
   }
 } finally { Stop-Process -Id $id -ErrorAction SilentlyContinue }
