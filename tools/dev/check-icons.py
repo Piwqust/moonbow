@@ -8,9 +8,15 @@ import re
 import sys
 
 root = pathlib.Path(__file__).resolve().parents[2]
-known = set(re.findall(r'\{"([a-z0-9_\-]+)",', (root / "src/gfx/IconData.inc").read_text(encoding="utf-8")))
+order = re.findall(r'\{"([a-z0-9_\-]+)",', (root / "src/gfx/IconData.inc").read_text(encoding="utf-8"))
+known = set(order)
 if not known:
     sys.exit("no icons found in IconData.inc")
+# Icons.cpp binary-searches: one name out of byte order hides its neighbours too (a hand edit at
+# the rename made "maximize" and "minimize" draw nothing). Regenerate with tools/gen-icons.ps1.
+unsorted = [f"{a} > {b}" for a, b in zip(order, order[1:]) if a.encode() > b.encode()]
+if unsorted:
+    sys.exit("IconData.inc is out of order: " + ", ".join(unsorted))
 
 NAME = r'"([a-z0-9_\-]+)"'
 patterns = [
