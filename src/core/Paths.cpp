@@ -49,7 +49,15 @@ bool CopyOldDataDir(const std::wstring& from, const std::wstring& to) {
     const std::wstring tmp = to + L".copy";
     fs::remove_all(tmp, ec);
     fs::copy(from, tmp, fs::copy_options::recursive, ec);
-    if (!ec && MoveFileW(tmp.c_str(), to.c_str())) return true;
+    // Files just written are often held open for a moment (Defender, the indexer), and renaming
+    // their folder fails with access denied. A failed move here is never retried (the app then
+    // makes an empty data folder), so wait for them: at most ~1 s, only when it fails.
+    for (int i = 0; !ec && i < 20; ++i) {
+        if (MoveFileW(tmp.c_str(), to.c_str())) return true;
+        const DWORD err = GetLastError();
+        if (err != ERROR_ACCESS_DENIED && err != ERROR_SHARING_VIOLATION) break;
+        Sleep(50);
+    }
     fs::remove_all(tmp, ec);
     return false;
 }
