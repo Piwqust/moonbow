@@ -46,12 +46,13 @@ public:
     }
     void Paint(Painter& p) override {
         const bool sel = Selected();
+        const float h = HoverFade(hover_, IsHot() && !sel);
         if (sel)
             p.Fill(rect, P().bgSelected, 4);
-        else if (IsHot())
-            p.Fill(rect, P().hover, 4);
+        else if (h > 0)
+            p.Fill(rect, P().hover.Fade(h), 4);
         PaintFocusRing(p, rect, 4);
-        const Color fg = sel ? P().textPrimary : IsHot() ? P().textPrimary : P().textSecondary;
+        const Color fg = sel ? P().textPrimary : Color::Mix(P().textSecondary, P().textPrimary, h);
         const std::string icon = std::string(SectionIcon(section_)) + (sel ? "_active" : "");
         const std::string draw = gfx::Icons::Exists(icon) ? icon : SectionIcon(section_);
         const float ix = owner_->Collapsed() ? rect.Cx() - 12 : rect.x + 12;
@@ -63,6 +64,7 @@ public:
 private:
     Section section_;
     NavSidebar* owner_;
+    AnimFloat hover_;
 };
 
 class AddItem : public Widget {
@@ -87,9 +89,10 @@ public:
         };
     }
     void Paint(Painter& p) override {
-        if (IsHot()) p.Fill(rect, P().hover, 4);
+        const float h = HoverFade(hover_, IsHot());
+        if (h > 0) p.Fill(rect, P().hover.Fade(h), 4);
         PaintFocusRing(p, rect, 4);
-        const Color fg = IsHot() ? P().textPrimary : P().textSecondary;
+        const Color fg = Color::Mix(P().textSecondary, P().textPrimary, h);
         const float ix = owner_->Collapsed() ? rect.Cx() - 12 : rect.x + 12;
         p.Icon("add", {ix, rect.Cy() - 12, 24, 24}, fg);
         if (!owner_->Collapsed())
@@ -98,6 +101,7 @@ public:
 
 private:
     NavSidebar* owner_;
+    AnimFloat hover_;
 };
 
 // Window button in the title bar (46×40 as in Windows 11, close turns red on hover). Dimmed while

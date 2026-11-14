@@ -111,20 +111,22 @@ public:
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
+        const float h = HoverFade(hover_, IsHot() && !selected_);
         if (selected_)
             p.Fill(rect, c.bgSelected, 2);
         else if (IsPressed())
             p.Fill(rect, c.press, 2);
-        else if (IsHot())
-            p.Fill(rect, c.hover, 2);
+        else if (h > 0)
+            p.Fill(rect, c.hover.Fade(h), 2);
         PaintFocusRing(p, rect, 2);
         const Rect icon{rect.x + 8, rect.Cy() - 12, 24, 24};
+        const Color fg = Color::Mix(c.textSecondary, c.textPrimary, h);
         if (selected_)
             p.Icon(cat_.icon + "_active", icon, c.accent, c.accent);
         else
-            p.Icon(cat_.icon, icon, IsHot() ? c.textPrimary : c.textSecondary);
+            p.Icon(cat_.icon, icon, fg);
         p.Text(cat_.Label(Lang()), {rect.x + 44, rect.y, rect.w - 52, rect.h}, TextStyle::Body,
-               selected_ ? c.textPrimary : IsHot() ? c.textPrimary : c.textSecondary);
+               selected_ ? c.textPrimary : fg);
     }
     void OnClick() override;
     bool OnKeyDown(const KeyEvent& e) override;
@@ -133,6 +135,7 @@ private:
     const Category& cat_;
     SettingsWindow* window_;
     bool selected_ = false;
+    AnimFloat hover_;
 };
 
 class AdvancedExpander : public Widget {

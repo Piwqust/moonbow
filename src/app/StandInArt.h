@@ -19,4 +19,8 @@ struct StandInTones {
 uint32_t ArtSeed(const std::wstring& s);
 void PaintStandInArt(ui::Painter& p, const ui::Rect& r, float radius, uint32_t seed, const StandInTones& tones);
 
+// An artist without a picture: a circle with the first letters of two words ("Daft Punk" → "DP").
+std::wstring Initials(const std::wstring& name);
+void PaintInitials(ui::Painter& p, const ui::Rect& r, const std::wstring& initials, ui::Color ground, ui::Color ink);
+
 }  // namespace app

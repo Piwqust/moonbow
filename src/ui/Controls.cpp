@@ -79,15 +79,13 @@ Color DisabledFill() {
     return Color::Mix(P().bgBase, P().bgCard, 0.5f);
 }
 
-// Hover fades in fast and out a little slower, as Windows 11's own controls do; a press shows at
-// once. Called from Paint: the host keeps drawing frames while the fade runs.
+}  // namespace
+
 float HoverFade(AnimFloat& fade, bool hot) {
     const float to = hot ? 1.0f : 0.0f;
     if (fade.Target() != to) fade.To(to, hot ? 90.0f : 160.0f);
     return fade.Get();
 }
-
-}  // namespace
 
 Color ToneColor(Tone t) {
     switch (t) {

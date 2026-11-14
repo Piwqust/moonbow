@@ -16,6 +16,10 @@ namespace ui {
 enum class Tone : uint8_t { Primary, Secondary, Tertiary, Disabled, Accent };
 Color ToneColor(Tone t);
 
+// 0..1 for a widget's hover, eased toward `hot`: in fast and out a little slower, as Windows 11's
+// own controls do (a press shows at once). Called from Paint; the host draws frames while it runs.
+float HoverFade(AnimFloat& fade, bool hot);
+
 // --- static content --------------------------------------------------------------------
 
 // A search match underlined in the text just painted by p.Text(text, box, style, ..., h): the menu's

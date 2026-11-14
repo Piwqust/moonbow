@@ -112,11 +112,14 @@ public:
         } else if (!round_) {
             // The album's first track has no artwork: the same stand-in record as its card.
             PaintStandInArt(p, rect, radius, ArtSeed(image_), {c.bgCard, c.textPrimary, c.textTertiary});
+        } else if (!initials.empty()) {
+            PaintInitials(p, rect, initials, c.bgCard, c.textSecondary);
         } else {
             p.Fill(rect, c.bgCard, radius);
             p.Icon("artist", rect.Center(64, 64), c.textTertiary.Fade(appear), c.accentMid.Fade(appear));
         }
     }
+    std::wstring initials;  // an artist page without a picture shows these (empty: the glyph)
 
 private:
     float size_;
@@ -173,6 +176,7 @@ public:
             toolbar_->gap = 24;
             toolbar_->align = Align::End;
             cover_ = toolbar_->Add<CoverArt>(168.0f, mode_ == MusicMode::Artist);
+            if (mode_ == MusicMode::Artist) cover_->initials = Initials(arg_);
             auto* info = toolbar_->Add<Widget>();
             info->dir = Dir::Column;
             info->gap = 6;

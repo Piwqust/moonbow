@@ -532,6 +532,14 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
         p.PopOpacity();
         return;
     }
+    // An artist without a picture: the first letters of the name in the circle (not "Unknown artist").
+    if (e.kind == EntryKind::Artist && roundImages && !e.path.empty() && t.w >= 96)
+        if (const std::wstring ini = Initials(e.title); !ini.empty()) {
+            p.PushOpacity(opacity * appear);
+            PaintInitials(p, t, ini, c.bgCard, c.textSecondary);
+            p.PopOpacity();
+            return;
+        }
     std::string icon = e.icon;
     if (icon.empty()) icon = e.audio ? "music" : "video";
     const Color ic = iconOnly || e.kind == EntryKind::Action ? c.textSecondary : c.textTertiary;
