@@ -36,7 +36,7 @@
   transition: translate 0.5s var(--ease-out);
 }
 html.frame-away .site-header { translate: 0 -110%; }
-.brand { display: inline-flex; align-items: center; gap: 0.55rem; font-weight: 500; letter-spacing: -0.02em; font-size: 1.0625rem; padding-block: 0.4rem; }
+.brand { display: inline-flex; align-items: center; gap: 0.55rem; font-weight: 500; letter-spacing: -0.04em; font-size: 1.0625rem; padding-block: 0.4rem; }
 .brand svg { width: 1.6rem; height: 1.6rem; transition: rotate 0.5s var(--ease-out); }
 @media (hover: hover) { .brand:hover svg { rotate: -8deg; } }
 .brand:focus-visible svg { rotate: -8deg; }

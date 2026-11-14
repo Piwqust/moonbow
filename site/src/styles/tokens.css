@@ -1,16 +1,17 @@
-/* Tokens: values from the player's own design/DESIGN.md. Monochrome on purpose: colour on this
-   site exists only inside screenshots, as in Moonbow it exists only in the film. */
+/* Tokens: the Moonbow brand (design/brand-exploration-2026-10-25/moonbow.html): night with a trace of
+   blue, moonlight text. Monochrome on purpose: colour on this site exists only inside screenshots, as in
+   Moonbow it exists only in the film. */
 :root {
-  --c-bg: #090909;        /* bg.deep */
-  --c-raised: #121212;
-  --c-fg: #eaeaea;        /* text.primary */
-  --c-muted: #8b8b8b;     /* text.tertiary, AA on bg */
-  --c-dim: #646464;       /* only for non-text marks */
-  --c-line: #262626;      /* line */
-  --c-line-strong: #404040;
-  --c-accent: #ededed;    /* accent «Белый» */
-  --c-on-accent: #0e0e0e;
-  --c-curtain: #000;
+  --c-bg: #0B0C10;        /* Ночь: window background */
+  --c-raised: #15171D;    /* Сумерки: panels, menus */
+  --c-fg: #EEF1F6;        /* Лунный свет: text, the mark */
+  --c-muted: #8E939C;     /* Туман: secondary text, AA on bg */
+  --c-dim: #5A5E67;       /* only for non-text marks */
+  --c-line: #23262E;      /* Линия */
+  --c-line-strong: #363A44;
+  --c-accent: #FFFFFF;    /* only Play-like buttons, as in the player */
+  --c-on-accent: #0B0C10;
+  --c-curtain: #0B0C10;
 
   --f-display: 'Onest', system-ui, sans-serif;
   --f-body: 'Onest', system-ui, sans-serif;

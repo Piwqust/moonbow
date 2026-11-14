@@ -24,11 +24,11 @@ import Base from '../layouts/Base.astro';
   .nf { min-height: 100svh; display: grid; align-content: center; gap: calc(var(--u) * 4); padding-top: var(--header-h); padding-bottom: calc(var(--u) * 6); }
   .nf__time { font-weight: 100; white-space: nowrap; color: var(--c-dim); font-size: min(13.5rem, calc((100vw - 2 * var(--gutter)) / 6.75)); line-height: 0.9; margin-left: -0.04em; }
   .nf__card {
-    max-width: 34rem; padding: clamp(1.25rem, 3vw, 2rem); background: #191919; border: 1px solid var(--c-line); border-radius: var(--r-window);
+    max-width: 34rem; padding: clamp(1.25rem, 3vw, 2rem); background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-window);
     display: grid; gap: 1rem; justify-items: start;
   }
   /* Moonbow's "broken file" badge: the only place where the player uses red as a sign. */
-  .nf__badge { display: inline-flex; align-items: center; gap: 0.5rem; font-size: var(--t-xs); padding: 0.25rem 0.7rem 0.25rem 0.3rem; border-radius: var(--r-pill); background: #242424; }
+  .nf__badge { display: inline-flex; align-items: center; gap: 0.5rem; font-size: var(--t-xs); padding: 0.25rem 0.7rem 0.25rem 0.3rem; border-radius: var(--r-pill); background: var(--c-line); }
   .nf__badge span { display: grid; place-items: center; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: #c42b1c; color: #fff; font-weight: 600; font-size: 0.75rem; }
   .nf__title { font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; }
   .nf__row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.75rem; margin-top: 0.5rem; }
