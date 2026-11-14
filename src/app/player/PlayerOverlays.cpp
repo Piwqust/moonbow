@@ -10,6 +10,7 @@
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
 #include "gfx/Text.h"
+#include "library/MediaTypes.h"
 
 #include <cmath>
 #include <cstring>
@@ -391,13 +392,17 @@ NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
     row->gap = 8;
     auto* play = row->Add<Button>(Tr(L"Play now"), ButtonKind::Primary, "play");
     play->id = "play-next";
+    play_ = play;
     play->onClick = [this] { PlayNext(); };
     auto* cancel = row->Add<Button>(Tr(L"Cancel"), ButtonKind::Secondary);
     cancel->id = "cancel-next";
+    cancel_ = cancel;
     cancel->onClick = [this] {
-        // Cancel = stay on this episode: no automatic switch at its end.
         dismissed_ = true;
-        if (fromQueue_ || TheApp().config().GetString("playback.whenFinished") == "next") Live().SetStopAfter(true);
+        // Cancel = stay on this episode: no automatic switch at its end. A song's card only hides:
+        // the music goes on.
+        if (!song_ && (fromQueue_ || TheApp().config().GetString("playback.whenFinished") == "next"))
+            Live().SetStopAfter(true);
         SetWanted(false);
     };
     playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) { OnPlayer(m); });
@@ -406,8 +411,8 @@ NextEpisodeCard::NextEpisodeCard(MainWindow* window) : window_(window) {
         Update();
     });
     langConn_ = Connect(TheApp().languageChanged, [this, play, cancel] {
-        play->SetText(Tr(L"Play now"));
-        cancel->SetText(Tr(L"Cancel"));
+        play->SetText(Tr(song_ ? L"Listen now" : L"Play now"));
+        cancel->SetText(Tr(song_ ? L"Hide" : L"Cancel"));
         shownSecs_ = -1;  // the title too
         Update();
     });
@@ -458,10 +463,19 @@ void NextEpisodeCard::OnNewFile() {
 
 void NextEpisodeCard::Resolve() {
     nextPath_.clear();
-    fromQueue_ = false;
-    if (curPath_.empty() || lib::IsUrl(curPath_) || !episodes::Parse(curPath_).Valid()) return;
+    fromQueue_ = song_ = false;
+    if (curPath_.empty() || lib::IsUrl(curPath_)) return;
     const PlayQueue& q = TheApp().queue();
     const int ni = q.NextIndex(false);
+    if (library::KindOf(curPath_) == library::MediaKind::Audio) {
+        job_.reset();
+        if (ni >= 0 && ni != q.Current()) {
+            nextPath_ = q.Items()[static_cast<size_t>(ni)].path;
+            fromQueue_ = song_ = true;
+        }
+        return;
+    }
+    if (!episodes::Parse(curPath_).Valid()) return;
     // With a next item in the queue (or repeating this one) the folder search is moot: a result
     // it already found must not come back through Update() and replace the queue the user built.
     if (ni >= 0) job_.reset();
@@ -491,20 +505,28 @@ void NextEpisodeCard::Update() {
     const PlayerState& s = PS();
     bool want = false;
     double left = 0;
-    if (s.fileLoaded && HasNext() && !dismissed_ && s.duration > 60 && !s.eof) {
+    if (s.fileLoaded && HasNext() && !dismissed_ && s.duration > (song_ ? 30 : 60) && !s.eof) {
         left = std::max(0.0, s.duration - s.position);
         bool credits = false;
-        if (s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size())) {
+        if (!song_ && s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size())) {
             const Chapter& c = s.chapters[static_cast<size_t>(s.chapter)];
             credits = c.time > s.duration * 0.5 && episodes::KindOf(c.title) == episodes::ChapterKind::Credits;
         }
-        want = left <= 30 || credits;
+        want = left <= (song_ ? 10 : 30) || credits;
     }
     SetWanted(want);
     if (!want) return;
     const long long secs = static_cast<long long>(std::ceil(left - 1e-3));
     if (secs == shownSecs_) return;
+    if (shownSecs_ < 0) {  // the card has just come up: its buttons say what they do for this file
+        play_->SetText(Tr(song_ ? L"Listen now" : L"Play now"));
+        cancel_->SetText(Tr(song_ ? L"Hide" : L"Cancel"));
+    }
     shownSecs_ = secs;
+    if (song_) {
+        UpdateSong(secs);
+        return;
+    }
     const episodes::Episode e = episodes::Parse(nextPath_);
     // Without "play the folder's other files" the card only offers the episode: no countdown.
     title_->SetText(AutoNext() ? Fmt(Tr(L"Next episode: {0} · in {1} s"), {episodes::Label(e), std::to_wstring(secs)})
@@ -513,6 +535,28 @@ void NextEpisodeCard::Update() {
     name_->SetText(name);
     if (name_->visible != !name.empty()) {
         name_->visible = !name.empty();
+        InvalidateLayout();
+    }
+}
+
+// "Up next · in 8 s", then the song's title and artist as the library knows them.
+void NextEpisodeCard::UpdateSong(long long secs) {
+    const Config& c = TheApp().config();
+    const bool autoNext = !c.GetBool("playback.stopAfterEach") && !Live().stopAfter;
+    title_->SetText(autoNext ? Fmt(Tr(L"Up next · in {0} s"), {std::to_wstring(secs)}) : Tr(L"Up next"));
+    std::wstring title, artist;
+    const auto snap = TheApp().library().Current();
+    if (const library::MediaItem* m = snap ? snap->FindItem(nextPath_) : nullptr) {
+        title = m->title;
+        artist = m->artist;
+    }
+    if (title.empty())
+        for (const QueueItem& q : TheApp().queue().Items())
+            if (q.path == nextPath_ && !q.title.empty()) title = q.title;
+    if (title.empty()) title = library::FileNameOf(nextPath_);
+    name_->SetText(artist.empty() ? title : title + L" \u2014 " + artist);
+    if (!name_->visible) {
+        name_->visible = true;
         InvalidateLayout();
     }
 }

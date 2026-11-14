@@ -51,6 +51,7 @@ public:
     explicit NextEpisodeCard(MainWindow* window);
     ~NextEpisodeCard() override;
     // The player's card: Next plays its episode when the queue has nothing after this file.
+    // For a song it is "Up next", the queue's next item, 10 s before the end.
     static NextEpisodeCard* Instance();
     bool Wanted() const { return wanted_; }
     bool HasNext();  // takes the folder search's result when it has just finished
@@ -63,6 +64,7 @@ private:
     void OnNewFile();
     void Resolve();
     void Update();
+    void UpdateSong(long long secs);
     void OnEnded();
     bool AutoNext() const;  // the episode starts by itself when this one ends
     void CarryLanguages();
@@ -72,9 +74,12 @@ private:
     MainWindow* window_;
     ui::Label* title_ = nullptr;
     ui::Label* name_ = nullptr;
+    ui::Button* play_ = nullptr;
+    ui::Button* cancel_ = nullptr;
     uint64_t serial_ = 0;
     std::wstring curPath_, nextPath_;
     bool fromQueue_ = false, dismissed_ = false, wanted_ = false;
+    bool song_ = false;  // a song: the queue's next item, whatever it is
     long long shownSecs_ = -1;
     std::shared_ptr<FolderJob> job_;
     // Track choice of the file at carryPath_, applied to its next episode.

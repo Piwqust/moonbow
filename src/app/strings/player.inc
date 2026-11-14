@@ -456,3 +456,6 @@
 {L"Lyrics shifted {0}", L"Текст песни сдвинут: {0}"},
 {L"Lyrics Shift", L"Сдвиг текста песни"},
 {L"Lyrics only, without the cover", L"Только текст, без обложки"},
+{L"Up next", L"Дальше в очереди"},
+{L"Up next · in {0} s", L"Дальше в очереди · через {0} с"},
+{L"Listen now", L"Слушать сейчас"},
