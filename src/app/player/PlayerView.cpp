@@ -6,6 +6,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/Shell.h"
+#include "app/StandInArt.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
 #include "app/player/Episodes.h"
@@ -1169,10 +1170,14 @@ void MiniPlayer::Paint(Painter& p) {
             // Square cover centered over a dimmed, cropped copy of itself.
             p.Image(bmp, v, 4, true, 0.35f * appear);
             p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true, appear);
+        } else if (!TheApp().images().Loading(path, px) && !compact_) {
+            // No artwork: the stand-in record of the music view and the library, where a cover goes.
+            p.PushOpacity(appear);
+            PaintStandInArt(p, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, ArtSeed(path),
+                            {P().bgCard, P().textPrimary, P().textTertiary});
+            p.PopOpacity();
         } else if (!TheApp().images().Loading(path, px)) {
-            // The hover controls take the center: fade the note out under them.
-            const float icon = compact_ ? 24.0f : 40.0f;
-            p.Icon("music", v.Center(icon, icon), P().textTertiary.Fade((1 - k) * appear));
+            p.Icon("music", v.Center(24, 24), P().textTertiary.Fade(appear));  // the one-row card: too small for it
         }
     }
     const QueueItem* item = TheApp().queue().CurrentItem();
