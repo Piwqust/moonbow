@@ -804,6 +804,7 @@ void SortQueue(int mode) {
         sorted.push_back(items[i]);
     }
     q.Set(std::move(sorted), cur, q.Name());
+    q.reordered.Emit();
 }
 
 void AddFilesToQueue();

@@ -50,6 +50,8 @@ public:
     int IndexOfStarted(const std::wstring& path, int hint) const;
 
     Signal<> changed;
+    // The user put the items in another order (moved one, sorted the list), after `changed`.
+    Signal<> reordered;
 
 private:
     void Reshuffle();
@@ -60,5 +62,11 @@ private:
     Repeat repeat_ = Repeat::Off;
     std::wstring name_;
 };
+
+// `files` (full paths, a folder's files in its usual order) with the files `saved` names first,
+// in that order, then the others in theirs. `saved` holds paths relative to `folder` (no trailing
+// backslash), matched without case: the order the user gave the folder's queue last time.
+std::vector<std::wstring> ApplySavedOrder(std::vector<std::wstring> files, const std::wstring& folder,
+                                          const std::vector<std::wstring>& saved);
 
 }  // namespace app

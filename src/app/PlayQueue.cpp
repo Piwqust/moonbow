@@ -1,8 +1,10 @@
 #include "PlayQueue.h"
 
 #include <algorithm>
+#include <cwctype>
 #include <numeric>
 #include <random>
+#include <unordered_map>
 
 namespace app {
 
@@ -106,6 +108,7 @@ void PlayQueue::Move(int from, int to) {
     for (int& o : order_) o = remap(o);
     if (!shuffle_) Reshuffle();
     changed.Emit();
+    reordered.Emit();
 }
 
 void PlayQueue::Clear() {
@@ -188,6 +191,26 @@ int PlayQueue::IndexOfStarted(const std::wstring& path, int hint) const {
         if (items_[static_cast<size_t>(i)].path == path) return i;
     }
     return -1;
+}
+
+std::vector<std::wstring> ApplySavedOrder(std::vector<std::wstring> files, const std::wstring& folder,
+                                          const std::vector<std::wstring>& saved) {
+    if (saved.empty() || folder.empty()) return files;
+    auto lower = [](std::wstring s) {
+        for (wchar_t& c : s) c = static_cast<wchar_t>(std::towlower(c));
+        return s;
+    };
+    std::unordered_map<std::wstring, size_t> rank;
+    for (size_t i = 0; i < saved.size(); ++i) rank.emplace(lower(saved[i]), i);
+    const size_t skip = folder.size() + 1;  // "<folder>\"
+    auto rankOf = [&](const std::wstring& path) {
+        if (path.size() <= skip) return saved.size();
+        const auto it = rank.find(lower(path.substr(skip)));
+        return it == rank.end() || lower(path.substr(0, folder.size())) != lower(folder) ? saved.size() : it->second;
+    };
+    std::stable_sort(files.begin(), files.end(),
+                     [&](const std::wstring& a, const std::wstring& b) { return rankOf(a) < rankOf(b); });
+    return files;
 }
 
 }  // namespace app

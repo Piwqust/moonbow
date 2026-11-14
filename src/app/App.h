@@ -182,6 +182,8 @@ public:
 private:
     App();
     void BuildFolderQueue(const std::wstring& file);
+    std::vector<std::wstring> SavedFolderOrder(const std::wstring& folder) const;
+    void RememberFolderOrder();
     void OnConfigChanged(const std::string& key);
     void SaveHistoryPosition();
     void SaveWindowPlacement();
@@ -199,6 +201,7 @@ private:
     Config config_;
     library::MediaLibrary library_;
     library::History history_;
+    std::wstring folderQueue_;  // the folder the queue was built from (its order is remembered), or empty
     library::Playlists playlists_;
     library::Bookmarks bookmarks_;
     library::Favorites favorites_;

@@ -433,6 +433,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     queue_.changed.Connect([this] {
         if (!settingCurrent_) SyncNextInPlayer();
     });
+    queue_.reordered.Connect([this] { RememberFolderOrder(); });
     Trace("config loaded");
 
     main_ = std::make_unique<MainWindow>();
@@ -822,12 +823,45 @@ void App::Enqueue(const std::vector<std::wstring>& paths) {
     ShowToast(main_.get(), Fmt(Tr(L"Added to the queue: {0}"), {std::to_wstring(added)}), "list");
 }
 
+// A folder's queue in the order the user gave it last time (ui.json "queue.folderOrders":
+// {"<folder, lower case>": ["<name relative to it>", ...]}, the latest last, at most 200 folders).
+std::vector<std::wstring> App::SavedFolderOrder(const std::wstring& folder) const {
+    std::vector<std::wstring> out;
+    const auto doc = json::Parse(UiValue("queue.folderOrders"));
+    if (!doc) return out;
+    if (const json::Value* list = doc->Find(json::ToUtf8(library::PathKey(folder))))
+        for (const json::Value& v : list->AsArray())
+            if (v.IsString()) out.push_back(v.AsWString());
+    return out;
+}
+
+// The user moved or sorted the items of a folder's queue: that order comes back next time the
+// folder plays (the folder's files only; files added from elsewhere don't count).
+void App::RememberFolderOrder() {
+    if (folderQueue_.empty() || history_.IsExcluded(folderQueue_ + L"\\")) return;
+    const std::wstring prefix = folderQueue_ + L'\\';
+    json::Value list = json::Value::MakeArray();
+    for (const QueueItem& item : queue_.Items())
+        if (item.path.size() > prefix.size() && _wcsnicmp(item.path.c_str(), prefix.c_str(), prefix.size()) == 0)
+            list.Push(json::ToUtf8(item.path.substr(prefix.size())));
+    json::Value doc = json::Parse(UiValue("queue.folderOrders")).value_or(json::Value::MakeObject());
+    if (!doc.IsObject()) doc = json::Value::MakeObject();
+    const std::string key = json::ToUtf8(library::PathKey(folderQueue_));
+    doc.Erase(key);  // to the end: the latest folders stay when the list is full
+    if (list.size() > 0) doc.Set(key, std::move(list));
+    json::Value::Object& folders = doc.MutObject();
+    if (folders.size() > 200) folders.erase(folders.begin(), folders.end() - 200);
+    SetUiValue("queue.folderOrders", json::Serialize(doc));
+}
+
 void App::BuildFolderQueue(const std::wstring& file) {
     if (!config_.GetBool("playback.folderAsPlaylist")) {
         PlayQueueItems({ItemFor(file)}, 0);
         return;
     }
-    std::vector<std::wstring> siblings = ListSiblingMedia(file, FolderOrder(config_, FolderOf(file)));
+    const std::wstring folder = FolderOf(file);
+    std::vector<std::wstring> siblings =
+        ApplySavedOrder(ListSiblingMedia(file, FolderOrder(config_, folder)), folder, SavedFolderOrder(folder));
     // Same kind only: a song doesn't pull the folder's videos into the queue (nor a film its .ac3).
     const bool audio = library::KindOf(file) == library::MediaKind::Audio;
     std::vector<QueueItem> items;
@@ -845,6 +879,7 @@ void App::BuildFolderQueue(const std::wstring& file) {
     }
     const size_t slash = file.find_last_of(L"\\/");
     PlayQueueItems(std::move(items), index, slash == std::wstring::npos ? L"" : FileNameOf(file.substr(0, slash)));
+    folderQueue_ = folder;
 }
 
 void App::Open(const std::vector<std::wstring>& paths) {
@@ -872,15 +907,19 @@ void App::Open(const std::vector<std::wstring>& paths) {
     }
     if (paths.size() == 1 && !IsUrl(paths[0])) {
         if (IsDirectory(paths[0])) {
+            std::wstring folder = paths[0];
+            while (folder.size() > 3 && (folder.back() == L'\\' || folder.back() == L'/')) folder.pop_back();
             std::vector<QueueItem> items;
-            for (const auto& f : MediaInFolder(paths[0], config_.GetString("library.openFolder") != "folder",
-                                               FolderOrder(config_, paths[0])))
+            for (const auto& f : ApplySavedOrder(MediaInFolder(folder, config_.GetString("library.openFolder") != "folder",
+                                                               FolderOrder(config_, folder)),
+                                                 folder, SavedFolderOrder(folder)))
                 items.push_back(ItemFor(f));
             if (items.empty()) {
                 ShowToast(main_.get(), Tr(L"No media files in this folder"), "folder");
                 return;
             }
-            PlayQueueItems(std::move(items), 0, FileNameOf(paths[0]));
+            PlayQueueItems(std::move(items), 0, FileNameOf(folder));
+            folderQueue_ = folder;
             return;
         }
         BuildFolderQueue(paths[0]);
@@ -900,6 +939,7 @@ void App::Open(const std::vector<std::wstring>& paths) {
 
 void App::PlayQueueItems(std::vector<QueueItem> items, int index, std::wstring name, bool showPlayer) {
     if (items.empty()) return;
+    folderQueue_.clear();  // the callers that play a folder set it again
     queue_.Set(std::move(items), index, std::move(name));
     PlayIndex(queue_.Current(), showPlayer);
 }

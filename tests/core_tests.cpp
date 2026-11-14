@@ -2802,6 +2802,30 @@ void TestLyricsLrc() {
 
 // The play queue and the gapless hand-off to mpv. FakeMpv models what App::SyncNextInPlayer and
 // Player::QueueNext do to mpv's playlist: [0] plays, [1] is the appended next file.
+void TestQueueFolderOrder() {
+    using V = std::vector<std::wstring>;
+    const V files = {L"D:\\M\\a.mp3", L"D:\\M\\b.mp3", L"D:\\M\\c.mp3", L"D:\\M\\new.mp3"};
+    // The saved names first in their order (any case), files it doesn't name after, in theirs.
+    CHECK(app::ApplySavedOrder(files, L"D:\\M", {L"C.MP3", L"a.mp3", L"gone.mp3"}) ==
+          (V{L"D:\\M\\c.mp3", L"D:\\M\\a.mp3", L"D:\\M\\b.mp3", L"D:\\M\\new.mp3"}));
+    CHECK(app::ApplySavedOrder(files, L"D:\\M", {}) == files);
+    // A file in a subfolder (a recursive folder queue) is named relative to the folder.
+    CHECK(app::ApplySavedOrder({L"D:\\M\\a.mp3", L"D:\\M\\cd2\\x.mp3"}, L"D:\\M", {L"cd2\\x.mp3"}) ==
+          (V{L"D:\\M\\cd2\\x.mp3", L"D:\\M\\a.mp3"}));
+    // Another folder's file with the same name doesn't take the saved place.
+    CHECK(app::ApplySavedOrder({L"D:\\M\\a.mp3", L"E:\\Q\\b.mp3"}, L"D:\\M", {L"b.mp3", L"a.mp3"}) ==
+          (V{L"D:\\M\\a.mp3", L"E:\\Q\\b.mp3"}));
+    // Moving an item says so; other changes don't.
+    app::PlayQueue q;
+    int reordered = 0;
+    q.reordered.Connect([&reordered] { ++reordered; });
+    q.Set({{L"a"}, {L"b"}, {L"c"}}, 0);
+    q.Add({{L"d"}});
+    CHECK(reordered == 0);
+    q.Move(0, 2);
+    CHECK(reordered == 1 && q.Items()[2].path == L"a");
+}
+
 void TestPlayQueue() {
     using app::PlayQueue;
     using app::QueueItem;
@@ -4166,6 +4190,7 @@ const TestCase kTests[] = {
     {"lyrics_words", TestLyricsWords},
     {"lyrics_lrc", TestLyricsLrc},
     {"play_queue", TestPlayQueue},
+    {"queue_folder_order", TestQueueFolderOrder},
     {"shell_text", TestShellText},
     {"crossfade_math", TestCrossfadeMath},
     {"spectrum", TestSpectrum},
