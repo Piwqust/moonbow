@@ -383,7 +383,9 @@ public:
         const float textX = r.x + box + (compact_ ? 8.0f : 10.0f);
         const double d = DurationOf(i);
         const std::wstring dur = d > 0 ? ClockTime(d) : L"";
-        const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, ts).width + 4;
+        // Tabular figures, as in the library's lists: the lengths line up down the column.
+        const TextStyle ds = compact_ ? TextStyle::MonoSmall : TextStyle::Mono;
+        const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, ds).width + 4;
         const bool showRemove = hot && !compact_ && !removeCold_;
         const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - (compact_ ? 6.0f : 10.0f);
         const Color fg = current ? c.accent : hot ? c.textPrimary : RowText();
@@ -408,7 +410,7 @@ public:
             p.Icon("close", x.Center(18, 18), hoverRemove_ ? c.textPrimary : c.textTertiary);
         }
         if (!dur.empty())
-            p.Text(dur, {right - dw - 4, r.y, dw + 4, r.h}, ts, current ? c.textSecondary : c.textTertiary, HAlign::Trailing);
+            p.Text(dur, {right - dw - 4, r.y, dw + 4, r.h}, ds, current ? c.textSecondary : c.textTertiary, HAlign::Trailing);
     }
 
     // A row of the pinned queue: the cover (the drag handle), the title over the artist, the length.
@@ -434,7 +436,7 @@ public:
         }
         const double d = DurationOf(i);
         const std::wstring dur = d > 0 ? ClockTime(d) : L"";
-        const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, TextStyle::Small).width + 4;
+        const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, TextStyle::MonoSmall).width + 4;
         const bool showRemove = hot && !removeCold_;
         const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - 8;
         const float textX = art.Right() + 12;
@@ -458,7 +460,7 @@ public:
             p.Icon("close", x.Center(18, 18), hoverRemove_ ? c.textPrimary : c.textTertiary);
         }
         if (!dur.empty())
-            p.Text(dur, {right - dw, r.y, dw, r.h}, TextStyle::Small, c.textTertiary, HAlign::Trailing);
+            p.Text(dur, {right - dw, r.y, dw, r.h}, TextStyle::MonoSmall, c.textTertiary, HAlign::Trailing);
     }
 
     void Paint(Painter& p) override {

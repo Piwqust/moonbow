@@ -738,7 +738,7 @@ std::unique_ptr<Widget> VideoTab() {
         Widget* b = shaders->Body();
         const std::vector<std::wstring> files = ShaderFiles();
         if (files.empty()) {
-            auto* hint = b->Add<Label>(Tr(L"Put .glsl or .hook shader files (FSRCNNX, Anime4K...) in the shaders folder."),
+            auto* hint = b->Add<Label>(Tr(L"Put .glsl or .hook shader files (FSRCNNX, Anime4K…) in the shaders folder."),
                                        TextStyle::Small, Tone::Tertiary);
             hint->wrap = true;
             hint->pad = {4, 4, 0, 10};

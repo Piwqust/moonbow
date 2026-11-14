@@ -435,8 +435,8 @@
 {L"The video already matches the screen", L"Видео уже не меньше экрана"},
 {L"Debanding", L"Сглаживание градиентов"},
 {L"Shaders", L"Шейдеры"},
-{L"Put .glsl or .hook shader files (FSRCNNX, Anime4K...) in the shaders folder.",
- L"Положите файлы шейдеров .glsl или .hook (FSRCNNX, Anime4K...) в папку шейдеров."},
+{L"Put .glsl or .hook shader files (FSRCNNX, Anime4K…) in the shaders folder.",
+ L"Положите файлы шейдеров .glsl или .hook (FSRCNNX, Anime4K…) в папку шейдеров."},
 {L"Open shaders folder", L"Открыть папку шейдеров"},
 // --- key presets
 {L"Jump to position", L"Переход по позиции"},

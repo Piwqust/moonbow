@@ -836,7 +836,7 @@ void ShowKeyboardShortcutsDialog() {
     auto frame = std::make_unique<Frame>(Tr(L"Keyboard Shortcuts"), FitWidth(w, 1048),
                                          std::min(800.0f, std::floor(w->ClientSize().h - 24)));
     Frame* f = frame.get();
-    auto* search = f->Toolbar()->Add<TextBox>(Tr(L"Search Keyboard Shortcuts..."), "search");
+    auto* search = f->Toolbar()->Add<TextBox>(Tr(L"Search keyboard shortcuts…"), "search");
     search->width = Length::Grow();
     search->raised = true;
     auto* mode = f->Toolbar()->Add<FieldDropdown>(

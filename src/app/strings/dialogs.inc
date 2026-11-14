@@ -17,7 +17,7 @@
 {L"Images", L"Изображения"},
 // --- keyboard shortcuts
 {L"Keyboard Shortcuts", L"Сочетания клавиш"},
-{L"Search Keyboard Shortcuts...", L"Поиск сочетаний клавиш…"},
+{L"Search keyboard shortcuts…", L"Поиск сочетаний клавиш…"},
 {L"All Fields", L"Все поля"},
 {L"Search in", L"Искать в"},
 {L"Action", L"Действие"},
