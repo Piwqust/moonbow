@@ -79,6 +79,14 @@ Color DisabledFill() {
     return Color::Mix(P().bgBase, P().bgCard, 0.5f);
 }
 
+// Hover fades in fast and out a little slower, as Windows 11's own controls do; a press shows at
+// once. Called from Paint: the host keeps drawing frames while the fade runs.
+float HoverFade(AnimFloat& fade, bool hot) {
+    const float to = hot ? 1.0f : 0.0f;
+    if (fade.Target() != to) fade.To(to, hot ? 90.0f : 160.0f);
+    return fade.Get();
+}
+
 }  // namespace
 
 Color ToneColor(Tone t) {
@@ -188,26 +196,26 @@ Size Button::MeasureContent(float, float) {
 void Button::Paint(Painter& p) {
     const bool on = IsEnabled();
     const bool hot = on && IsHot(), down = on && IsPressed();
+    const float h = HoverFade(hover_, hot);
     const Palette& c = P();
     Color bg = Color::Clear(), fg = c.textSecondary;
     switch (kind) {
         case ButtonKind::Primary:
-            bg = on ? (down ? Color::Mix(c.accent, c.bgBase, 0.22f) : hot ? Color::Mix(c.accent, c.bgBase, 0.1f) : c.accent)
-                    : DisabledFill();
+            bg = on ? (down ? Color::Mix(c.accent, c.bgBase, 0.22f) : Color::Mix(c.accent, c.bgBase, 0.1f * h)) : DisabledFill();
             fg = on ? c.onAccent : c.textDisabled;
             break;
         case ButtonKind::Secondary:
             // Hover and press step towards the text colour: a visible change in both themes.
             bg = !on ? DisabledFill() : down ? Color::Mix(c.bgPanel, c.textPrimary, 0.2f)
-                 : hot ? Color::Mix(c.bgPanel, c.textPrimary, 0.12f) : Color::Mix(c.bgPanel, c.textPrimary, 0.06f);
+                                             : Color::Mix(c.bgPanel, c.textPrimary, 0.06f + 0.06f * h);
             fg = on ? c.textPrimary : c.textDisabled;
             break;
         case ButtonKind::Ghost:
-            bg = down ? c.press : hot ? c.hover : Color::Clear();
-            fg = !on ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+            bg = down ? c.press : c.hover.Fade(h);
+            fg = !on ? c.textDisabled : Color::Mix(c.textSecondary, c.textPrimary, h);
             break;
         case ButtonKind::Outline:
-            bg = !on ? DisabledFill() : down ? c.press : hot ? c.hover : c.textPrimary.Fade(0.03f);
+            bg = !on ? DisabledFill() : down ? c.press : Color::Mix(c.textPrimary.Fade(0.03f), c.hover, h);
             fg = on ? c.textPrimary : c.textDisabled;
             break;
     }
@@ -239,13 +247,14 @@ IconButton::IconButton(std::string i, std::wstring tip, int box, int isz) : icon
 void IconButton::Paint(Painter& p) {
     const bool on = IsEnabled();
     const bool hot = on && IsHot(), down = on && IsPressed();
+    const float h = HoverFade(hover_, hot);
     const float r = round ? rect.w / 2 : 4;
     if (down)
         p.Fill(rect, P().press, r);
-    else if (hot)
-        p.Fill(rect, P().hover, r);
+    else if (h > 0)
+        p.Fill(rect, P().hover.Fade(h), r);
     PaintFocusRing(p, rect, r);
-    Color c = !on ? P().textDisabled : active ? P().accent : hot ? P().textPrimary : ToneColor(tone);
+    Color c = !on ? P().textDisabled : active ? P().accent : Color::Mix(ToneColor(tone), P().textPrimary, h);
     p.Icon(icon, rect.Center(iconSize, iconSize), c, active ? P().accent : P().accentMid);
 }
 
@@ -264,13 +273,14 @@ Size LinkButton::MeasureContent(float, float) {
 }
 
 void LinkButton::Paint(Painter& p) {
-    const bool hot = IsHot();
-    const Color c = hot ? P().textPrimary : P().textSecondary;
+    const float h = HoverFade(hover_, IsHot());
+    const Color c = Color::Mix(P().textSecondary, P().textPrimary, h);
     const float tw = gfx::Text::Get().Measure(text, style).width;
     p.Text(text, {rect.x, rect.y, tw + 1, rect.h}, style, c, HAlign::Leading, VAlign::Center, 0);
     // Grey text that only turns white reads as a label: the underline says it is a link. 1 DIP
-    // and faded, so it is not taken for the 2 DIP search-match mark (PaintTextMarks).
-    if (hot) p.Fill({rect.x, std::round(rect.Cy() + p.Measure(text, style).height / 2 - 1), tw, 1}, c.Fade(0.6f));
+    // and faded, so it is not taken for the 2 DIP search-match mark (PaintTextMarks). It draws
+    // from the left with the hover.
+    if (h > 0) p.Fill({rect.x, std::round(rect.Cy() + p.Measure(text, style).height / 2 - 1), std::round(tw * h), 1}, c.Fade(0.6f));
     if (!trailingIcon.empty()) p.Icon(trailingIcon, {rect.x + tw + 4, rect.Cy() - 10, 20, 20}, c);
     PaintFocusRing(p, rect, 4);
 }

@@ -88,6 +88,7 @@ public:
 
 private:
     std::wstring text_;
+    AnimFloat hover_;
 };
 
 // Square icon button with hover background. `active` paints the icon in the
@@ -102,6 +103,9 @@ public:
     Tone tone = Tone::Secondary;
     void Paint(Painter& p) override;
     void DebugInfo(std::string& out) const override;
+
+private:
+    AnimFloat hover_;
 };
 
 // Single-line text link / text-only button.
@@ -113,6 +117,9 @@ public:
     std::string trailingIcon;  // e.g. "chevron_right" after section titles
     Size MeasureContent(float availW, float availH) override;
     void Paint(Painter& p) override;
+
+private:
+    AnimFloat hover_;
 };
 
 // --- inputs -----------------------------------------------------------------------------
