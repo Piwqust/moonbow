@@ -10,6 +10,7 @@
 #include "Util.h"
 #include "app/App.h"
 #include "app/MainWindow.h"
+#include "app/StandInArt.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
@@ -49,12 +50,6 @@ namespace {
 
 // CLSID_D2D1GaussianBlur (defined here so we don't need dxguid.lib).
 constexpr GUID kGaussianBlur = {0x1feb6d69, 0x2fe6, 0x4ac9, {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
-
-uint32_t Hash(const std::wstring& s) {
-    uint32_t h = 2166136261u;
-    for (wchar_t c : s) h = (h ^ static_cast<uint32_t>(c)) * 16777619u;
-    return h;
-}
 
 // A .lrc read on a worker thread (the file may sit on a slow network share); the view takes
 // the result on its next paint or time update.
@@ -432,7 +427,7 @@ public:
             p.PushOpacity((1 - gone) * appear);
             p.Shadow(cover, 16, 40, 12, 0.55f * (1 - gone) * appear);
             if (bmp) p.Image(bmp, cover, 16, true);
-            else PaintGeneratedArt(p, cover, Hash(path));
+            else PaintGeneratedArt(p, cover, ArtSeed(path));
             p.PopOpacity();
         }
         // Beside the cover the band stays in place at rest (a pause, before the first frame): one
@@ -1378,7 +1373,7 @@ private:
         Vignette(p, cover);
     }
 
-    // The gradient and groove brushes, made once per device and palette and moved with
+    // The gradient brushes, made once per device and palette and moved with
     // SetCenter / SetRadius: synced lyrics repaint the view every frame while they glide.
     // The stage is dark in both themes, so the light parts are white, not the palette's text.
     bool EnsureBrushes(ID2D1DeviceContext5* ctx) {
@@ -1392,7 +1387,6 @@ private:
         if (glow_ && brushGen_ == gen && same(brushBg_, bg)) return true;
         glow_.Reset();
         vignette_.Reset();
-        grooves_.Reset();
         brushGen_ = gen;
         brushBg_ = bg;
         const D2D1_GRADIENT_STOP glowStops[] = {{0.0f, white.WithAlpha(0.07f).D2D()},
@@ -1405,8 +1399,7 @@ private:
         if (FAILED(ctx->CreateGradientStopCollection(glowStops, 3, &glowColl)) ||
             FAILED(ctx->CreateGradientStopCollection(vignetteStops, 2, &vignetteColl)) ||
             FAILED(ctx->CreateRadialGradientBrush(props, glowColl.Get(), &glow_)) ||
-            FAILED(ctx->CreateRadialGradientBrush(props, vignetteColl.Get(), &vignette_)) ||
-            FAILED(ctx->CreateSolidColorBrush(white.D2D(), &grooves_))) {
+            FAILED(ctx->CreateRadialGradientBrush(props, vignetteColl.Get(), &vignette_))) {
             glow_.Reset();
             return false;
         }
@@ -1436,32 +1429,11 @@ private:
         ctx->FillRectangle(rect.D2D(), vignette_.Get());
     }
 
-    // Monochrome stand-in art: dark square, record-like grooves and a center label. Translucent
-    // white on the always-dark stage, the dark theme's card tones in both themes (a light card
-    // there looked like a hole).
+    // Monochrome stand-in art (app/StandInArt): translucent white on the always-dark stage, the
+    // dark theme's card tones in both themes (a light card there looked like a hole).
     void PaintGeneratedArt(Painter& p, const Rect& r, uint32_t seed) {
         const Color white = Color::Hex(0xFFFFFF);
-        p.Fill(r, white.Fade(0.12f), 16);
-        p.PushRoundClip(r, 16);
-        const Point center{r.Cx(), r.Cy()};
-        const float maxR = r.w * 0.42f;
-        ID2D1DeviceContext5* ctx = p.Ctx();
-        if (EnsureBrushes(ctx)) {
-            ID2D1SolidColorBrush* brush = grooves_.Get();
-            int k = 0;
-            for (float rad = maxR * 0.38f; rad < maxR; rad += r.w * 0.012f, ++k) {
-                const float a = 0.025f + 0.035f * static_cast<float>((seed >> (k % 24)) & 1);
-                brush->SetColor(white.WithAlpha(a * p.Opacity()).D2D());
-                ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, rad, rad), brush, 1.0f);
-            }
-            brush->SetColor(white.WithAlpha(0.14f * p.Opacity()).D2D());
-            ctx->DrawEllipse(D2D1::Ellipse({center.x, center.y}, maxR, maxR), brush, 1.5f);
-        }
-        p.FillCircle(center, maxR * 0.30f, white.Fade(0.03f));  // over the card: the dark theme's bgSelected
-        const float icon = maxR * 0.22f;
-        p.Icon("music", {center.x - icon / 2, center.y - icon / 2, icon, icon}, white.Fade(0.55f));
-        p.PopClip();
-        p.Stroke(r, white.Fade(0.15f), 16);
+        PaintStandInArt(p, r, 16, seed, {white.Fade(0.12f), white, white.Fade(0.55f), white.Fade(0.15f)});
     }
 
     Widget* titleTip_ = nullptr;
@@ -1512,7 +1484,6 @@ private:
     uint32_t strokeGen_ = 0, lineGen_ = 0;
     gfx::ComPtr<ID2D1Effect> blur_;
     gfx::ComPtr<ID2D1RadialGradientBrush> glow_, vignette_;
-    gfx::ComPtr<ID2D1SolidColorBrush> grooves_;
     gfx::ComPtr<ID2D1LinearGradientBrush> mask_;  // PushEdgeMask
     float maskH_ = -1;
     uint32_t maskGen_ = 0;

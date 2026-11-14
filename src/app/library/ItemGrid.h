@@ -135,7 +135,9 @@ private:
     void PaintCard(ui::Painter& p, int i, const ui::Rect& r, bool hot, bool now);
     void PaintRow(ui::Painter& p, int i, const ui::Rect& r, bool hot, bool now);
     void PaintHeader(ui::Painter& p, int i, const ui::Rect& r);
-    void PaintThumb(ui::Painter& p, const Entry& e, const ui::Rect& t, float radius, int iconSize, float opacity);
+    // zoom 0..1: how far a hovered card's picture has grown inside its frame.
+    void PaintThumb(ui::Painter& p, const Entry& e, const ui::Rect& t, float radius, int iconSize, float opacity,
+                    float zoom = 0);
     ui::Rect MoreButtonRect(const ui::Rect& slot) const;
     bool OnPlayButton(int index, float x, float y) const;  // over the ▶ of a media card
     ui::ScrollView* Scroller() const;
@@ -176,6 +178,9 @@ private:
     ui::Point pressAt_;
     bool pressPlay_ = false, pressMods_ = false;  // the press hit a card's ▶; Ctrl or Shift was held
     bool hoverPlay_ = false;
+    // The hovered card (warm_) eases in, the one just left (cooling_) eases out.
+    int warm_ = -1, cooling_ = -1;
+    ui::AnimFloat warmIn_{0}, warmOut_{0};
     bool dragging_ = false;
     int dropAt_ = -1;
     uint64_t created_ = 0;

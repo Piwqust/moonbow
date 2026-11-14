@@ -3,6 +3,7 @@
 #include "Util.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/StandInArt.h"
 #include "app/library/Pages.h"
 #include "library/MediaTypes.h"
 #include "ui/Host.h"
@@ -106,9 +107,15 @@ public:
             }
             return;
         }
-        p.Fill(rect, c.bgCard, radius);
-        if (!loading)
-            p.Icon(round_ ? "artist" : "album", rect.Center(64, 64), c.textTertiary.Fade(appear), c.accentMid.Fade(appear));
+        if (loading) {
+            p.Fill(rect, c.bgCard, radius);
+        } else if (!round_) {
+            // The album's first track has no artwork: the same stand-in record as its card.
+            PaintStandInArt(p, rect, radius, ArtSeed(image_), {c.bgCard, c.textPrimary, c.textTertiary});
+        } else {
+            p.Fill(rect, c.bgCard, radius);
+            p.Icon("artist", rect.Center(64, 64), c.textTertiary.Fade(appear), c.accentMid.Fade(appear));
+        }
     }
 
 private:

@@ -2,6 +2,7 @@
 
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/StandInArt.h"
 #include "app/library/LibraryCommon.h"
 #include "library/MediaTypes.h"
 #include "net/Online.h"
@@ -55,6 +56,8 @@ bool OpensOnClick(EntryKind k) {
 }
 
 constexpr float kPlayD = 48;  // the ▶ on a hovered media card
+// A card's hover eases in and out; its artwork grows by this part inside the frame.
+constexpr float kHoverInMs = 160, kHoverOutMs = 220, kHoverZoom = 0.03f;
 
 // The track column fits "#" with the sort arrow beside it.
 constexpr float kColumnsH = 32, kTrackW = 32, kDurationW = 76;
@@ -210,6 +213,7 @@ void ItemGrid::SetEntries(std::vector<Entry> entries) {
     hover_ = -1;
     hoverHead_ = -1;
     press_ = -1;
+    warm_ = cooling_ = -1;  // the indexes now name other items
     dragging_ = false;
     ++version_;
     ResetTip();
@@ -470,7 +474,7 @@ void ItemGrid::SetCursor(int index, bool scrollIntoView) {
 
 // --- painting ------------------------------------------------------------------------------
 
-void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radius, int iconSize, float opacity) {
+void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radius, int iconSize, float opacity, float zoom) {
     const Palette& c = P();
     ID2D1Bitmap* bmp = nullptr;
     float appear = 1;
@@ -500,6 +504,13 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
             p.PushRoundClip(t, t.w / 2);
             p.Image(bmp, t, 0, true, opacity * appear);
             p.PopClip();
+        } else if (zoom > 0) {
+            // Hovered: the picture grows inside the card's frame, the frame stays put.
+            const float dx = t.w * kHoverZoom * zoom / 2, dy = t.h * kHoverZoom * zoom / 2;
+            p.PushRoundClip(t, radius);
+            p.Fill(t, c.bgDeep.Fade(appear));
+            p.Image(bmp, {t.x - dx, t.y - dy, t.w + 2 * dx, t.h + 2 * dy}, 0, true, opacity * appear);
+            p.PopClip();
         } else {
             p.Fill(t, c.bgDeep.Fade(appear), radius);
             p.Image(bmp, t, radius, true, opacity * appear);
@@ -512,6 +523,15 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
         p.Fill(t, c.bgCard, r);
     }
     if (loading) return;  // the picture is on its way: no "no picture" icon in the meantime
+    // A song or album without artwork: the player's stand-in record, seeded by the same file, so
+    // the card and the player match. Small row thumbnails keep the plain note.
+    if ((e.kind == EntryKind::Album || (e.kind == EntryKind::Media && e.audio)) && t.w >= 96) {
+        p.PushOpacity(opacity * appear);
+        PaintStandInArt(p, t, r, ArtSeed(e.image.empty() ? e.title : e.image),
+                        {c.bgCard, c.textPrimary, c.textTertiary});
+        p.PopOpacity();
+        return;
+    }
     std::string icon = e.icon;
     if (icon.empty()) icon = e.audio ? "music" : "video";
     const Color ic = iconOnly || e.kind == EntryKind::Action ? c.textSecondary : c.textTertiary;
@@ -534,8 +554,9 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     const bool opening = Opening(e);
     const bool pressed = (hot && IsPressed()) || opening;
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
+    const float heat = opening ? 1.0f : i == warm_ ? warmIn_.Get() : i == cooling_ ? warmOut_.Get() : 0.0f;
 
-    PaintThumb(p, e, t, kCardRadius, 48, dim);
+    PaintThumb(p, e, t, kCardRadius, 48, dim, heat);
 
     // Progress line along the bottom edge, clipped by the rounded corners. On artwork, like the
     // "now playing" chip: white on a dark track in both themes, so a light frame can't hide it.
@@ -549,18 +570,24 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
     // Badges: duration for media, item count for folders, the warning chip for damaged files.
     std::wstring badge;
     if (e.kind == EntryKind::Media && !e.audio && e.duration > 0) badge = FormatDuration(e.duration);
-    if ((e.kind == EntryKind::Folder || e.kind == EntryKind::Playlist) && e.count > 0 && style_ == GridStyle::VideoCards)
+    // A folder card shows the frame of a file inside: the folder glyph in its badge says it is not
+    // that file.
+    const bool folderMark = e.kind == EntryKind::Folder && e.icon == "folder" && !e.image.empty();
+    if ((e.kind == EntryKind::Folder || e.kind == EntryKind::Playlist) && e.count > 0 &&
+        (style_ == GridStyle::VideoCards || folderMark))
         badge = std::to_wstring(e.count);
     if (e.damaged) {
         const float cw = std::min(DamagedChipWidth(p), t.w - 16);
         PaintDamagedChip(p, {t.Right() - 8 - cw, t.Bottom() - 12 - kChipH, cw, kChipH}, c.bgBase.Fade(0.82f));
-    } else if (!badge.empty()) {
-        const float tw = std::ceil(p.Measure(badge, TextStyle::MonoSmall).width);
+    } else if (!badge.empty() || folderMark) {
+        const float tw = badge.empty() ? 0.0f : std::ceil(p.Measure(badge, TextStyle::MonoSmall).width);
+        const float iw = folderMark ? (badge.empty() ? 14.0f : 18.0f) : 0.0f;
         // One height for every card, clear of the 4-DIP progress line, so a row's badges line up.
         const float bh = 20, by = t.Bottom() - 12 - bh;
-        const Rect b{t.Right() - 8 - tw - 12, by, tw + 12, bh};
+        const Rect b{t.Right() - 8 - tw - iw - 12, by, tw + iw + 12, bh};
         p.Fill(b, c.bgBase.Fade(0.82f), 4);
-        p.Text(badge, b, TextStyle::MonoSmall, c.textPrimary, HAlign::Center, VAlign::Center, 0);
+        if (folderMark) p.Icon("folder", {b.x + 6, b.Cy() - 7, 14, 14}, c.textPrimary);
+        p.Text(badge, {b.x + 6 + iw, b.y, tw, bh}, TextStyle::MonoSmall, c.textPrimary, HAlign::Center, VAlign::Center, 0);
     }
 
     // Year and rating from TMDB, top right (the card's text lines keep their layout).
@@ -595,15 +622,19 @@ void ItemGrid::PaintCard(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Icon(paused ? "pause" : "waveform_twotone", t.Center(paused ? 24.0f : 30.0f, paused ? 24.0f : 30.0f), white,
                white.Fade(0.6f));
     }
-    if (hot || opening) {
-        p.Fill(t, pressed ? c.press : c.hover, kCardRadius);
+    if (heat > 0.001f) {
+        p.Fill(t, (pressed ? c.press : c.hover).Fade(heat), kCardRadius);
         if ((e.kind == EntryKind::Media || (e.kind == EntryKind::Album && onPlay)) && !now && !opening) {
             // On artwork, like the "now playing" chip: the same in both themes (the light theme's
             // black accent vanished on a dark cover), with a shadow that keeps it on a white one.
-            const float rad = kPlayD / 2 + (hoverPlay_ ? 2.0f : 0.0f);
+            // It fades in and grows to its size with the hover.
+            const float grow = 0.85f + 0.15f * heat;
+            const float rad = (kPlayD / 2 + (hot && hoverPlay_ ? 2.0f : 0.0f)) * grow, icon = 24 * grow;
+            p.PushOpacity(heat);
             p.Shadow(t.Center(rad * 2, rad * 2), rad, 10, 2, 0.35f);
-            p.FillCircle({t.Cx(), t.Cy()}, rad, Color::Hex(0xFFFFFF, hoverPlay_ ? 1.0f : 0.94f));
-            p.Icon("play", t.Center(24, 24), Color::Hex(0x000000));
+            p.FillCircle({t.Cx(), t.Cy()}, rad, Color::Hex(0xFFFFFF, hot && hoverPlay_ ? 1.0f : 0.94f));
+            p.Icon("play", t.Center(icon, icon), Color::Hex(0x000000));
+            p.PopOpacity();
         }
     }
     if (sel) {
@@ -659,7 +690,8 @@ void ItemGrid::PaintRow(Painter& p, int i, const Rect& r, bool hot, bool now) {
         p.Icon("play", {cells.track.Right() - 18, r.Cy() - 9, 18, 18}, c.accent);
     else if (!compactRow && (columns & kColTrack) && e.track > 0)
         p.Text(std::to_wstring(e.track), cells.track, TextStyle::Mono, now ? c.accent : c.textTertiary, HAlign::Trailing);
-    const bool iconRow = e.kind != EntryKind::Media && e.kind != EntryKind::Album && e.image.empty();
+    // Folder rows keep their glyph even with a cover found inside: at row size it reads better.
+    const bool iconRow = e.kind != EntryKind::Media && e.kind != EntryKind::Album && (e.image.empty() || e.icon == "folder");
     const float dim = e.damaged ? 0.4f : e.watched ? 0.55f : 1.0f;
     if (t.w <= 0) {
         // No artwork column: the track number (accent while playing) carries the row.
@@ -906,6 +938,22 @@ void ItemGrid::Paint(Painter& p) {
     }
     const std::wstring now = NowPlayingPath();
     const bool hotItem = IsHot() && hover_ >= 0 && !dragging_;
+    // The card left behind keeps fading out while the new one comes in; back on a card that is
+    // still fading, it comes back from where it was.
+    if (const int heat = hotItem && IsCardStyle(style_) ? hover_ : -1; heat != warm_) {
+        const int wasCooling = cooling_;
+        const float wasCool = warmOut_.Get();
+        if (warm_ >= 0) {
+            cooling_ = warm_;
+            warmOut_.Set(warmIn_.Get());
+            warmOut_.To(0, kHoverOutMs);
+        }
+        if (heat >= 0) {
+            warmIn_.Set(heat == wasCooling ? wasCool : 0.0f);
+            warmIn_.To(1, kHoverInMs);
+        }
+        warm_ = heat;
+    }
     collectTip_ = hotItem && (hover_ != tipIndex_ || version_ != tipVersion_ || rect.w != tipW_);
     tipCut_ = false;
     auto it = std::lower_bound(slots_.begin(), slots_.end(), top, [](const Rect& r, float v) { return r.Bottom() <= v; });

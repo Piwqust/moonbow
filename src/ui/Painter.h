@@ -43,6 +43,7 @@ public:
     // Stroke drawn inside `r` (crisp 1 px borders on integer rects).
     void Stroke(const Rect& r, Color c, float radius = 0, float width = 1);
     void FillCircle(Point center, float radius, Color c);
+    void StrokeCircle(Point center, float radius, Color c, float width = 1);
     void FillGeometry(ID2D1Geometry* g, Color c);
 
     void Text(std::wstring_view text, const Rect& r, TextStyle style, Color c, HAlign h = HAlign::Leading,

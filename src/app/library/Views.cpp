@@ -80,6 +80,21 @@ constexpr double kBannerDelayMs = 1000;  // scans shorter than this never show t
 constexpr UINT kBannerPollMs = 250;
 uint64_t g_bannerHidden = 0;  // the scan generation whose banner the user hid
 
+// The first playable file of the kind in a folder, or in its first subfolders that have one: the
+// folder card shows its frame or cover (like a series card) instead of a bare folder glyph.
+std::wstring FolderCover(const library::Snapshot& s, const library::FolderNode& f, library::MediaKind kind, int depth = 0) {
+    for (int i : f.items) {
+        if (i < 0 || static_cast<size_t>(i) >= s.items.size()) continue;
+        const library::MediaItem& m = s.items[static_cast<size_t>(i)];
+        if ((kind == library::MediaKind::Other || m.kind == kind) && !m.offline && !m.damaged) return m.path;
+    }
+    if (depth < 2)
+        for (int c : f.children)
+            if (c >= 0 && static_cast<size_t>(c) < s.folders.size())
+                if (std::wstring p = FolderCover(s, s.folders[static_cast<size_t>(c)], kind, depth + 1); !p.empty()) return p;
+    return {};
+}
+
 }  // namespace
 
 ScanBanner::ScanBanner(bool compact) : compact_(compact) {
@@ -571,6 +586,7 @@ Entry Page::FolderEntry(const library::FolderNode& f, library::MediaKind kind) c
         for (int c : f.children)
             if (c >= 0 && static_cast<size_t>(c) < snap_->folders.size() && has(snap_->folders[static_cast<size_t>(c)])) ++n;
     e.count = n;
+    if (snap_) e.image = FolderCover(*snap_, f, kind);
     return e;
 }
 

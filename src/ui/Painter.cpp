@@ -48,6 +48,10 @@ void Painter::FillCircle(Point center, float radius, Color c) {
     ctx_->FillEllipse(D2D1::Ellipse({center.x, center.y}, radius, radius), Brush(c));
 }
 
+void Painter::StrokeCircle(Point center, float radius, Color c, float width) {
+    ctx_->DrawEllipse(D2D1::Ellipse({center.x, center.y}, radius, radius), Brush(c), width);
+}
+
 void Painter::FillGeometry(ID2D1Geometry* g, Color c) {
     ctx_->FillGeometry(g, Brush(c));
 }
