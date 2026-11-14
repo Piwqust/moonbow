@@ -1101,6 +1101,10 @@ void BuildApp(Builder& b) {
            "fullscreen")
         .Basic("fullscreen", L"What a double click on the picture does.",
                L"Что делает двойной щелчок по картинке.");
+    b.Toggle("controls.doubleClickEdges", L"Double click near the left or right edge seeks",
+             L"Двойной щелчок у левого или правого края перематывает", true)
+        .Desc(L"Back or forward by the short skip, as on YouTube; more clicks there go on seeking.",
+              L"Назад или вперёд на короткий шаг, как на YouTube; следующие щелчки там же перематывают дальше.");
     b.Pick("controls.wheel", L"Scroll wheel", L"Колесо мыши",
            {{"volume", L"Volume", L"Громкость"}, {"seek", L"Seek", L"Перемотка"}, {"none", L"Do nothing", L"Ничего"}},
            "volume")

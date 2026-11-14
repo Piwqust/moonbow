@@ -365,6 +365,12 @@ public:
     void OnClick() override {
         if (!clickPending_) return;
         clickPending_ = false;
+        // Clicks right after a double click at an edge go on seeking there, as on YouTube.
+        if (Host* h = GetHost(); h && edgeSide_ && GetTickCount64() - edgeAt_ < kEdgeRepeatMs &&
+                                 EdgeAt(h->MousePos().x) == edgeSide_) {
+            SeekEdge(edgeSide_);
+            return;
+        }
         // On the subtitle line, when a click doesn't pause by itself: pause for the words.
         if (Host* h = GetHost(); h && owner_->words_->ClaimVideoClick(h->MousePos().x, h->MousePos().y, owner_->SubtitleRect()))
             return;
@@ -372,12 +378,17 @@ public:
         pausedByClick_ = PS().fileLoaded && TheApp().config().GetString("controls.singleClick") == "playPause";
         VideoSingleClick();
     }
-    bool OnDoubleClick(const MouseEvent&) override {
+    bool OnDoubleClick(const MouseEvent& e) override {
         down_ = clickPending_ = false;
         if (window_->PictureInPicture()) return true;
         const bool undo = pausedByClick_ && TheApp().config().GetString("controls.doubleClick") != "none";
         pausedByClick_ = false;
         if (undo) Run(Action::PlayPause);
+        if (const int side = EdgeAt(e.x)) {
+            SeekEdge(side);
+            return true;
+        }
+        edgeSide_ = 0;
         VideoDoubleClick();
         return true;
     }
@@ -409,7 +420,21 @@ public:
 
 private:
     static constexpr UINT kHoldMs = 400;
+    static constexpr ULONGLONG kEdgeRepeatMs = 700;
     static constexpr float kRevealZone = 120;
+    // -1 / 1 for a point in the left / right quarter of the picture, when a double click there
+    // seeks (controls.doubleClickEdges); 0 elsewhere.
+    int EdgeAt(float x) const {
+        const PlayerState& s = PS();
+        if (!s.fileLoaded || s.duration <= 0 || !TheApp().config().GetBool("controls.doubleClickEdges")) return 0;
+        const float zone = rect.w * 0.25f;
+        return x < rect.x + zone ? -1 : x >= rect.Right() - zone ? 1 : 0;
+    }
+    void SeekEdge(int side) {
+        edgeSide_ = side;
+        edgeAt_ = GetTickCount64();
+        Run(side < 0 ? Action::SeekBackward : Action::SeekForward);
+    }
     void BeginHold() {
         const PlayerState& s = PS();
         if (!down_ || !s.fileLoaded || s.paused) return;
@@ -429,6 +454,8 @@ private:
     bool down_ = false, holding_ = false, clickPending_ = false;
     double holdSpeed_ = 1;
     UINT_PTR holdTimer_ = 0, revealTimer_ = 0;
+    int edgeSide_ = 0;     // the edge of the last seeking double click
+    ULONGLONG edgeAt_ = 0;  // when it (or a click after it) seeked
 };
 
 // Shown instead of a black player when a file can't be opened.
