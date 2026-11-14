@@ -1252,12 +1252,27 @@ void SettingRow::FitControl(float innerW) {
 
 Size SettingRow::MeasureContent(float availW, float availH) {
     FitControl(availW - pad.H());
-    return FlexMeasure(availW, availH);
+    Size s = FlexMeasure(availW, availH);
+    // FlexMeasure measures the label across the whole row, but it gets only what the control
+    // leaves: in a narrow window its summary wraps to more lines there, and the row must grow.
+    if (control_ && control_->visible && !Children().empty()) {
+        const float inner = std::max(0.0f, availW - pad.H());
+        const float labelW = std::max(0.0f, inner - gap - control_->Measure(inner, availH).w);
+        s.h = std::max(s.h, Children().front()->Measure(labelW, availH).h + pad.V());
+    }
+    return s;
 }
 
 void SettingRow::OnLayout() {
     FitControl(rect.w - pad.H());
     FlexLayout();
+    // FlexLayout gave the label the height it needs across the whole row; at its real width its
+    // summary may take more lines (MeasureContent): its rect, hover and tooltip cover them all.
+    if (Children().empty()) return;
+    Widget* label = Children().front().get();
+    const Rect in = rect.Inset(pad);
+    const float h = std::min(in.h, label->Measure(label->rect.w, in.h).h);
+    if (h > label->rect.h) label->Arrange({label->rect.x, std::round(in.Cy() - h / 2), label->rect.w, h});
 }
 
 void SettingRow::Sync() {
