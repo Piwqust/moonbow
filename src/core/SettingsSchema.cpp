@@ -1882,6 +1882,9 @@ void BuildMedia(Builder& b) {
            {{"auto", L"As in the style", L"Как в стиле"}, {"on", L"On", L"Да"}, {"off", L"Off", L"Нет"}}, "auto")
         .Desc(L"Karaoke: the sung line lights up from left to right.",
               L"Караоке: текущая строка загорается слева направо.");
+    b.Toggle("audio.lyricsOnly", L"Lyrics only, without the cover", L"Только текст, без обложки", false)
+        .Desc(L"The lyrics take the whole view in larger letters, for karaoke on a TV.",
+              L"Текст занимает весь экран крупными буквами, для караоке на телевизоре.");
 
     b.Sec("languages", L"Languages", L"Языки");
     b.Pick("audio.language", L"Preferred audio language", L"Предпочтительный язык звука", LanguageChoices(true),

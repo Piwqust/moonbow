@@ -102,6 +102,7 @@ struct LyricsLook {
     float grow = 1;            // scale of the sung line
     float sung = 0.96f, ahead = 0.62f, past = 0.46f;  // brightness of the sung line, lines to come, sung lines
     float gap = 14;
+    bool only = false;  // audio.lyricsOnly: the lyrics take the whole view, larger
 };
 
 LyricsLook ReadLyricsLook(const Config& c) {
@@ -119,6 +120,12 @@ LyricsLook ReadLyricsLook(const Config& c) {
     } else if (style == "karaoke") {  // the sung line and the next one, low on the screen
         k.size = 34, k.weight = DWRITE_FONT_WEIGHT_BOLD, k.center = true, k.anchor = 0.6f, k.fill = true;
         k.before = 0, k.after = 1, k.sung = 1, k.ahead = 0.5f, k.past = 0.3f, k.gap = 22;
+    }
+    k.only = c.GetBool("audio.lyricsOnly");
+    if (k.only) {  // read from across a room: larger, and centered unless the user says otherwise
+        k.size *= 1.5f;
+        k.gap *= 1.5f;
+        k.center = true;
     }
     k.font = Utf8ToWide(c.GetString("audio.lyricsFont"));
     const std::string size = c.GetString("audio.lyricsSize");
@@ -225,9 +232,10 @@ public:
             Invalidate();
         });
         ReadVisualizerSetting();
-        look_ = ReadLyricsLook(TheApp().config());
+        look_ = base_ = ReadLyricsLook(TheApp().config());
         lyricsToken_ = TheApp().config().Subscribe("audio.lyrics", [this](const std::string&) {
-            look_ = ReadLyricsLook(TheApp().config());
+            look_ = base_ = ReadLyricsLook(TheApp().config());
+            fit_ = 1;
             format_.Reset();
             layoutW_ = -1;
             Invalidate();
@@ -287,6 +295,7 @@ public:
         bool beside = false;    // the cover stays and the visualizer has viz (and viz2)
         bool textLeft = false;  // the text starts at title.x instead of centering under the cover
         bool shown = false, wide = false, oneLine = false;
+        bool full = false;      // lyrics only: no cover, the lyrics across the view
     };
     Geometry Place() const {
         // An open popover (queue, tracks, settings) takes the right side: center the cover and
@@ -301,6 +310,10 @@ public:
         g.shown = lyricsOn_ && !lyrics_.Empty();
         g.wide = g.shown && area.w >= kWideLyrics;
         g.oneLine = g.shown && !g.wide && lyrics_.synced;
+        if (g.shown && look_.only) {
+            g.full = true;
+            g.wide = g.oneLine = false;
+        }
         const float extra = (g.oneLine ? 32.0f : 0.0f) + kPillsH;
         g.area = area;
         g.left = area;
@@ -407,6 +420,12 @@ public:
         p.PopClip();
 
         lastPaint_ = AnimFloat::Now();
+        lyricsBtn_->visible = queueBtn_->visible = !g.full;
+        if (g.full) {
+            PaintLyricsOnly(p, g);
+            return;
+        }
+        FitLyrics(1);
         const float viz = UpdateVisualizer(s);
         const float gone = g.beside ? 0.0f : viz;  // how far the cover has made way
         if (gone < 1 && !loading) {
@@ -496,6 +515,41 @@ public:
         }
     }
 
+    // Lyrics only: over the blurred cover, the title as one dim line on top and the lyrics in a
+    // column across the rest. No visualizer: the capture rests.
+    void PaintLyricsOnly(Painter& p, const Geometry& g) {
+        if (capture_) capture_->SetRunning(false);
+        titleTip_->visible = false;
+        source_->visible = false;
+        const Rect& area = g.area;
+        const Rect head{area.x + 48, rect.y + 28, area.w - 96, 24};
+        // Fullscreen has its own title panel at the top; it would sit on this line.
+        const bool fullscreen = TheApp().main() && TheApp().main()->IsFullscreen();
+        if (!fullscreen) {
+            const QueueItem* item = TheApp().queue().CurrentItem();
+            const PlayingTags& tags = CurrentTags();
+            std::wstring line = tags.title.empty() ? (item ? FileNameOf(item->path) : L"") : tags.title;
+            if (!tags.artist.empty()) line += L" \u00B7 " + tags.artist;
+            p.Text(line, head, TextStyle::Body, Color::Hex(0xFFFFFF).Fade(0.55f), HAlign::Center);
+        }
+        // Letters grow with the view (a TV across the room), from the look's size at 700 DIP high.
+        FitLyrics(std::clamp(rect.h / 700.0f, 1.0f, 2.4f));
+        const float w = std::min(area.w - 96, 1400.0f * fit_);
+        box_ = {std::round(area.Cx() - w / 2), head.Bottom() + 24, w, rect.Bottom() - 40 - (head.Bottom() + 24)};
+        PaintLyrics(p, box_);
+    }
+
+    // The look's letters and gaps at `f` times their size; the line layouts are made again.
+    void FitLyrics(float f) {
+        if (f == fit_) return;
+        fit_ = f;
+        look_ = base_;
+        look_.size *= f;
+        look_.gap *= f;
+        format_.Reset();
+        layoutW_ = -1;
+    }
+
     bool OnMouseMove(const MouseEvent& e) override {
         const int hit = LineAt(e.x, e.y);
         if (hit != hovered_) {
@@ -539,6 +593,11 @@ public:
                 }
                 items.push_back(MenuItem::Separator());
             }
+            MenuItem only;
+            only.label = Tr(L"Lyrics only, without the cover");
+            only.checked = look_.only;
+            only.action = [on = !look_.only] { TheApp().config().SetBool("audio.lyricsOnly", on); };
+            items.push_back(std::move(only));
             MenuItem more;
             more.label = Tr(L"Lyrics settings…");
             more.icon = "settings";
@@ -1428,7 +1487,9 @@ private:
     std::vector<float> tops_, heights_;
     std::vector<gfx::ComPtr<IDWriteTextLayout>> layouts_;  // EnsureLayout, one per line
     std::vector<Rect> lineRects_;  // where clickable synced lines were painted
-    LyricsLook look_;
+    LyricsLook look_;  // base_ fitted to the view (FitLyrics)
+    LyricsLook base_;  // as the settings say
+    float fit_ = 1;
     gfx::ComPtr<IDWriteTextFormat> format_;  // the look's font; reset when it changes
     Config::Token lyricsToken_ = 0;
     double clock_ = 0, clockAt_ = 0;  // SmoothTime's clock and when it last ran
@@ -1474,6 +1535,8 @@ bool MusicCoverReady() {
 Rect MusicToastSlot() {
     if (!g_musicView || !g_musicView->visible) return {};
     const auto g = g_musicView->Place();
+    // Lyrics only: under the title line on top, clear of the lyrics (PaintLyricsOnly).
+    if (g.full) return {g.area.x, g_musicView->rect.y + 60, g.area.w, 40};
     // The title is 70 DIP under the cover (Paint): a 40 DIP toast sits in the middle of the gap.
     if (g.textLeft) return {g.viz.x, g.viz.y - 44, g.viz.w, 40};
     return {g.left.x, g.title.y - 55, g.left.w, 40};
