@@ -397,7 +397,7 @@ h2.t:focus { outline: none; }
 <div class="wrap">
   <header class="top">
     <span class="mark"><svg viewBox="0 0 24 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 11.5a9.5 9.5 0 0 1 19 0"/><path d="M5.5 11.5a6.5 6.5 0 0 1 13 0"/><path d="M8.5 11.5a3.5 3.5 0 0 1 7 0"/></g></svg>Moonbow</span>
-    <span>17.10 → 25.10.2026 · 33 главы</span>
+    <span>17.10 → 14.11.2026 · 34 главы</span>
   </header>
 
   <section class="hero grid" id="now" aria-labelledby="h1">
@@ -433,6 +433,51 @@ h2.t:focus { outline: none; }
 </div>
 
 <main id="chapters" class="wrap" tabindex="-1">
+
+<!-- 34 -->
+<article class="ch grid" id="ch-34" data-n="34" data-topic="features" data-date="14.11" aria-labelledby="t34">
+  <div class="meta"><span class="num">34</span><span class="date">14.11.2026</span><span class="tag">Плеер</span><span class="state">в main</span></div>
+  <div class="body">
+    <h2 class="t" id="t34" tabindex="-1">Караоке, перемотка у края и порядок папки</h2>
+    <p class="say">Шесть идей из списка «что осталось» сделаны. Текст песни можно сдвинуть, если .lrc спешит или отстаёт, и он загорается по словам. Есть режим «только текст» для телевизора. Двойной щелчок у края видео перематывает, как на YouTube. Перед концом песни появляется следующая, а очередь папки помнит ваш порядок.</p>
+    <ul>
+      <li>Сдвиг текста песни: правый щелчок по тексту → «на 0,5 с раньше / позже» и «Сбросить». Сдвиг запоминается для файла, как задержка субтитров.</li>
+      <li>Пословная заливка: метки слов enhanced LRC (&lt;00:12.30&gt;) больше не вырезаются, строка загорается слово за словом, а внутри слова плавно.</li>
+      <li>«Только текст, без обложки»: крупные строки по центру поверх размытой обложки. Буквы растут вместе с экраном, на 4K в 2,4 раза.</li>
+      <li>Двойной щелчок по левой или правой четверти видео: назад или вперёд на короткий шаг. Следующие щелчки там же в течение 0,7 с перематывают дальше. Середина по-прежнему открывает полный экран.</li>
+      <li>«Дальше в очереди» за 10 с до конца песни: название и исполнитель следующей, «Слушать сейчас» и «Скрыть». «Скрыть» только убирает карточку, музыка не останавливается.</li>
+      <li>Ручной порядок очереди папки (перетаскивание, Alt+стрелки, сортировка) запоминается: папка открывается в нём же, новые файлы встают в конец.</li>
+      <li>Попутно: в узком окне настроек описание в три строки больше не наезжает на соседние строки. Появились файл лицензии GPL v3 и цвета бренда на сайте.</li>
+    </ul>
+    <dl class="figs">
+      <div><dd>60/60</dd><dt>тестов</dt></div>
+      <div><dd>55/55</dd><dt>сценариев настроек</dt></div>
+      <div><dd>0</dd><dt>средних находок в настройках, было 58</dt></div>
+    </dl>
+    <p class="src">Подробно: <a href="../STATUS.md">STATUS.md</a>, раздел 6т</p>
+  </div>
+  <figure class="plate">
+    <div class="frame">
+      <svg class="ill" data-keys="20,70;20,180;230,258" viewBox="0 0 480 300" role="img" aria-label="Строка текста песни, залитая до середины слова; под ней кнопки сдвига на полсекунды; ниже кадр видео с зонами по краям для перемотки на 10 секунд и карточка следующей песни">
+        <text class="tr" x="40" y="62" style="font-size:22px">Every</text>
+        <text class="t" x="104" y="62" style="font-size:22px">word lights up</text>
+        <rect class="lk" x="40" y="72" width="88" height="2" rx="1"/>
+        <rect class="pn" x="40" y="88" width="96" height="26" rx="13"/><text class="t" x="54" y="106">−0,5 с</text>
+        <rect class="pn" x="146" y="88" width="96" height="26" rx="13"/><text class="t" x="160" y="106">+0,5 с</text>
+        <rect class="pn" x="40" y="140" width="400" height="80" rx="6"/>
+        <rect class="cd" x="40" y="140" width="100" height="80" rx="6"/>
+        <rect class="cd" x="340" y="140" width="100" height="80" rx="6"/>
+        <text class="tm" x="62" y="186">−10 с</text>
+        <text class="tm" x="360" y="186">+10 с</text>
+        <text class="t" x="196" y="186">полный экран</text>
+        <rect class="pn" x="250" y="232" width="190" height="52" rx="8"/><rect class="lk" x="250.75" y="232.75" width="188.5" height="50.5" rx="8"/>
+        <text class="tr" x="264" y="254">Дальше · через 8 с</text>
+        <text class="t" x="264" y="274">Second song · Artist</text>
+      </svg>
+    </div>
+    <ol class="keys"><li data-k="1">Строка загорается по меткам слов; сдвиг ±0,5 с для файла</li><li data-k="2">Двойной щелчок по краю перематывает, в середине открывает полный экран</li><li data-k="3">Карточка следующей песни за 10 с до конца</li></ol>
+  </figure>
+</article>
 
 <!-- 33 -->
 <article class="ch grid flip" id="ch-33" data-n="33" data-topic="release" data-date="25.10" aria-labelledby="t33">
