@@ -31,7 +31,11 @@ rem They go to a response file: on the command line the list outgrows cmd's 8191
 rem limit when the checkout path is long (worktrees).
 set "RSP=%OBJ%\sources.rsp"
 if exist "%RSP%" del "%RSP%"
-for /r "%ROOT%src" %%f in (*.cpp) do echo "%%f">>"%RSP%"
+rem src\thumbs is MoonbowThumbs.dll, built below.
+for /r "%ROOT%src" %%f in (*.cpp) do (
+    set "F=%%f"
+    if "!F:\src\thumbs\=!"=="!F!" echo "%%f">>"%RSP%"
+)
 
 set "CFLAGS=/nologo /std:c++20 /utf-8 /EHsc /W4 /permissive- /Zc:__cplusplus /MP /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /I"%ROOT%src" /I"%ROOT%third_party\mpv\include""
 set "LFLAGS=/SUBSYSTEM:WINDOWS /MANIFEST:NO /DYNAMICBASE /NXCOMPAT"
@@ -40,20 +44,27 @@ set "LFLAGS=%LFLAGS% /DELAYLOAD:d3d11.dll /DELAYLOAD:d2d1.dll /DELAYLOAD:dwrite.
 if /i "%CONFIG%"=="debug" (
     set "CFLAGS=%CFLAGS% /Od /Zi /MTd /D_DEBUG"
     set "LFLAGS=%LFLAGS% /DEBUG"
+    set "DLLFLAGS=/DEBUG"
 ) else if /i "%CONFIG%"=="asan" (
     rem AddressSanitizer, for test runs; needs the C++ AddressSanitizer component of Visual Studio.
     set "CFLAGS=%CFLAGS% /O1 /Zi /MT /DNDEBUG /fsanitize=address"
     set "LFLAGS=%LFLAGS% /DEBUG /INCREMENTAL:NO"
+    set "DLLFLAGS=/DEBUG /INCREMENTAL:NO"
 ) else (
     rem /Zi and /DEBUG only add Moonbow.pdb, which crash dumps need; /OPT:REF,ICF keep the exe as small.
     set "CFLAGS=%CFLAGS% /O2 /GL /Gw /MT /DNDEBUG /Zi"
     set "LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF /DEBUG"
+    set "DLLFLAGS=/LTCG /OPT:REF /OPT:ICF /DEBUG"
 )
 rem uiautomationcore.lib comes before windowsapp.lib, whose API-set imports of it would load at startup.
 set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib uiautomationcore.lib windowsapp.lib winhttp.lib crypt32.lib dbghelp.lib delayimp.lib"
 
 rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
 cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Moonbow.exe" /link %LFLAGS% %LIBS% || exit /b 1
+
+rem Explorer's thumbnail provider for audio (src\thumbs); it reuses the exe's tag reader objects.
+if not exist "%OBJ%\thumbs" mkdir "%OBJ%\thumbs"
+cl %CFLAGS% /LD /Fo"%OBJ%\thumbs\\" /Fd"%OBJ%\thumbs\\" "%ROOT%src\thumbs\ThumbProvider.cpp" "%OBJ%\TagReader.obj" "%OBJ%\Json.obj" "%OBJ%\Paths.obj" /Fe"%OUT%\MoonbowThumbs.dll" /link %DLLFLAGS% /NOIMPLIB /NOEXP user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib uuid.lib windowscodecs.lib d2d1.lib || exit /b 1
 
 copy /y "%ROOT%third_party\mpv\libmpv-2.dll" "%OUT%\" >nul || exit /b 1
 if /i "%CONFIG%"=="asan" copy /y "%VCToolsInstallDir%bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll" "%OUT%\" >nul

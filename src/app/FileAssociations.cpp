@@ -1,6 +1,7 @@
 #include "app/FileAssociations.h"
 #include "app/I18n.h"
 #include "core/UserChoice.h"
+#include "thumbs/ThumbsClsid.h"
 #include "ui/Host.h"
 
 #include <windows.h>
@@ -156,6 +157,25 @@ bool WriteUserChoice(const wchar_t* ext, const wchar_t* progId, const std::wstri
     return false;
 }
 
+constexpr wchar_t kThumbsClsidKey[] = L"Software\\Classes\\CLSID\\" MOONBOW_THUMBS_CLSID_STR;
+
+std::wstring ThumbHandlerKey(const wchar_t* ext) {
+    return std::wstring(L"Software\\Classes\\") + ext + L"\\ShellEx\\" SHELL_THUMBNAIL_HANDLER_STR;
+}
+
+// Explorer thumbnails for audio from MoonbowThumbs.dll next to the exe: the cover, else the stand-in
+// record. The DLL hands each file to the type's machine-wide handler first (Icaros, say), so this
+// HKCU entry only adds what that one could not draw. Without the DLL (a dev build) nothing is written.
+bool WriteThumbnailHandler(const std::wstring& exe) {
+    const std::wstring dll = exe.substr(0, exe.find_last_of(L'\\') + 1) + MOONBOW_THUMBS_DLL;
+    if (GetFileAttributesW(dll.c_str()) == INVALID_FILE_ATTRIBUTES) return true;
+    const std::wstring clsid = kThumbsClsidKey;
+    bool ok = SetValue(clsid, nullptr, L"Moonbow thumbnails") && SetValue(clsid + L"\\InprocServer32", nullptr, dll) &&
+              SetValue(clsid + L"\\InprocServer32", L"ThreadingModel", L"Apartment");
+    for (const wchar_t* ext : kAudio) ok &= SetValue(ThumbHandlerKey(ext), nullptr, MOONBOW_THUMBS_CLSID_STR);
+    return ok;
+}
+
 // What Explorer will really open the type with: it drops a UserChoice whose hash it rejects.
 bool OpensWith(const wchar_t* ext, const wchar_t* progId) {
     wchar_t got[128];
@@ -178,6 +198,7 @@ bool RegisterFileAssociations() {
     for (const wchar_t* shell : {L"SystemFileAssociations\\video\\shell", L"SystemFileAssociations\\audio\\shell", L"Directory\\shell"})
         ok &= WriteVerbs(std::wstring(L"Software\\Classes\\") + shell, exe);
     ok &= SetValue(L"Software\\RegisteredApplications", L"Moonbow", kCapabilities);
+    ok &= WriteThumbnailHandler(exe);
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;
 }
@@ -210,6 +231,15 @@ bool UnregisterFileAssociations() {
         ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\OpenWithProgids").c_str(), progId));
     });
     ok &= gone(RegDeleteKeyValueW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", L"Moonbow"));
+    // Only a handler entry that is still Moonbow's: another app may have taken the type since.
+    for (const wchar_t* ext : kAudio) {
+        wchar_t value[64];
+        DWORD n = sizeof(value);
+        if (RegGetValueW(HKEY_CURRENT_USER, ThumbHandlerKey(ext).c_str(), nullptr, RRF_RT_REG_SZ, nullptr, value, &n) == ERROR_SUCCESS &&
+            _wcsicmp(value, MOONBOW_THUMBS_CLSID_STR) == 0)
+            ok &= gone(RegDeleteKeyW(HKEY_CURRENT_USER, ThumbHandlerKey(ext).c_str()));
+    }
+    ok &= removeTree(kThumbsClsidKey);
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok;
 }

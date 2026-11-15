@@ -1,5 +1,5 @@
 # Builds a beta for testers from the current commit:
-#   dist\Moonbow-<version>-beta-<commit>.zip       Moonbow.exe, libmpv-2.dll, README-BETA.txt
+#   dist\Moonbow-<version>-beta-<commit>.zip       Moonbow.exe, libmpv-2.dll, MoonbowThumbs.dll, README-BETA.txt
 #   dist\Moonbow-<version>-beta-<commit>-setup.exe the same files as Moonbow's own setup (src/setup):
 #                                                install, update, go back to a kept version, uninstall
 #   dist\symbols\<version>-<commit>\             Moonbow.exe + Moonbow.pdb, to read the testers' crash dumps
@@ -22,16 +22,16 @@ if ($LASTEXITCODE) { throw "build.bat failed" }
 $stage = Join-Path $dist $name
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory $stage | Out-Null
-Copy-Item "$build\Moonbow.exe", "$build\libmpv-2.dll", "$PSScriptRoot\beta\README-BETA.txt" $stage
+Copy-Item "$build\Moonbow.exe", "$build\libmpv-2.dll", "$build\MoonbowThumbs.dll", "$PSScriptRoot\beta\README-BETA.txt" $stage
 Compress-Archive -Path "$stage\*" -DestinationPath "$dist\$name.zip" -Force
 # The setup: this Moonbow.exe with the other files appended. A GUI exe: wait for it.
-$setup = Start-Process "$build\Moonbow.exe" -ArgumentList "--make-setup", "`"$dist\$name-setup.exe`"", "`"$stage\libmpv-2.dll`"", "`"$stage\README-BETA.txt`"" -Wait -PassThru -WindowStyle Hidden
+$setup = Start-Process "$build\Moonbow.exe" -ArgumentList "--make-setup", "`"$dist\$name-setup.exe`"", "`"$stage\libmpv-2.dll`"", "`"$stage\MoonbowThumbs.dll`"", "`"$stage\README-BETA.txt`"" -Wait -PassThru -WindowStyle Hidden
 if ($setup.ExitCode) { throw "Moonbow.exe --make-setup failed" }
 Remove-Item -Recurse -Force $stage
 
 $symbols = Join-Path $dist "symbols\$version-$commit"
 New-Item -ItemType Directory -Force $symbols | Out-Null
-Copy-Item "$build\Moonbow.exe", "$build\Moonbow.pdb" $symbols
+Copy-Item "$build\Moonbow.exe", "$build\Moonbow.pdb", "$build\MoonbowThumbs.dll", "$build\MoonbowThumbs.pdb" $symbols
 
 Write-Host "Beta: $dist\$name.zip"
 Write-Host "Symbols: $symbols (keep them as long as testers may send dumps of this build)"

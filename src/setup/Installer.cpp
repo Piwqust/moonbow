@@ -161,14 +161,27 @@ bool Extract(const Package& package, const std::wstring& dir, const Progress& pr
     }
     // A reinstall of the same version replaces its folder; the current files are links of their own.
     if (IsDir(finalDir)) {
-        const std::wstring old = finalDir + L".old";
-        RemoveTree(old);
+        // A unique name: a DLL Explorer still has loaded keeps an earlier .old from being deleted (Prune retries).
+        const std::wstring old = finalDir + L"." + std::to_wstring(GetTickCount64()) + L".old";
         if (!MoveFileW(finalDir.c_str(), old.c_str())) return *error = L"cannot replace " + finalDir, RemoveTree(tmp), false;
         RemoveTree(old);
     }
     if (!MoveFileW(tmp.c_str(), finalDir.c_str())) return *error = L"cannot create " + finalDir, RemoveTree(tmp), false;
     if (progress) progress(1.0);
     return true;
+}
+
+// Moves `next` over `dest`. A DLL Explorer has loaded (MoonbowThumbs.dll in a thumbnail host) cannot
+// be overwritten but can be renamed: it moves aside to <name>.del, which Prune removes once it is free.
+bool MoveOver(const std::wstring& next, const std::wstring& dest) {
+    constexpr DWORD kFlags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    if (MoveFileExW(next.c_str(), dest.c_str(), kFlags)) return true;
+    if (!EndsWith(Lower(dest), L".dll")) return false;
+    const std::wstring aside = dest + L"." + std::to_wstring(GetTickCount64()) + L".del";
+    if (!MoveFileExW(dest.c_str(), aside.c_str(), 0)) return false;
+    if (MoveFileExW(next.c_str(), dest.c_str(), kFlags)) return true;
+    MoveFileExW(aside.c_str(), dest.c_str(), 0);
+    return false;
 }
 
 // Puts the files of versions\<to> in place of `old` (the names the current version has there).
@@ -179,8 +192,7 @@ bool Activate(const std::wstring& dir, const std::vector<std::wstring>& old, con
         return *error = L"no Moonbow.exe in " + src, false;
     for (const std::wstring& name : files) {
         const std::wstring dest = dir + L"\\" + name, next = dest + L".new";
-        if (!LinkOrCopy(src + L"\\" + name, next) ||
-            !MoveFileExW(next.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        if (!LinkOrCopy(src + L"\\" + name, next) || !MoveOver(next, dest)) {
             DeleteFileW(next.c_str());
             *error = L"cannot replace " + dest + L" (is Moonbow still running?)";
             return false;
@@ -216,7 +228,7 @@ void Prune(const std::wstring& dir, const std::wstring& current) {
         if (EndsWith(name, L".tmp") || EndsWith(name, L".old")) RemoveTree(e.path().wstring());
     }
     for (const std::wstring& name : FilesIn(dir))
-        if (EndsWith(name, L".new")) DeleteFileW((dir + L"\\" + name).c_str());
+        if (EndsWith(name, L".new") || EndsWith(name, L".del")) DeleteFileW((dir + L"\\" + name).c_str());
 }
 
 std::wstring KnownFolder(REFKNOWNFOLDERID id) {
@@ -433,7 +445,8 @@ bool Uninstall(const Target& target, bool removeData, std::wstring* error) {
     for (const std::wstring& v : StoredVersions(dir))
         for (const std::wstring& name : FilesIn(VersionDir(dir, v))) ours.push_back(name);
     for (const std::wstring& name : FilesIn(dir))
-        if (IsMoonbowFile(name) || std::find(ours.begin(), ours.end(), name) != ours.end() || EndsWith(name, L".new"))
+        if (IsMoonbowFile(name) || std::find(ours.begin(), ours.end(), name) != ours.end() || EndsWith(name, L".new") ||
+            EndsWith(name, L".del"))
             DeleteFileW((dir + L"\\" + name).c_str());
     RemoveTree(dir + L"\\versions");
     RemoveDirectoryW(dir.c_str());
