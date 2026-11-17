@@ -9,11 +9,13 @@
 
 #include <d2d1_1.h>
 
+#include <vector>
+
 namespace app {
 
 class VizPaint {
 public:
-    static constexpr float kVuAspect = 1.45f;
+    static constexpr float kVuAspect = 1.6f;
 
     // Moves the VU needles toward the frame's levels (`live` false: back to the stop). True while
     // a needle is off the stop, so the caller keeps painting.
@@ -35,6 +37,18 @@ public:
     ID2D1SolidColorBrush* LineBrush(ID2D1DeviceContext5* ctx, ui::Color c, float opacity);
 
 private:
+    struct VuDial {
+        UINT32 pxW = 0, pxH = 0;
+        int ch = 0;
+        uint32_t gen = 0;
+        gfx::ComPtr<ID2D1Bitmap1> back, front;  // behind and in front of the needle
+    };
+    VuDial* DialFor(ID2D1DeviceContext5* ctx, float w, float h, int ch);
+    void DrawVuScale(ID2D1DeviceContext5* c, float w, float h, bool big);
+
+    std::vector<VuDial> dials_;
+    gfx::ComPtr<ID2D1DeviceContext5> off_;  // draws the dials, off the window's frame
+    uint32_t offGen_ = 0;
     audio::VuNeedle needles_[2];  // left, right
     double vuAt_ = 0;             // when the needles last moved (AnimFloat::Now)
     gfx::ComPtr<ID2D1StrokeStyle> roundStroke_;
