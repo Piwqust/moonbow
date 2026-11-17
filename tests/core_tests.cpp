@@ -351,8 +351,8 @@ void TestJsonFiles() {
 
 void TestSchema() {
     using namespace settings;
-    const char* kExpected[] = {"general", "interface", "privacy", "controls", "playback", "video", "audio",
-                               "subtitles", "library", "network", "performance", "recording", "extensions"};
+    const char* kExpected[] = {"general", "interface", "privacy", "controls", "gestures", "playback", "video",
+                               "audio", "subtitles", "library", "network", "performance", "recording", "extensions"};
     const auto& cats = Categories();
     CHECK(cats.size() == std::size(kExpected));
     for (size_t i = 0; i < cats.size() && i < std::size(kExpected); ++i) CHECK(cats[i].id == kExpected[i]);
@@ -380,7 +380,12 @@ void TestSchema() {
                 static const std::map<std::string, std::string> kMoved = {
                     {"library.singleInstance", "interface"}, {"library.singleInstanceFileManager", "interface"},
                     {"library.enqueue", "interface"},        {"privacy.rememberPosition", "playback"},
-                    {"general.theme", "interface"},          {"general.accent", "interface"}};
+                    {"general.theme", "interface"},          {"general.accent", "interface"},
+                    {"controls.singleClick", "gestures"},    {"controls.doubleClick", "gestures"},
+                    {"controls.doubleClickEdges", "gestures"}, {"controls.holdSpeed", "gestures"},
+                    {"controls.middleClick", "gestures"},    {"controls.sideButtons", "gestures"},
+                    {"controls.wheel", "gestures"},          {"controls.hwheel", "gestures"},
+                    {"controls.reverseScroll", "gestures"}};
                 const auto moved = kMoved.find(it.key);
                 CHECK_MSG(moved != kMoved.end() ? c.id == moved->second
                                                 : it.key.compare(0, c.id.size() + 1, c.id + ".") == 0,

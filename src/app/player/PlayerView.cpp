@@ -339,17 +339,16 @@ public:
             window_->CancelTimer(holdTimer_);
             holdTimer_ = 0;
             const PlayerState& s = PS();
-            if (s.fileLoaded && !s.paused && !s.eof)
+            if (s.fileLoaded && !s.paused && !s.eof && TheApp().config().GetBool("controls.holdSpeed"))
                 holdTimer_ = window_->StartTimer(kHoldMs, [this] {
                     holdTimer_ = 0;
                     BeginHold();
                 });
         } else if (e.button == MouseButton::Middle) {
-            Run(Action::Fullscreen);
-        } else if (e.button == MouseButton::X1) {
-            Run(Action::Previous);
-        } else if (e.button == MouseButton::X2) {
-            Run(Action::Next);
+            if (TheApp().config().GetBool("controls.middleClick")) Run(Action::Fullscreen);
+        } else if (e.button == MouseButton::X1 || e.button == MouseButton::X2) {
+            if (TheApp().config().GetBool("controls.sideButtons"))
+                Run(e.button == MouseButton::X1 ? Action::Previous : Action::Next);
         }
         return true;
     }

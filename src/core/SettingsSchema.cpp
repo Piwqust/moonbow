@@ -1088,7 +1088,24 @@ void BuildApp(Builder& b) {
     b.Number("controls.skipLong", L"Long skip (Ctrl+Shift+arrows)", L"Длинный (Ctrl+Shift+стрелки)", 1, 3600, 1, 300)
         .Unit(L"s", L"с");
 
-    b.Sec("mouse", L"Mouse", L"Мышь");
+    b.Sec("remotes", L"Remotes", L"Удалённое управление");
+    b.Toggle("controls.webRemote", L"Web remote control", L"Веб-пульт", false)
+        .Hidden();  // not implemented yet
+    b.Number("controls.webRemotePort", L"Port", L"Порт", 1024, 65535, 1, 8080).When("controls.webRemote", "true")
+        .Hidden();  // not implemented yet
+    b.inferred = true;
+    b.Text("controls.webRemotePassword", L"Password", L"Пароль")
+        .Secret()
+        .Desc(L"Required to control Moonbow from a browser on another device.",
+              L"Нужен, чтобы управлять Moonbow из браузера на другом устройстве.")
+        .When("controls.webRemote", "true")
+        .Hidden();  // not implemented yet
+
+    // ===== Gestures =====
+    // Its own tab so that every mouse gesture on the video can be found and switched off in one place.
+    b.Cat("gestures", "app", "mouse", L"Gestures", L"Жесты");
+
+    b.Sec("mouse", L"Mouse over the video", L"Мышь над видео");
     b.Pick("controls.singleClick", L"Single click on the video", L"Одиночный щелчок по видео",
            {{"playPause", L"Play / Pause", L"Пауза / продолжить"},
             {"showControls", L"Show controls", L"Показать панель"},
@@ -1105,6 +1122,12 @@ void BuildApp(Builder& b) {
              L"Двойной щелчок у левого или правого края перематывает", true)
         .Desc(L"Back or forward by the short skip, as on YouTube; more clicks there go on seeking.",
               L"Назад или вперёд на короткий шаг, как на YouTube; следующие щелчки там же перематывают дальше.");
+    b.Toggle("controls.holdSpeed", L"Press and hold for 2× speed", L"Удержание — скорость 2×", true)
+        .Desc(L"Hold the left button on the video to play twice as fast until you let go.",
+              L"Пока левая кнопка зажата на видео, оно идёт вдвое быстрее.");
+    b.Toggle("controls.middleClick", L"Middle click toggles fullscreen", L"Средняя кнопка — полный экран", true);
+    b.Toggle("controls.sideButtons", L"Side buttons go to the previous or next file",
+             L"Боковые кнопки — предыдущий или следующий файл", true);
     b.Pick("controls.wheel", L"Scroll wheel", L"Колесо мыши",
            {{"volume", L"Volume", L"Громкость"}, {"seek", L"Seek", L"Перемотка"}, {"none", L"Do nothing", L"Ничего"}},
            "volume")
@@ -1114,19 +1137,6 @@ void BuildApp(Builder& b) {
            {{"seek", L"Seek", L"Перемотка"}, {"volume", L"Volume", L"Громкость"}, {"none", L"Do nothing", L"Ничего"}},
            "seek");
     b.Toggle("controls.reverseScroll", L"Reverse scroll direction", L"Обратное направление прокрутки", false);
-
-    b.Sec("remotes", L"Remotes", L"Удалённое управление");
-    b.Toggle("controls.webRemote", L"Web remote control", L"Веб-пульт", false)
-        .Hidden();  // not implemented yet
-    b.Number("controls.webRemotePort", L"Port", L"Порт", 1024, 65535, 1, 8080).When("controls.webRemote", "true")
-        .Hidden();  // not implemented yet
-    b.inferred = true;
-    b.Text("controls.webRemotePassword", L"Password", L"Пароль")
-        .Secret()
-        .Desc(L"Required to control Moonbow from a browser on another device.",
-              L"Нужен, чтобы управлять Moonbow из браузера на другом устройстве.")
-        .When("controls.webRemote", "true")
-        .Hidden();  // not implemented yet
 }
 
 void BuildMedia(Builder& b) {
