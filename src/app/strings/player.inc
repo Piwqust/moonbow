@@ -460,3 +460,8 @@
 {L"Up next", L"Дальше в очереди"},
 {L"Up next · in {0} s", L"Дальше в очереди · через {0} с"},
 {L"Listen now", L"Слушать сейчас"},
+{L"Player controls", L"Управление плеером"},
+{L"Audio meters", L"Индикаторы звука"},
+{L"RMS", L"RMS"},
+{L"Peak", L"Пик"},
+{L"Max", L"Макс."},

@@ -29,6 +29,7 @@ struct VisualFrame {
     float wave[kWaveColumns] = {};   // loudness history 0..1, oldest first
     float level = 0;               // overall loudness 0..1
     float rms[2] = {};             // left / right RMS of the newest samples, before mpv's volume (VU meters)
+    float peak[2] = {};            // left / right sample peak of the newest samples, before mpv's volume
     uint64_t serial = 0;
 };
 
@@ -77,6 +78,7 @@ private:
     int head_ = 0;
     int fresh_ = 0;        // samples since the last analysis
     double sumSq_[2] = {};  // per channel, since the last analysis
+    float peak_[2] = {};
     int sumCount_ = 0;
     float scopeGain_ = 1;
     double lastAnalysis_ = 0;

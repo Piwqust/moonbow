@@ -207,7 +207,9 @@ public:
     // The music view's visualizer listens to Moonbow's own output, which carries mpv's volume. While
     // a tap is on, volume 0 is sent to mpv as kTapVolume (-300 dB: digital silence at the device,
     // yet the float samples keep the waveform), and the visualizer scales by OutputGain().
-    void SetSignalTap(bool on);
+    // Each listener (1: the music view, 2: the audio meters window) asks for the tap; it stays on
+    // while any of them wants it.
+    void SetSignalTap(bool on, unsigned listener = 1);
     double OutputGain() const;  // mpv's software gain, (volume / 100)^3; 0 when muted
     static constexpr double kTapVolume = 0.001;
 
@@ -273,6 +275,7 @@ private:
     uint64_t xfSerial_ = 0;   // the transition already tried (loadSerial, entry)
     int64_t xfEntry_ = 0;
     bool signalTap_ = false;
+    unsigned tapListeners_ = 0;
     bool holdResume_ = false;  // StopAtStart
     double stopPos_ = 0;       // the position Stop left
 };

@@ -973,7 +973,9 @@ void Player::SyncCrossfade() {
 
 // --- visualizer tap ----------------------------------------------------------------------------
 
-void Player::SetSignalTap(bool on) {
+void Player::SetSignalTap(bool on, unsigned listener) {
+    tapListeners_ = on ? tapListeners_ | listener : tapListeners_ & ~listener;
+    on = tapListeners_ != 0;
     if (on == signalTap_) return;
     signalTap_ = on;
     if (state_.ready && state_.volume <= 0) SetDouble("volume", MpvVolume(0));

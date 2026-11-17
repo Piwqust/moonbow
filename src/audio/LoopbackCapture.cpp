@@ -151,6 +151,7 @@ void LoopbackCapture::Run() {
             std::memset(ring_, 0, sizeof ring_);
             fresh_ = 0;
             sumSq_[0] = sumSq_[1] = 0;
+            peak_[0] = peak_[1] = 0;
             sumCount_ = 0;
             lastAnalysis_ = NowSeconds();
             postedAt = 0;
@@ -275,6 +276,8 @@ void LoopbackCapture::Read() {
             if (std::isfinite(l) && std::isfinite(r)) {
                 sumSq_[0] += static_cast<double>(l) * l;
                 sumSq_[1] += static_cast<double>(r) * r;
+                peak_[0] = std::max(peak_[0], std::fabs(l));
+                peak_[1] = std::max(peak_[1], std::fabs(r));
             }
             ++sumCount_;
             ring_[head_] = (l + r) * 0.5f;
@@ -304,7 +307,9 @@ void LoopbackCapture::Analyze(double dt) {
     for (int ch = 0; ch < 2; ++ch) {
         const double rms = sumCount_ ? std::sqrt(sumSq_[ch] / sumCount_) * inv : 0.0;
         work_.rms[ch] = static_cast<float>(std::min(rms, 4.0));
+        work_.peak[ch] = std::min(peak_[ch] * inv, 4.0f);
         sumSq_[ch] = 0;
+        peak_[ch] = 0;
     }
     sumCount_ = 0;
     analyzer_.Analyze(linear_, bandsDb_);

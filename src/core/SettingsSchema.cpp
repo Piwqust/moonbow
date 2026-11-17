@@ -938,6 +938,22 @@ void BuildApp(Builder& b) {
         .Desc(L"Show a thin progress line along the bottom of the video while the controls are hidden.",
               L"Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.");
 
+    // Read by app/player/DetachedWindows.cpp; closing a window with X turns its row off.
+    b.Sec("windows", L"Separate windows", L"Отдельные окна");
+    b.advanced = true;
+    b.Toggle("interface.controlsWindow", L"Player controls in a separate window", L"Управление плеером в отдельном окне",
+             false)
+        .Desc(L"A small window with what plays, the seek bar (the song's wave for music), the buttons and the volume. "
+              L"Put it anywhere, on another screen too.",
+              L"Маленькое окно: что играет, полоса перемотки (для музыки — волна песни), кнопки и громкость. Его можно "
+              L"поставить куда угодно, хоть на другой экран.");
+    ItemRef meters = b.Toggle("interface.metersWindow", L"Audio meters in a separate window",
+                              L"Индикаторы звука в отдельном окне", false)
+        .Desc(L"VU meters, RMS and peak levels in dBFS, the spectrum and the oscilloscope of Moonbow's own sound.",
+              L"VU-индикаторы, уровни RMS и пиков в dBFS, спектр и осциллограф звука самого Moonbow.");
+    if (!audio::ProcessLoopbackSupported()) meters.Hidden();
+    b.advanced = false;
+
     b.Sec("notifications", L"Notifications and system tray", L"Уведомления и системный трей");
     b.inferred = true;
     b.Toggle("interface.osdMessages", L"Show on-screen messages", L"Сообщения поверх видео", true)

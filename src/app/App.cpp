@@ -17,6 +17,7 @@
 #include "ui/Theme.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/player/DetachedWindows.h"
 #include "app/Shell.h"
 #include "app/Skins.h"
 #include "app/SettingsActions.h"
@@ -454,6 +455,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         });
     }
     ApplyWindowOptions();
+    InitDetachedWindows();
     system_.Attach(main_->Hwnd());
     Trace("window shown");
     // The GPU device started in wWinMain; libmpv starts after the window is up.
