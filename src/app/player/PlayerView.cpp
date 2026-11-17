@@ -335,6 +335,8 @@ public:
         if (e.button == MouseButton::Left) {
             // The click acts on release, so that a long press can mean 2× instead.
             down_ = true;
+            downX_ = e.x;
+            downY_ = e.y;
             clickPending_ = false;
             window_->CancelTimer(holdTimer_);
             holdTimer_ = 0;
@@ -394,6 +396,10 @@ public:
         return true;
     }
     bool OnMouseMove(const MouseEvent& e) override {
+        if (down_ && DragStarted(e)) {
+            BeginWindowDrag();
+            return true;
+        }
         window_->PointerMoved(e.x, e.y);
         if (owner_->topTip_.empty() || !owner_->topInfo_.Contains(e.x, e.y)) tooltip.clear();
         else if (tooltip != owner_->topTip_) tooltip = owner_->topTip_;
@@ -436,6 +442,29 @@ private:
         edgeAt_ = GetTickCount64();
         Run(side < 0 ? Action::SeekBackward : Action::SeekForward);
     }
+    // Past the system drag distance a press on the video moves the window (Media Player Classic):
+    // drag beats the click and the 2× hold.
+    bool DragStarted(const MouseEvent& e) const {
+        Host* h = GetHost();
+        if (!h || h->IsFullscreen() || window_->PictureInPicture() || !TheApp().config().GetBool("controls.dragWindow"))
+            return false;
+        // The move loop follows the real button: a posted test press (input.ps1) must not start it.
+        if (GetKeyState(VK_LBUTTON) >= 0) return false;
+        const float s = h->Scale();
+        return std::fabs(e.x - downX_) * s >= GetSystemMetrics(SM_CXDRAG) ||
+               std::fabs(e.y - downY_) * s >= GetSystemMetrics(SM_CYDRAG);
+    }
+    void BeginWindowDrag() {
+        down_ = clickPending_ = false;
+        window_->CancelTimer(holdTimer_);
+        holdTimer_ = 0;
+        if (holding_) EndHold();
+        const HWND hwnd = GetHost()->Hwnd();
+        POINT pt;
+        GetCursorPos(&pt);
+        ::ReleaseCapture();  // Host cancels the press; the window's own move loop takes the mouse
+        SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(pt.x, pt.y));
+    }
     void BeginHold() {
         const PlayerState& s = PS();
         if (!down_ || !s.fileLoaded || s.paused) return;
@@ -453,6 +482,7 @@ private:
     PlayerView* owner_;
     bool pausedByClick_ = false;
     bool down_ = false, holding_ = false, clickPending_ = false;
+    float downX_ = 0, downY_ = 0;
     double holdSpeed_ = 1;
     UINT_PTR holdTimer_ = 0, revealTimer_ = 0;
     int edgeSide_ = 0;     // the edge of the last seeking double click

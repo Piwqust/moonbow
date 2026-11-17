@@ -1119,9 +1119,12 @@ void BuildApp(Builder& b) {
         .Basic("fullscreen", L"What a double click on the picture does.",
                L"Что делает двойной щелчок по картинке.");
     b.Toggle("controls.doubleClickEdges", L"Double click near the left or right edge seeks",
-             L"Двойной щелчок у левого или правого края перематывает", true)
+             L"Двойной щелчок у левого или правого края перематывает", false)
         .Desc(L"Back or forward by the short skip, as on YouTube; more clicks there go on seeking.",
               L"Назад или вперёд на короткий шаг, как на YouTube; следующие щелчки там же перематывают дальше.");
+    b.Toggle("controls.dragWindow", L"Drag the video to move the window", L"Перетаскивание видео двигает окно", true)
+        .Desc(L"Grab the picture anywhere and move the window, as in Media Player Classic.",
+              L"Возьмитесь за картинку в любом месте и перетащите окно, как в Media Player Classic.");
     b.Toggle("controls.holdSpeed", L"Press and hold for 2× speed", L"Удержание — скорость 2×", true)
         .Desc(L"Hold the left button on the video to play twice as fast until you let go.",
               L"Пока левая кнопка зажата на видео, оно идёт вдвое быстрее.");

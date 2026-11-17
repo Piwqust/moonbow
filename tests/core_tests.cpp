@@ -383,6 +383,7 @@ void TestSchema() {
                     {"general.theme", "interface"},          {"general.accent", "interface"},
                     {"controls.singleClick", "gestures"},    {"controls.doubleClick", "gestures"},
                     {"controls.doubleClickEdges", "gestures"}, {"controls.holdSpeed", "gestures"},
+                    {"controls.dragWindow", "gestures"},
                     {"controls.middleClick", "gestures"},    {"controls.sideButtons", "gestures"},
                     {"controls.wheel", "gestures"},          {"controls.hwheel", "gestures"},
                     {"controls.reverseScroll", "gestures"}};
