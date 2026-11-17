@@ -66,6 +66,34 @@ inline constexpr float kPeakGravity = 2.5f;  // bar heights per second, per seco
 struct PeakDrop {
     float value = 0, hold = 0, speed = 0;
 };
+// An analog VU meter's needle: a damped spring (IEC 60268-17: 99 % of a step in 300 ms, about
+// 1.5 % overshoot) driven by the RMS level. 0 is the left stop, 1 is +3 VU; it rests against the
+// pin a little past 1.
+inline constexpr float kVuOmega = 13.5f;  // rad/s
+inline constexpr float kVuDamping = 0.8f;
+inline constexpr float kVuPin = 1.04f;
+struct VuNeedle {
+    float pos = 0, vel = 0;
+};
+// Where a steady level of `rms` (full scale 1) points when `referenceDb` dBFS reads 0 VU. The
+// needle's swing is linear in voltage, so 0 VU sits at 10^(-3/20) of the way to +3.
+inline float VuTarget(float rms, float referenceDb) {
+    return rms / std::pow(10.0f, (referenceDb + 3.0f) / 20.0f);
+}
+inline void UpdateVu(VuNeedle& n, float target, float dt) {
+    target = std::clamp(target, 0.0f, 1.2f);
+    dt = std::clamp(dt, 0.0f, 0.1f);
+    for (float left = dt; left > 0; left -= 0.001f) {  // small steps: the spring stays stable
+        const float h = std::min(left, 0.001f);
+        n.vel += (kVuOmega * kVuOmega * (target - n.pos) - 2 * kVuDamping * kVuOmega * n.vel) * h;
+        n.pos += n.vel * h;
+        if (n.pos < 0 || n.pos > kVuPin) {
+            n.pos = std::clamp(n.pos, 0.0f, kVuPin);
+            n.vel = 0;
+        }
+    }
+}
+
 inline void UpdatePeak(PeakDrop& p, float bar, float dt) {
     if (bar >= p.value) {
         p = {bar, kPeakHold, 0};

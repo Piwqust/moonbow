@@ -1820,7 +1820,8 @@ void BuildMedia(Builder& b) {
             {"spectrometer", L"Spectrometer", L"Спектрометр", "", "spectometer_twotone"},
             {"scope", L"Scope", L"Осциллограф", "", "scope_twotone"},
             {"spectrum", L"Spectrum", L"Спектр", "", "spectrum_twotone"},
-            {"waveform", L"Waveform", L"Волна", "", "waveform_twotone"}},
+            {"waveform", L"Waveform", L"Волна", "", "waveform_twotone"},
+            {"vu", L"VU meters", L"Стрелочные VU-индикаторы", "", "vu_twotone"}},
            "disabled")
         .Desc(L"Animation in place of the cover while music plays (components/Audio_Visualizer). It listens to "
               L"Moonbow's own sound only, never to other apps.",
@@ -1850,6 +1851,19 @@ void BuildMedia(Builder& b) {
         .Basic("grid", L"Next to the cover or instead of it.", L"Рядом с обложкой или вместо неё.")
         .When("audio.visualizer", "disabled", true);
     if (!audio::ProcessLoopbackSupported()) vizLayout.Hidden();
+    // Read by the music view's VU meters: the RMS level that reads 0 VU.
+    ItemRef vuRef = b.Pick("audio.vuReference", L"VU meter calibration", L"Калибровка VU-индикаторов",
+           {{"-20", L"0 VU = −20 dBFS (SMPTE)", L"0 VU = −20 dBFS (SMPTE)"},
+            {"-18", L"0 VU = −18 dBFS (EBU)", L"0 VU = −18 dBFS (EBU)"},
+            {"-14", L"0 VU = −14 dBFS", L"0 VU = −14 dBFS"},
+            {"-10", L"0 VU = −10 dBFS (loud modern masters)", L"0 VU = −10 dBFS (громкие современные записи)"}},
+           "-10")
+        .Desc(L"The RMS level of the music that puts the needles at 0 VU. Studio references (−18, −20) suit quiet "
+              L"recordings; with today's loud releases they keep the needles in the red.",
+              L"Средний (RMS) уровень музыки, при котором стрелки стоят на 0 VU. Студийные значения (−18, −20) "
+              L"подходят для тихих записей; на громких современных релизах стрелки с ними не выходят из красной зоны.")
+        .When("audio.visualizer", "vu");
+    if (!audio::ProcessLoopbackSupported()) vuRef.Hidden();
     b.Toggle("audio.pitchCorrection", L"Keep pitch when changing speed", L"Сохранять тон при смене скорости", true)
         .MpvBool("audio-pitch-correction");
 

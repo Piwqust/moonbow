@@ -7,6 +7,10 @@
 #include <string>
 #include <vector>
 
+namespace audio {
+class TrackWave;
+}
+
 namespace app {
 
 // Items that can sit in the player control bar ("Customize Player" dialog).
@@ -80,6 +84,9 @@ private:
     float hoverX_ = -1;
     ui::AnimFloat sweep_;  // the loading line's run along the track (App::OpeningSince)
     ui::AnimFloat lineShown_;  // the loading line's opacity
+    std::unique_ptr<audio::TrackWave> wave_;  // the song's loudness for the music bar
+    std::wstring wavePath_;
+    ui::AnimFloat waveIn_;  // the bars grow from a flat line when the song's wave arrives
     ScopedConnection conn_, liveConn_;
 };
 

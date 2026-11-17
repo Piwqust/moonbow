@@ -28,6 +28,7 @@ struct VisualFrame {
     float scope[kScopePoints] = {};  // the waveform, -1..1, starting at a rising zero crossing
     float wave[kWaveColumns] = {};   // loudness history 0..1, oldest first
     float level = 0;               // overall loudness 0..1
+    float rms[2] = {};             // left / right RMS of the newest samples, before mpv's volume (VU meters)
     uint64_t serial = 0;
 };
 
@@ -75,6 +76,8 @@ private:
     float ring_[kFftSize] = {};  // mono, ring_[head_] is the oldest
     int head_ = 0;
     int fresh_ = 0;        // samples since the last analysis
+    double sumSq_[2] = {};  // per channel, since the last analysis
+    int sumCount_ = 0;
     float scopeGain_ = 1;
     double lastAnalysis_ = 0;
     float bandsDb_[kBands] = {};

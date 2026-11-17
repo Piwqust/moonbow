@@ -150,6 +150,8 @@ void LoopbackCapture::Run() {
         if (!started_) {
             std::memset(ring_, 0, sizeof ring_);
             fresh_ = 0;
+            sumSq_[0] = sumSq_[1] = 0;
+            sumCount_ = 0;
             lastAnalysis_ = NowSeconds();
             postedAt = 0;
             posted_ = false;
@@ -260,17 +262,22 @@ void LoopbackCapture::Read() {
         if (FAILED(capture_->GetBuffer(&data, &frames, &flags, nullptr, nullptr))) break;
         const bool silent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
         for (UINT32 i = 0; i < frames; ++i) {
-            float m = 0;
+            float l = 0, r = 0;
             if (!silent) {
                 if (floatFormat_) {
                     const float* f = reinterpret_cast<const float*>(data) + i * 2;
-                    m = (f[0] + f[1]) * 0.5f;
+                    l = f[0], r = f[1];
                 } else {
                     const int16_t* s = reinterpret_cast<const int16_t*>(data) + i * 2;
-                    m = (s[0] + s[1]) * (0.5f / 32768.0f);
+                    l = s[0] / 32768.0f, r = s[1] / 32768.0f;
                 }
             }
-            ring_[head_] = m;
+            if (std::isfinite(l) && std::isfinite(r)) {
+                sumSq_[0] += static_cast<double>(l) * l;
+                sumSq_[1] += static_cast<double>(r) * r;
+            }
+            ++sumCount_;
+            ring_[head_] = (l + r) * 0.5f;
             head_ = (head_ + 1) % kFftSize;
         }
         fresh_ += static_cast<int>(frames);
@@ -294,6 +301,12 @@ void LoopbackCapture::Analyze(double dt) {
         }
     }
     fresh_ = 0;
+    for (int ch = 0; ch < 2; ++ch) {
+        const double rms = sumCount_ ? std::sqrt(sumSq_[ch] / sumCount_) * inv : 0.0;
+        work_.rms[ch] = static_cast<float>(std::min(rms, 4.0));
+        sumSq_[ch] = 0;
+    }
+    sumCount_ = 0;
     analyzer_.Analyze(linear_, bandsDb_);
     const float t = static_cast<float>(std::min(dt, 0.1));
     for (int b = 0; b < kBands; ++b) {

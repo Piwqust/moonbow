@@ -25,6 +25,7 @@
 #include "../src/audio/CrossfadeMath.h"
 #include "../src/audio/LoopbackSupport.h"
 #include "../src/audio/Spectrum.h"
+#include "../src/audio/TrackWave.h"
 #include "../src/net/Cache.h"
 #include "../src/net/Http.h"
 #include "../src/net/OnlineData.h"
@@ -3138,6 +3139,41 @@ void TestSpectrum() {
     }
     for (int i = 0; i < 200; ++i) UpdatePeak(drop, 0.1f, 0.016f);
     CHECK(drop.value == 0.1f);
+    // VU needle: a steady level at the reference reads 0 VU; a step gets there in about 300 ms
+    // with a small overshoot (IEC 60268-17), and a level past +3 VU rests on the pin.
+    const float vuZero = std::pow(10.0f, -3.0f / 20.0f);
+    CHECK(std::fabs(VuTarget(std::pow(10.0f, -18.0f / 20.0f), -18) - vuZero) < 1e-4f);
+    VuNeedle needle;
+    float top = 0, at99 = -1;
+    for (int i = 1; i <= 100; ++i) {
+        UpdateVu(needle, vuZero, 0.01f);
+        top = std::max(top, needle.pos);
+        if (at99 < 0 && needle.pos >= 0.99f * vuZero) at99 = i * 0.01f;
+    }
+    CHECK_MSG(at99 > 0.25f && at99 <= 0.32f, "99%% after %.2f s", at99);
+    CHECK_MSG(top / vuZero > 1.005f && top / vuZero < 1.02f, "overshoot %.3f", top / vuZero);
+    CHECK(std::fabs(needle.pos - vuZero) < 1e-3f);
+    for (int i = 0; i < 100; ++i) UpdateVu(needle, 5, 0.016f);
+    CHECK(needle.pos == kVuPin);
+    for (int i = 0; i < 100; ++i) UpdateVu(needle, 0, 0.016f);
+    CHECK(needle.pos >= 0 && needle.pos < 1e-3f);
+}
+
+void TestTrackWave() {
+    using namespace audio;
+    CHECK(ReduceWave(nullptr, 0, 8).empty());
+    // A loud half then a quiet half: the loud columns are 1, the quiet ones a quarter.
+    std::vector<int16_t> s(800);
+    for (size_t i = 0; i < s.size(); ++i) s[i] = static_cast<int16_t>((i % 2 ? 1 : -1) * (i < 400 ? 8000 : 2000));
+    const std::vector<float> w = ReduceWave(s.data(), s.size(), 4);
+    CHECK(w.size() == 4);
+    CHECK(w[0] == 1.0f && w[1] == 1.0f);
+    CHECK_MSG(std::fabs(w[2] - 0.25f) < 1e-4f && std::fabs(w[3] - 0.25f) < 1e-4f, "%.3f %.3f", w[2], w[3]);
+    // More columns than samples: every column still has a sample, none read past the end.
+    const std::vector<float> many = ReduceWave(s.data(), 3, 10);
+    CHECK(many.size() == 10 && many[0] == 1.0f);
+    std::vector<int16_t> silence(100, 0);
+    for (float v : ReduceWave(silence.data(), silence.size(), 5)) CHECK(v == 0);
 }
 
 void TestMusicSettings() {
@@ -3157,9 +3193,9 @@ void TestMusicSettings() {
     CHECK(c.IsEnabled("audio.crossfadeSeconds") == false);
     c.SetBool("audio.crossfadeAlbums", false);
     CHECK(FindOption(MpvOptionFor(c, "audio.crossfadeAlbums"), "user-data/moonbow/crossfade-albums") == "no");
-    // The visualizer is a visible setting now, with the four styles of the design.
+    // The visualizer is a visible setting, with the four styles of the design and the VU meters.
     const settings::Item* viz = settings::FindItem("audio.visualizer");
-    CHECK(viz && viz->choices.size() == 5);
+    CHECK(viz && viz->choices.size() == 6);
     if (viz) CHECK(viz->hidden == !audio::ProcessLoopbackSupported());
     CHECK((settings::FindItem("audio.visualizerUnsupported") != nullptr) == !audio::ProcessLoopbackSupported());
     CHECK(c.GetString("audio.visualizer") == "disabled");
@@ -4200,6 +4236,7 @@ const TestCase kTests[] = {
     {"shell_text", TestShellText},
     {"crossfade_math", TestCrossfadeMath},
     {"spectrum", TestSpectrum},
+    {"track_wave", TestTrackWave},
     {"music_settings", TestMusicSettings},
     {"subtitle_text", TestSubtitleText},
     {"skin_parse", TestSkinParse},

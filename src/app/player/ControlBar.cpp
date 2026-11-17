@@ -1,4 +1,5 @@
 #include "app/player/ControlBar.h"
+#include "audio/TrackWave.h"
 #include "app/player/LiveState.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/PanelKit.h"
@@ -926,19 +927,32 @@ void SeekBar::Paint(Painter& p) {
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));
     if (!compact && !s.hasVideo) {
-        // Music: the design's waveform-style bar (decorative bars seeded by the file name).
-        uint32_t h = 2166136261u;
-        for (wchar_t ch : s.path) h = (h ^ static_cast<uint32_t>(ch)) * 16777619u;
-        const float pitch = 5, playX = t.x + t.w * k;
+        // Music: the song's own loudness as thin mirrored bars (SoundCloud), played part lit.
+        // Until the scan is done (or for a stream) the bars lie flat, then grow into the wave.
+        const float playX = t.x + t.w * k;
+        if (!wave_) wave_ = std::make_unique<audio::TrackWave>(TheApp().player().Api());
+        const std::vector<float>* wave =
+            GetHost() ? wave_->Find(s.path, s.duration, GetHost()->Hwnd(), ui::Host::kRepaintMessage) : nullptr;
+        if (wavePath_ != s.path) {
+            wavePath_ = s.path;
+            waveIn_.Set(0);
+        }
+        if (wave && waveIn_.Target() < 1) waveIn_.To(1, ui::AnimFloat::ReducedMotion() ? 0.0f : 260.0f, ui::Ease::Out);
+        const float grow = wave ? waveIn_.Get() : 0.0f;
         const LevelTones bars = LevelColors();  // like the volume wedge: faint ahead, 3:1 played
-        float smooth = 0.5f;
-        for (float bx = t.x + 6; bx < t.Right() - 6; bx += pitch) {
-            h = h * 1664525u + 1013904223u;
-            const float r = static_cast<float>((h >> 8) & 0xFFFF) / 65535.0f;
-            smooth = smooth * 0.55f + r * 0.45f;
-            const float bh = std::round(4 + (t.h - 10) * smooth * smooth * 1.4f);
-            const float bhc = std::min(bh, t.h - 6);
-            p.Fill({std::round(bx), std::round(t.Cy() - bhc / 2), 1.5f, bhc}, bx < playX ? bars.level : bars.empty, 0.75f);
+        constexpr float pitch = 3, barW = 2;
+        const float x0 = t.x + 6, span = t.w - 12, tallest = t.h - 6;
+        const int n = std::max(1, static_cast<int>(span / pitch));
+        for (int i = 0; i < n; ++i) {
+            float v = 0;
+            if (wave) {
+                // The loudest of the wave's columns under this bar, so a short peak isn't lost.
+                const size_t a = wave->size() * i / n, b = std::max(a + 1, wave->size() * (i + 1) / n);
+                for (size_t j = a; j < b && j < wave->size(); ++j) v = std::max(v, (*wave)[j]);
+            }
+            const float bh = std::round(2 + (tallest - 2) * v * grow);
+            const float bx = std::round(x0 + i * pitch);
+            p.Fill({bx, std::round(t.Cy() - bh / 2), barW, bh}, bx < playX ? bars.level : bars.empty, 1);
         }
         const float x = std::clamp(playX, t.x + 2, t.Right() - 2);
         p.Fill({x - 2, t.Cy() - 10, 4, 20}, P().accent, 2);

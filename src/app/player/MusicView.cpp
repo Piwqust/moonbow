@@ -5,7 +5,8 @@
 // left and the lyrics on the right: synced lines follow playback with the sung line highlighted
 // and a click on a line seeks to it; unsynced text stays put and scrolls with the wheel.
 // With Settings > Audio > Visualization on, a playing song shows the visualizer where the cover
-// is (spectrum bars, a radial spectrometer, an oscilloscope or a scrolling waveform), fed by
+// is (spectrum bars, a radial spectrometer, an oscilloscope, a scrolling waveform or a pair of
+// analog VU meters), fed by
 // audio/LoopbackCapture from Moonbow's own sound; a pause brings the cover back.
 #include "Util.h"
 #include "app/App.h"
@@ -34,6 +35,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -64,13 +66,14 @@ constexpr float kWideLyrics = 720;  // narrower views show only the sung line un
 constexpr double kLead = 0.1;
 constexpr float kEdgeFade = 72;  // lyrics fade out over this much at the column's top and bottom
 
-enum class VizStyle { Off, Spectrometer, Scope, Spectrum, Waveform };
+enum class VizStyle { Off, Spectrometer, Scope, Spectrum, Waveform, Vu };
 
 VizStyle VizStyleOf(const std::string& v) {
     if (v == "spectrometer") return VizStyle::Spectrometer;
     if (v == "scope") return VizStyle::Scope;
     if (v == "spectrum") return VizStyle::Spectrum;
     if (v == "waveform") return VizStyle::Waveform;
+    if (v == "vu") return VizStyle::Vu;
     return VizStyle::Off;
 }
 
@@ -659,6 +662,20 @@ private:
             if (!still) capture_->Take(frame_);
             show = playing && !capture_->Failed();
         }
+        if (style_ == VizStyle::Vu) {
+            // The needles swing by the meter's own physics between frames; silence lets them fall.
+            const double now = AnimFloat::Now();
+            const float dt = vuAt_ > 0 ? static_cast<float>((now - vuAt_) / 1000) : 0.0f;
+            vuAt_ = now;
+            const float ref = static_cast<float>(std::atof(TheApp().config().GetString("audio.vuReference").c_str()));
+            bool moving = false;
+            for (int ch = 0; ch < 2; ++ch) {
+                const float target = show ? audio::VuTarget(frame_.rms[ch], ref) : 0.0f;
+                audio::UpdateVu(needles_[ch], target, dt);
+                moving = moving || needles_[ch].pos > 0.001f;
+            }
+            if (moving && !show) Invalidate();  // falling back to the stop after a pause
+        }
         const float target = show ? 1.0f : 0.0f;
         if (vizShow_.Target() != target) vizShow_.To(target, 220, Ease::InOut);
         return vizShow_.Get();
@@ -695,13 +712,15 @@ private:
         const Color fg = white.Fade(0.86f), dim = white.Fade(0.4f);
         // The bar styles take a wider band than the square cover, at the same height, so the
         // title below stays where it was.
-        const float w = std::floor(std::min(left.w - 96, cover.w * 1.5f));
+        // Two VU meters side by side need more width than bars to be read.
+        const float w = std::floor(std::min(left.w - 96, cover.w * (style_ == VizStyle::Vu ? 2.2f : 1.5f)));
         const Rect band{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
         switch (style_) {
             case VizStyle::Spectrum: PaintSpectrum(p, band, white, false, false); break;
             case VizStyle::Waveform: PaintWaveform(p, band, white); break;
             case VizStyle::Scope: PaintScope(p, band, fg, dim); break;
             case VizStyle::Spectrometer: PaintSpectrometer(p, cover, bmp, fg, dim); break;
+            case VizStyle::Vu: PaintVuPair(p, band, false); break;
             case VizStyle::Off: break;
         }
     }
@@ -710,7 +729,7 @@ private:
     // mirrored wings, so the low notes sit next to the cover on both sides. `rest`: silence.
     void PaintBand(Painter& p, const Rect& r, bool leftWing, bool rest) {
         const Color white = Color::Hex(0xFFFFFF);
-        if (rest && style_ != VizStyle::Spectrum) {
+        if (rest && style_ != VizStyle::Spectrum && style_ != VizStyle::Vu) {
             p.Fill({r.x, std::round(r.Cy()), r.w, 1}, white.Fade(0.3f));
             return;
         }
@@ -718,6 +737,11 @@ private:
             case VizStyle::Spectrum: PaintSpectrum(p, r, white, leftWing, layout_ == VizLayout::Wings, rest); break;
             case VizStyle::Waveform: PaintWaveform(p, r, white); break;
             case VizStyle::Scope: PaintScope(p, r, white.Fade(0.86f), white.Fade(0.4f)); break;
+            case VizStyle::Vu:
+                // Wings: the left meter on the left of the cover, the right one on its right.
+                if (layout_ == VizLayout::Wings) PaintVuMeter(p, FitVu(r), leftWing ? 0 : 1, rest);
+                else PaintVuPair(p, r, rest);
+                break;
             default: break;
         }
     }
@@ -782,6 +806,105 @@ private:
             ctx->DrawLine(prev, pt, brush, 2.0f, stroke);
             prev = pt;
         }
+    }
+
+    // --- VU meters: a backlit dial, a scale from -20 to +3 VU with the red zone past 0, and a
+    // needle rising out of a cap at the bottom (AIMP's analog meters).
+    static constexpr float kVuAspect = 1.45f;
+
+    // The largest meter that fits `r`, centered in it.
+    static Rect FitVu(const Rect& r) {
+        const float w = std::floor(std::min(r.w, r.h * kVuAspect)), h = std::floor(w / kVuAspect);
+        return {std::round(r.Cx() - w / 2), std::round(r.Cy() - h / 2), w, h};
+    }
+
+    // Left and right meters side by side, or one above the other when `r` is tall.
+    void PaintVuPair(Painter& p, const Rect& r, bool rest) {
+        constexpr float space = 24;
+        const float wSide = std::min((r.w - space) / 2, r.h * kVuAspect);
+        const float wStack = std::min(r.w, (r.h - space) / 2 * kVuAspect);
+        const float w = std::floor(std::max(wSide, wStack)), h = std::floor(w / kVuAspect);
+        if (w < 40) return;
+        if (wSide >= wStack) {
+            const float x = std::round(r.Cx() - (2 * w + space) / 2), y = std::round(r.Cy() - h / 2);
+            PaintVuMeter(p, {x, y, w, h}, 0, rest);
+            PaintVuMeter(p, {x + w + space, y, w, h}, 1, rest);
+        } else {
+            const float x = std::round(r.Cx() - w / 2), y = std::round(r.Cy() - (2 * h + space) / 2);
+            PaintVuMeter(p, {x, y, w, h}, 0, rest);
+            PaintVuMeter(p, {x, y + h + space, w, h}, 1, rest);
+        }
+    }
+
+    void PaintVuMeter(Painter& p, const Rect& m, int ch, bool rest) {
+        ID2D1DeviceContext5* ctx = p.Ctx();
+        const Color white = Color::Hex(0xFFFFFF);
+        const Color red = Color::Hex(0xFF5A4E);
+        const Color scale = Color::Hex(0xFFE7C2);  // warm, like a lamp behind the dial
+        const float radius = std::round(m.h * 0.07f);
+        p.Fill(m, white.Fade(0.06f), radius);
+        p.Stroke(m, white.Fade(0.12f), radius);
+        const Point pivot{m.Cx(), m.Bottom() - m.h * 0.02f};
+        const float R = m.h * 0.7f;
+        constexpr float kSwing = 0.82f;  // radians each side of upright
+        auto at = [&](float pos, float rad) {
+            const float a = -kSwing + 2 * kSwing * pos;
+            return D2D1_POINT_2F{pivot.x + std::sin(a) * rad, pivot.y - std::cos(a) * rad};
+        };
+        auto vuPos = [](float vu) { return std::pow(10.0f, (vu - 3.0f) / 20.0f); };
+        ID2D1StrokeStyle* round = RoundStroke(ctx);
+        const float o = p.Opacity();
+        const float line = std::max(1.0f, std::round(m.h * 0.008f * 2) / 2);
+        // The arc, then the red band just outside it from 0 VU on.
+        auto arc = [&](float from, float to, float rad, Color c, float thick) {
+            ID2D1SolidColorBrush* b = LineBrush(ctx, c, o);
+            if (!b) return;
+            constexpr int steps = 40;
+            D2D1_POINT_2F prev = at(from, rad);
+            for (int i = 1; i <= steps; ++i) {
+                const D2D1_POINT_2F pt = at(from + (to - from) * i / steps, rad);
+                ctx->DrawLine(prev, pt, b, thick, round);
+                prev = pt;
+            }
+        };
+        arc(vuPos(-20), 1, R, scale.Fade(0.75f), line);
+        const float band = std::max(3.0f, m.h * 0.03f);
+        arc(vuPos(0), 1, R + 2 + band / 2, red.Fade(0.85f), band);
+        struct Mark {
+            int vu;
+            const wchar_t* text;
+            bool minor;  // left out on a small meter, where the labels would touch
+        };
+        static const Mark kMarks[] = {{-20, L"-20", false}, {-10, L"-10", false}, {-7, L"-7", true},
+                                      {-5, L"-5", false},   {-3, L"-3", true},    {-2, L"-2", true},
+                                      {-1, L"-1", true},    {0, L"0", false},     {1, L"+1", true},
+                                      {2, L"+2", true},     {3, L"+3", false}};
+        const bool big = m.w >= 260;
+        const TextStyle labelStyle = m.h >= 240 ? TextStyle::Body : TextStyle::Small;
+        for (const Mark& mk : kMarks) {
+            const float pos = vuPos(static_cast<float>(mk.vu));
+            const Color c = mk.vu >= 0 ? red : scale;
+            if (ID2D1SolidColorBrush* b = LineBrush(ctx, c.Fade(0.9f), o))
+                ctx->DrawLine(at(pos, R - m.h * 0.05f), at(pos, R), b, line * 1.5f, round);
+            if (!big && mk.minor) continue;
+            const D2D1_POINT_2F t = at(pos, R + band + m.h * 0.09f);
+            p.Text(mk.text, {t.x - 20, t.y - 10, 40, 20}, labelStyle, c.Fade(0.9f), HAlign::Center);
+        }
+        const TextStyle tagStyle = m.h >= 240 ? TextStyle::BodyMedium : TextStyle::SmallMedium;
+        const float inset = std::round(m.h * 0.06f);
+        p.Text(L"VU", {m.x + inset, m.y + inset, 60, 20}, tagStyle, scale.Fade(0.6f));
+        p.Text(ch == 0 ? L"L" : L"R", {m.Right() - inset - 60, m.y + inset, 60, 20}, tagStyle, scale.Fade(0.6f),
+               HAlign::Trailing);
+        // The needle, from under the cap to just past the scale.
+        const float pos = rest ? 0.0f : needles_[ch].pos;
+        p.PushClip(m);
+        if (ID2D1SolidColorBrush* b = LineBrush(ctx, red, o))
+            ctx->DrawLine(at(pos, m.h * 0.1f), at(pos, R + band + m.h * 0.04f), b, std::max(1.5f, line * 2), round);
+        const float cap = m.h * 0.17f;
+        p.FillCircle({m.Cx(), m.Bottom()}, cap, Color::Hex(0x0B0C10));
+        p.StrokeCircle({m.Cx(), m.Bottom()}, cap, white.Fade(0.12f));
+        p.FillCircle({m.Cx(), m.Bottom() - cap * 0.45f}, cap * 0.22f, white.Fade(0.8f));
+        p.PopClip();
     }
 
     // Spokes around a round copy of the cover: the bands go down one side and back up the other.
@@ -1473,6 +1596,8 @@ private:
     Config::Token vizToken_ = 0;
     VizStyle style_ = VizStyle::Off;
     VizLayout layout_ = VizLayout::Replace;
+    audio::VuNeedle needles_[2];  // left, right
+    double vuAt_ = 0;             // when the needles last moved (AnimFloat::Now)
     std::unique_ptr<audio::LoopbackCapture> capture_;
     audio::VisualFrame frame_;
     AnimFloat vizShow_{0};  // 0 = the cover, 1 = the visualizer
