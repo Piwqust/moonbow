@@ -25,6 +25,7 @@
 #include "../src/audio/CrossfadeMath.h"
 #include "../src/audio/LoopbackSupport.h"
 #include "../src/audio/Spectrum.h"
+#include "../src/audio/Loudness.h"
 #include "../src/audio/TrackWave.h"
 #include "../src/net/Cache.h"
 #include "../src/net/Http.h"
@@ -3176,6 +3177,40 @@ void TestTrackWave() {
     for (float v : ReduceWave(silence.data(), silence.size(), 5)) CHECK(v == 0);
 }
 
+// EBU Tech 3341 / 3342 test signals: 1 kHz sines in both channels.
+void TestLoudness() {
+    using namespace audio;
+    // shortcut: a heap meter, its bins are too large for the test thread's stack frame.
+    auto m = std::make_unique<LoudnessMeter>();
+    m->Configure(48000);
+    CHECK(m->Momentary() == kLoudnessNone && m->Integrated() == kLoudnessNone);
+    double phase = 0;
+    auto play = [&](float dbfs, double seconds) {
+        const float a = std::pow(10.0f, dbfs / 20);
+        for (int i = 0; i < static_cast<int>(seconds * 48000); ++i) {
+            const float v = a * static_cast<float>(std::sin(phase));
+            phase += 2 * 3.14159265358979323846 * 1000 / 48000;
+            m->Add(v, v);
+        }
+    };
+    play(-23, 20);  // 3341 case 1: M, S and I read -23.0 +/- 0.1
+    CHECK_MSG(std::fabs(m->Momentary() + 23) < 0.1f, "M %.2f", m->Momentary());
+    CHECK_MSG(std::fabs(m->ShortTerm() + 23) < 0.1f, "S %.2f", m->ShortTerm());
+    CHECK_MSG(std::fabs(m->Integrated() + 23) < 0.1f, "I %.2f", m->Integrated());
+    m->Reset();
+    CHECK(m->Integrated() == kLoudnessNone);
+    // Case 4: the quiet parts fall under the gates, I stays -23.0.
+    play(-72, 10), play(-36, 10), play(-23, 60), play(-36, 10), play(-72, 10);
+    CHECK_MSG(std::fabs(m->Integrated() + 23) < 0.1f, "I %.2f", m->Integrated());
+    // 3342 cases 1 and 2: LRA 10 and 5 LU, +/- 1.
+    m->Reset();
+    play(-20, 20), play(-30, 20);
+    CHECK_MSG(std::fabs(m->Range() - 10) < 1, "LRA %.2f", m->Range());
+    m->Reset();
+    play(-20, 20), play(-15, 20);
+    CHECK_MSG(std::fabs(m->Range() - 5) < 1, "LRA %.2f", m->Range());
+}
+
 void TestMusicSettings() {
     FreshDataDir(L"music-settings");
     Config c;
@@ -4237,6 +4272,7 @@ const TestCase kTests[] = {
     {"crossfade_math", TestCrossfadeMath},
     {"spectrum", TestSpectrum},
     {"track_wave", TestTrackWave},
+    {"loudness", TestLoudness},
     {"music_settings", TestMusicSettings},
     {"subtitle_text", TestSubtitleText},
     {"skin_parse", TestSkinParse},

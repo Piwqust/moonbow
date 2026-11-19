@@ -691,7 +691,7 @@ private:
             case VizStyle::Waveform: viz_.Waveform(p, band, frame_, white); break;
             case VizStyle::Scope: viz_.Scope(p, band, frame_, fg, dim); break;
             case VizStyle::Spectrometer: PaintSpectrometer(p, cover, bmp, fg, dim); break;
-            case VizStyle::Vu: viz_.VuPair(p, band, false); break;
+            case VizStyle::Vu: viz_.VuPair(p, band, false, white); break;
             case VizStyle::Off: break;
         }
     }
@@ -710,8 +710,8 @@ private:
             case VizStyle::Scope: viz_.Scope(p, r, frame_, white.Fade(0.86f), white.Fade(0.4f)); break;
             case VizStyle::Vu:
                 // Wings: the left meter on the left of the cover, the right one on its right.
-                if (layout_ == VizLayout::Wings) viz_.VuMeter(p, VizPaint::FitVu(r), leftWing ? 0 : 1, rest);
-                else viz_.VuPair(p, r, rest);
+                if (layout_ == VizLayout::Wings) viz_.VuMeter(p, VizPaint::FitVu(r), leftWing ? 0 : 1, rest, white);
+                else viz_.VuPair(p, r, rest, white);
                 break;
             default: break;
         }

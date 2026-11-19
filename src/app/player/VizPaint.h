@@ -28,8 +28,10 @@ public:
     void Waveform(ui::Painter& p, const ui::Rect& r, const audio::VisualFrame& frame, ui::Color white);
     void Scope(ui::Painter& p, const ui::Rect& r, const audio::VisualFrame& frame, ui::Color fg, ui::Color dim);
     // Left and right meters side by side, or stacked when `r` is tall; `rest`: needles on the stop.
-    void VuPair(ui::Painter& p, const ui::Rect& r, bool rest);
-    void VuMeter(ui::Painter& p, const ui::Rect& m, int ch, bool rest);
+    // `ink`: the one colour they are drawn in (white on the music view, the theme's text colour
+    // on the meters window's cards).
+    void VuPair(ui::Painter& p, const ui::Rect& r, bool rest, ui::Color ink);
+    void VuMeter(ui::Painter& p, const ui::Rect& m, int ch, bool rest, ui::Color ink);
     static ui::Rect FitVu(const ui::Rect& r);  // the largest meter that fits, centered
 
     // Lines go straight to the context (Painter has no line call); made once per device.
@@ -37,19 +39,12 @@ public:
     ID2D1SolidColorBrush* LineBrush(ID2D1DeviceContext5* ctx, ui::Color c, float opacity);
 
 private:
-    struct VuDial {
-        UINT32 pxW = 0, pxH = 0;
-        int ch = 0;
-        uint32_t gen = 0;
-        gfx::ComPtr<ID2D1Bitmap1> back, front;  // behind and in front of the needle
+    struct Hold {
+        float pos = 0;
+        double at = 0;
     };
-    VuDial* DialFor(ID2D1DeviceContext5* ctx, float w, float h, int ch);
-    void DrawVuScale(ID2D1DeviceContext5* c, float w, float h, bool big);
-
-    std::vector<VuDial> dials_;
-    gfx::ComPtr<ID2D1DeviceContext5> off_;  // draws the dials, off the window's frame
-    uint32_t offGen_ = 0;
     audio::VuNeedle needles_[2];  // left, right
+    Hold holds_[2];               // the highest needle position of the last moment
     double vuAt_ = 0;             // when the needles last moved (AnimFloat::Now)
     gfx::ComPtr<ID2D1StrokeStyle> roundStroke_;
     gfx::ComPtr<ID2D1SolidColorBrush> lineBrush_;

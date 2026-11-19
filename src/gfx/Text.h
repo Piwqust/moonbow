@@ -23,6 +23,7 @@ enum class TextStyle : uint8_t {
     Micro,       // Medium 10
     Mono,        // Regular 14, tabular figures
     MonoSmall,   // Regular 12, tabular figures
+    MonoLarge,   // Light 28, tabular figures (meter readouts)
     Count,
 };
 

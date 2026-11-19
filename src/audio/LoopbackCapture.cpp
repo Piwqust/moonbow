@@ -127,6 +127,7 @@ bool LoopbackCapture::Take(VisualFrame& out) {
 void LoopbackCapture::Run() {
     const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     analyzer_.Configure(rate_);
+    loudness_.Configure(rate_);
     if (!Open()) {
         Trace("visualizer: process loopback unavailable");
         failed_ = true;
@@ -150,7 +151,7 @@ void LoopbackCapture::Run() {
         if (!started_) {
             std::memset(ring_, 0, sizeof ring_);
             fresh_ = 0;
-            sumSq_[0] = sumSq_[1] = 0;
+            sumSq_[0] = sumSq_[1] = sumLR_ = 0;
             peak_[0] = peak_[1] = 0;
             sumCount_ = 0;
             lastAnalysis_ = NowSeconds();
@@ -255,6 +256,11 @@ void LoopbackCapture::Close() {
 }
 
 void LoopbackCapture::Read() {
+    // Loudness is measured before mpv's volume, like the other levels.
+    const double g = gain_.load();
+    const float inv = g > 1e-30 ? static_cast<float>(1.0 / g) : 0.0f;
+    if (resetLoudness_.exchange(false)) loudness_.Reset();
+    constexpr int kStereoPairs = kGonioPoints * 2;
     UINT32 size = 0;
     while (SUCCEEDED(capture_->GetNextPacketSize(&size)) && size) {
         BYTE* data = nullptr;
@@ -278,7 +284,14 @@ void LoopbackCapture::Read() {
                 sumSq_[1] += static_cast<double>(r) * r;
                 peak_[0] = std::max(peak_[0], std::fabs(l));
                 peak_[1] = std::max(peak_[1], std::fabs(r));
+                sumLR_ += static_cast<double>(l) * r;
+            } else {
+                l = r = 0;
             }
+            loudness_.Add(l * inv, r * inv);
+            stereo_[stereoHead_ * 2] = l * inv;
+            stereo_[stereoHead_ * 2 + 1] = r * inv;
+            stereoHead_ = (stereoHead_ + 1) % kStereoPairs;
             ++sumCount_;
             ring_[head_] = (l + r) * 0.5f;
             head_ = (head_ + 1) % kFftSize;
@@ -304,6 +317,32 @@ void LoopbackCapture::Analyze(double dt) {
         }
     }
     fresh_ = 0;
+    // Correlation: +1 mono, 0 unrelated channels, -1 one channel inverted. Under -80 dBFS (before
+    // the volume, like every level here) it settles back to 0 instead of jumping on noise.
+    const double energyLR = sumSq_[0] * sumSq_[1];
+    const double quiet = 1e-8 * g * g * sumCount_;  // (-80 dBFS)^2 per sample, after the volume
+    const float corr = sumSq_[0] > quiet && sumSq_[1] > quiet
+                           ? static_cast<float>(std::clamp(sumLR_ / std::sqrt(energyLR), -1.0, 1.0))
+                           : 0.0f;
+    const float t0 = static_cast<float>(std::min(dt, 0.1));
+    work_.correlation = Smooth(work_.correlation, corr, t0, 0.12f, 0.12f);
+    sumLR_ = 0;
+    // Goniometer: every second pair of the newest ones (already before the volume), with a slow
+    // gain so quiet music still fills the circle.
+    float gonioPeak = 0;
+    constexpr int kStereoPairs = kGonioPoints * 2;
+    for (int i = 0; i < kGonioPoints; ++i) {
+        const int at = (stereoHead_ + i * 2) % kStereoPairs;
+        work_.gonio[i * 2] = stereo_[at * 2];
+        work_.gonio[i * 2 + 1] = stereo_[at * 2 + 1];
+        gonioPeak = std::max({gonioPeak, std::fabs(stereo_[at * 2]), std::fabs(stereo_[at * 2 + 1])});
+    }
+    gonioGain_ = Smooth(gonioGain_, 0.8f / std::max(gonioPeak, 0.06f), t0, 0.05f, 1.2f);
+    for (float& v : work_.gonio) v = std::clamp(v * gonioGain_, -1.0f, 1.0f);
+    work_.momentary = loudness_.Momentary();
+    work_.shortTerm = loudness_.ShortTerm();
+    work_.integrated = loudness_.Integrated();
+    work_.range = loudness_.Range();
     for (int ch = 0; ch < 2; ++ch) {
         const double rms = sumCount_ ? std::sqrt(sumSq_[ch] / sumCount_) * inv : 0.0;
         work_.rms[ch] = static_cast<float>(std::min(rms, 4.0));

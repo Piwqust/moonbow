@@ -28,6 +28,7 @@ constexpr StyleSpec kStyles[] = {
     {10, DWRITE_FONT_WEIGHT_MEDIUM, false},    // Micro
     {14, DWRITE_FONT_WEIGHT_REGULAR, true},    // Mono
     {12, DWRITE_FONT_WEIGHT_REGULAR, true},    // MonoSmall
+    {28, DWRITE_FONT_WEIGHT_LIGHT, true},      // MonoLarge
 };
 static_assert(std::size(kStyles) == static_cast<size_t>(TextStyle::Count));
 
@@ -52,6 +53,7 @@ constexpr StyleSpec kOnestStyles[] = {
     {10.3f, DWRITE_FONT_WEIGHT_MEDIUM, false},     // Micro
     {14, DWRITE_FONT_WEIGHT_REGULAR, true},        // Mono: Inter, as in kStyles
     {12, DWRITE_FONT_WEIGHT_REGULAR, true},        // MonoSmall: Inter, as in kStyles
+    {28, DWRITE_FONT_WEIGHT_LIGHT, true},          // MonoLarge: Inter, as in kStyles
 };
 static_assert(std::size(kOnestStyles) == static_cast<size_t>(TextStyle::Count));
 

@@ -6,9 +6,8 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/player/ControlBar.h"
+#include "app/player/MetersView.h"
 #include "app/player/NowPlaying.h"
-#include "app/player/VizPaint.h"
-#include "audio/LoopbackCapture.h"
 #include "audio/LoopbackSupport.h"
 #include "gfx/Gpu.h"
 #include "ui/Anim.h"
@@ -26,8 +25,6 @@ using namespace ui;
 
 namespace {
 
-constexpr unsigned kMetersTap = 2;  // Player::SetSignalTap listener of the meters window
-
 Config& Settings() { return TheApp().config(); }
 
 // A small window owned by the main one: a caption row with the name and a close button over
@@ -36,7 +33,7 @@ class DetachedWindow : public Host {
 public:
     DetachedWindow(const char* key, const wchar_t* name) : key_(key), name_(name) {}
 
-    bool Open(float w, float h, float minW, float minH, bool dark) {
+    bool Open(float w, float h, float minW, float minH) {
         HostOptions o;
         o.title = std::wstring(Tr(name_)) + L" — Moonbow";
         MainWindow* main = TheApp().main();
@@ -49,26 +46,30 @@ public:
         if (!Create(o)) return false;
 
         auto root = std::make_unique<Panel>();
-        root->fill = dark ? std::function<Color()>([] { return P().videoBg; }) : [] { return P().bgBase; };
+        root->fill = [] { return P().bgBase; };
         root->dir = Dir::Column;
+        // The caption row of the main window: the logo, the name, the window's own tools, close.
         auto* header = root->Add<Panel>();
         header->fill = [] { return P().bgChrome; };
         header->dir = Dir::Row;
         header->align = Align::Center;
         header->width = Length::Grow();
-        header->height = Length::Px(36);
-        header->pad = {14, 0, 0, 0};
+        header->height = Length::Px(40);
+        header->pad = {16, 0, 0, 0};
+        header->gap = 8;
         header->ncRole = NcRole::Caption;
+        header->Add<IconView>("moonbow", 16, Tone::Primary);
         caption_ = header->Add<Label>(Tr(name_), TextStyle::Body, Tone::Secondary);
         caption_->width = Length::Grow();
-        auto* close = header->Add<IconButton>("close", Tr(L"Close"), 40, 20);
-        close->height = Length::Px(36);
-        close->onClick = [this] { Close(); };
         body_ = root->Add<Widget>();
         body_->width = Length::Grow();
         body_->height = Length::Grow();
         body_->dir = Dir::Column;
         Build(body_);
+        BuildTools(header);
+        auto* close = header->Add<IconButton>("close", Tr(L"Close"), 40, 20);
+        close->height = Length::Px(40);
+        close->onClick = [this] { Close(); };
         SetRoot(std::move(root));
 
         // The player's shortcuts work here too (Space, arrows, M ...).
@@ -92,6 +93,7 @@ public:
 
 protected:
     virtual void Build(Widget* body) = 0;
+    virtual void BuildTools(Widget* /*header*/) {}  // between the name and the close button
     Label* caption_ = nullptr;
 
 private:
@@ -166,120 +168,16 @@ private:
     ScopedConnection conn_;
 };
 
-// --- Audio meters: Moonbow's own sound measured like a studio's desk, on the dark ground of the
-// music view: two VU meters, the levels in dBFS, the spectrum and the oscilloscope.
-class MetersView : public Widget {
-public:
-    MetersView() {
-        width = Length::Grow();
-        height = Length::Grow();
-        TheApp().player().SetSignalTap(true, kMetersTap);
-        conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-            if (m & (kChangeTime | kChangeState | kChangeFile | kChangeVolume)) Invalidate();
-        });
-    }
-    ~MetersView() override { TheApp().player().SetSignalTap(false, kMetersTap); }
-
-    void DebugInfo(std::string& out) const override {
-        Widget::DebugInfo(out);
-        char text[160];
-        snprintf(text, sizeof text, " frames=%llu rms=%.3f/%.3f peak=%.3f/%.3f%s",
-                 static_cast<unsigned long long>(frame_.serial), frame_.rms[0], frame_.rms[1], frame_.peak[0],
-                 frame_.peak[1], capture_ && capture_->Failed() ? " failed" : "");
-        out += text;
-    }
-
-    void Paint(Painter& p) override {
-        const PlayerState& s = TheApp().player().State();
-        const bool playing = s.fileLoaded && !s.paused && !s.eof && !s.idle;
-        if (playing && !capture_ && GetHost())
-            capture_ = std::make_unique<audio::LoopbackCapture>(GetHost()->Hwnd(), Host::kRepaintMessage);
-        bool live = false;
-        if (capture_) {
-            // Windows' "Animation effects" off: the first frame with sound in it stays (WCAG 2.3.3).
-            const bool still = AnimFloat::ReducedMotion() && frame_.level > 0.05f;
-            capture_->SetGain(TheApp().player().OutputGain());
-            capture_->SetRunning(playing && !still);
-            if (!still) capture_->Take(frame_);
-            live = playing && !capture_->Failed();
-        }
-        if (s.loadSerial != serial_) {  // a new file: its own loudest moments
-            serial_ = s.loadSerial;
-            for (Hold& h : max_) h = {};
-        }
-        const float ref = static_cast<float>(std::atof(Settings().GetString("audio.vuReference").c_str()));
-        if (viz_.UpdateNeedles(frame_, live, ref) && !live) Invalidate();  // falling to the stop
-        const double now = AnimFloat::Now();
-        for (int ch = 0; ch < 2; ++ch) {
-            const float db = live ? Db(frame_.peak[ch]) : -200.0f;
-            // The peak readout holds the highest value for a moment, like a desk's peak meter.
-            if (db >= hold_[ch].db || now - hold_[ch].at > 1500) hold_[ch] = {db, now};
-            if (db > max_[ch].db) max_[ch] = {db, now};
-        }
-
-        const Color white = Color::Hex(0xFFFFFF);
-        const Rect r{rect.x + 20, rect.y + 16, rect.w - 40, rect.h - 32};
-        const float readH = 64;
-        const float rest = r.h - readH - 32;
-        const Rect vu{r.x, r.y, r.w, std::floor(rest * 0.5f)};
-        const Rect read{r.x, vu.Bottom() + 12, r.w, readH};
-        const Rect spec{r.x, read.Bottom() + 12, r.w, std::floor(rest * 0.32f)};
-        const Rect scope{r.x, spec.Bottom() + 8, r.w, r.Bottom() - spec.Bottom() - 8};
-        viz_.VuPair(p, vu, false);
-        PaintReadouts(p, read, live);
-        viz_.Spectrum(p, spec, frame_, white, false, false, !live);
-        if (live) viz_.Scope(p, scope, frame_, white.Fade(0.86f), white.Fade(0.4f));
-        else p.Fill({scope.x, std::round(scope.Cy()), scope.w, 1}, white.Fade(0.2f));
-    }
-
-private:
-    struct Hold {
-        float db = -200;
-        double at = 0;
-    };
-    static float Db(float v) { return v > 1e-9f ? 20.0f * std::log10(v) : -200.0f; }
-    static std::wstring DbText(float db) {
-        if (db <= -99) return L"−∞";
-        wchar_t t[32];
-        swprintf_s(t, L"%+.1f", db);
-        if (t[0] == L'-') return L"−" + std::wstring(t + 1);  // a real minus sign
-        return t;
-    }
-
-    // Per channel: RMS, the held peak and the loudest peak of the file, in dBFS; a peak at
-    // 0 dBFS or above (clipping) is red.
-    void PaintReadouts(Painter& p, const Rect& r, bool live) {
-        const Color white = Color::Hex(0xFFFFFF), red = Color::Hex(0xFF5A4E);
-        const float colW = r.w / 4;
-        const wchar_t* heads[] = {L"", L"RMS", L"Peak", L"Max"};
-        for (int c = 1; c < 4; ++c)
-            p.Text(Tr(heads[c]), {r.x + colW * c, r.y, colW, 18}, TextStyle::Micro, white.Fade(0.45f), HAlign::Trailing);
-        for (int ch = 0; ch < 2; ++ch) {
-            const float y = r.y + 20 + ch * 22;
-            p.Text(ch == 0 ? L"L" : L"R", {r.x, y, colW, 20}, TextStyle::BodyMedium, white.Fade(0.6f));
-            const float values[] = {live ? Db(frame_.rms[ch]) : -200.0f, hold_[ch].db, max_[ch].db};
-            for (int c = 0; c < 3; ++c) {
-                const float v = values[c];
-                const Color col = c > 0 && v >= 0 ? red : white.Fade(c == 2 ? 0.6f : 0.86f);
-                p.Text(DbText(v) + L" dB", {r.x + colW * (c + 1), y, colW, 20}, TextStyle::Mono, col, HAlign::Trailing);
-            }
-        }
-    }
-
-    std::unique_ptr<audio::LoopbackCapture> capture_;
-    audio::VisualFrame frame_;
-    VizPaint viz_;
-    Hold hold_[2], max_[2];
-    uint64_t serial_ = 0;
-    ScopedConnection conn_;
-};
-
 class MetersWindow : public DetachedWindow {
 public:
     MetersWindow() : DetachedWindow("interface.metersWindow", L"Audio meters") {}
 
 protected:
-    void Build(Widget* body) override { body->Add<MetersView>(); }
+    void Build(Widget* body) override { view_ = AddMetersView(body); }
+    void BuildTools(Widget* header) override { AddMetersTools(header, view_); }
+
+private:
+    Widget* view_ = nullptr;
 };
 
 DetachedWindow* g_controls = nullptr;
@@ -304,7 +202,7 @@ void Follow(DetachedWindow*& slot, bool want) {
     };
     slot = w;
     const bool controls = std::is_same_v<W, ControlsWindow>;
-    if (!(controls ? w->Open(560, 136, 380, 136, false) : w->Open(720, 620, 420, 440, true))) {
+    if (!(controls ? w->Open(560, 140, 380, 140) : w->Open(980, 720, 700, 580))) {
         slot = nullptr;
         delete w;
     }

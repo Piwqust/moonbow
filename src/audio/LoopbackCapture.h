@@ -8,6 +8,7 @@
 // Each analyzed frame posts ui::Host::kRepaintMessage to the window, one at a time: the next is
 // posted only after Take() has picked up the previous one.
 
+#include "audio/Loudness.h"
 #include "audio/Spectrum.h"
 
 #include <windows.h>
@@ -22,6 +23,8 @@ struct IAudioCaptureClient;
 
 namespace audio {
 
+inline constexpr int kGonioPoints = 1024;  // stereo pairs drawn by the goniometer
+
 struct VisualFrame {
     float bands[kBands] = {};      // bar heights 0..1, smoothed
     float peaks[kBands] = {};      // falling peak marks 0..1
@@ -30,6 +33,10 @@ struct VisualFrame {
     float level = 0;               // overall loudness 0..1
     float rms[2] = {};             // left / right RMS of the newest samples, before mpv's volume (VU meters)
     float peak[2] = {};            // left / right sample peak of the newest samples, before mpv's volume
+    float correlation = 0;         // L/R phase correlation, -1..1, smoothed
+    float momentary = kLoudnessNone, shortTerm = kLoudnessNone;  // LUFS, before mpv's volume
+    float integrated = kLoudnessNone, range = kLoudnessNone;     // since ResetLoudness: LUFS, LU
+    float gonio[kGonioPoints * 2] = {};  // the newest L, R pairs, -1..1 with a slow automatic gain
     uint64_t serial = 0;
 };
 
@@ -43,6 +50,7 @@ public:
     // UI thread.
     void SetRunning(bool run);
     void SetGain(double gain);  // mpv's software gain (Player::OutputGain): the levels ignore the volume
+    void ResetLoudness() { resetLoudness_ = true; }  // integrated loudness and range start over
     // Copies the newest frame into `out`; false when there is none newer than out.serial.
     bool Take(VisualFrame& out);
     bool Failed() const { return failed_.load(); }  // process loopback unavailable: show nothing
@@ -61,7 +69,7 @@ private:
     UINT message_;
     HANDLE control_ = nullptr;  // auto-reset: SetRunning, the destructor
     HANDLE audio_ = nullptr;    // the capture client's buffer event
-    std::atomic<bool> want_{false}, quit_{false}, failed_{false}, stalled_{false}, posted_{false};
+    std::atomic<bool> want_{false}, quit_{false}, failed_{false}, stalled_{false}, posted_{false}, resetLoudness_{false};
     std::atomic<double> gain_{1.0};
     std::atomic<uint64_t> captured_{0};
 
@@ -78,6 +86,10 @@ private:
     int head_ = 0;
     int fresh_ = 0;        // samples since the last analysis
     double sumSq_[2] = {};  // per channel, since the last analysis
+    double sumLR_ = 0;
+    float stereo_[kGonioPoints * 4] = {};  // L, R pairs, twice what the goniometer draws; ring
+    int stereoHead_ = 0;                   // pair index of the oldest
+    float gonioGain_ = 1;
     float peak_[2] = {};
     int sumCount_ = 0;
     float scopeGain_ = 1;
@@ -86,6 +98,7 @@ private:
     float linear_[kFftSize] = {};
     VisualFrame work_;
     PeakDrop drops_[kBands];
+    LoudnessMeter loudness_;
     SpectrumAnalyzer analyzer_;
     std::thread thread_;
 };
