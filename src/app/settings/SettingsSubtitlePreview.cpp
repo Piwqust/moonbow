@@ -1,8 +1,9 @@
-// Subtitle samples drawn with a style, so a change shows without a playing video (R3-08): the
-// example on top of Settings > Subtitles and the cards of the ready-made styles (here and in the
-// player's Subtitles panel). An approximation of libass in Direct2D: the outline is the text
-// stamped around a circle, the shadow an offset copy, the blur a Gaussian blur effect. The text
-// is recorded into a command list once per style change, so repaints only replay it.
+// Settings > Subtitles: the subtitle style on a real frame (a night lake under a moonbow, dark water
+// on the left and moonlight on the right, so readability shows on both), with the ready-made styles
+// as a row of names under it: hovering one shows it, a click picks it (design/explorations/
+// 2026-11-19-subtitles.html, layout B). An approximation of libass in Direct2D: the outline is the
+// text stamped around a circle, the shadow an offset copy, the blur a Gaussian blur effect. The
+// text is recorded into a command list once per style, so repaints only replay it.
 #include "app/I18n.h"
 #include "app/player/SubStyle.h"
 #include "app/settings/SettingsUi.h"
@@ -11,6 +12,7 @@
 #include "gfx/Text.h"
 
 #include <d2d1effects.h>
+#include <wincodec.h>
 
 #include <cmath>
 #include <functional>
@@ -25,7 +27,7 @@ namespace {
 // CLSID_D2D1GaussianBlur (defined here so we don't need dxguid.lib).
 constexpr GUID kGaussianBlur = {0x1feb6d69, 0x2fe6, 0x4ac9, {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
 
-// Everything that changes the picture; compared on every settings change.
+// Everything that changes the picture.
 std::wstring StyleKey(const SubtitleStyle& s, float position) {
     wchar_t buf[200];
     swprintf_s(buf, L"|%g|%d|%d|%08X%02X|%08X|%08X%02X|%g|%d|%hs|%g|%g", s.size, s.bold ? 1 : 0, s.weight, s.text.Rgb(),
@@ -35,34 +37,50 @@ std::wstring StyleKey(const SubtitleStyle& s, float position) {
     return s.font + buf;
 }
 
-// The "frame" behind the text: a night half and a daylight half, so readability shows on both.
-// They stand for video content, not UI, so they are not theme tokens.
-void PaintScene(Painter& p, const Rect& f) {
-    ID2D1DeviceContext5* ctx = p.Ctx();
-    const float half = std::round(f.w / 2);
-    auto gradient = [&](const Rect& r, uint32_t top, uint32_t bottom) {
-        if (!ctx) return p.Fill(r, Color::Hex(bottom));
-        const D2D1_GRADIENT_STOP stops[] = {{0, Color::Hex(top).D2D()}, {1, Color::Hex(bottom).D2D()}};
-        gfx::ComPtr<ID2D1GradientStopCollection> coll;
-        gfx::ComPtr<ID2D1LinearGradientBrush> brush;
-        if (FAILED(ctx->CreateGradientStopCollection(stops, 2, &coll)) ||
-            FAILED(ctx->CreateLinearGradientBrush({{r.x, r.y}, {r.x, r.Bottom()}}, D2D1::BrushProperties(), coll.Get(), &brush)))
-            return p.Fill(r, Color::Hex(bottom));
-        ctx->FillRectangle(D2D1::RectF(r.x, r.y, r.Right(), r.Bottom()), brush.Get());
-    };
-    gradient({f.x, f.y, half, f.h}, 0x2A3556, 0x0E121D);
-    gradient({f.x + half, f.y, f.w - half, f.h}, 0xF3E3C3, 0xB8C6D1);
-    // A moon in the night and a sun haze in the day, faint: a picture, not a test card.
-    const Point moon{f.x + half * 0.26f, f.y + f.h * 0.28f};
-    p.FillCircle(moon, f.h * 0.16f, Color::Hex(0xDCE6FF, 0.06f));
-    p.FillCircle(moon, f.h * 0.085f, Color::Hex(0xEEF2FF, 0.55f));
-    p.FillCircle({f.x + half * 1.72f, f.y + f.h * 0.26f}, f.h * 0.3f, Color::Hex(0xFFFFFF, 0.28f));
+// res/images/subtitle-frame.jpg, decoded once to premultiplied BGRA.
+struct FramePixels {
+    UINT w = 0, h = 0;
+    std::vector<uint8_t> data;
+};
+
+const FramePixels& Frame() {
+    static const FramePixels px = [] {
+        FramePixels out;
+        HRSRC res = FindResourceW(nullptr, L"MOONBOW_SUB_FRAME", RT_RCDATA);
+        HGLOBAL mem = res ? LoadResource(nullptr, res) : nullptr;
+        auto* bytes = mem ? static_cast<BYTE*>(LockResource(mem)) : nullptr;
+        if (!bytes) return out;
+        gfx::ComPtr<IWICImagingFactory> wic;
+        gfx::ComPtr<IWICStream> stream;
+        gfx::ComPtr<IWICBitmapDecoder> decoder;
+        gfx::ComPtr<IWICBitmapFrameDecode> frame;
+        gfx::ComPtr<IWICFormatConverter> converter;
+        UINT w = 0, h = 0;
+        if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) ||
+            FAILED(wic->CreateStream(&stream)) || FAILED(stream->InitializeFromMemory(bytes, SizeofResource(nullptr, res))) ||
+            FAILED(wic->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder)) ||
+            FAILED(decoder->GetFrame(0, &frame)) || FAILED(frame->GetSize(&w, &h)) ||
+            FAILED(wic->CreateFormatConverter(&converter)) ||
+            FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                         WICBitmapPaletteTypeCustom)))
+            return out;
+        out.data.resize(static_cast<size_t>(w) * h * 4);
+        if (FAILED(converter->CopyPixels(nullptr, w * 4, static_cast<UINT>(out.data.size()), out.data.data()))) {
+            out.data.clear();
+            return out;
+        }
+        out.w = w;
+        out.h = h;
+        return out;
+    }();
+    return px;
 }
 
-// A line (or two) of subtitles drawn with a style over the scene.
+// A line (or two) of subtitles drawn with a style over the frame, sized as mpv sizes them: the
+// style's size is pixels of a 720-line picture.
 class SubtitleSample {
 public:
-    SubtitleSample(std::wstring text, float scale) : text_(std::move(text)), scale_(scale) {}
+    explicit SubtitleSample(std::wstring text) : text_(std::move(text)) {}
 
     // True when the picture changed.
     bool SetStyle(const SubtitleStyle& s, float position) {
@@ -77,6 +95,12 @@ public:
     }
 
     void Paint(Painter& p, const Rect& f, float radius) {
+        const float scale = std::round(f.h / 720.0f * 1000) / 1000;
+        if (scale != scale_) {
+            scale_ = scale;
+            scene_.Reset();
+            layout_.Reset();
+        }
         p.PushRoundClip(f, radius);
         PaintScene(p, f);
         PaintText(p, f);
@@ -84,6 +108,21 @@ public:
     }
 
 private:
+    void PaintScene(Painter& p, const Rect& f) {
+        ID2D1DeviceContext5* ctx = p.Ctx();
+        const FramePixels& px = Frame();
+        const uint32_t gen = gfx::Gpu::Get().Generation();
+        if (ctx && px.w && (!frame_ || frameGen_ != gen)) {
+            frame_.Reset();
+            frameGen_ = gen;
+            const D2D1_BITMAP_PROPERTIES props =
+                D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+            ctx->CreateBitmap(D2D1::SizeU(px.w, px.h), px.data.data(), px.w * 4, &props, &frame_);
+        }
+        if (frame_) p.Image(frame_.Get(), f, 0, true);
+        else p.Fill(f, Color::Hex(0x121A26));  // the frame's own night blue
+    }
+
     bool Prepare(ID2D1DeviceContext5* ctx) {
         const uint32_t gen = gfx::Gpu::Get().Generation();
         if (gen != generation_) {
@@ -93,12 +132,11 @@ private:
         }
         if (!layout_) {
             IDWriteFactory5* dw = gfx::Gpu::Get().DWrite();
-            if (!dw) return false;
+            if (!dw || scale_ <= 0) return false;
             gfx::ComPtr<IDWriteTextFormat> format;
             if (FAILED(dw->CreateTextFormat(style_.font.c_str(), gfx::Text::Get().CollectionFor(style_.font),
-                                            static_cast<DWRITE_FONT_WEIGHT>(style_.weight),
-                                            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, style_.size * scale_,
-                                            L"", &format)))
+                                            static_cast<DWRITE_FONT_WEIGHT>(style_.weight), DWRITE_FONT_STYLE_NORMAL,
+                                            DWRITE_FONT_STRETCH_NORMAL, style_.size * scale_, L"", &format)))
                 return false;
             format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -139,8 +177,9 @@ private:
         return out;
     }
 
-    // Shadow, outline and text at the origin, on a separate context of the same device (the
-    // window's context is mid-frame).
+    // Shadow and outline at the origin, on a separate context of the same device (the window's
+    // context is mid-frame). The letters themselves are drawn on top, after any blur: libass
+    // blurs only the outline when there is one.
     bool Record(ID2D1DeviceContext5* ctx) {
         gfx::ComPtr<ID2D1Device> device;
         ctx->GetDevice(&device);
@@ -172,14 +211,16 @@ private:
             }
             rec->DrawTextLayout({ox, oy}, layout_.Get(), brush.Get());
         };
-        // mpv draws the shadow in the box color (sub-back-color).
+        // mpv draws the shadow in the box color (sub-back-color), 2 px of a 720-line picture away.
         if (style_.shadow && !lineBoxes && style_.background != "box") {
             const float s = std::max(1.0f, 2 * scale_);
             stamp(s, s, style_.back);
         }
         if (r > 0) stamp(0, 0, style_.outlineColor);
-        brush->SetColor(style_.text.D2D());
-        rec->DrawTextLayout({0, 0}, layout_.Get(), brush.Get());
+        if (r <= 0 || style_.blur <= 0) {  // otherwise drawn sharp on top of the blurred outline
+            brush->SetColor(style_.text.D2D());
+            rec->DrawTextLayout({0, 0}, layout_.Get(), brush.Get());
+        }
 
         const HRESULT hr = rec->EndDraw();
         rec->SetTarget(nullptr);
@@ -192,8 +233,8 @@ private:
         ID2D1DeviceContext5* ctx = p.Ctx();
         if (!ctx || !Prepare(ctx)) return;
         const float x = std::round(frame.Cx() - textW_ / 2);
-        // Vertical position: 100% at the bottom edge, as in mpv (with a small margin).
-        const float margin = std::min(12.0f, frame.h * 0.12f);
+        // 100% at the bottom edge, as in mpv, above its 22-pixel margin of a 720-line picture.
+        const float margin = 22 * scale_;
         const float travel = std::max(0.0f, frame.h - 2 * margin - textH_);
         const float y = std::round(frame.y + margin + travel * std::clamp(position_, 0.0f, 100.0f) / 100);
 
@@ -209,8 +250,8 @@ private:
                 p.Fill(box, style_.outlineColor);
             }
         } else if (style_.background == "box") {
-            const float o = style_.outline * scale_;
-            p.Fill(textRect.Inset(Insets::Sym(-8 * scale_ / 0.6f - o, -3 - o)), style_.back, 3);
+            const float o = std::max(2.0f, style_.outline * scale_);
+            p.Fill(textRect.Inset(Insets::Sym(-o * 2, -o)), style_.back);
         }
 
         if (style_.blur > 0 && blur_) {
@@ -220,182 +261,177 @@ private:
             gfx::ComPtr<ID2D1Image> out;
             blur_->GetOutput(&out);
             ctx->DrawImage(out.Get(), D2D1::Point2F(x, y));
-            // libass blurs only the outline when there is one: the letters stay sharp on top.
-            if (style_.outline > 0 && style_.background != "lines") {
-                gfx::ComPtr<ID2D1SolidColorBrush> brush;
-                if (SUCCEEDED(ctx->CreateSolidColorBrush(style_.text.D2D(), &brush)))
-                    ctx->DrawTextLayout(D2D1::Point2F(x, y), layout_.Get(), brush.Get());
-            }
         } else {
             ctx->DrawImage(scene_.Get(), D2D1::Point2F(x, y));
+        }
+        if (style_.outline > 0 && style_.blur > 0 && style_.background != "lines") {
+            gfx::ComPtr<ID2D1SolidColorBrush> brush;
+            if (SUCCEEDED(ctx->CreateSolidColorBrush(style_.text.D2D(), &brush)))
+                ctx->DrawTextLayout(D2D1::Point2F(x, y), layout_.Get(), brush.Get());
         }
     }
 
     std::wstring text_;
-    float scale_;
+    float scale_ = 0;
     SubtitleStyle style_;
     float position_ = 100;
     std::wstring key_;
     gfx::ComPtr<IDWriteTextLayout> layout_;
     gfx::ComPtr<ID2D1CommandList> scene_;
     gfx::ComPtr<ID2D1Effect> blur_;
-    uint32_t generation_ = 0;
+    gfx::ComPtr<ID2D1Bitmap> frame_;
+    uint32_t generation_ = 0, frameGen_ = 0;
     float textW_ = 0, textH_ = 0;
 };
 
-// mpv sizes are pixels of a 720-line frame; 0.6 keeps two lines readable in the strip while the
-// steps between sizes stay visible.
-constexpr float kPreviewScale = 0.6f;
-constexpr float kPreviewH = 150;
-
-class SubtitlePreview : public Widget, public Syncable {
+// The example and the styles under it: hovering a name shows that style in the example, a click
+// (or Enter) picks it. One widget, so the keyboard walks the names with the arrows.
+class SubtitleStylePicker : public Widget, public Syncable {
 public:
-    explicit SubtitlePreview(const Item& it)
-        : sample_(Tr(L"— Did you see the sky glow?\n— It's a moonbow."), kPreviewScale) {
+    explicit SubtitleStylePicker(const Item& it) : sample_(Tr(L"— Did you see the sky glow?\n— It's a moonbow.")) {
         width = Length::Grow();
-        height = Length::Px(kPreviewH + 4);
         id = it.key;
-        tooltip = it.Label(Lang());
+        interactive = true;
+        focusable = true;
         Sync();
     }
 
     void Sync() override {
-        if (sample_.SetStyle(ReadSubtitleStyle(Cfg()), static_cast<float>(Cfg().GetDouble("subtitles.position"))))
-            Invalidate();
+        const SubtitlePreset* now = MatchSubtitlePreset(Cfg());
+        current_ = now ? static_cast<int>(now - SubtitlePresets().data()) : -1;
+        Show(shown_ >= 0 ? shown_ : current_);
+        Invalidate();
     }
 
-    void Paint(Painter& p) override {
-        const Rect f{rect.x, rect.y + 2, rect.w, kPreviewH};
-        sample_.Paint(p, f, 8);
-        p.Stroke(f, P().line, 8);
+    Size MeasureContent(float availW, float) override {
+        Place(availW, 0);
+        return {availW, height_};
     }
-
-private:
-    SubtitleSample sample_;
-};
-
-// One ready-made style: its sample over the scene and its name; the current one has a ring.
-class StyleCard : public Widget {
-public:
-    StyleCard(const SubtitlePreset& preset, float frameH)
-        : preset_(preset), frameH_(frameH), sample_(Tr(L"A moonbow"), frameH / 150.0f) {
-        interactive = true;
-        focusable = true;
-        width = Length::Grow();
-        height = Length::Px(frameH + 30);
-        tooltip = Tr(preset.name);
-        Sync();
-    }
-
-    void Sync() {
-        const bool on = MatchSubtitlePreset(Cfg()) == &preset_;
-        const bool changed = sample_.SetStyle(PresetSubtitleStyle(Cfg(), preset_), 82);
-        if (changed || on != on_) {
-            on_ = on;
-            Invalidate();
-        }
-    }
+    void OnLayout() override { Place(rect.w, rect.y, rect.x); }
 
     void Paint(Painter& p) override {
         const Palette& c = P();
-        const Rect f{rect.x, rect.y, rect.w, frameH_};
-        sample_.Paint(p, f, 8);
-        if (on_) p.Stroke(f.Inset(-1), c.accent, 9, 2);
-        else p.Stroke(f, IsHot() ? c.lineStrong : c.line, 8);
-        PaintFocusRing(p, on_ ? f.Inset(-1) : f, 8);
-        const Rect cap{rect.x + 2, f.Bottom() + 6, rect.w - 4, 20};
-        float tx = cap.x;
-        if (on_) {
-            p.Icon("check_selected", {cap.x - 2, cap.Cy() - 9, 18, 18}, c.accent);
-            tx += 20;
+        sample_.Paint(p, preview_, 10);
+        p.Stroke(preview_, c.line, 10);
+        const auto& presets = SubtitlePresets();
+        for (size_t i = 0; i < chips_.size(); ++i) {
+            const Rect& r = chips_[i];
+            const bool on = static_cast<int>(i) == current_;
+            const bool hot = static_cast<int>(i) == hover_ || (IsFocused() && static_cast<int>(i) == focus_);
+            p.Fill(r, on ? c.textPrimary : hot ? c.bgSelected : c.bgCard, r.h / 2);
+            p.Text(Tr(presets[i].name), r, TextStyle::Body, on ? c.bgBase : hot ? c.textPrimary : c.textSecondary,
+                   HAlign::Center, VAlign::Center, 0);
+            if (IsFocused() && static_cast<int>(i) == focus_) PaintFocusRing(p, r, r.h / 2);
         }
-        p.Text(Tr(preset_.name), {tx, cap.y, cap.Right() - tx, cap.h}, TextStyle::Body,
-               on_ || IsHot() ? c.textPrimary : c.textSecondary, HAlign::Leading, VAlign::Center, gfx::kTextEllipsis);
+        const int noteFor = hover_ >= 0 ? hover_ : current_;
+        const std::wstring note = noteFor >= 0 ? std::wstring(Tr(presets[static_cast<size_t>(noteFor)].detail))
+                                               : std::wstring(Tr(L"Your own style: changed in the settings below."));
+        p.Text(note, note_, TextStyle::Body, c.textTertiary, HAlign::Leading, VAlign::Center, gfx::kTextEllipsis);
     }
 
-    void OnClick() override { ApplySubtitlePreset(Cfg(), preset_); }
-    bool OnKeyDown(const KeyEvent& e) override {
-        if (e.key != VK_SPACE && e.key != VK_RETURN) return false;
-        OnClick();
+    bool OnMouseMove(const MouseEvent& e) override {
+        SetHover(ChipAt(e.x, e.y));
         return true;
     }
-    void Describe(A11y& a) override {
-        a.role = Role::ListItem;
-        a.name = Tr(preset_.name);
-        a.selected = on_ ? 1 : 0;
+    void OnMouseLeave() override { SetHover(-1); }
+    void OnClick() override {
+        const Point m = GetHost()->MousePos();
+        if (const int i = ChipAt(m.x, m.y); i >= 0) Pick(i);
     }
-
-private:
-    const SubtitlePreset& preset_;
-    float frameH_;
-    SubtitleSample sample_;
-    bool on_ = false;
-};
-
-// The ready-made styles in rows of `columns`, and a line for a style of one's own.
-class StyleCards : public Widget, public Syncable {
-public:
-    StyleCards(int columns, float frameH) {
-        dir = Dir::Column;
-        width = Length::Grow();
-        gap = 12;
-        pad.t = 12;
-        const auto& presets = SubtitlePresets();
-        Widget* row = nullptr;
-        for (size_t i = 0; i < presets.size(); ++i) {
-            if (i % static_cast<size_t>(columns) == 0) {
-                row = Add<Widget>();
-                row->dir = Dir::Row;
-                row->width = Length::Grow();
-                row->gap = 12;
-            }
-            cards_.push_back(row->Add<StyleCard>(presets[i], frameH));
+    bool OnKeyDown(const KeyEvent& e) override {
+        const int n = static_cast<int>(chips_.size());
+        if (focus_ < 0) focus_ = std::max(0, current_);
+        switch (e.key) {
+            case VK_LEFT: case VK_RIGHT:
+                focus_ = (focus_ + (e.key == VK_LEFT ? n - 1 : 1)) % n;
+                Show(focus_);
+                Invalidate();
+                return true;
+            case VK_RETURN: case VK_SPACE: Pick(focus_); return true;
+            default: return false;
         }
-        // Keeps the last row's cards as wide as the others.
-        for (size_t i = presets.size(); i % static_cast<size_t>(columns) != 0; ++i) row->Add<Widget>()->width = Length::Grow();
-        own_ = Add<Label>(Tr(L"Your own style: changed in the settings below."), TextStyle::Small, Tone::Tertiary);
-        own_->wrap = true;
-        own_->width = Length::Grow();
-        Sync();
     }
-
-    void Sync() override {
-        for (StyleCard* c : cards_) c->Sync();
-        const bool own = MatchSubtitlePreset(Cfg()) == nullptr;
-        if (own_->visible != own) {
-            own_->visible = own;
-            InvalidateLayout();
-        }
+    void OnFocusChanged(bool focused) override {
+        focus_ = focused ? std::max(0, current_) : -1;
+        Show(focused ? focus_ : current_);
+        Invalidate();
     }
     void Describe(A11y& a) override {
         a.role = Role::List;
         a.name = Tr(L"Subtitle style");
+        a.items = static_cast<int>(chips_.size());
+        a.item = [this](int k, A11y::Item& it) {
+            const SubtitlePreset& p = SubtitlePresets()[static_cast<size_t>(k)];
+            it.role = Role::ListItem;
+            it.name = std::wstring(Tr(p.name)) + L". " + Tr(p.detail);
+            it.rect = chips_[static_cast<size_t>(k)];
+            it.selected = k == current_;
+        };
+        a.selectItem = a.invokeItem = [this](int k) { Pick(k); };
+        if (IsFocused() && focus_ >= 0) a.focusedItem = focus_;
     }
-    Label* OwnLine() const { return own_; }
 
 private:
-    std::vector<StyleCard*> cards_;
-    Label* own_ = nullptr;
+    static constexpr float kChipH = 34, kChipGap = 8, kGap = 14;
+
+    // The example 16:9 up to 400 high, the names wrapped under it, then the line about the style.
+    void Place(float w, float y0, float x0 = 0) {
+        const float ph = std::round(std::min(w * 9 / 16, 400.0f));
+        preview_ = {x0, y0, w, ph};
+        chips_.clear();
+        float x = x0, y = y0 + ph + kGap;
+        for (const SubtitlePreset& p : SubtitlePresets()) {
+            const float cw = std::ceil(gfx::Text::Get().Measure(Tr(p.name), TextStyle::Body).width) + 32;
+            if (x > x0 && x + cw > x0 + w) {
+                x = x0;
+                y += kChipH + kChipGap;
+            }
+            chips_.push_back({x, y, cw, kChipH});
+            x += cw + kChipGap;
+        }
+        note_ = {x0 + 2, y + kChipH + 8, w - 4, 22};
+        height_ = note_.Bottom() - y0 + 4;
+    }
+
+    int ChipAt(float x, float y) const {
+        for (size_t i = 0; i < chips_.size(); ++i)
+            if (chips_[i].Contains(x, y)) return static_cast<int>(i);
+        return -1;
+    }
+
+    void SetHover(int i) {
+        if (i == hover_) return;
+        hover_ = i;
+        Show(i >= 0 ? i : (IsFocused() ? focus_ : current_));
+        Invalidate();
+    }
+
+    // The example in preset i, or in the settings as they are (-1).
+    void Show(int i) {
+        shown_ = i == current_ ? -1 : i;
+        const float pos = static_cast<float>(Cfg().GetDouble("subtitles.position"));
+        if (i >= 0) sample_.SetStyle(PresetSubtitleStyle(Cfg(), SubtitlePresets()[static_cast<size_t>(i)]), pos);
+        else sample_.SetStyle(ReadSubtitleStyle(Cfg()), pos);
+    }
+
+    void Pick(int i) {
+        if (i < 0 || i >= static_cast<int>(SubtitlePresets().size())) return;
+        focus_ = i;
+        ApplySubtitlePreset(Cfg(), SubtitlePresets()[static_cast<size_t>(i)]);
+        Sync();
+    }
+
+    SubtitleSample sample_;
+    Rect preview_, note_;
+    std::vector<Rect> chips_;
+    float height_ = 0;
+    int current_ = -1, hover_ = -1, focus_ = -1, shown_ = -1;
 };
 
 }  // namespace
 
 std::unique_ptr<Widget> MakeSubtitlePreview(const Item& item) {
-    return std::make_unique<SubtitlePreview>(item);
-}
-
-std::unique_ptr<Widget> MakeSubtitleStyles(const Item& item) {
-    auto cards = std::make_unique<StyleCards>(3, 84.0f);
-    cards->id = item.key;
-    return cards;
-}
-
-std::unique_ptr<Widget> MakeSubtitleStyleCards(std::function<void(const std::function<void()>&)> onSync) {
-    auto cards = std::make_unique<StyleCards>(2, 64.0f);
-    cards->OwnLine()->SetText(Tr(L"Your own style: changed in Settings."));
-    StyleCards* raw = cards.get();
-    if (onSync) onSync([raw] { raw->Sync(); });
-    return cards;
+    return std::make_unique<SubtitleStylePicker>(item);
 }
 
 }  // namespace app::sui

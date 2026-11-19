@@ -11,7 +11,6 @@
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
 #include "app/player/SubStyle.h"
-#include "app/settings/SettingsUi.h"
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
 #include "gfx/Text.h"
@@ -455,9 +454,23 @@ std::unique_ptr<Widget> SubtitlesPanel(int id) {
             break;
         }
         case kSubStyle: {
-            Gap(page, 8);
-            auto cards = sui::MakeSubtitleStyleCards([page](const std::function<void()>& fn) { page->OnSync(fn); });
-            AddSection(page)->AddChild(std::move(cards));
+            // The video is the example: a pick restyles it at once.
+            AddChoiceList(
+                page,
+                [] {
+                    std::vector<ChoiceRow> rows;
+                    const SubtitlePreset* now = MatchSubtitlePreset(Cfg());
+                    for (const SubtitlePreset& p : SubtitlePresets()) {
+                        ChoiceRow r;
+                        r.label = Tr(p.name);
+                        r.detail = Tr(p.detail);
+                        r.checked = now == &p;
+                        r.select = [&p] { ApplySubtitlePreset(Cfg(), p); };
+                        rows.push_back(std::move(r));
+                    }
+                    return rows;
+                },
+                Tr(L"Subtitle style"));
             break;
         }
         case kSubSecond:

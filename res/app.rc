@@ -13,6 +13,8 @@
 
 // GPU sharpening shader, written to <data>\cache\shaders by src/Player.cpp.
 MOONBOW_CAS RCDATA "shaders/moonbow-cas.glsl"
+// The frame behind the subtitle example in Settings (generated for Moonbow; app/settings/SettingsSubtitlePreview.cpp).
+MOONBOW_SUB_FRAME RCDATA "images/subtitle-frame.jpg"
 
 // Built-in skins (design/SKINS.md), read by src/app/Skins.cpp.
 MOONBOW_SKIN_OLED RCDATA "skins/oled.json"

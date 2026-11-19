@@ -2053,12 +2053,9 @@ void BuildMedia(Builder& b) {
     b.inferred = false;
 
     b.Sec("appearance", L"Appearance", L"Оформление");
-    // A sample line drawn with the style below (settings/SettingsSubtitlePreview.cpp).
+    // A sample drawn with the style below, and the ready-made styles under it (app/player/SubStyle.cpp,
+    // the first is the default of the rows below; settings/SettingsSubtitlePreview.cpp).
     b.Info("subtitles.preview", L"Subtitle example", L"Пример субтитров", "subtitle-preview")
-        .Inferred()
-        .Basic("", L"", L"");
-    // Ready-made looks over the rows below (app/player/SubStyle.cpp); the first is their default.
-    b.Info("subtitles.styles", L"Subtitle style", L"Стиль субтитров", "subtitle-styles")
         .Inferred()
         .Basic("", L"", L"");
     b.Text("subtitles.font", L"Font", L"Шрифт", "Inter SemiBold")
@@ -2116,7 +2113,7 @@ void BuildMedia(Builder& b) {
         .Unit(L"%", L"%")
         .When("subtitles.background", "box")
         .MpvBuild("sub-back-color", BuildSubBackColor);
-    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 0.5)
+    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 2)
         .Desc(L"Blur the edges of the text and its outline. 0 keeps them sharp.",
               L"Размывать края текста и обводки. 0 — чёткие края.")
         .Mpv("sub-blur");

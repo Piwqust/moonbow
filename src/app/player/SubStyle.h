@@ -32,7 +32,8 @@ SubtitleStyle ReadSubtitleStyle(const Config& c);
 // stay as the person set them. Picked in Settings > Subtitles and in the player's Subtitles panel.
 struct SubtitlePreset {
     const char* id;
-    const wchar_t* name;  // English; Tr()
+    const wchar_t* name;    // English; Tr()
+    const wchar_t* detail;  // what it looks like, one line; Tr()
     const char* font;     // "" = the default sans-serif
     bool bold;
     const char* color;

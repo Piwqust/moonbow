@@ -186,13 +186,8 @@ std::unique_ptr<ui::Widget> MakeEqualizer(const std::vector<const settings::Item
 std::unique_ptr<ui::Widget> MakeAddonsList(const settings::Item& item, PageHost& page);
 // Settings > Library: the library roots with Remove / Show in File Explorer (SettingsLibrary.cpp).
 std::unique_ptr<ui::Widget> MakeLibraryFolders(const settings::Item& item, PageHost& page);
-// Sample line drawn with the current subtitle style (SettingsSubtitlePreview.cpp).
+// The subtitle example on a frame with the ready-made styles under it (SettingsSubtitlePreview.cpp).
 std::unique_ptr<ui::Widget> MakeSubtitlePreview(const settings::Item& item);
-// Cards of the ready-made subtitle styles (app/player/SubStyle.h); a click applies one.
-std::unique_ptr<ui::Widget> MakeSubtitleStyles(const settings::Item& item);
-// The same cards narrower, for the player's Subtitles panel: `onSync` gets the function that
-// updates them when the settings change.
-std::unique_ptr<ui::Widget> MakeSubtitleStyleCards(std::function<void(const std::function<void()>&)> onSync);
 // Shader files in <data>\shaders with a toggle each (video.shaders), and "Open folder".
 std::unique_ptr<ui::Widget> MakeShaderList(const settings::Item& item, PageHost& page);
 std::unique_ptr<ui::Widget> MakeAddonsToolbar(const std::vector<const settings::Item*>& items, PageHost& page);

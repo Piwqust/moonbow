@@ -95,20 +95,24 @@ const std::vector<SubtitlePreset>& SubtitlePresets() {
     // Inter is bundled (Player.cpp puts it in mpv's fonts folder); the others come with Windows.
     // The shadow takes the box color in mpv, so it is set too.
     static const std::vector<SubtitlePreset> presets = {
-        // The player's font (Inter SemiBold), a light outline softened a little
-        // and a shadow: crisp on dark and bright scenes alike, as DCMP and Netflix ask.
-        {"moonbow", L"Moonbow", "Inter SemiBold", false, "#FFFFFF", "thin", "#000000", true, "none", "#000000", 60, 0.5},
-        // White on a translucent box in the player's night color, like its on-screen messages
-        // (Apple's "Transparent Background").
-        {"box", L"Box", "Inter Medium", false, "#FFFFFF", "thin", "#0F121A", false, "box", "#0F121A", 70, 0},
+        // The player's font with no hard edge: the outline is blurred into a soft dark halo (libass
+        // blurs only the outline, the letters stay sharp) over a close shadow, as Netflix and Apple TV.
+        {"moonbow", L"Moonbow", L"The player's font and a soft shadow", "Inter SemiBold", false, "#FFFFFF", "thin",
+         "#000000", true, "none", "#000000", 60, 2},
+        // A crisp thin outline: reads on the brightest frame.
+        {"outline", L"Outlined", L"Reads on the brightest frame", "Inter SemiBold", false, "#FFFFFF", "thin", "#000000",
+         true, "none", "#000000", 60, 0.5},
+        // White on a translucent box in the player's night color (Apple's "Transparent Background").
+        {"box", L"Box", L"White text on a translucent box", "Inter Medium", false, "#FFFFFF", "thin", "#0F121A", false,
+         "box", "#0F121A", 70, 0},
         // mpv's own look.
-        {"classic", L"Classic", "", false, "#FFFFFF", "normal", "#000000", true, "none", "#000000", 60, 0},
+        {"classic", L"Classic", L"As in plain mpv", "", false, "#FFFFFF", "normal", "#000000", true, "none", "#000000",
+         60, 0},
         // The DVD yellow.
-        {"yellow", L"Yellow", "", true, "#FFE14D", "normal", "#000000", true, "none", "#000000", 60, 0},
-        // No hard edge: a wide blurred outline reads as a soft dark halo.
-        {"soft", L"Soft", "Inter Medium", false, "#FFFFFF", "thick", "#000000", false, "none", "#000000", 60, 2.5},
+        {"yellow", L"Yellow", L"As on DVDs", "", true, "#FFE14D", "normal", "#000000", true, "none", "#000000", 60, 0},
         // A book face in warm white.
-        {"serif", L"Serif", "Georgia", false, "#F6F1E7", "thin", "#000000", true, "none", "#000000", 60, 0.5},
+        {"book", L"Book", L"A serif face in warm white", "Georgia", false, "#F6F1E7", "thin", "#000000", true, "none",
+         "#000000", 60, 1.5},
     };
     return presets;
 }
