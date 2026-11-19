@@ -304,7 +304,8 @@ public:
         // the text in what is left, when that is still wide enough.
         Rect area = rect;
         const bool panel = PlayerPanelOpen(PanelKind::Queue) || PlayerPanelOpen(PanelKind::Tracks) ||
-                           PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings);
+                           PlayerPanelOpen(PanelKind::Subtitles) || PlayerPanelOpen(PanelKind::Settings) ||
+                           PlayerPanelOpen(PanelKind::Video);
         // 320 leaves a usable cover next to the compact library too (844 - 420 DIP at 1280 wide).
         if (panel && rect.w - (panel::kPanelW + panel::kGap) >= 320) area.w -= panel::kPanelW + panel::kGap;
         Geometry g;

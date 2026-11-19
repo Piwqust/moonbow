@@ -854,7 +854,7 @@ Rect PlayerView::ToastBand(float* top) const {
     }
     Rect a = video_->rect;
     bool panel = false;
-    for (int k = 0; k <= static_cast<int>(PanelKind::Speed); ++k) panel |= PlayerPanelOpen(static_cast<PanelKind>(k));
+    for (int k = 0; k <= static_cast<int>(PanelKind::Video); ++k) panel |= PlayerPanelOpen(static_cast<PanelKind>(k));
     // The popover's left edge (Panels.cpp, PlaceAboveBar): the toast, at most band.w - 32 wide and
     // centred, keeps 16 DIP from it.
     const float panelX = bar_->rect.Right() - panel::kGap - panel::kPanelW;

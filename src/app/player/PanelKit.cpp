@@ -276,6 +276,18 @@ void Popover::SetFooter(std::unique_ptr<Widget> footer) {
     InvalidateLayout();
 }
 
+float Popover::NaturalHeight() {
+    const float w = rect.w > 0 ? rect.w : kPanelW;
+    float h = tabs_ || !title_.empty() ? kHeaderH : 0.0f;
+    if (footer_) h += footer_->Measure(w, 10000).h;
+    if (auto* sv = dynamic_cast<ScrollView*>(body_)) {
+        if (Widget* c = sv->Content()) h += c->Measure(w, 100000).h;
+    } else if (body_) {
+        h += body_->Measure(w, 100000).h;
+    }
+    return std::ceil(h) + 2;  // the frame's hairline
+}
+
 void Popover::ShowTab(int tab) {
     tab_ = tab;
     if (tabs_ && tabs_->Selected() != tab) tabs_->SetSelected(tab);
@@ -321,8 +333,13 @@ void Popover::Paint(Painter& p) {
     if (tabs_ || !title_.empty()) {
         p.PushRoundClip(rect, radius);
         const Rect h{rect.x, rect.y, rect.w, kHeaderH};
-        p.Fill(h, tabs_ ? c.bgDeep : c.bgChrome);
-        if (!title_.empty()) p.Text(title_, h, TextStyle::Body, c.textSecondary, HAlign::Center);
+        if (tabs_) {
+            p.Fill(h, c.bgDeep);
+        } else {
+            // A plain title: the panel's name on its own ground, at the rows' left edge.
+            p.Text(title_, {h.x + 20, h.y, h.w - 40, h.h}, TextStyle::BodyStrong, c.textPrimary);
+            p.Fill({h.x, h.Bottom() - 1, h.w, 1}, SectionLine());
+        }
         p.PopClip();
     }
 }
@@ -425,7 +442,7 @@ void AddSectionTitle(Widget* page, const std::wstring& text) {
 }
 
 void AddCaption(Widget* section, const std::wstring& text, float h) {
-    auto* l = section->Add<Label>(text, TextStyle::Body, Tone::Tertiary);
+    auto* l = section->Add<Label>(text, TextStyle::Body, Tone::Secondary);
     l->width = Length::Grow();
     l->height = Length::Px(h);
     l->pad = {4, 0, 0, 0};
@@ -438,7 +455,7 @@ Widget* AddRow(Widget* section, const std::wstring& label, std::unique_ptr<Widge
     row->width = Length::Grow();
     row->height = Length::Px(h);
     row->gap = 8;  // labels paint to their right edge (pad only affects measuring)
-    auto* l = row->Add<Label>(label, TextStyle::Body, Tone::Tertiary);
+    auto* l = row->Add<Label>(label, TextStyle::Body, Tone::Secondary);
     l->width = Length::Grow();
     l->pad = {4, 0, 8, 0};
     // Long (Russian) labels take a second line instead of being cut off. The label spans the
@@ -456,10 +473,10 @@ Label* AddValueRow(Widget* section, const std::wstring& label, float h) {
     row->align = Align::Center;
     row->width = Length::Grow();
     row->height = Length::Px(h);
-    auto* l = row->Add<Label>(label, TextStyle::Body, Tone::Tertiary);
+    auto* l = row->Add<Label>(label, TextStyle::Body, Tone::Secondary);
     l->width = Length::Grow();
     l->pad = {4, 0, 8, 0};
-    auto* v = row->Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
+    auto* v = row->Add<Label>(L"", TextStyle::Body, Tone::Primary);
     v->halign = HAlign::Trailing;
     v->pad = {0, 0, 4, 0};
     v->width = Length::Px(140);
@@ -609,7 +626,7 @@ bool Range::OnWheel(const WheelEvent& e) {
 // --- ValueBox ---------------------------------------------------------------------------------
 
 ValueBox::ValueBox() {
-    width = Length::Px(140);
+    width = Length::Px(112);
     height = Length::Px(36);
     onSubmit = [this](const std::wstring&) {
         Commit();

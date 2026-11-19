@@ -72,6 +72,7 @@ const std::vector<ControlInfo> kControls = {
     {ControlId::Bookmark, "bookmark", L"Bookmark", "bookmark", true},
     {ControlId::Bookmarks, "bookmarks", L"Bookmarks", "bookmarks", true},
     {ControlId::Playlists, "playlists", L"Playlists", "playlist", true},
+    {ControlId::Video, "video", L"Video settings", "video", true},
 };
 
 ControlLayout g_layout = ControlLayout::Default();
@@ -562,6 +563,27 @@ private:
     Action key_;
 };
 
+// The video panel's button: only while the file has a picture (songs have nothing to adjust).
+class VideoButton : public PanelButton {
+public:
+    VideoButton() : PanelButton("video", L"Video settings", PanelKind::Video) {
+        Follow();
+        conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
+            if (m & (kChangeFile | kChangeTracks)) Follow();
+        });
+    }
+
+private:
+    void Follow() {
+        const PlayerState& s = PS();
+        const bool show = !s.fileLoaded || s.hasVideo;
+        if (visible == show) return;
+        visible = show;
+        if (Parent()) Parent()->InvalidateLayout();
+    }
+    ScopedConnection conn_;
+};
+
 // Last on the right of every bar style, where YouTube, VLC and MPC-HC have it.
 class FullscreenButton : public IconButton {
 public:
@@ -656,8 +678,8 @@ const ControlInfo& ControlInfoFor(ControlId id) {
 ControlLayout ControlLayout::Default() {
     ControlLayout l;
     l.left = {ControlId::Previous, ControlId::PlayPause, ControlId::Next, ControlId::Time};
-    l.right = {ControlId::Duration, ControlId::Volume, ControlId::Audio, ControlId::Subtitles, ControlId::Settings,
-               ControlId::Playlist};
+    l.right = {ControlId::Duration, ControlId::Volume, ControlId::Audio, ControlId::Subtitles, ControlId::Video,
+               ControlId::Settings, ControlId::Playlist};
     return l;
 }
 
@@ -726,6 +748,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
             return std::make_unique<PanelButton>("playback-settings", L"Playback settings", PanelKind::Settings);
         case ControlId::Playlist:
             return std::make_unique<PanelButton>("list", L"Queue", PanelKind::Queue, Action::TogglePlaylist);
+        case ControlId::Video: return std::make_unique<VideoButton>();
         case ControlId::Spacer: {
             auto w = std::make_unique<Widget>();
             w->width = Length::Px(24);
@@ -753,7 +776,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
         case ControlId::PictureInPicture: return button("pip", L"Picture in Picture", Action::PictureInPicture);
         case ControlId::Hdr: {
             auto b = std::make_unique<StateButton>(
-                "hdr", L"HDR", [] { TogglePlayerPanel(PanelKind::Settings, {}); }, [] { return PS().hdr; });
+                "hdr", L"HDR", [] { TogglePlayerPanel(PanelKind::Video, {}); }, [] { return PS().hdr; });
             b->toggles = false;
             return b;
         }

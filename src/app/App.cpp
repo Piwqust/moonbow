@@ -417,7 +417,33 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
     ApplyTheme();
     Skins::Get().Start(config_);
-    SetControlLayout(ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize())));
+    {
+        ControlLayout layout = ControlLayout::Parse(UiValue("controls.layout", ControlLayout::Default().Serialize()));
+        // The settings popover split into one per button (2026-11): a layout saved before gets the new
+        // Video button once, just before the gear; removing it in Customize player then sticks.
+        if (UiValue("controls.videoButton").empty()) {
+            auto has = [&](ControlId id) {
+                for (const auto* side : {&layout.left, &layout.right})
+                    for (ControlId c : *side)
+                        if (c == id) return true;
+                return false;
+            };
+            if (!has(ControlId::Video)) {
+                bool placed = false;
+                for (auto* side : {&layout.left, &layout.right})
+                    for (auto it = side->begin(); !placed && it != side->end(); ++it)
+                        if (*it == ControlId::Settings) {
+                            side->insert(it, ControlId::Video);
+                            placed = true;
+                            break;
+                        }
+                if (!placed) layout.right.push_back(ControlId::Video);
+                SetUiValue("controls.layout", layout.Serialize());
+            }
+            SetUiValue("controls.videoButton", "1");
+        }
+        SetControlLayout(layout);
+    }
     // The library opens on the section it was left in (only the section: a folder may be gone).
     {
         const std::string section = UiValue("library.section");
@@ -1303,7 +1329,8 @@ bool ParsePanel(const std::string& name, PanelKind* out) {
     static const std::pair<const char*, PanelKind> kPanels[] = {
         {"tracks", PanelKind::Tracks},     {"audio", PanelKind::Tracks},       {"subtitles", PanelKind::Subtitles},
         {"settings", PanelKind::Settings}, {"queue", PanelKind::Queue},        {"chapters", PanelKind::Chapters},
-        {"bookmarks", PanelKind::Bookmarks}, {"speed", PanelKind::Speed},
+        {"bookmarks", PanelKind::Bookmarks}, {"speed", PanelKind::Speed},       {"video", PanelKind::Video},
+        {"playback", PanelKind::Settings},
     };
     for (const auto& [n, k] : kPanels)
         if (name == n) {

@@ -87,6 +87,8 @@ public:
     void SetTabs(std::vector<Tab> tabs, int selected);
     void SetTitle(std::wstring title);  // plain centered header instead of tabs (mini player queue)
     void SetFooter(std::unique_ptr<ui::Widget> footer);
+    // The height that shows everything: header, the whole body (unscrolled) and the footer.
+    float NaturalHeight();
     int CurrentTab() const { return tab_; }
     void ShowTab(int tab);
     void Rebuild() { ShowTab(tab_); }

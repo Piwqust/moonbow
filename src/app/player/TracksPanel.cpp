@@ -95,13 +95,13 @@ public:
     }
     bool editing = false;
     std::wstring name;  // for screen readers when no list title stands before it
-    static constexpr float kPitch = 44, kRowH = 32;
+    static constexpr float kPitch = 40, kRowH = 36;
     int Count() const { return static_cast<int>(rows_().size()); }
 
     Size MeasureContent(float availW, float) override {
         const size_t n = rows_().size();
         if (n == 0) return {availW, empty_.empty() ? 0.0f : 40.0f};
-        return {availW, kPitch * static_cast<float>(n) - (kPitch - kRowH) + 8};
+        return {availW, kPitch * static_cast<float>(n) - (kPitch - kRowH) + 4};
     }
     Rect RowRect(int i) const { return {rect.x + pad.l, rect.y + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH}; }
     int RowAt(float y) const {
@@ -114,7 +114,7 @@ public:
         if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y);
         if (rows.empty()) {
             if (!empty_.empty())
-                p.Text(empty_, {rect.x + 62, rect.y, rect.w - 82, 32}, TextStyle::Body, c.textTertiary);
+                p.Text(empty_, {rect.x + pad.l, rect.y, rect.w - pad.H(), kRowH}, TextStyle::Body, c.textTertiary);
             return;
         }
         for (size_t k = 0; k < rows.size(); ++k) {
@@ -124,14 +124,16 @@ public:
             const bool hot = i == hover_ && IsHot();
             if (hot) p.Fill(r, c.hover, 4);
             if (i == focusRow_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
-            if (row.checked) p.Icon("check_active", Rect{r.x, r.y, 32, 32}.Center(24, 24), c.accent, c.accent);
+            // The tick on the right, as in Moonbow's menus: every label starts at the rows' one edge.
             const bool showRemove = editing && row.remove;
-            float right = r.Right();
+            float right = r.Right() - 4;
             if (showRemove) {
-                const Rect x{r.Right() - 28, r.Cy() - 12, 24, 24};
+                const Rect x{right - 24, r.Cy() - 12, 24, 24};
                 p.Icon("close", x.Center(18, 18), hot && hoverX_ ? c.textPrimary : c.textTertiary);
                 right -= 32;
             }
+            if (row.checked) p.Icon("check_selected", {right - 20, r.Cy() - 10, 20, 20}, c.accent);
+            right -= 28;
             float dw = 0;
             if (!row.detail.empty()) {
                 dw = std::min(120.0f, gfx::Text::Get().Measure(row.detail, TextStyle::Small).width + 4);
@@ -139,12 +141,12 @@ public:
                 dw += 8;
             }
             const Color fg = row.checked ? c.textPrimary : hot ? c.textPrimary : RowText();
-            p.Text(row.label, {r.x + 42, r.y, std::max(0.0f, right - dw - r.x - 42), r.h}, TextStyle::Body, fg);
+            p.Text(row.label, {r.x, r.y, std::max(0.0f, right - dw - r.x), r.h}, TextStyle::Body, fg);
         }
     }
     bool OnMouseMove(const MouseEvent& e) override {
         const int i = RowAt(e.y);
-        const bool x = i >= 0 && editing && e.x >= RowRect(i).Right() - 32;
+        const bool x = i >= 0 && editing && e.x >= RowRect(i).Right() - 36;
         if (i != hover_ || x != hoverX_) {
             hover_ = i;
             hoverX_ = x;
@@ -160,7 +162,7 @@ public:
         const int i = RowAt(e.y);
         if (i < 0) return true;
         focusRow_ = i;
-        Activate(i, editing && e.x >= RowRect(i).Right() - 32);
+        Activate(i, editing && e.x >= RowRect(i).Right() - 36);
         return true;
     }
     bool OnKeyDown(const KeyEvent& e) override {
@@ -211,7 +213,8 @@ private:
 // Shows the ✕ on each added track; off and dimmed while nothing is added.
 class RemoveModeButton : public IconButton {
 public:
-    explicit RemoveModeButton(ChoiceList* list) : IconButton("remove", Tr(L"Remove external tracks"), 30, 24), list_(list) {
+    RemoveModeButton(ChoiceList* list, std::function<bool()> any)
+        : IconButton("remove", Tr(L"Remove external tracks"), 30, 24), list_(list), any_(std::move(any)) {
         onClick = [this] {
             list_->editing = !list_->editing;
             list_->Invalidate();
@@ -219,7 +222,7 @@ public:
         };
     }
     void Paint(Painter& p) override {
-        enabled = list_->Count() > 0;
+        enabled = any_();
         if (!enabled) list_->editing = false;
         active = list_->editing;
         IconButton::Paint(p);
@@ -228,6 +231,7 @@ public:
 
 private:
     ChoiceList* list_;
+    std::function<bool()> any_;  // an added track to remove
 };
 
 // "Embedded Tracks" row (60 DIP) with optional icon buttons on the right.
@@ -236,10 +240,10 @@ Widget* AddListTitle(Widget* page, const std::wstring& text) {
     row->dir = Dir::Row;
     row->align = Align::Center;
     row->width = Length::Grow();
-    row->height = Length::Px(60);
-    row->pad = {28, 0, 24, 0};
-    row->gap = 14;
-    auto* l = row->Add<Label>(text, TextStyle::Body, Tone::Tertiary);
+    row->height = Length::Px(48);
+    row->pad = {20, 4, 18, 0};
+    row->gap = 6;
+    auto* l = row->Add<Label>(text, TextStyle::SmallMedium, Tone::Tertiary);
     l->width = Length::Grow();
     return row;
 }
@@ -272,6 +276,7 @@ std::vector<ChoiceRow> TrackRows(const wchar_t* type, bool external) {
         // The codec ("SubRip", "E-AC-3") is jargon: the row says stereo or 5.1 and nothing more (a
         // tooltip under the pointer covered the next row; Media Information names the format).
         r.detail = TrackDetail(t, false);
+        if (external) r.detail = r.detail.empty() ? std::wstring(Tr(L"external")) : r.detail + L" · " + Tr(L"external");
         r.checked = t.selected;
         const int64_t id = t.id;
         r.select = [prop, id] { TheApp().player().SetTrack(prop, id); };
@@ -314,20 +319,26 @@ std::vector<ChoiceRow> DeviceRows() {
     return rows;
 }
 
+// One list: off, the file's own tracks, then the added ones (marked "external"); adding, finding
+// online and removing sit on its title row.
 void AddTracksSection(Widget* page, const wchar_t* type) {
-    page->Add<Widget>()->height = Length::Px(16);
-    const std::wstring_view t(type);
-    page->Add<ChoiceList>([type] { return OffRows(type); })->name =
-        Tr(t == L"video" ? L"Video" : t == L"audio" ? L"Audio" : L"Subtitles");
-    AddSectionLine(page);
-    AddListTitle(page, Tr(L"Embedded Tracks"));
-    page->Add<ChoiceList>([type] { return TrackRows(type, false); }, Tr(L"No tracks"));
-    if (std::wstring_view(type) == L"video") return;
-    AddSectionLine(page);
-    Widget* title = AddListTitle(page, Tr(L"External Tracks"));
-    auto* list = page->Add<ChoiceList>([type] { return TrackRows(type, true); }, Tr(L"None added"));
-    title->Add<RemoveModeButton>(list);
-    const bool subs = std::wstring_view(type) == L"sub";
+    const bool subs = std::wstring_view(type) == L"sub", video = std::wstring_view(type) == L"video";
+    Widget* title = AddListTitle(page, Tr(L"Tracks"));
+    auto* list = page->Add<ChoiceList>(
+        [type] {
+            std::vector<ChoiceRow> rows = OffRows(type);
+            for (bool external : {false, true})
+                for (ChoiceRow& r : TrackRows(type, external)) rows.push_back(std::move(r));
+            return rows;
+        },
+        Tr(L"No tracks"));
+    list->name = Tr(video ? L"Video" : subs ? L"Subtitles" : L"Audio");
+    if (video) return;
+    title->Add<RemoveModeButton>(list, [type] {
+        for (const Track& t : PS().tracks)
+            if (t.type == type && t.external) return true;
+        return false;
+    });
     if (subs)
         AddTitleButton(title, "search", L"Find subtitles online", [] {
             if (!PS().fileLoaded) return;
@@ -352,10 +363,38 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
 void AddTrackLists(Widget* page, const wchar_t* type) {
     AddTracksSection(page, type);
     if (std::wstring_view(type) != L"audio") return;
-    AddSectionLine(page);
-    Widget* title = AddListTitle(page, Tr(L"Output Device"));
-    AddTitleButton(title, "refresh", L"Refresh devices", [] { Live().RefreshDevices(); });
-    page->Add<ChoiceList>([] { return DeviceRows(); }, Tr(L"Default device"));
+    // The output device as one dropdown row (the list of every device took half the panel).
+    Live().RefreshDevices();
+    Widget* section = AddSection(page);
+    auto choices = [] {
+        std::vector<ui::Choice> out;
+        for (const ChoiceRow& r : DeviceRows()) out.push_back({r.label, "", ""});
+        return out;
+    };
+    auto selected = [] {
+        const auto rows = DeviceRows();
+        for (size_t i = 0; i < rows.size(); ++i)
+            if (rows[i].checked) return static_cast<int>(i);
+        return -1;
+    };
+    auto d = std::make_unique<Dropdown>(choices(), selected());
+    Dropdown* raw = d.get();
+    d->width = Length::Px(196);
+    d->height = Length::Px(36);
+    d->placeholder = Tr(L"System default");
+    d->onChange = [](int i) {
+        const auto rows = DeviceRows();
+        if (i >= 0 && i < static_cast<int>(rows.size()) && rows[static_cast<size_t>(i)].select) rows[static_cast<size_t>(i)].select();
+    };
+    AddRow(section, Tr(L"Output Device"), std::move(d), 52);
+    if (auto* sync = dynamic_cast<SyncPage*>(page))
+        sync->OnSync([raw, choices, selected] {
+            auto now = choices();
+            bool same = now.size() == raw->Choices().size();
+            for (size_t i = 0; same && i < now.size(); ++i) same = now[i].label == raw->Choices()[i].label;
+            if (!same) raw->SetChoices(std::move(now), selected());
+            else if (raw->Selected() != selected()) raw->SetSelected(selected());
+        });
 }
 
 }  // namespace app::panel

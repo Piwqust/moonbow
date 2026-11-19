@@ -1,6 +1,7 @@
 #pragma once
 // Tab bodies of the player popovers (implemented in QueuePanel.cpp, SettingsPanel.cpp and its
 // track lists in TracksPanel.cpp); Panels.cpp owns the popover itself.
+#include "app/player/ControlBar.h"
 #include "ui/Widget.h"
 
 #include <memory>
@@ -25,11 +26,10 @@ std::unique_ptr<ui::IconButton> MakeRepeatButton();
 // external tracks (add, find online, edit) and, for audio, the output device. type: video, audio, sub.
 void AddTrackLists(ui::Widget* page, const wchar_t* type);
 
-// Live settings: 0 playback, 1 video, 2 audio, 3 subtitles.
-std::unique_ptr<ui::Widget> BuildSettingsTab(int tab);
-std::unique_ptr<ui::Widget> BuildSettingsFooter(Popover* owner);
-// The tab the settings popover shows (0-3, as above; Panels.cpp).
-int SettingsTab();
+// The live settings popover of a bar button (Settings / Speed: playback, Video, Tracks: audio,
+// Subtitles) and its footer, which opens the matching page of the Settings window.
+std::unique_ptr<ui::Widget> BuildSettingsPanel(PanelKind kind);
+std::unique_ptr<ui::Widget> BuildSettingsFooter(PanelKind kind);
 
 // Rows the mini player queue needs (header + list) to size its popover.
 float CompactQueueHeight();

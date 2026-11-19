@@ -19,7 +19,7 @@ enum class ControlId : uint8_t {
     Spacer, Divider, Speed, Forward10, Backward10, Forward15, Backward15, Stop, Repeat, Shuffle,
     Record, Snapshot, PictureInPicture, Hdr, Zoom, RightSidebar, Quit, Preferences, GoHome,
     Thumbnail, FileName, ArtistName, FolderName, PlaylistName, Properties, Replay, Chapters,
-    Favorite, Bookmark, Bookmarks, Playlists,
+    Favorite, Bookmark, Bookmarks, Playlists, Video,
     Count,
 };
 
@@ -48,7 +48,8 @@ void SetControlLayout(const ControlLayout& layout);
 Signal<>& ControlLayoutChanged();
 
 // Player popovers anchored above the control bar (implemented in Panels.cpp).
-enum class PanelKind : uint8_t { Tracks, Subtitles, Settings, Queue, Chapters, Bookmarks, Speed };
+// Tracks is the audio panel, Settings (and Speed) the playback one; Video only shows for video.
+enum class PanelKind : uint8_t { Tracks, Subtitles, Settings, Queue, Chapters, Bookmarks, Speed, Video };
 void TogglePlayerPanel(PanelKind kind, const ui::Rect& anchor);
 void ClosePlayerPanels();
 bool PlayerPanelOpen(PanelKind kind);

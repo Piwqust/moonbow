@@ -255,7 +255,8 @@ void SubtitleWords::SetMpvHidden(bool hide) {
 void SubtitleWords::Frame() {
     // Cheap: only while paused, and only a pointer comparison or two.
     if (!enabled_ || (!PS().paused && !panelOpen_)) return;
-    const bool open = PlayerPanelOpen(PanelKind::Settings);
+    const bool open = PlayerPanelOpen(PanelKind::Settings) || PlayerPanelOpen(PanelKind::Subtitles) ||
+                      PlayerPanelOpen(PanelKind::Tracks) || PlayerPanelOpen(PanelKind::Video);
     if (open == panelOpen_) return;
     panelOpen_ = open;
     window_->Post([this] { Reevaluate(); });

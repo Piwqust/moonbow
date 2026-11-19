@@ -1,6 +1,6 @@
-// Playback Settings popover: Playback / Video / Audio / Subtitles tabs with live controls (the
-// last three start with the track lists of TracksPanel.cpp), the preset field ("Default Preset")
-// and "Open Advanced Settings".
+// The player's settings popovers, one per control bar button: playback (the gear and the speed
+// button), video, audio and subtitles (those two start with the track lists of TracksPanel.cpp).
+// Each is short; its footer opens the matching page of the Settings window.
 #include "Util.h"
 #include "app/Actions.h"
 #include "app/App.h"
@@ -45,7 +45,7 @@ void Later(std::function<void()> fn) {
 std::unique_ptr<Dropdown> MakeDropdown(std::vector<ui::Choice> choices, float w) {
     auto d = std::make_unique<Dropdown>(std::move(choices), 0);
     d->width = Length::Px(w);
-    d->height = Length::Px(48);
+    d->height = Length::Px(36);
     return d;
 }
 
@@ -58,14 +58,14 @@ int IndexOf(const std::vector<ui::Choice>& choices, const std::string& value) {
 // Dropdown bound to string state: `get` returns the current value, `set` applies a new one.
 Dropdown* AddChoice(SyncPage* page, Widget* section, const std::wstring& label, std::vector<ui::Choice> choices,
                     std::function<std::string()> get, std::function<void(const std::string&)> set, bool fullWidth = false) {
-    auto d = MakeDropdown(choices, fullWidth ? 360.0f : 188.0f);
+    auto d = MakeDropdown(choices, fullWidth ? 360.0f : 196.0f);
     Dropdown* raw = d.get();
     if (fullWidth) {
         if (!label.empty()) AddCaption(section, label);
         d->width = Length::Grow();
         section->AddChild(std::move(d));
     } else {
-        AddRow(section, label, std::move(d), 68);
+        AddRow(section, label, std::move(d), 52);
     }
     raw->onChange = [raw, set](int i) {
         if (i >= 0 && i < static_cast<int>(raw->Choices().size())) set(raw->Choices()[static_cast<size_t>(i)].value);
@@ -98,7 +98,7 @@ Dropdown* AddConfigChoice(SyncPage* page, Widget* section, const std::wstring& l
 }
 
 Toggle* AddToggle(SyncPage* page, Widget* section, const std::wstring& label, std::function<bool()> get,
-                  std::function<void(bool)> set, float h = 52) {
+                  std::function<void(bool)> set, float h = 48) {
     auto t = std::make_unique<Toggle>(get());
     Toggle* raw = t.get();
     raw->onChange = std::move(set);
@@ -109,7 +109,7 @@ Toggle* AddToggle(SyncPage* page, Widget* section, const std::wstring& label, st
     return raw;
 }
 
-Toggle* AddConfigToggle(SyncPage* page, Widget* section, const std::wstring& label, const char* key, float h = 52) {
+Toggle* AddConfigToggle(SyncPage* page, Widget* section, const std::wstring& label, const char* key, float h = 48) {
     const std::string k = key;
     return AddToggle(page, section, label, [k] { return Cfg().GetBool(k); }, [k](bool v) { Cfg().SetBool(k, v); }, h);
 }
@@ -148,54 +148,25 @@ Range* AddRange(SyncPage* page, Widget* section, const std::wstring& label, cons
     return r;
 }
 
-// Range bound to a numeric schema setting; written on release (they rebuild filter chains).
-Range* AddConfigRange(SyncPage* page, Widget* section, const char* key, std::wstring label = {}) {
-    const settings::Item* item = settings::FindItem(key);
-    if (!item) return nullptr;
-    const std::string k = key;
-    RangeSpec spec;
-    spec.min = static_cast<float>(item->min);
-    spec.max = static_cast<float>(item->max);
-    spec.step = static_cast<float>(item->step);
-    if (item->min < 0 && item->max > 0) spec.origin = 0;
-    spec.liveDrag = false;
-    const std::wstring unit = item->Unit(Lang());
-    const int decimals = item->step > 0 && item->step < 1 ? (item->step < 0.1 ? 2 : 1) : 0;
-    auto fmt = [unit, decimals](double v) {
-        wchar_t buf[48];
-        swprintf_s(buf, L"%.*f", decimals, std::abs(v) < 0.0005 ? 0.0 : v);
-        std::wstring s = LocalDecimal(buf);
-        if (unit.empty()) return s;
-        return s + L" " + unit;
-    };
-    return AddRange(page, section, label.empty() ? item->Label(Lang()) : label, spec, [k] { return Cfg().GetDouble(k); },
-                    [k](double v) { Cfg().SetDouble(k, v); }, fmt);
-}
-
-// Label + value box on one row, slider below (delays).
-Range* AddBoxRange(SyncPage* page, Widget* section, const std::wstring& label, const RangeSpec& spec,
-                   std::function<double()> get, std::function<void(double)> set, std::function<std::wstring(double)> fmt) {
-    auto box = std::make_unique<ValueBox>();
-    ValueBox* b = box.get();
-    b->text = [get, fmt] { return fmt(get()); };
-    b->onValue = set;
-    AddRow(section, label, std::move(box), 56);
-    auto* r = section->Add<Range>(spec.min, spec.max, static_cast<float>(get()), spec.step);
-    r->origin = spec.origin;
-    r->ticks = spec.ticks;
-    r->labels = spec.labels;
-    r->trackH = 21;
-    r->format = [fmt](float v) { return fmt(v); };
-    r->a11yName = label;  // the row above holds the value box too
-    auto* spacer = section->Add<Widget>();
-    spacer->height = Length::Px(14);
-    r->onChange = [set](float v) { set(v); };
-    page->OnSync([r, b, get] {
-        if (!r->Dragging()) r->SetValue(static_cast<float>(get()));
-        b->Refresh();
-    });
-    b->Refresh();
-    return r;
+// "Label   −  0.000 s  +" on one row: nudged a step at a time or typed (the delays).
+ValueBox* AddStepper(SyncPage* page, Widget* section, const std::wstring& label, double step, std::function<double()> get,
+                     std::function<void(double)> set, std::function<std::wstring(double)> fmt) {
+    auto group = std::make_unique<Widget>();
+    group->dir = Dir::Row;
+    group->align = Align::Center;
+    group->gap = 4;
+    auto* minus = group->Add<IconButton>("remove", L"−" + fmt(step), 32, 20);
+    auto* box = group->Add<ValueBox>();
+    box->text = [get, fmt] { return fmt(get()); };
+    box->onValue = set;
+    box->a11yName = label;
+    auto* plus = group->Add<IconButton>("add", L"+" + fmt(step), 32, 20);
+    minus->onClick = [get, set, step] { set(std::round((get() - step) / step) * step); };
+    plus->onClick = [get, set, step] { set(std::round((get() + step) / step) * step); };
+    AddRow(section, label, std::move(group), 52);
+    page->OnSync([box] { box->Refresh(); });
+    box->Refresh();
+    return box;
 }
 
 ValueBox* AddBox(SyncPage* page, Widget* section, const std::wstring& label, std::function<std::wstring()> text,
@@ -233,9 +204,9 @@ std::vector<ui::Choice> TrackChoices(const wchar_t* type) {
 // panel opens, external subtitles get added.
 Dropdown* AddTracks(SyncPage* page, Widget* section, const std::wstring& label, const wchar_t* type,
                     std::function<std::string()> get, std::function<void(const std::string&)> set) {
-    auto d = MakeDropdown(TrackChoices(type), 188.0f);
+    auto d = MakeDropdown(TrackChoices(type), 196.0f);
     Dropdown* raw = d.get();
-    AddRow(section, label, std::move(d), 68);
+    AddRow(section, label, std::move(d), 52);
     raw->onChange = [raw, set](int i) {
         if (i >= 0 && i < static_cast<int>(raw->Choices().size())) set(raw->Choices()[static_cast<size_t>(i)].value);
     };
@@ -253,42 +224,13 @@ Dropdown* AddTracks(SyncPage* page, Widget* section, const std::wstring& label, 
     return raw;
 }
 
-// Swatch + "#RRGGBB" field bound to a color setting.
-class ColorBox : public ValueBox {
-public:
-    explicit ColorBox(std::string key) : key_(std::move(key)) {
-        text = [this] { return Utf8ToWide(Cfg().GetString(key_)); };
-        onText = [this](const std::wstring& t) {
-            std::wstring s = t;
-            while (!s.empty() && iswspace(s.back())) s.pop_back();
-            while (!s.empty() && iswspace(s.front())) s.erase(s.begin());
-            if (!s.empty() && s[0] != L'#') s = L"#" + s;
-            for (wchar_t& ch : s) ch = static_cast<wchar_t>(towupper(ch));
-            Cfg().SetString(key_, WideToUtf8(s));  // the schema rejects malformed colors
-        };
-    }
-    void Paint(Painter& p) override {
-        ValueBox::Paint(p);
-        const std::string v = Cfg().GetString(key_);
-        if (v.size() == 7) {
-            const uint32_t rgb = static_cast<uint32_t>(std::strtoul(v.c_str() + 1, nullptr, 16));
-            const Rect sw{rect.Right() - 30, rect.Cy() - 11, 22, 22};
-            p.Fill(sw, Color::Hex(rgb), 2);
-            p.Stroke(sw, P().lineStrong, 2);
-        }
-    }
-
-private:
-    std::string key_;
-};
-
 // Three or more equal buttons in a dark well (Flip: None | Horizontal | Vertical).
 Segmented* AddSegments(SyncPage* page, Widget* section, const std::wstring& caption, std::vector<ui::Choice> choices,
                        std::function<int()> get, std::function<void(int)> set) {
     if (!caption.empty()) AddCaption(section, caption);
     auto* s = section->Add<Segmented>(std::move(choices), get());
     s->width = Length::Grow();
-    s->height = Length::Px(44);
+    s->height = Length::Px(36);
     s->onChange = std::move(set);
     page->OnSync([s, get] {
         if (s->Selected() != get()) s->SetSelected(get());
@@ -306,57 +248,6 @@ Expander* AddExpander(Widget* section, const std::string& key, const std::wstrin
     auto* spacer = section->Add<Widget>();
     spacer->height = Length::Px(14);
     return e;
-}
-
-// --- custom shaders (<data>\shaders, enabled ones in video.shaders as "a.glsl|b.hook") ----------
-
-std::wstring ShadersFolder() {
-    return DataDir() + L"\\shaders";
-}
-
-// .glsl / .hook files in the shaders folder, sorted. A few directory entries, read when the
-// Video tab opens (local folder; no recursion).
-std::vector<std::wstring> ShaderFiles() {
-    std::vector<std::wstring> out;
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileExW((ShadersFolder() + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
-                                FIND_FIRST_EX_LARGE_FETCH);
-    if (h == INVALID_HANDLE_VALUE) return out;
-    do {
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-        const std::wstring name = fd.cFileName;
-        const size_t dot = name.rfind(L'.');
-        if (dot == std::wstring::npos) continue;
-        const wchar_t* ext = name.c_str() + dot;
-        if (_wcsicmp(ext, L".glsl") == 0 || _wcsicmp(ext, L".hook") == 0) out.push_back(name);
-    } while (FindNextFileW(h, &fd));
-    FindClose(h);
-    std::sort(out.begin(), out.end(),
-              [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
-    return out;
-}
-
-std::vector<std::string> EnabledShaderList() {
-    std::vector<std::string> out;
-    const std::string list = Cfg().GetString("video.shaders");
-    size_t start = 0;
-    while (start < list.size()) {
-        size_t bar = list.find('|', start);
-        if (bar == std::string::npos) bar = list.size();
-        if (bar > start) out.push_back(list.substr(start, bar - start));
-        start = bar + 1;
-    }
-    return out;
-}
-
-// Toggling rewrites glsl-shaders live (Config pushes it to mpv); mpv keeps playing.
-void SetShaderEnabled(const std::string& name, bool on) {
-    std::vector<std::string> list = EnabledShaderList();
-    list.erase(std::remove(list.begin(), list.end(), name), list.end());
-    if (on) list.push_back(name);
-    std::string joined;
-    for (const std::string& n : list) joined += (joined.empty() ? "" : "|") + n;
-    Cfg().SetString("video.shaders", joined);
 }
 
 // --- per-file settings ------------------------------------------------------------------------
@@ -424,15 +315,35 @@ std::unique_ptr<Widget> Page(SyncPage** out) {
     return sv;
 }
 
-// --- tabs ------------------------------------------------------------------------------------
+// --- panels: one short popover per bar button ------------------------------------------------
+// What is used while watching sits here; the rest (quality and HDR, equalizer bands, effects,
+// subtitle style, shaders) is in the Settings window, one link away in each footer.
 
-std::unique_ptr<Widget> PlaybackTab() {
+// Quick speeds as segments over the exact value box.
+constexpr double kQuickSpeeds[] = {0.5, 0.75, 1.0, 1.25, 1.5, 2.0};
+
+int QuickSpeedIndex() {
+    for (size_t i = 0; i < std::size(kQuickSpeeds); ++i)
+        if (std::abs(PS().speed - kQuickSpeeds[i]) < 1e-3) return static_cast<int>(i);
+    return -1;
+}
+
+std::unique_ptr<Widget> PlaybackPanel() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
     auto* top = page->Add<Widget>();
-    top->height = Length::Px(12);
-    Widget* s = AddSection(page);
+    top->height = Length::Px(8);
+    Widget* sp = AddSection(page);
+    AddBox(
+        page, sp, Tr(L"Speed"), [] { return FormatNumber(PS().speed) + L"×"; },
+        [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); });
+    std::vector<ui::Choice> speeds;
+    for (double v : kQuickSpeeds) speeds.push_back({FormatNumber(v) + L"×", "", ""});
+    AddSegments(page, sp, L"", std::move(speeds), [] { return QuickSpeedIndex(); },
+                [](int i) { TheApp().player().SetSpeed(kQuickSpeeds[static_cast<size_t>(std::clamp(i, 0, 5))]); });
 
+    AddSectionLine(page);
+    Widget* s = AddSection(page);
     AddSegments(
         page, s, Tr(L"Repeat"), {{Tr(L"Off"), "off", ""}, {Tr(L"All"), "all", ""}, {Tr(L"One"), "one", ""}},
         [] { return static_cast<int>(TheApp().queue().RepeatMode()); },
@@ -491,70 +402,76 @@ std::unique_ptr<Widget> PlaybackTab() {
             info->SetText(t);
         });
     }
-    AddSectionLine(page);
-    Widget* sp = AddSection(page);
-    auto* gap = sp->Add<Widget>();
-    gap->height = Length::Px(8);
-    RangeSpec speed;
-    // Up to 4x, where Faster stops (the menu goes to 3x): a faster speed must not pin the thumb at 2x.
-    speed.min = 0.25f;
-    speed.max = 4.0f;
-    speed.step = 0.05f;
-    speed.origin = 0.25f;
-    for (float t = 0.5f; t < 4.0f; t += 0.25f) speed.ticks.push_back(t);
-    for (float t : {0.25f, 1.0f, 2.0f, 3.0f, 4.0f}) speed.labels.push_back({t, FormatNumber(t)});
-    AddBoxRange(page, sp, Tr(L"Speed"), speed, [] { return PS().speed; },
-                [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); },
-                [](double v) { return FormatNumber(v) + L"x"; });
 
-    // What Moonbow remembers for the playing file (playback.perFile, LiveState).
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"This File's Settings"));
+    // What is remembered for this file, only when there is something (playback.perFile is in
+    // Settings > Playback).
     Widget* fs = AddSection(page);
-    AddConfigToggle(page, fs, Tr(L"Remember for Each File"), "playback.perFile");
     auto* stored = fs->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
-    stored->pad = {4, 0, 0, 0};
+    stored->pad = {4, 8, 0, 0};
     stored->wrap = true;
-    auto* fsgap = fs->Add<Widget>();
-    fsgap->height = Length::Px(10);
     auto* reset = fs->Add<FlatButton>(Tr(L"Reset for This File"), "refresh");
     reset->tooltip = Tr(L"Forget what is remembered for this file and go back to the defaults");
     reset->onClick = [] { Live().ResetFileSettings(); };
     auto* fsbottom = fs->Add<Widget>();
     fsbottom->height = Length::Px(12);
-    auto syncStored = [stored, reset] {
-        const std::wstring t = FileSettingsText();
-        if (t != stored->Text()) stored->SetText(t);
+    auto syncStored = [stored, reset, fsbottom] {
         const bool any = Live().FileSettingsOn() && !Live().FileSettingsStored().Empty();
+        const std::wstring t = any ? Tr(L"Remembered for this file:") + std::wstring(L"\n") + FileSettingsText() : L"";
+        if (t != stored->Text()) stored->SetText(t);
         if (reset->visible != any) {
-            reset->visible = any;
+            reset->visible = stored->visible = fsbottom->visible = any;
             reset->InvalidateLayout();
         }
     };
+    reset->visible = stored->visible = fsbottom->visible = false;
     syncStored();
     page->OnSync(syncStored);
     return root;
 }
 
-std::unique_ptr<Widget> VideoTab() {
+std::unique_ptr<Widget> VideoPanel() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
-    AddTrackLists(page, L"video");
-    // What resets with the next file apart from what carries on to the next files.
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"This File"));
-    Widget* s = AddSection(page);
-    auto* top = s->Add<Widget>();
+    // The track list only when there is a choice (most files have one picture).
+    int videoTracks = 0;
+    for (const Track& t : PS().tracks) videoTracks += t.type == L"video";
+    if (videoTracks > 1) {
+        AddTrackLists(page, L"video");
+        AddSectionLine(page);
+    }
+    auto* top = page->Add<Widget>();
     top->height = Length::Px(8);
-    AddSegments(
-        page, s, Tr(L"Flip"), {{Tr(L"None"), "0", ""}, {Tr(L"Horizontal"), "1", ""}, {Tr(L"Vertical"), "2", ""}},
-        [] { return Live().flip; }, [](int i) { Live().SetFlip(i); });
-    AddBox(
-        page, s, Tr(L"Rotate"), [] { return FormatNumber(Live().V().rotate) + L"°"; },
-        [](double v) {
-            const int r = ((static_cast<int>(std::lround(v)) % 360) + 360) % 360;
+    Widget* s = AddSection(page);
+    // Rotate by quarter turns; the exact angle shows between the buttons.
+    {
+        auto* row = s->Add<Widget>();
+        row->dir = Dir::Row;
+        row->align = Align::Center;
+        row->width = Length::Grow();
+        row->height = Length::Px(52);
+        row->gap = 8;
+        auto* l = row->Add<Label>(Tr(L"Rotate"), TextStyle::Body, Tone::Tertiary);
+        l->width = Length::Grow();
+        l->pad = {4, 0, 0, 0};
+        auto turn = [](int by) {
+            const int r = ((static_cast<int>(std::lround(Live().V().rotate)) + by) % 360 + 360) % 360;
             TheApp().player().SetProperty("video-rotate", std::to_string(r));  // a choice option: mpv rejects a double
-        });
+        };
+        auto* left = row->Add<Button>(L"−90°", ButtonKind::Secondary);
+        left->tooltip = Tr(L"Rotate left");
+        left->onClick = [turn] { turn(-90); };
+        auto* angle = row->Add<Label>(L"", TextStyle::Mono, Tone::Secondary);
+        angle->width = Length::Px(44);
+        angle->halign = HAlign::Center;
+        auto* right = row->Add<Button>(L"+90°", ButtonKind::Secondary);
+        right->tooltip = Tr(L"Rotate right");
+        right->onClick = [turn] { turn(90); };
+        auto sync = [angle] { angle->SetText(FormatNumber(Live().V().rotate) + L"°"); };
+        sync();
+        page->OnSync(sync);
+    }
+    AddChoice(page, s, Tr(L"Flip"), {{Tr(L"None"), "0", ""}, {Tr(L"Horizontal"), "1", ""}, {Tr(L"Vertical"), "2", ""}},
+              [] { return std::to_string(Live().flip); }, [](const std::string& v) { Live().SetFlip(std::atoi(v.c_str())); });
     AddChoice(page, s, Tr(L"Zoom"),
               {{Tr(L"Fit to Window"), "fit", ""},
                {Tr(L"1:4 Quarter"), "quarter", ""},
@@ -572,30 +489,7 @@ std::unique_ptr<Widget> VideoTab() {
                {L"5:4", "5:4", ""},
                {L"1:1", "1:1", ""}},
               [] { return Live().aspect; }, [](const std::string& v) { Live().SetAspect(v); });
-    {
-        // The rule for the next file (Player.cpp reset-on-next-file, LiveState's file change).
-        auto* note = s->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
-        note->pad = {4, 4, 0, 0};
-        note->wrap = true;
-        // ...and come back with it when per-file settings remember them (LiveState).
-        auto sync = [note] {
-            const std::wstring t =
-                Live().FileSettingsAll()
-                    ? Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only and are remembered for it.")
-                    : Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only.");
-            if (t != note->Text()) note->SetText(t);
-        };
-        sync();
-        page->OnSync(sync);
-    }
-    auto* bottom = s->Add<Widget>();
-    bottom->height = Length::Px(8);
-
-    // Crop and deinterlacing stay for the next files; the rest are settings.
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"All Files"));
-    Widget* g = AddSection(page);
-    AddChoice(page, g, Tr(L"Crop"),
+    AddChoice(page, s, Tr(L"Crop"),
               {{Tr(L"Default"), "none", ""},
                {L"16:9", "16:9", ""},
                {L"4:3", "4:3", ""},
@@ -603,81 +497,11 @@ std::unique_ptr<Widget> VideoTab() {
                {L"2.35:1", "2.35:1", ""},
                {Tr(L"Custom"), "custom", ""}},
               [] { return Live().crop; }, [](const std::string& v) { Live().SetCrop(v); });
-    AddChoice(page, g, Tr(L"Deinterlace"), {{Tr(L"Auto"), "auto", ""}, {Tr(L"On"), "yes", ""}, {Tr(L"Off"), "no", ""}},
-              [] { return Live().deinterlace; }, [](const std::string& v) { Live().SetDeinterlace(v); });
-    AddConfigChoice(page, g, Tr(L"HDR"), "video.hdr");
-    AddConfigChoice(page, g, Tr(L"Tone Mapping"), "video.toneMapping");
-    AddConfigChoice(page, g, Tr(L"Resolution"), "playback.videoQuality");
-    auto* gbottom = g->Add<Widget>();
-    gbottom->height = Length::Px(8);
-
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Quality"));
-    Widget* q = AddSection(page);
-    AddConfigChoice(page, q, Tr(L"Image Quality"), "video.quality");
-    AddChoice(page, q, Tr(L"Upscaler"),
-              {{Tr(L"Auto"), "auto", ""},
-               {Tr(L"Bilinear"), "bilinear", ""},
-               {L"Spline36", "spline36", ""},
-               {L"Lanczos", "lanczos", ""},
-               {L"EWA Lanczos", "ewa_lanczos", ""},
-               {L"EWA Lanczos Sharp", "ewa_lanczossharp", ""}},
-              [] { return Cfg().GetString("video.upscaler"); },
-              [](const std::string& v) { Cfg().SetString("video.upscaler", v); });
-    AddConfigToggle(page, q, Tr(L"Smooth Motion"), "video.smoothMotion");
-    AddConfigToggle(page, q, Tr(L"AI Upscaling"), "video.superResolution");
+    // Custom crop: the four edges in pixels, only while "Custom" is chosen.
     {
-        // Why the upscaler isn't running (no D3D11 decoding, CPU filters on, video big enough...).
-        auto* status = q->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
-        status->pad = {4, 0, 0, 0};
-        status->wrap = true;
-        auto sync = [status] {
-            std::wstring t = Live().UpscalerStatus();
-            if (t.empty() && Live().UpscalerActive()) t = Tr(L"Upscaling on the graphics card");
-            if (t != status->Text()) status->SetText(t);
-        };
-        sync();
-        page->OnSync(sync);
-    }
-    auto* qbottom = q->Add<Widget>();
-    qbottom->height = Length::Px(10);
-
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Filters"));
-    Widget* f = AddSection(page);
-    Expander* ess = AddExpander(f, "video.essential", Tr(L"Essential"));
-    {
-        Widget* b = ess->Body();
-        RangeSpec pic;
-        pic.min = -100;
-        pic.max = 100;
-        pic.step = 1;
-        pic.origin = 0;
-        auto prop = [&](const wchar_t* label, const char* name, double LiveValues::*field) {
-            const std::string n = name;
-            AddRange(page, b, Tr(label), pic, [field] { return Live().V().*field; },
-                     [n](double v) { TheApp().player().SetProperty(n.c_str(), std::round(v)); },
-                     [](double v) { return FormatNumber(std::round(v)); });
-        };
-        prop(L"Hue", "hue", &LiveValues::hue);
-        prop(L"Brightness", "brightness", &LiveValues::brightness);
-        prop(L"Contrast", "contrast", &LiveValues::contrast);
-        prop(L"Saturation", "saturation", &LiveValues::saturation);
-        prop(L"Gamma", "gamma", &LiveValues::gamma);
-        AddConfigRange(page, b, "video.sharpen", Tr(L"Sharpen Sigma"));
-        AddConfigToggle(page, b, Tr(L"Debanding"), "video.deband", 48);
-        AddConfigRange(page, b, "video.debandRange", Tr(L"Banding Removal Radius"));
-        AddConfigRange(page, b, "video.filmGrain", Tr(L"Film Grain Variance"));
-        auto* reset = b->Add<FlatButton>(Tr(L"Reset picture"), "refresh");
-        reset->onClick = [] { Live().ResetPicture(); };
-    }
-    AddSectionLine(page);
-    Widget* c = AddSection(page);
-    auto* cgap = c->Add<Widget>();
-    cgap->height = Length::Px(10);
-    Expander* crop = AddExpander(c, "video.crop", Tr(L"Crop"));
-    {
-        Widget* b = crop->Body();
+        auto* edges = s->Add<Widget>();
+        edges->dir = Dir::Column;
+        edges->width = Length::Grow();
         auto field = [page](Widget* row, const wchar_t* label, double LiveState::*value) {
             auto* cell = row->Add<Widget>();
             cell->dir = Dir::Row;
@@ -696,7 +520,7 @@ std::unique_ptr<Widget> VideoTab() {
             box->Refresh();
         };
         for (int r = 0; r < 2; ++r) {
-            auto* row = b->Add<Widget>();
+            auto* row = edges->Add<Widget>();
             row->dir = Dir::Row;
             row->align = Align::Center;
             row->width = Length::Grow();
@@ -710,67 +534,88 @@ std::unique_ptr<Widget> VideoTab() {
                 field(row, L"Right", &LiveState::cropR);
             }
         }
-        auto* reset = b->Add<FlatButton>(Tr(L"Reset crop"), "refresh");
-        reset->onClick = [] {
-            LiveState& l = Live();
-            l.cropT = l.cropB = l.cropL = l.cropR = 0;
-            l.SetCrop("none");
+        auto sync = [edges] {
+            const bool on = Live().crop == "custom";
+            if (edges->visible != on) {
+                edges->visible = on;
+                edges->InvalidateLayout();
+            }
         };
+        edges->visible = false;
+        sync();
+        page->OnSync(sync);
     }
-    AddSectionLine(page);
-    Widget* col = AddSection(page);
-    auto* colgap = col->Add<Widget>();
-    colgap->height = Length::Px(10);
-    Expander* colors = AddExpander(col, "video.colors", Tr(L"Colors"));
+    AddConfigChoice(page, s, Tr(L"Quality"), "video.quality");
     {
-        Widget* b = colors->Body();
+        auto* note = s->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
+        note->pad = {4, 4, 0, 0};
+        note->wrap = true;
+        auto sync = [note] {
+            const std::wstring t =
+                Live().FileSettingsAll()
+                    ? Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only and are remembered for it.")
+                    : Tr(L"Flip, rotation, zoom and aspect ratio apply to the current file only.");
+            if (t != note->Text()) note->SetText(t);
+        };
+        sync();
+        page->OnSync(sync);
+    }
+    auto* gap = s->Add<Widget>();
+    gap->height = Length::Px(12);
+
+    // Picture adjustments, folded: brightness and the like, the colour effects and a reset.
+    AddSectionLine(page);
+    Widget* f = AddSection(page);
+    auto* fgap = f->Add<Widget>();
+    fgap->height = Length::Px(10);
+    Expander* pic = AddExpander(f, "video.picture", L"", Tr(L"Picture adjustments"));
+    {
+        Widget* b = pic->Body();
+        RangeSpec spec;
+        spec.min = -100;
+        spec.max = 100;
+        spec.step = 1;
+        spec.origin = 0;
+        auto prop = [&](const wchar_t* label, const char* name, double LiveValues::*field) {
+            const std::string n = name;
+            AddRange(page, b, Tr(label), spec, [field] { return Live().V().*field; },
+                     [n](double v) { TheApp().player().SetProperty(n.c_str(), std::round(v)); },
+                     [](double v) { return FormatNumber(std::round(v)); });
+        };
+        prop(L"Brightness", "brightness", &LiveValues::brightness);
+        prop(L"Contrast", "contrast", &LiveValues::contrast);
+        prop(L"Saturation", "saturation", &LiveValues::saturation);
+        prop(L"Gamma", "gamma", &LiveValues::gamma);
+        prop(L"Hue", "hue", &LiveValues::hue);
         AddToggle(page, b, Tr(L"Negate Colors"), [] { return Live().negate; },
-                  [](bool v) { Live().SetColorFx(v, Live().grayscale); });
+                  [](bool v) { Live().SetColorFx(v, Live().grayscale); }, 48);
         AddToggle(page, b, Tr(L"Grayscale"), [] { return Live().grayscale; },
-                  [](bool v) { Live().SetColorFx(Live().negate, v); });
-    }
-    AddSectionLine(page);
-    Widget* sh = AddSection(page);
-    auto* shgap = sh->Add<Widget>();
-    shgap->height = Length::Px(10);
-    Expander* shaders = AddExpander(sh, "video.shaders", Tr(L"Shaders"));
-    {
-        Widget* b = shaders->Body();
-        const std::vector<std::wstring> files = ShaderFiles();
-        if (files.empty()) {
-            auto* hint = b->Add<Label>(Tr(L"Put .glsl or .hook shader files (FSRCNNX, Anime4K…) in the shaders folder."),
-                                       TextStyle::Small, Tone::Tertiary);
-            hint->wrap = true;
-            hint->pad = {4, 4, 0, 10};
-        }
-        for (const std::wstring& file : files) {
-            const std::string name = WideToUtf8(file);
-            AddToggle(
-                page, b, file,
-                [name] {
-                    const auto list = EnabledShaderList();
-                    return std::find(list.begin(), list.end(), name) != list.end();
-                },
-                [name](bool v) { SetShaderEnabled(name, v); }, 48);
-        }
-        auto* open = b->Add<FlatButton>(Tr(L"Open shaders folder"), "folder");
-        open->onClick = [] {
-            const std::wstring dir = ShadersFolder();
-            CreateDirectoryW(dir.c_str(), nullptr);
-            ui::Host::ShellOpen(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                  [](bool v) { Live().SetColorFx(Live().negate, v); }, 48);
+        auto* reset = b->Add<FlatButton>(Tr(L"Reset picture"), "refresh");
+        reset->onClick = [] {
+            Live().ResetPicture();
+            Live().SetColorFx(false, false);
         };
     }
     return root;
 }
 
-std::unique_ptr<Widget> AudioTab() {
+std::unique_ptr<Widget> AudioPanel() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
     AddTrackLists(page, L"audio");
     AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"All Files"));  // nothing here resets with the next file
     Widget* s = AddSection(page);
-    AddConfigChoice(page, s, Tr(L"Audio Language"), "audio.language");
+    auto* top = s->Add<Widget>();
+    top->height = Length::Px(8);
+    AddStepper(page, s, Tr(L"Audio Track Delay"), 0.05, [] { return Live().V().audioDelay; },
+               [](double v) { TheApp().player().SetProperty("audio-delay", v); }, [](double v) { return FormatSeconds(v); });
+    // The equalizer as its presets; the bands are in Settings > Audio.
+    AddConfigChoice(page, s, Tr(L"Equalizer"), "audio.eqPreset", [](const std::string& id) {
+        Cfg().ApplyEqPreset(id);
+        Cfg().SetBool("audio.eq", id != "none");
+    });
+    AddConfigToggle(page, s, Tr(L"Normalize Loudness"), "audio.normalize");
     AddChoice(page, s, Tr(L"Stereo Mode"),
               {{Tr(L"Stereo"), "stereo", ""},
                {Tr(L"Mono"), "mono", ""},
@@ -778,141 +623,34 @@ std::unique_ptr<Widget> AudioTab() {
                {Tr(L"Left channel"), "left", ""},
                {Tr(L"Right channel"), "right", ""}},
               [] { return Live().stereoMode; }, [](const std::string& v) { Live().SetStereoMode(v); });
-    auto* sgap = s->Add<Widget>();
-    sgap->height = Length::Px(20);
-
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Synchronization"));
-    Widget* sync = AddSection(page);
-    RangeSpec delay;
-    delay.min = -10;
-    delay.max = 10;
-    delay.step = 0.05f;
-    delay.origin = 0;
-    delay.labels = {{-10.0f, L"-10 " + std::wstring(Tr(L"s"))}, {0.0f, L"0 " + std::wstring(Tr(L"s"))},
-                    {10.0f, L"+10 " + std::wstring(Tr(L"s"))}};
-    AddBoxRange(page, sync, Tr(L"Audio Track Delay"), delay, [] { return Live().V().audioDelay; },
-                [](double v) { TheApp().player().SetProperty("audio-delay", v); },
-                [](double v) { return FormatSeconds(v); });
-
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Filters"));
-    Widget* eq = AddSection(page);
-    AddConfigToggle(page, eq, Tr(L"Equalizer"), "audio.eq");
-    AddConfigChoice(page, eq, L"", "audio.eqPreset",
-                    [](const std::string& id) {
-                        Cfg().ApplyEqPreset(id);
-                        if (id != "none") Cfg().SetBool("audio.eq", true);
-                    },
-                    true);
-    auto* eqgap = eq->Add<Widget>();
-    eqgap->height = Length::Px(10);
-    Expander* bands = AddExpander(eq, "audio.eq", L"", Tr(L"Equalizer bands"));
-    // Bands keep working while the EQ is off (moving one turns it on), but look inactive.
-    class DimWhenOff : public Widget {
-    public:
-        DimWhenOff() {
-            dir = Dir::Column;
-            width = Length::Grow();
-        }
-        void Paint(Painter& p) override {
-            dimmed_ = !Cfg().GetBool("audio.eq");
-            if (dimmed_) p.PushOpacity(0.45f);
-        }
-        void PaintOver(Painter& p) override {
-            if (dimmed_) p.PopOpacity();
-        }
-
-    private:
-        bool dimmed_ = false;
-    };
-    auto* dim = bands->Body()->Add<DimWhenOff>();
-    page->OnSync([dim] { dim->Invalidate(); });
-    AddConfigRange(page, dim, settings::kEqPreampKey);
-    for (const char* key : settings::kEqBandKeys) {
-        Range* r = AddConfigRange(page, dim, key);
-        if (!r) continue;
-        r->onCommit = [prev = r->onCommit](float v) {
-            prev(v);
-            if (!Cfg().GetBool("audio.eq")) Cfg().SetBool("audio.eq", true);
-        };
-    }
-    AddConfigToggle(page, eq, Tr(L"2 Pass"), "audio.eqTwoPass", 48);
-
-    struct Effect {
-        const wchar_t* label;
-        const wchar_t* settings;
-        const char* toggle;
-        const char* group;
-    };
-    for (const Effect& fx : {Effect{L"Compressor", L"Compressor settings", "audio.nightMode", "compressor"},
-                             Effect{L"Spatializer", L"Spatializer settings", "audio.spatial", "spatializer"},
-                             Effect{L"Stereo Widener", L"Stereo widener settings", "audio.stereoWiden",
-                                    "stereoWidener"}}) {
-        AddSectionLine(page);
-        Widget* sec = AddSection(page);
-        AddConfigToggle(page, sec, Tr(fx.label), fx.toggle, 58);
-        Expander* e = AddExpander(sec, std::string("audio.") + fx.group, L"", Tr(fx.settings));
-        if (std::string(fx.group) == "spatializer") AddConfigChoice(page, e->Body(), L"", "audio.spatialMode", nullptr, true);
-        for (const settings::Item* item : settings::AllItems())
-            if (item->group == fx.group && item->type == settings::ItemType::Slider) AddConfigRange(page, e->Body(), item->key.c_str());
-    }
-    AddSectionLine(page);
-    Widget* norm = AddSection(page);
-    AddConfigToggle(page, norm, Tr(L"Normalize Loudness"), "audio.normalize", 58);
+    auto* bottom = s->Add<Widget>();
+    bottom->height = Length::Px(12);
     return root;
 }
 
-std::unique_ptr<Widget> SubtitlesTab() {
+std::unique_ptr<Widget> SubtitlesPanel() {
     SyncPage* page = nullptr;
     auto root = Page(&page);
     AddTrackLists(page, L"sub");
     AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"This File"));
-    Widget* f = AddSection(page);
+    Widget* s = AddSection(page);
+    auto* top = s->Add<Widget>();
+    top->height = Length::Px(8);
+    AddToggle(page, s, Tr(L"Show Subtitles"), [] { return Live().V().subVisible; },
+              [](bool v) { TheApp().player().SetProperty("sub-visibility", v); });
     AddTracks(
-        page, f, Tr(L"Secondary Subtitles"), L"sub", [] { return std::to_string(Live().V().secondarySid); },
+        page, s, Tr(L"Secondary Subtitles"), L"sub", [] { return std::to_string(Live().V().secondarySid); },
         [](const std::string& v) {
             TheApp().player().SetProperty("secondary-sid", std::string(v == "0" ? "no" : v));
         });
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"All Files"));
-    Widget* s = AddSection(page);
-    AddConfigChoice(page, s, Tr(L"Subtitle Language"), "subtitles.language");
-    AddToggle(page, s, Tr(L"Show Subtitles"), [] { return Live().V().subVisible; },
-              [](bool v) { TheApp().player().SetProperty("sub-visibility", v); });
-
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Synchronization"));
-    Widget* sync = AddSection(page);
-    RangeSpec delay;
-    delay.min = -10;
-    delay.max = 10;
-    delay.step = 0.05f;
-    delay.origin = 0;
-    delay.labels = {{-10.0f, L"-10 " + std::wstring(Tr(L"s"))}, {0.0f, L"0 " + std::wstring(Tr(L"s"))},
-                    {10.0f, L"+10 " + std::wstring(Tr(L"s"))}};
-    AddBoxRange(page, sync, Tr(L"Subtitle Track Delay"), delay, [] { return Live().V().subDelay; },
-                [](double v) { TheApp().player().SetProperty("sub-delay", v); },
-                [](double v) { return FormatSeconds(v); });
-    RangeSpec speed;
-    speed.min = 0.5f;
-    speed.max = 2;
-    speed.step = 0.001f;
-    speed.origin = 1;
-    AddBoxRange(page, sync, Tr(L"Subtitle Speed"), speed, [] { return Live().V().subSpeed; },
-                [](double v) { TheApp().player().SetProperty("sub-speed", std::clamp(v, 0.1, 10.0)); },
-                [](double v) { return Signed(v, 3, L"×"); });
-
-    AddSectionLine(page);
-    AddSectionTitle(page, Tr(L"Appearance"));
-    Widget* a = AddSection(page);
+    AddStepper(page, s, Tr(L"Subtitle Track Delay"), 0.05, [] { return Live().V().subDelay; },
+               [](double v) { TheApp().player().SetProperty("sub-delay", v); }, [](double v) { return FormatSeconds(v); });
     RangeSpec size;
     size.min = 0.5f;
     size.max = 3;
     size.step = 0.05f;
     size.origin = 0.5f;
-    AddRange(page, a, Tr(L"Subtitle Size"), size, [] { return Live().V().subScale; },
+    AddRange(page, s, Tr(L"Subtitle Size"), size, [] { return Live().V().subScale; },
              [](double v) { TheApp().player().SetProperty("sub-scale", v); },
              [](double v) { return FormatNumber(v * 100, 0) + L"%"; });
     RangeSpec pos;
@@ -920,28 +658,15 @@ std::unique_ptr<Widget> SubtitlesTab() {
     pos.max = 150;
     pos.step = 1;
     pos.origin = 0;
-    AddRange(page, a, Tr(L"Vertical Position"), pos, [] { return Live().V().subPos; },
+    AddRange(page, s, Tr(L"Vertical Position"), pos, [] { return Live().V().subPos; },
              [](double v) { TheApp().player().SetProperty("sub-pos", std::round(v)); },
              [](double v) { return FormatNumber(std::round(v), 0) + L"%"; });
-    AddConfigToggle(page, a, Tr(L"Override Embedded Style"), "subtitles.assOverride");
+    // For subtitles made for another frame rate; one row, typed.
     AddBox(
-        page, a, Tr(L"Subtitle Font"),
-        [] {
-            const std::wstring f = Cfg().GetWString("subtitles.font");
-            return f.empty() ? std::wstring(L"Sans-serif") : f;
-        },
-        nullptr, [](const std::wstring& t) { Cfg().SetWString("subtitles.font", t == L"Sans-serif" ? L"" : t); });
-    auto color = [&](const wchar_t* label, const char* key) {
-        auto box = std::make_unique<ColorBox>(key);
-        ValueBox* b = box.get();
-        AddRow(a, Tr(label), std::move(box), 52);
-        page->OnSync([b] { b->Refresh(); });
-        b->Refresh();
-    };
-    color(L"Text Color", "subtitles.color");
-    color(L"Outline Color", "subtitles.outlineColor");
-    AddToggle(page, a, Tr(L"Background Box"), [] { return Live().subBackground; },
-              [](bool v) { Live().SetSubBackground(v); });
+        page, s, Tr(L"Subtitle Speed"), [] { return Signed(Live().V().subSpeed, 3, L"×"); },
+        [](double v) { TheApp().player().SetProperty("sub-speed", std::clamp(v, 0.1, 10.0)); });
+    auto* bottom = s->Add<Widget>();
+    bottom->height = Length::Px(12);
     return root;
 }
 
@@ -1024,64 +749,50 @@ private:
     ScopedConnection conn_;
 };
 
-class SettingsFooter : public Widget {
+// The bottom row: "All audio settings" opening that page of the Settings window; the playback
+// panel has the preset field beside a settings button instead.
+class PanelFooter : public Widget {
 public:
-    explicit SettingsFooter(Popover* owner) {
+    PanelFooter(std::string category, const wchar_t* label, bool presets) {
         width = Length::Grow();
-        Add<PresetField>();
-        // What the bar is for: "preset" alone said nothing (UX-14).
-        hint_ = Add<Label>(Tr(L"Save these values as a preset to come back to them"), TextStyle::Small, Tone::Tertiary);
-        adv_ = Add<FlatButton>(Tr(L"Open Advanced Settings"), "settings", false);
-        adv_->onClick = [] {
-            static const char* kCats[] = {"playback", "video", "audio", "subtitles"};
-            const std::string cat = kCats[std::clamp(SettingsTab(), 0, 3)];
-            Later([cat] {
+        dir = Dir::Row;
+        align = Align::Center;
+        height = Length::Px(62);
+        pad = {20, 10, 20, 10};
+        gap = 8;
+        if (presets) Add<PresetField>();
+        auto* open = Add<FlatButton>(presets ? L"" : Tr(label), "settings", presets);
+        open->tooltip = presets ? Tr(label) : L"";
+        open->width = presets ? Length::Px(42) : Length::Grow();
+        open->height = Length::Px(42);
+        open->onClick = [category] {
+            Later([category] {
                 ClosePlayerPanels();
-                TheApp().OpenSettings(cat);
+                TheApp().OpenSettings(category);
             });
         };
-        SetCompact(false);
-        owner->fitFooter = [this](float h) { SetCompact(h < 560); };
     }
-    void Paint(Painter& p) override {
-        p.Fill({rect.x, rect.y, rect.w, 1}, SectionLine());
-    }
-
-private:
-    // Short popover (an 800x500 window): one row, the settings button shows its icon only, so
-    // the footer takes 62 DIP instead of 151 and leaves the room to the scrolling rows.
-    void SetCompact(bool on) {
-        if (compact_ == (on ? 1 : 0)) return;
-        compact_ = on ? 1 : 0;
-        dir = on ? Dir::Row : Dir::Column;
-        height = Length::Px(on ? 62.0f : 151.0f);
-        hint_->visible = !on;
-        pad = on ? Insets{20, 10, 20, 10} : Insets{20, 21, 20, 20};
-        gap = on ? 8.0f : 10.0f;
-        adv_->text = on ? L"" : Tr(L"Open Advanced Settings");
-        adv_->tooltip = on ? Tr(L"Open Advanced Settings") : L"";
-        adv_->width = on ? Length::Px(42) : Length::Grow();
-        adv_->height = Length::Px(on ? 42.0f : 32.0f);
-        adv_->filled = on;
-    }
-    FlatButton* adv_ = nullptr;
-    Label* hint_ = nullptr;
-    int compact_ = -1;
+    void Paint(Painter& p) override { p.Fill({rect.x, rect.y, rect.w, 1}, SectionLine()); }
 };
 
 }  // namespace
 
-std::unique_ptr<Widget> BuildSettingsTab(int tab) {
-    switch (tab) {
-        case 1: return VideoTab();
-        case 2: return AudioTab();
-        case 3: return SubtitlesTab();
-        default: return PlaybackTab();
+std::unique_ptr<Widget> BuildSettingsPanel(PanelKind kind) {
+    switch (kind) {
+        case PanelKind::Tracks: return AudioPanel();
+        case PanelKind::Subtitles: return SubtitlesPanel();
+        case PanelKind::Video: return VideoPanel();
+        default: return PlaybackPanel();
     }
 }
 
-std::unique_ptr<Widget> BuildSettingsFooter(Popover* owner) {
-    return std::make_unique<SettingsFooter>(owner);
+std::unique_ptr<Widget> BuildSettingsFooter(PanelKind kind) {
+    switch (kind) {
+        case PanelKind::Tracks: return std::make_unique<PanelFooter>("audio", L"All audio settings", false);
+        case PanelKind::Subtitles: return std::make_unique<PanelFooter>("subtitles", L"All subtitle settings", false);
+        case PanelKind::Video: return std::make_unique<PanelFooter>("video", L"All video settings", false);
+        default: return std::make_unique<PanelFooter>("playback", L"All playback settings", true);
+    }
 }
 
 }  // namespace app::panel
