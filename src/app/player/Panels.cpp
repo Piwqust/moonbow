@@ -11,6 +11,8 @@
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerView.h"
 
+#include <algorithm>
+
 namespace app {
 
 using namespace ui;
@@ -25,6 +27,7 @@ struct PanelState {
     Popover* pop = nullptr;
     Group group = Group::None;
     int tab = 0;  // Lists: 0 queue, 1 bookmarks, 2 chapters
+    Rect anchor;  // the bar button that opened it (empty: the keyboard, a menu)
 };
 
 PanelState& S() {
@@ -82,7 +85,8 @@ MiniPlayer* FindMini(Widget* w) {
     return nullptr;
 }
 
-// Above the control bar, 20 DIP from the right edge and from the bar.
+// Above the control bar, over the button that opened it (Apple HIG: a popover points at its
+// source), kept inside the window; without a button, 20 DIP from the right edge.
 Rect PlaceAboveBar(float prefH) {
     MainWindow* w = TheApp().main();
     if (!w) return {};
@@ -93,7 +97,9 @@ Rect PlaceAboveBar(float prefH) {
     const bool chrome = !w->IsFullscreen() && !w->UiHidden();
     const float top = chrome ? 40.0f + 12.0f : 12.0f;
     const float width = std::min(kPanelW, client.w - 2 * 12);
-    const float right = bar.Right() - kGap;
+    const Rect& a = S().anchor;
+    const float right = a.w > 0 ? std::clamp(std::round(a.Cx() + width / 2), 12 + width, bar.Right() - kGap)
+                                : bar.Right() - kGap;
     const float bottom = bar.y - kGap;
     const float h = std::max(120.0f, std::min(prefH, bottom - top));
     return {std::round(right - width), std::round(bottom - h), width, h};
@@ -258,7 +264,7 @@ void ReopenPlayerPanels() {
     });
 }
 
-void TogglePlayerPanel(PanelKind kind, const Rect&) {
+void TogglePlayerPanel(PanelKind kind, const Rect& anchor) {
     MainWindow* w = TheApp().main();
     if (!w) return;
     PanelState& s = S();
@@ -266,6 +272,7 @@ void TogglePlayerPanel(PanelKind kind, const Rect&) {
         ClosePlayerPanels();
         return;
     }
+    S().anchor = anchor;
     const Group g = GroupFor(kind);
     int tab = TabFor(kind);
     if (g == Group::Lists && tab == 2 && !HasChaptersTab()) tab = 0;

@@ -334,9 +334,10 @@ std::unique_ptr<Widget> PlaybackPanel() {
     auto* top = page->Add<Widget>();
     top->height = Length::Px(8);
     Widget* sp = AddSection(page);
-    AddBox(
-        page, sp, Tr(L"Speed"), [] { return FormatNumber(PS().speed) + L"×"; },
-        [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); });
+    // The rate between − and + (fine steps, or typed), the usual rates below it, 1× among them.
+    AddStepper(page, sp, Tr(L"Speed"), 0.05, [] { return PS().speed; },
+               [](double v) { TheApp().player().SetSpeed(std::clamp(v, 0.05, 8.0)); },
+               [](double v) { return FormatNumber(v) + L"×"; });
     std::vector<ui::Choice> speeds;
     for (double v : kQuickSpeeds) speeds.push_back({FormatNumber(v) + L"×", "", ""});
     AddSegments(page, sp, L"", std::move(speeds), [] { return QuickSpeedIndex(); },
@@ -370,7 +371,7 @@ std::unique_ptr<Widget> PlaybackPanel() {
         row->width = Length::Grow();
         row->height = Length::Px(52);
         row->gap = 8;
-        auto* l = row->Add<Label>(Tr(L"A-B Loop"), TextStyle::Body, Tone::Tertiary);
+        auto* l = row->Add<Label>(Tr(L"A-B Loop"), TextStyle::Body, Tone::Secondary);
         l->width = Length::Grow();
         l->pad = {4, 0, 0, 0};
         auto* a = row->Add<Button>(L"A", ButtonKind::Secondary);
@@ -442,36 +443,47 @@ std::unique_ptr<Widget> VideoPanel() {
     auto* top = page->Add<Widget>();
     top->height = Length::Px(8);
     Widget* s = AddSection(page);
-    // Rotate by quarter turns; the exact angle shows between the buttons.
+    // Rotate by quarter turns (the angle between the buttons) and mirror: icon buttons, not a
+    // dropdown for three choices (NN/g, Baymard: show few options at once).
     {
-        auto* row = s->Add<Widget>();
-        row->dir = Dir::Row;
-        row->align = Align::Center;
-        row->width = Length::Grow();
-        row->height = Length::Px(52);
-        row->gap = 8;
-        auto* l = row->Add<Label>(Tr(L"Rotate"), TextStyle::Body, Tone::Tertiary);
-        l->width = Length::Grow();
-        l->pad = {4, 0, 0, 0};
+        auto row = [&](const wchar_t* label) {
+            auto* r = s->Add<Widget>();
+            r->dir = Dir::Row;
+            r->align = Align::Center;
+            r->width = Length::Grow();
+            r->height = Length::Px(48);
+            r->gap = 4;
+            auto* l = r->Add<Label>(Tr(label), TextStyle::Body, Tone::Secondary);
+            l->width = Length::Grow();
+            l->pad = {4, 0, 0, 0};
+            return r;
+        };
+        Widget* rot = row(L"Rotate");
         auto turn = [](int by) {
             const int r = ((static_cast<int>(std::lround(Live().V().rotate)) + by) % 360 + 360) % 360;
             TheApp().player().SetProperty("video-rotate", std::to_string(r));  // a choice option: mpv rejects a double
         };
-        auto* left = row->Add<Button>(L"−90°", ButtonKind::Secondary);
-        left->tooltip = Tr(L"Rotate left");
+        auto* left = rot->Add<IconButton>("rotate-left", Tr(L"Rotate left"), 36, 22);
         left->onClick = [turn] { turn(-90); };
-        auto* angle = row->Add<Label>(L"", TextStyle::Mono, Tone::Secondary);
+        auto* angle = rot->Add<Label>(L"", TextStyle::Mono, Tone::Primary);
         angle->width = Length::Px(44);
         angle->halign = HAlign::Center;
-        auto* right = row->Add<Button>(L"+90°", ButtonKind::Secondary);
-        right->tooltip = Tr(L"Rotate right");
+        auto* right = rot->Add<IconButton>("rotate-right", Tr(L"Rotate right"), 36, 22);
         right->onClick = [turn] { turn(90); };
-        auto sync = [angle] { angle->SetText(FormatNumber(Live().V().rotate) + L"°"); };
+        Widget* flip = row(L"Flip");
+        auto* h = flip->Add<IconButton>("flip-horizontal", Tr(L"Horizontal"), 36, 22);
+        h->onClick = [] { Live().SetFlip(Live().flip == 1 ? 0 : 1); };
+        auto* v = flip->Add<IconButton>("flip-vertical", Tr(L"Vertical"), 36, 22);
+        v->onClick = [] { Live().SetFlip(Live().flip == 2 ? 0 : 2); };
+        auto sync = [angle, h, v] {
+            angle->SetText(FormatNumber(Live().V().rotate) + L"°");
+            h->active = Live().flip == 1;
+            v->active = Live().flip == 2;
+            h->Invalidate();
+        };
         sync();
         page->OnSync(sync);
     }
-    AddChoice(page, s, Tr(L"Flip"), {{Tr(L"None"), "0", ""}, {Tr(L"Horizontal"), "1", ""}, {Tr(L"Vertical"), "2", ""}},
-              [] { return std::to_string(Live().flip); }, [](const std::string& v) { Live().SetFlip(std::atoi(v.c_str())); });
     AddChoice(page, s, Tr(L"Zoom"),
               {{Tr(L"Fit to Window"), "fit", ""},
                {Tr(L"1:4 Quarter"), "quarter", ""},
@@ -545,7 +557,19 @@ std::unique_ptr<Widget> VideoPanel() {
         sync();
         page->OnSync(sync);
     }
-    AddConfigChoice(page, s, Tr(L"Quality"), "video.quality");
+    // Three presets: all in view (the details are in Settings > Video).
+    {
+        static const char* kPresets[] = {"fast", "balanced", "high"};
+        AddSegments(
+            page, s, Tr(L"Quality"), {{Tr(L"Fast"), "fast", ""}, {Tr(L"Balanced"), "balanced", ""}, {Tr(L"Best"), "high", ""}},
+            [] {
+                const std::string q = Cfg().GetString("video.quality");
+                for (int i = 0; i < 3; ++i)
+                    if (q == kPresets[i]) return i;
+                return -1;
+            },
+            [](int i) { Cfg().SetString("video.quality", kPresets[std::clamp(i, 0, 2)]); });
+    }
     {
         auto* note = s->Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
         note->pad = {4, 4, 0, 0};

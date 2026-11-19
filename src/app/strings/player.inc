@@ -493,3 +493,6 @@
 {L"All subtitle settings", L"Все настройки субтитров"},
 {L"All video settings", L"Все настройки видео"},
 {L"All playback settings", L"Все настройки воспроизведения"},
+{L"Fast", L"Быстро"},
+{L"Balanced", L"Баланс"},
+{L"Best", L"Максимум"},
