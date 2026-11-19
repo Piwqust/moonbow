@@ -63,6 +63,8 @@ public:
     // A format in an installed font (empty: the bundled Onest) at any size, for text the user
     // styles (song lyrics). Not cached: the caller keeps it. Null on failure.
     ComPtr<IDWriteTextFormat> CustomFormat(const std::wstring& family, float size, DWRITE_FONT_WEIGHT weight);
+    // The bundled fonts when they hold `family` (Inter, Onest), else null: the installed ones.
+    IDWriteFontCollection* CollectionFor(const std::wstring& family);
 
     // Drops layouts not used for a few frames. Call once per frame.
     void EndFrame();

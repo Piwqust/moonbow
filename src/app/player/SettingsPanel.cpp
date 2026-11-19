@@ -10,6 +10,8 @@
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
 #include "app/player/PanelTabs.h"
+#include "app/player/SubStyle.h"
+#include "app/settings/SettingsUi.h"
 #include "core/Paths.h"
 #include "core/SettingsSchema.h"
 #include "gfx/Text.h"
@@ -401,7 +403,7 @@ std::unique_ptr<Widget> AudioPanel(int id) {
 
 // --- Subtitles ---
 
-enum SubPage { kSubSync = 1, kSubSize, kSubPosition, kSubSecond };
+enum SubPage { kSubSync = 1, kSubSize, kSubPosition, kSubSecond, kSubStyle };
 
 std::wstring SecondName() {
     const int64_t id = Live().V().secondarySid;
@@ -452,6 +454,12 @@ std::unique_ptr<Widget> SubtitlesPanel(int id) {
             AddHint(s, Tr(L"100 % is the bottom of the picture."));
             break;
         }
+        case kSubStyle: {
+            Gap(page, 8);
+            auto cards = sui::MakeSubtitleStyleCards([page](const std::function<void()>& fn) { page->OnSync(fn); });
+            AddSection(page)->AddChild(std::move(cards));
+            break;
+        }
         case kSubSecond:
             AddChoiceList(
                 page,
@@ -476,6 +484,10 @@ std::unique_ptr<Widget> SubtitlesPanel(int id) {
             AddTrackLists(page, L"sub");
             AddSectionLine(page);
             Gap(page, 4);
+            NavRow(page, "edit", L"Style", [] {
+                const SubtitlePreset* p = MatchSubtitlePreset(Cfg());
+                return std::wstring(Tr(p ? p->name : L"Your own"));
+            }, kSubStyle);
             NavRow(page, "recent", L"Synchronization", [] { return SyncText(Live().V().subDelay); }, kSubSync);
             NavRow(page, "subtitle", L"Size", [] { return FormatNumber(Live().V().subScale * 100, 0) + L"%"; }, kSubSize);
             NavRow(page, "arrow_up", L"Position", [] { return FormatNumber(std::round(Live().V().subPos), 0) + L"%"; },
@@ -997,8 +1009,9 @@ std::wstring SettingsPageTitle(PanelKind kind, int page) {
             break;
         }
         case PanelKind::Subtitles: {
-            static const wchar_t* k[] = {L"Subtitles", L"Synchronization", L"Size", L"Position", L"Secondary Subtitles"};
-            t = k[std::clamp(page, 0, 4)];
+            static const wchar_t* k[] = {L"Subtitles", L"Synchronization", L"Size", L"Position", L"Secondary Subtitles",
+                                         L"Subtitle style"};
+            t = k[std::clamp(page, 0, 5)];
             break;
         }
         case PanelKind::Video: {

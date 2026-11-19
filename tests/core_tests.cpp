@@ -20,6 +20,7 @@
 #include "../src/library/TagReader.h"
 #include "../src/library/Thumbnails.h"
 #include "../src/app/player/Episodes.h"
+#include "../src/app/player/SubStyle.h"
 #include "../src/app/player/SubText.h"
 #include "../src/app/PlayQueue.h"
 #include "../src/audio/CrossfadeMath.h"
@@ -4225,6 +4226,22 @@ void TestSetupFromInno() {
     CHECK(!FileExists(dir + L"\\Moonbow.exe") && ReadAll(dir + L"\\yt-dlp.exe") == "mine");
 }
 
+// Every subtitle style is recognized once applied (values the schema snaps would make it "your own").
+void TestSubtitlePresets() {
+    Config c;
+    CHECK(app::MatchSubtitlePreset(c) == &app::SubtitlePresets().front());  // the default is the first
+    for (const app::SubtitlePreset& p : app::SubtitlePresets()) {
+        app::ApplySubtitlePreset(c, p);
+        CHECK(app::MatchSubtitlePreset(c) == &p);
+    }
+    c.SetDouble("subtitles.blur", 7);
+    CHECK(app::MatchSubtitlePreset(c) == nullptr);
+    // libass finds "Inter SemiBold" by name; DirectWrite draws it as Inter at 600.
+    app::ApplySubtitlePreset(c, app::SubtitlePresets().front());
+    const app::SubtitleStyle st = app::ReadSubtitleStyle(c);
+    CHECK(st.font == L"Inter" && st.weight == 600);
+}
+
 struct TestCase {
     const char* name;
     void (*fn)();
@@ -4235,6 +4252,7 @@ const TestCase kTests[] = {
     {"json_strings", TestJsonStrings},
     {"json_numbers", TestJsonNumbers},
     {"json_errors", TestJsonErrors},
+    {"subtitle_presets", TestSubtitlePresets},
     {"json_roundtrip", TestJsonRoundTrip},
     {"json_files", TestJsonFiles},
     {"schema", TestSchema},

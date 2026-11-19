@@ -9,6 +9,7 @@
 #include "app/player/ControlBar.h"
 #include "app/player/SubStyle.h"
 #include "app/player/SubText.h"
+#include "gfx/Text.h"
 #include "ui/Host.h"
 
 #include <algorithm>
@@ -420,6 +421,7 @@ void SubtitleWords::Rebuild() {
     plain.font = style_.font;
     plain.line = style_.size * sizeScale * unit;
     plain.bold = style_.bold;
+    plain.weight = style_.weight;
     plain.text = style_.text;
     plain.outlineColor = style_.outlineColor;
     plain.back = style_.back;
@@ -514,8 +516,9 @@ void SubtitleWords::Rebuild() {
         float em = 0.89f, ascent = 0.8f;
         FontRatios(b.look.font, b.look.bold, em, ascent);
         gfx::ComPtr<IDWriteTextFormat> format;
-        if (FAILED(dw->CreateTextFormat(b.look.font.c_str(), nullptr,
-                                        b.look.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+        if (FAILED(dw->CreateTextFormat(b.look.font.c_str(), gfx::Text::Get().CollectionFor(b.look.font),
+                                        b.look.weight ? static_cast<DWRITE_FONT_WEIGHT>(b.look.weight)
+                                        : b.look.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
                                         b.look.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
                                         DWRITE_FONT_STRETCH_NORMAL, b.look.line * em, L"", &format)))
             continue;

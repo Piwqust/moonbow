@@ -98,6 +98,28 @@ void InstallBuiltinShaders(const std::wstring& dataDir) {
     json::WriteFileAtomic(path, text);
 }
 
+// Inter, the player's own font, for subtitles: libass loads every font in mpv's sub-fonts-dir
+// (~~/fonts, the data folder's "fonts"). Written once; a file of the same size is left alone.
+void InstallSubtitleFonts(const std::wstring& dataDir) {
+    if (dataDir.empty()) return;
+    const std::wstring dir = dataDir + L"\\fonts";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    const std::pair<int, const wchar_t*> fonts[] = {
+        {201, L"Inter-Light.ttf"}, {202, L"Inter-Regular.ttf"}, {203, L"Inter-Medium.ttf"}, {204, L"Inter-SemiBold.ttf"}};
+    for (const auto& [id, name] : fonts) {
+        HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(id), RT_RCDATA);
+        HGLOBAL mem = res ? LoadResource(nullptr, res) : nullptr;
+        const char* data = mem ? static_cast<const char*>(LockResource(mem)) : nullptr;
+        if (!data) continue;
+        const DWORD size = SizeofResource(nullptr, res);
+        const std::wstring path = dir + L"\\" + name;
+        WIN32_FILE_ATTRIBUTE_DATA a{};
+        if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a) && a.nFileSizeHigh == 0 && a.nFileSizeLow == size)
+            continue;
+        json::WriteFileAtomic(path, std::string(data, size));
+    }
+}
+
 }  // namespace
 
 void SetQuietMpvOptions(const MpvApi& api, mpv_handle* mpv) {
@@ -211,6 +233,7 @@ bool Player::InitOnWorker(int64_t wid) {
 
     std::wstring appData = DataDir();
     InstallBuiltinShaders(appData);
+    InstallSubtitleFonts(appData);
     if (!appData.empty()) {
         opt("config-dir", WideToUtf8(appData));
         opt("config", "yes");

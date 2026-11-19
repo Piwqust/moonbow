@@ -1364,6 +1364,7 @@ std::unique_ptr<Widget> MakeItemRow(const Item& item, PageHost& page) {
             if (item.action == "addons-list") return MakeAddonsList(item, page);
             if (item.action == "library-folders") return MakeLibraryFolders(item, page);
             if (item.action == "subtitle-preview") return MakeSubtitlePreview(item);
+            if (item.action == "subtitle-styles") return MakeSubtitleStyles(item);
             if (item.action == "loudness-conflict") return std::make_unique<LoudnessConflictHint>(item);
             break;
         case ItemType::KeyBindings: return nullptr;

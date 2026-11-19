@@ -71,6 +71,7 @@ private:
         std::wstring font;
         float line = 20;  // line height: libass sizes fonts by it
         bool bold = false, italic = false;
+        int weight = 0;  // 0: from `bold`
         ui::Color text, outlineColor, back;
         float outline = 0, shadow = 0;
         enum Background : uint8_t { None, Lines, Box } background = None;

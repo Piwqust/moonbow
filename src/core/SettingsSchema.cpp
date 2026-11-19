@@ -2054,8 +2054,14 @@ void BuildMedia(Builder& b) {
 
     b.Sec("appearance", L"Appearance", L"Оформление");
     // A sample line drawn with the style below (settings/SettingsSubtitlePreview.cpp).
-    b.Info("subtitles.preview", L"Subtitle example", L"Пример субтитров", "subtitle-preview").Inferred();
-    b.Text("subtitles.font", L"Font", L"Шрифт")
+    b.Info("subtitles.preview", L"Subtitle example", L"Пример субтитров", "subtitle-preview")
+        .Inferred()
+        .Basic("", L"", L"");
+    // Ready-made looks over the rows below (app/player/SubStyle.cpp); the first is their default.
+    b.Info("subtitles.styles", L"Subtitle style", L"Стиль субтитров", "subtitle-styles")
+        .Inferred()
+        .Basic("", L"", L"");
+    b.Text("subtitles.font", L"Font", L"Шрифт", "Inter SemiBold")
         .Hint(L"System, sans-serif", L"Системный, без засечек")
         .Desc(L"Font for text subtitles. Leave empty for the default sans-serif font.",
               L"Шрифт текстовых субтитров. Если пусто — стандартный шрифт без засечек.")
@@ -2088,7 +2094,7 @@ void BuildMedia(Builder& b) {
             {"thin", L"Thin", L"Тонкая", "1.5"},
             {"normal", L"Normal", L"Обычная", "3"},
             {"thick", L"Thick", L"Толстая", "5"}},
-           "normal")
+           "thin")
         .Mpv("sub-outline-size");
     b.Color("subtitles.outlineColor", L"Outline color", L"Цвет обводки", "#000000").Mpv("sub-outline-color");
     b.Toggle("subtitles.shadow", L"Shadow", L"Тень", true).MpvBool("sub-shadow-offset", "2", "0");
@@ -2110,7 +2116,7 @@ void BuildMedia(Builder& b) {
         .Unit(L"%", L"%")
         .When("subtitles.background", "box")
         .MpvBuild("sub-back-color", BuildSubBackColor);
-    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 0)
+    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 0.5)
         .Desc(L"Blur the edges of the text and its outline. 0 keeps them sharp.",
               L"Размывать края текста и обводки. 0 — чёткие края.")
         .Mpv("sub-blur");

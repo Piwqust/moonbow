@@ -257,6 +257,14 @@ ComPtr<IDWriteTextFormat> Text::CustomFormat(const std::wstring& family, float s
     return format;
 }
 
+IDWriteFontCollection* Text::CollectionFor(const std::wstring& family) {
+    WaitReady();
+    UINT32 index = 0;
+    BOOL exists = FALSE;
+    if (!fonts_ || FAILED(fonts_->FindFamilyName(family.c_str(), &index, &exists)) || !exists) return nullptr;
+    return fonts_.Get();
+}
+
 void Text::EndFrame() {
     ++impl_->frame;
     // Every ~2 s of continuous drawing, drop layouts unused for 120 frames.
