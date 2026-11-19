@@ -16,6 +16,7 @@ namespace app {
 class VizPaint {
 public:
     static constexpr float kVuAspect = 1.6f;
+    bool vuPeak = true;  // VU meters draw the held peak mark
 
     // Moves the VU needles toward the frame's levels (`live` false: back to the stop). True while
     // a needle is off the stop, so the caller keeps painting.
@@ -24,7 +25,7 @@ public:
     // AIMP-style segmented bars with falling peak marks. `reverse` puts the low notes on the right;
     // `wing` grows them both ways from the middle, fading away from the cover; `rest`: silence.
     void Spectrum(ui::Painter& p, const ui::Rect& r, const audio::VisualFrame& frame, ui::Color white, bool reverse,
-                  bool wing, bool rest = false);
+                  bool wing, bool rest = false, bool peaks = true);
     void Waveform(ui::Painter& p, const ui::Rect& r, const audio::VisualFrame& frame, ui::Color white);
     void Scope(ui::Painter& p, const ui::Rect& r, const audio::VisualFrame& frame, ui::Color fg, ui::Color dim);
     // Left and right meters side by side, or stacked when `r` is tall; `rest`: needles on the stop.

@@ -56,7 +56,7 @@ ID2D1SolidColorBrush* VizPaint::LineBrush(ID2D1DeviceContext5* ctx, Color c, flo
 // them on the band's middle, growing both ways and fading away from the cover. `reverse`
 // puts the low notes on the right.
 void VizPaint::Spectrum(Painter& p, const Rect& r, const audio::VisualFrame& frame, Color white, bool reverse,
-                        bool wing, bool rest) {
+                        bool wing, bool rest, bool peaks) {
     constexpr int n = audio::kBands;
     const float step = r.w / n;
     const float seg = std::max(2.0f, std::round(r.h / 110)), space = std::max(1.0f, std::round(seg * 0.6f));
@@ -73,7 +73,7 @@ void VizPaint::Spectrum(Painter& p, const Rect& r, const audio::VisualFrame& fra
             p.Fill({x0, base - (k + 1) * pitch + space, x1 - x0, seg}, c);
             if (wing && k > 0) p.Fill({x0, base + space + (k - 1) * pitch, x1 - x0, seg}, c);
         }
-        if (!rest && frame.peaks[i] > 0.02f) {
+        if (peaks && !rest && frame.peaks[i] > 0.02f) {
             // A drop sits on its bar, never inside it.
             const int at = std::max(static_cast<int>(std::round(frame.peaks[i] * rows)), lit);
             const Color c = white.Fade(0.95f * fade);
@@ -218,7 +218,7 @@ void VizPaint::VuMeter(Painter& p, const Rect& m, int ch, bool rest, Color ink) 
     }
 
     // The held peak: a bright mark across the track that stays a moment, as on a desk.
-    if (!rest && holds_[ch].pos > zero * 0.15f)
+    if (vuPeak && !rest && holds_[ch].pos > zero * 0.15f)
         if (ID2D1SolidColorBrush* b = line(1.0f))
             ctx->DrawLine(g.At(holds_[ch].pos, g.R - track / 2 - 2), g.At(holds_[ch].pos, g.R + track / 2 + 2), b, 2.0f,
                           round);

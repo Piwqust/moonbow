@@ -949,9 +949,53 @@ void BuildApp(Builder& b) {
               L"поставить куда угодно, хоть на другой экран.");
     ItemRef meters = b.Toggle("interface.metersWindow", L"Audio meters in a separate window",
                               L"Индикаторы звука в отдельном окне", false)
-        .Desc(L"VU meters, RMS and peak levels in dBFS, the spectrum and the oscilloscope of Moonbow's own sound.",
-              L"VU-индикаторы, уровни RMS и пиков в dBFS, спектр и осциллограф звука самого Moonbow.");
+        .Desc(L"VU meters, loudness in LUFS (EBU R128), RMS and peak levels, the stereo image and the spectrum of "
+              L"Moonbow's own sound. Right-click the window to choose what it shows.",
+              L"VU-индикаторы, громкость в LUFS (EBU R128), уровни RMS и пиков, стереокартина и спектр звука самого "
+              L"Moonbow. Щелчок правой кнопкой по окну — выбрать, что в нём показывать.");
     if (!audio::ProcessLoopbackSupported()) meters.Hidden();
+    // The meters window's own options, set from its right-click menu (app/player/MetersView.cpp);
+    // the menu shows these labels.
+    b.Toggle("interface.metersVu", L"VU meters", L"VU-индикаторы", true).Hidden();
+    b.Toggle("interface.metersLoudness", L"Loudness", L"Громкость", true).Hidden();
+    b.Toggle("interface.metersLevels", L"Levels", L"Уровни", true).Hidden();
+    b.Toggle("interface.metersStereo", L"Stereo", L"Стерео", true).Hidden();
+    b.Toggle("interface.metersSpectrum", L"Spectrum", L"Спектр", true).Hidden();
+    b.Toggle("interface.metersOnTop", L"Keep above other windows", L"Поверх других окон", false).Hidden();
+    b.Toggle("interface.metersVuPeak", L"Show the held peak", L"Показывать удержанный пик", true).Hidden();
+    b.Pick("interface.metersTarget", L"Loudness target", L"Целевая громкость",
+           {{"off", L"None", L"Нет"},
+            {"-14", L"−14 LUFS (Spotify, YouTube)", L"−14 LUFS (Spotify, YouTube)"},
+            {"-16", L"−16 LUFS (Apple Music)", L"−16 LUFS (Apple Music)"},
+            {"-23", L"−23 LUFS (EBU R128 broadcast)", L"−23 LUFS (вещание EBU R128)"}},
+           "off")
+        .Hidden();
+    b.Pick("interface.metersHistory", L"Graph length", L"Длина графика",
+           {{"30", L"30 seconds", L"30 секунд"},
+            {"60", L"1 minute", L"1 минута"},
+            {"180", L"3 minutes", L"3 минуты"},
+            {"300", L"5 minutes", L"5 минут"}},
+           "60")
+        .Hidden();
+    b.Pick("interface.metersFloor", L"Scale range", L"Диапазон шкалы",
+           {{"-90", L"−90…0 dBFS", L"−90…0 dBFS"}, {"-60", L"−60…0 dBFS", L"−60…0 dBFS"}, {"-40", L"−40…0 dBFS", L"−40…0 dBFS"}},
+           "-60")
+        .Hidden();
+    b.Pick("interface.metersPeakHold", L"Peak hold", L"Удержание пика",
+           {{"off", L"Off", L"Нет"},
+            {"1500", L"1.5 seconds", L"1,5 секунды"},
+            {"3000", L"3 seconds", L"3 секунды"},
+            {"hold", L"Until reset", L"До сброса"}},
+           "1500")
+        .Hidden();
+    b.Pick("interface.metersGonio", L"Goniometer", L"Гониометр",
+           {{"lines", L"Lines", L"Линии"}, {"dots", L"Dots", L"Точки"}}, "lines")
+        .Hidden();
+    b.Toggle("interface.metersBalance", L"Show the balance", L"Показывать баланс", true).Hidden();
+    b.Pick("interface.metersSpectrumStyle", L"Spectrum style", L"Вид спектра",
+           {{"bars", L"Bars", L"Столбики"}, {"line", L"Line", L"Линия"}}, "bars")
+        .Hidden();
+    b.Toggle("interface.metersSpectrumPeaks", L"Show the peaks", L"Показывать пики", true).Hidden();
     b.advanced = false;
 
     b.Sec("notifications", L"Notifications and system tray", L"Уведомления и системный трей");
