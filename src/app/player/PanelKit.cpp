@@ -268,6 +268,10 @@ void Popover::SetTabs(std::vector<Tab> tabs, int selected) {
 
 void Popover::SetTitle(std::wstring title) {
     title_ = std::move(title);
+    if (back_) return;
+    back_ = Add<IconButton>("chevron_left", Tr(L"Back"), 36, 22);
+    back_->visible = false;
+    back_->onClick = [this] { ShowTab(0); };
 }
 
 void Popover::SetFooter(std::unique_ptr<Widget> footer) {
@@ -314,6 +318,10 @@ void Popover::OnLayout() {
     float top = rect.y;
     const bool header = tabs_ || !title_.empty();
     if (tabs_) tabs_->Arrange({rect.x, rect.y, rect.w, kHeaderH});
+    if (back_) {
+        back_->visible = tab_ != 0;
+        back_->Arrange({rect.x + 8, rect.y + (kHeaderH - 36) / 2, 36, 36});
+    }
     if (header) top += kHeaderH;
     float bottom = rect.Bottom();
     if (footer_) {
@@ -336,8 +344,12 @@ void Popover::Paint(Painter& p) {
         if (tabs_) {
             p.Fill(h, c.bgDeep);
         } else {
-            // A plain title: the panel's name on its own ground, at the rows' left edge.
-            p.Text(title_, {h.x + 20, h.y, h.w - 40, h.h}, TextStyle::BodyStrong, c.textPrimary);
+            // A plain title: the panel's name on its own ground, at the rows' left edge; an inner
+            // page names itself after a back arrow.
+            const bool inner = back_ && tab_ != 0;
+            const std::wstring text = inner && pageTitle ? pageTitle(tab_) : title_;
+            const float x = inner ? 46.0f : 20.0f;
+            p.Text(text, {h.x + x, h.y, h.w - x - 20, h.h}, TextStyle::BodyStrong, c.textPrimary);
             p.Fill({h.x, h.Bottom() - 1, h.w, 1}, SectionLine());
         }
         p.PopClip();
@@ -354,11 +366,68 @@ bool Popover::Backdrop(Color& out) const {
 }
 
 bool Popover::OnKeyDown(const KeyEvent& e) {
+    if (back_ && tab_ != 0 && (e.key == VK_BACK || (e.key == VK_LEFT && e.mods.alt))) {
+        ShowTab(0);
+        return true;
+    }
     if (tabs_ && e.key == VK_TAB && e.mods.ctrl) {
         tabs_->OnKeyDown(KeyEvent{static_cast<UINT>(e.mods.shift ? VK_LEFT : VK_RIGHT), {}, false});
         return true;
     }
     return false;
+}
+
+// --- ListRow -------------------------------------------------------------------------------
+
+ListRow::ListRow(std::string i, std::wstring l, std::function<std::wstring()> v, bool c)
+    : icon(std::move(i)), label(std::move(l)), value(std::move(v)), chevron(c) {
+    interactive = true;
+    focusable = true;
+    width = Length::Grow();
+    height = Length::Px(44);
+}
+
+void ListRow::Paint(Painter& p) {
+    const Palette& c = P();
+    const Rect r = rect.Inset({8, 2, 8, 2});
+    const bool hot = IsHot();
+    if (IsPressed()) p.Fill(r, c.press, kRadiusCard);
+    else if (hot) p.Fill(r, c.hover, kRadiusCard);
+    PaintFocusRing(p, r, kRadiusCard);
+    float x = r.x + 12;
+    if (!icon.empty()) {
+        p.Icon(icon, {x, r.Cy() - 10, 20, 20}, hot ? c.textPrimary : c.textSecondary);
+        x += 32;
+    }
+    float right = r.Right() - 12;
+    if (chevron) {
+        p.Icon("chevron_right", {right - 16, r.Cy() - 8, 16, 16}, c.textTertiary);
+        right -= 24;
+    }
+    const std::wstring v = value ? value() : std::wstring();
+    float vw = 0;
+    if (!v.empty()) {
+        // The label keeps its full width; the value takes what is left (cut with an ellipsis).
+        const float room = right - x - p.Measure(label, TextStyle::Body).width - 16;
+        vw = std::max(0.0f, std::min(room, p.Measure(v, TextStyle::Body).width + 2));
+        p.Text(v, {right - vw, r.y, vw, r.h}, TextStyle::Body, c.textTertiary, HAlign::Trailing);
+        vw += 12;
+    }
+    p.Text(label, {x, r.y, std::max(0.0f, right - vw - x), r.h}, TextStyle::Body, c.textPrimary);
+}
+
+bool ListRow::OnKeyDown(const KeyEvent& e) {
+    if ((e.key == VK_RETURN || e.key == VK_SPACE) && onClick) {
+        onClick();
+        return true;
+    }
+    return false;
+}
+
+void ListRow::Describe(A11y& a) {
+    a.role = Role::Button;
+    const std::wstring v = value ? value() : std::wstring();
+    a.name = v.empty() ? label : label + L", " + v;
 }
 
 // --- SyncPage ------------------------------------------------------------------------------

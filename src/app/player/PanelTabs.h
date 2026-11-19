@@ -4,7 +4,10 @@
 #include "app/player/ControlBar.h"
 #include "ui/Widget.h"
 
+#include <functional>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace ui {
 class IconButton;
@@ -22,13 +25,31 @@ std::unique_ptr<ui::Widget> BuildChaptersTab();
 // The Repeat button that tells One from All (a small "1"), at the control bar's size.
 std::unique_ptr<ui::IconButton> MakeRepeatButton();
 
-// The track choice at the top of the Video, Audio and Subtitles tabs: "off", the embedded and
-// external tracks (add, find online, edit) and, for audio, the output device. type: video, audio, sub.
+// A choice in a radio list (TracksPanel.cpp): the name, an optional line of detail under it, and
+// for an added track a way to remove it.
+struct ChoiceRow {
+    std::wstring label;
+    std::wstring detail;
+    bool checked = false;
+    std::function<void()> select;
+    std::function<void()> remove;
+};
+
+// The track choice at the top of the Video, Audio and Subtitles panels: off, the file's tracks,
+// the added ones, and rows to add a file (and find subtitles online). type: video, audio, sub.
 void AddTrackLists(ui::Widget* page, const wchar_t* type);
+// A radio list over `rows` (read again whenever the player or the live values change).
+ui::Widget* AddChoiceList(ui::Widget* page, std::function<std::vector<ChoiceRow>()> rows, std::wstring name = {});
+// The output devices as choices ("System default" first).
+std::vector<ChoiceRow> OutputDeviceRows();
 
 // The live settings popover of a bar button (Settings / Speed: playback, Video, Tracks: audio,
-// Subtitles) and its footer, which opens the matching page of the Settings window.
-std::unique_ptr<ui::Widget> BuildSettingsPanel(PanelKind kind);
+// Subtitles), page 0 its list and the others the pages its rows open, and its footer, which
+// opens the matching page of the Settings window.
+std::unique_ptr<ui::Widget> BuildSettingsPanel(PanelKind kind, int page);
+std::wstring SettingsPageTitle(PanelKind kind, int page);
+// Opens an inner page of the open settings panel (Panels.cpp).
+void ShowPanelPage(int page);
 std::unique_ptr<ui::Widget> BuildSettingsFooter(PanelKind kind);
 
 // Rows the mini player queue needs (header + list) to size its popover.

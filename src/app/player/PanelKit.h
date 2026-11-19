@@ -80,6 +80,9 @@ public:
     std::function<void(int tab)> onTab;
     // Called with the popover height before the footer is measured, so it can shrink in short windows.
     std::function<void(float height)> fitFooter;
+    // The settings panels' inner pages (tab = page, 0 the panel itself): their name in the header,
+    // with a back arrow to page 0.
+    std::function<std::wstring(int page)> pageTitle;
     // Fill of the frame (defaults to opaque bgBase).
     std::function<ui::Color()> fill;
     float radius = kRadius;
@@ -102,10 +105,29 @@ public:
 
 private:
     TabBar* tabs_ = nullptr;
+    ui::IconButton* back_ = nullptr;
     std::wstring title_;
     ui::Widget* body_ = nullptr;
     ui::Widget* footer_ = nullptr;
     int tab_ = 0;
+};
+
+// --- the quiet list ------------------------------------------------------------------------
+
+// One row of a settings panel: icon, label, the current value in grey and a chevron to its page
+// (or, as an action, the icon and label alone). It hovers inside an 8 DIP inset; its text starts
+// 20 DIP in, with the other rows.
+class ListRow : public ui::Widget {
+public:
+    ListRow(std::string icon, std::wstring label, std::function<std::wstring()> value = {}, bool chevron = true);
+    std::string icon;
+    std::wstring label;
+    std::function<std::wstring()> value;  // read on every paint
+    bool chevron;
+    ui::Size MeasureContent(float availW, float) override { return {availW, 44}; }
+    void Paint(ui::Painter& p) override;
+    bool OnKeyDown(const ui::KeyEvent& e) override;
+    void Describe(ui::A11y& a) override;
 };
 
 // --- setting rows ---------------------------------------------------------------------

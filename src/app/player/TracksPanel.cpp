@@ -71,15 +71,9 @@ const PlayerState& PS() {
     return TheApp().player().State();
 }
 
-struct ChoiceRow {
-    std::wstring label;
-    std::wstring detail;  // right-aligned, tertiary
-    bool checked = false;
-    std::function<void()> select;
-    std::function<void()> remove;  // shown in edit mode
-};
-
-// List of choosable rows with check marks (32 DIP rows every 44 DIP, text at x+42).
+// One choice per row: a radio on the left, the name and, under it, a line of detail ("Dubbed ·
+// 5.1"). Rows hover inside an 8 DIP inset, their radio at the rows' 20 DIP edge. A row that can
+// be removed (an added track) shows an × on hover.
 class ChoiceList : public Widget {
 public:
     explicit ChoiceList(std::function<std::vector<ChoiceRow>()> rows, std::wstring empty = {})
@@ -87,66 +81,58 @@ public:
         interactive = true;
         focusable = true;
         width = Length::Grow();
-        pad = {20, 0, 20, 0};
+        pad = {8, 0, 8, 0};
         playerConn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeTracks | kChangeFile)) InvalidateLayout();
         });
         liveConn_ = Connect(Live().changed, [this] { InvalidateLayout(); });
     }
-    bool editing = false;
-    std::wstring name;  // for screen readers when no list title stands before it
-    static constexpr float kPitch = 40, kRowH = 36;
-    int Count() const { return static_cast<int>(rows_().size()); }
+    std::wstring name;  // for screen readers
 
     Size MeasureContent(float availW, float) override {
-        const size_t n = rows_().size();
-        if (n == 0) return {availW, empty_.empty() ? 0.0f : 40.0f};
-        return {availW, kPitch * static_cast<float>(n) - (kPitch - kRowH) + 4};
-    }
-    Rect RowRect(int i) const { return {rect.x + pad.l, rect.y + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH}; }
-    int RowAt(float y) const {
-        const int i = static_cast<int>(std::floor((y - rect.y) / kPitch));
-        return i >= 0 && i < static_cast<int>(rows_().size()) && y - rect.y - kPitch * static_cast<float>(i) < kRowH ? i : -1;
+        const auto rows = rows_();
+        if (rows.empty()) return {availW, empty_.empty() ? 0.0f : 40.0f};
+        return {availW, RowH(rows) * static_cast<float>(rows.size())};
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
         const auto rows = rows_();
-        if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y);
+        if (IsHot() && GetHost()) hover_ = RowAt(GetHost()->MousePos().y, rows);
         if (rows.empty()) {
-            if (!empty_.empty())
-                p.Text(empty_, {rect.x + pad.l, rect.y, rect.w - pad.H(), kRowH}, TextStyle::Body, c.textTertiary);
+            if (!empty_.empty()) p.Text(empty_, {rect.x + 20, rect.y, rect.w - 40, 40}, TextStyle::Body, c.textTertiary);
             return;
         }
         for (size_t k = 0; k < rows.size(); ++k) {
             const int i = static_cast<int>(k);
             const ChoiceRow& row = rows[k];
-            const Rect r = RowRect(i);
+            const Rect r = RowRect(i, rows);
             const bool hot = i == hover_ && IsHot();
-            if (hot) p.Fill(r, c.hover, 4);
-            if (i == focusRow_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
-            // The tick on the right, as in Moonbow's menus: every label starts at the rows' one edge.
-            const bool showRemove = editing && row.remove;
-            float right = r.Right() - 4;
-            if (showRemove) {
-                const Rect x{right - 24, r.Cy() - 12, 24, 24};
-                p.Icon("close", x.Center(18, 18), hot && hoverX_ ? c.textPrimary : c.textTertiary);
-                right -= 32;
+            if (hot) p.Fill(r, c.hover, kRadiusCard);
+            if (i == focusRow_ && ShowFocusRing()) PaintFocusRing(p, r, kRadiusCard);
+            // The radio: a ring, filled with a dot when chosen.
+            const Point dot{r.x + 12 + 9, r.Cy()};
+            p.StrokeCircle(dot, 8.25f, row.checked ? c.textPrimary : c.textTertiary, 1.5f);
+            if (row.checked) p.FillCircle(dot, 4, c.textPrimary);
+            float right = r.Right() - 12;
+            if (row.remove && hot) {
+                const Rect x{right - 22, r.Cy() - 11, 22, 22};
+                p.Icon("close", x.Center(16, 16), hoverX_ ? c.textPrimary : c.textTertiary);
+                right -= 28;
             }
-            if (row.checked) p.Icon("check_selected", {right - 20, r.Cy() - 10, 20, 20}, c.accent);
-            right -= 28;
-            float dw = 0;
-            if (!row.detail.empty()) {
-                dw = std::min(120.0f, gfx::Text::Get().Measure(row.detail, TextStyle::Small).width + 4);
-                p.Text(row.detail, {right - dw, r.y, dw, r.h}, TextStyle::Small, c.textTertiary, HAlign::Trailing);
-                dw += 8;
+            const float tx = r.x + 42, tw = std::max(0.0f, right - tx);
+            const Color fg = row.checked || hot ? c.textPrimary : c.textSecondary;
+            if (row.detail.empty()) {
+                p.Text(row.label, {tx, r.y, tw, r.h}, TextStyle::Body, fg);
+            } else {
+                p.Text(row.label, {tx, r.y + 7, tw, 20}, TextStyle::Body, fg);
+                p.Text(row.detail, {tx, r.y + 27, tw, 17}, TextStyle::Small, c.textTertiary);
             }
-            const Color fg = row.checked ? c.textPrimary : hot ? c.textPrimary : RowText();
-            p.Text(row.label, {r.x, r.y, std::max(0.0f, right - dw - r.x), r.h}, TextStyle::Body, fg);
         }
     }
     bool OnMouseMove(const MouseEvent& e) override {
-        const int i = RowAt(e.y);
-        const bool x = i >= 0 && editing && e.x >= RowRect(i).Right() - 36;
+        const auto rows = rows_();
+        const int i = RowAt(e.y, rows);
+        const bool x = i >= 0 && rows[static_cast<size_t>(i)].remove && e.x >= RowRect(i, rows).Right() - 40;
         if (i != hover_ || x != hoverX_) {
             hover_ = i;
             hoverX_ = x;
@@ -156,13 +142,16 @@ public:
     }
     void OnMouseLeave() override {
         hover_ = -1;
+        hoverX_ = false;
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
-        const int i = RowAt(e.y);
+        if (e.button != MouseButton::Left) return false;
+        const auto rows = rows_();
+        const int i = RowAt(e.y, rows);
         if (i < 0) return true;
         focusRow_ = i;
-        Activate(i, editing && e.x >= RowRect(i).Right() - 36);
+        Activate(i, rows[static_cast<size_t>(i)].remove && e.x >= RowRect(i, rows).Right() - 40);
         return true;
     }
     bool OnKeyDown(const KeyEvent& e) override {
@@ -177,7 +166,7 @@ public:
         Invalidate();
         return true;
     }
-    // One choice is on at a time: list items with radio semantics (the ticked row is selected).
+    // One choice is on at a time: list items with radio semantics (the chosen row is selected).
     void Describe(A11y& a) override {
         a.role = Role::List;
         const auto rows = rows_();
@@ -187,7 +176,7 @@ public:
         a.item = [this, rows](int i, A11y::Item& it) {
             const ChoiceRow& row = rows[static_cast<size_t>(i)];
             it.name = row.detail.empty() ? row.label : row.label + L", " + row.detail;
-            it.rect = RowRect(i);
+            it.rect = RowRect(i, rows);
             it.selected = row.checked;
         };
         a.selectItem = a.invokeItem = [this](int i) { Activate(i, false); };
@@ -195,6 +184,21 @@ public:
     }
 
 private:
+    // Two-line rows when any row has a detail line, so the list keeps one rhythm.
+    static float RowH(const std::vector<ChoiceRow>& rows) {
+        for (const ChoiceRow& r : rows)
+            if (!r.detail.empty()) return 52;
+        return 40;
+    }
+    Rect RowRect(int i, const std::vector<ChoiceRow>& rows) const {
+        const float h = RowH(rows);
+        return {rect.x + pad.l, rect.y + h * static_cast<float>(i), rect.w - pad.H(), h};
+    }
+    int RowAt(float y, const std::vector<ChoiceRow>& rows) const {
+        if (rows.empty()) return -1;
+        const int i = static_cast<int>(std::floor((y - rect.y) / RowH(rows)));
+        return i >= 0 && i < static_cast<int>(rows.size()) ? i : -1;
+    }
     void Activate(int i, bool remove) {
         auto rows = rows_();
         if (i < 0 || i >= static_cast<int>(rows.size())) return;
@@ -209,50 +213,6 @@ private:
     bool hoverX_ = false;
     ScopedConnection playerConn_, liveConn_;
 };
-
-// Shows the ✕ on each added track; off and dimmed while nothing is added.
-class RemoveModeButton : public IconButton {
-public:
-    RemoveModeButton(ChoiceList* list, std::function<bool()> any)
-        : IconButton("remove", Tr(L"Remove external tracks"), 30, 24), list_(list), any_(std::move(any)) {
-        onClick = [this] {
-            list_->editing = !list_->editing;
-            list_->Invalidate();
-            Invalidate();
-        };
-    }
-    void Paint(Painter& p) override {
-        enabled = any_();
-        if (!enabled) list_->editing = false;
-        active = list_->editing;
-        IconButton::Paint(p);
-    }
-    void Describe(A11y& a) override { a.toggle = list_->editing ? 1 : 0; }
-
-private:
-    ChoiceList* list_;
-    std::function<bool()> any_;  // an added track to remove
-};
-
-// "Embedded Tracks" row (60 DIP) with optional icon buttons on the right.
-Widget* AddListTitle(Widget* page, const std::wstring& text) {
-    auto* row = page->Add<Widget>();
-    row->dir = Dir::Row;
-    row->align = Align::Center;
-    row->width = Length::Grow();
-    row->height = Length::Px(48);
-    row->pad = {20, 4, 18, 0};
-    row->gap = 6;
-    auto* l = row->Add<Label>(text, TextStyle::SmallMedium, Tone::Tertiary);
-    l->width = Length::Grow();
-    return row;
-}
-
-IconButton* AddTitleButton(Widget* row, const char* icon, const wchar_t* tip, std::function<void()> click) {
-    auto* b = row->Add<IconButton>(icon, Tr(tip), 30, 24);
-    b->onClick = std::move(click);
-    return b;
-}
 
 const char* TrackProp(const wchar_t* type) {
     if (std::wstring_view(type) == L"video") return "vid";
@@ -321,9 +281,11 @@ std::vector<ChoiceRow> DeviceRows() {
 
 // One list: off, the file's own tracks, then the added ones (marked "external"); adding, finding
 // online and removing sit on its title row.
+// Off, the file's own tracks, then the added ones; adding (and, for subtitles, finding online)
+// as rows under the list.
 void AddTracksSection(Widget* page, const wchar_t* type) {
     const bool subs = std::wstring_view(type) == L"sub", video = std::wstring_view(type) == L"video";
-    Widget* title = AddListTitle(page, Tr(L"Tracks"));
+    page->Add<Widget>()->height = Length::Px(6);
     auto* list = page->Add<ChoiceList>(
         [type] {
             std::vector<ChoiceRow> rows = OffRows(type);
@@ -334,13 +296,9 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
         Tr(L"No tracks"));
     list->name = Tr(video ? L"Video" : subs ? L"Subtitles" : L"Audio");
     if (video) return;
-    title->Add<RemoveModeButton>(list, [type] {
-        for (const Track& t : PS().tracks)
-            if (t.type == type && t.external) return true;
-        return false;
-    });
-    if (subs)
-        AddTitleButton(title, "search", L"Find subtitles online", [] {
+    if (subs) {
+        auto* find = page->Add<ListRow>("search", Tr(L"Find subtitles online"), nullptr, false);
+        find->onClick = [] {
             if (!PS().fileLoaded) return;
             // The dialog replaces the popover; close it after the click returns.
             if (MainWindow* w = TheApp().main())
@@ -348,53 +306,33 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
                     ClosePlayerPanels();
                     ShowOnlineSubtitlesDialog();
                 });
-        });
-    AddTitleButton(title, "add", subs ? L"Add subtitle file…" : L"Add audio file…", [subs] {
+        };
+    }
+    auto* add = page->Add<ListRow>("add", Tr(subs ? L"Add subtitle file…" : L"Add audio file…"), nullptr, false);
+    add->onClick = [subs] {
         if (!PS().fileLoaded) return;
         for (const std::wstring& f : PickFiles(subs ? 2 : 1)) {
             if (subs) TheApp().player().AddSubtitle(f);
             else TheApp().player().AddAudio(f);
         }
-    });
+    };
 }
 
 }  // namespace
 
 void AddTrackLists(Widget* page, const wchar_t* type) {
     AddTracksSection(page, type);
-    if (std::wstring_view(type) != L"audio") return;
-    // The output device as one dropdown row (the list of every device took half the panel).
+}
+
+std::vector<ChoiceRow> OutputDeviceRows() {
     Live().RefreshDevices();
-    Widget* section = AddSection(page);
-    auto choices = [] {
-        std::vector<ui::Choice> out;
-        for (const ChoiceRow& r : DeviceRows()) out.push_back({r.label, "", ""});
-        return out;
-    };
-    auto selected = [] {
-        const auto rows = DeviceRows();
-        for (size_t i = 0; i < rows.size(); ++i)
-            if (rows[i].checked) return static_cast<int>(i);
-        return -1;
-    };
-    auto d = std::make_unique<Dropdown>(choices(), selected());
-    Dropdown* raw = d.get();
-    d->width = Length::Px(196);
-    d->height = Length::Px(36);
-    d->placeholder = Tr(L"System default");
-    d->onChange = [](int i) {
-        const auto rows = DeviceRows();
-        if (i >= 0 && i < static_cast<int>(rows.size()) && rows[static_cast<size_t>(i)].select) rows[static_cast<size_t>(i)].select();
-    };
-    AddRow(section, Tr(L"Output Device"), std::move(d), 52);
-    if (auto* sync = dynamic_cast<SyncPage*>(page))
-        sync->OnSync([raw, choices, selected] {
-            auto now = choices();
-            bool same = now.size() == raw->Choices().size();
-            for (size_t i = 0; same && i < now.size(); ++i) same = now[i].label == raw->Choices()[i].label;
-            if (!same) raw->SetChoices(std::move(now), selected());
-            else if (raw->Selected() != selected()) raw->SetSelected(selected());
-        });
+    return DeviceRows();
+}
+
+Widget* AddChoiceList(Widget* page, std::function<std::vector<ChoiceRow>()> rows, std::wstring name) {
+    auto* list = page->Add<ChoiceList>(std::move(rows));
+    list->name = std::move(name);
+    return list;
 }
 
 }  // namespace app::panel

@@ -171,7 +171,8 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
             const PanelKind kind = KindOf(g);
             pop->SetTitle(Tr(kTitles[static_cast<int>(g) - static_cast<int>(Group::Playback)]));
             pop->a11yName = Tr(kTitles[static_cast<int>(g) - static_cast<int>(Group::Playback)]);
-            pop->build = [kind](int) { return BuildSettingsPanel(kind); };
+            pop->build = [kind](int page) { return BuildSettingsPanel(kind, page); };
+            pop->pageTitle = [kind](int page) { return SettingsPageTitle(kind, page); };
             // As tall as its rows, up to the room above the bar (then it scrolls).
             pop->place = [raw] { return PlaceAboveBar(raw->NaturalHeight()); };
             pop->SetFooter(BuildSettingsFooter(kind));
@@ -237,6 +238,20 @@ void WatchVideoPanel() {
 
 }  // namespace
 
+
+namespace panel {
+void ShowPanelPage(int page) {
+    PanelState& s = S();
+    MainWindow* w = TheApp().main();
+    if (!w || !s.pop || !w->IsPopupOpen(s.pop) || s.group == Group::Lists || s.group == Group::Mini) return;
+    // Posted: the row that asks is part of the page being replaced.
+    w->Post([page] {
+        PanelState& st = S();
+        MainWindow* mw = TheApp().main();
+        if (mw && st.pop && mw->IsPopupOpen(st.pop)) st.pop->ShowTab(page);
+    });
+}
+}  // namespace panel
 
 bool PlayerPanelOpen(PanelKind kind) {
     MainWindow* w = TheApp().main();
