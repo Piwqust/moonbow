@@ -711,8 +711,6 @@ std::unique_ptr<Widget> VideoPanel(int id) {
 
 // --- Playback ---
 
-enum PlaybackPage { kPlaySpeed = 1, kPlayRepeat, kPlaySleep, kPlayLoop, kPlayRemembered };
-
 constexpr double kSpeeds[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
 
 std::wstring SpeedText(double v) {
@@ -980,6 +978,14 @@ std::unique_ptr<Widget> BuildSettingsPanel(PanelKind kind, int page) {
         case PanelKind::Video: return VideoPanel(page);
         default: return PlaybackPanel(page);
     }
+}
+
+std::wstring SpeedValue() {
+    return SpeedText(PS().speed);
+}
+
+std::wstring SleepValue() {
+    return LabelOf(SleepOpts(), std::to_string(Live().sleepMinutes));
 }
 
 std::wstring SettingsPageTitle(PanelKind kind, int page) {

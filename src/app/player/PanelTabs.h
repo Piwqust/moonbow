@@ -50,6 +50,11 @@ std::unique_ptr<ui::Widget> BuildSettingsPanel(PanelKind kind, int page);
 std::wstring SettingsPageTitle(PanelKind kind, int page);
 // Opens an inner page of the open settings panel (Panels.cpp).
 void ShowPanelPage(int page);
+// The inner pages of the playback panel (PanelKind::Settings).
+enum PlaybackPage { kPlaySpeed = 1, kPlayRepeat, kPlaySleep, kPlayLoop, kPlayRemembered };
+// What the playback panel's Speed and Sleep timer rows say ("Normal", "Off"), for the menu.
+std::wstring SpeedValue();
+std::wstring SleepValue();
 std::unique_ptr<ui::Widget> BuildSettingsFooter(PanelKind kind);
 
 // Rows the mini player queue needs (header + list) to size its popover.

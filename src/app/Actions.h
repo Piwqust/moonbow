@@ -34,6 +34,8 @@ enum class Action : int {
     SubtitleWords,
     // Opens or closes the audio meters window (Settings > Interface > Separate windows).
     AudioMeters,
+    // Ctrl+K: one search over the commands and the settings.
+    CommandPalette,
     Count,
 };
 
@@ -87,5 +89,7 @@ void WheelVolume(float delta, bool toast);
 // Speaker icon for a volume level ("close_value-none" when muted).
 const char* VolumeIcon(double volume, bool mute);
 bool Enabled(Action a);
+// The command palette (Ctrl+K) over the main window.
+void ShowCommandPalette();
 
 }  // namespace app

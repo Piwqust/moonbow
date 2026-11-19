@@ -45,7 +45,8 @@ void ShowWhatsNew(const std::wstring& since, ui::Host* host = nullptr);
 void ShowOnboarding(std::function<void()> done);
 
 // Separate settings window; `category` is a schema category id ("general", "video"...).
-void ShowSettingsWindow(const std::string& category);
+// `query` opens it on a search for those words (the command palette's settings).
+void ShowSettingsWindow(const std::string& category, const std::wstring& query = {});
 void CloseSettingsWindow();
 
 }  // namespace app

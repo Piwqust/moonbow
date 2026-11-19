@@ -413,8 +413,13 @@ struct MenuItem {
 // Shows a menu popup anchored to `anchor` (window DIPs). Returns the popup widget.
 Widget* ShowMenu(Host* host, const Rect& anchor, std::vector<MenuItem> items, Place place = Place::Below,
                  float minWidth = 200);
-// Context menu at the mouse position.
-Widget* ShowContextMenu(Host* host, Point at, std::vector<MenuItem> items);
+// Context menu at the mouse position; `quick` are big icon buttons in a row above the list
+// (label = their accessible name).
+Widget* ShowContextMenu(Host* host, Point at, std::vector<MenuItem> items, std::vector<MenuItem> quick = {});
+// A menu with a search field always on top (the command palette): typing filters it, submenu
+// commands included.
+Widget* ShowSearchMenu(Host* host, const Rect& anchor, std::vector<MenuItem> items, std::wstring placeholder, float width,
+                       float maxHeight);
 
 // --- dialogs ----------------------------------------------------------------------------
 

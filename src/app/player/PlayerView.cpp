@@ -123,140 +123,86 @@ MenuItem PlayItem() {
     return Item(s.paused || !s.fileLoaded ? L"Play" : L"Pause", Action::PlayPause, s.paused || !s.fileLoaded ? "play" : "pause");
 }
 
-// Grouped by task: playback, what plays (video, audio, subtitles), the queue, what the file is,
-// opening something else, the settings.
+// The selected track of a type, by name as in the panels; "Off" without one.
+std::wstring TrackValue(const wchar_t* type) {
+    int ordinal = 0;
+    for (const Track& t : PS().tracks) {
+        if (t.type != type) continue;
+        ++ordinal;
+        if (t.selected) return panel::TrackName(t, ordinal);
+    }
+    return Tr(L"Off");
+}
+
+// A row that opens a bar button's panel (or one of its pages), its current value on the right.
+MenuItem PanelRow(const wchar_t* label, const char* icon, PanelKind kind, std::wstring value, int page = 0) {
+    MenuItem m{Tr(label), std::move(value), icon};
+    m.action = [kind, page] {
+        TogglePlayerPanel(kind, {});
+        if (page) panel::ShowPanelPage(page);
+    };
+    return m;
+}
+
+// Short, as in design/explorations/2026-11-19-interface.html (04): the four commands people use
+// most as big icons on top, what plays with its value on the right (a row opens the same panel
+// as its bar button), a few tools, and everything else behind "All commands" (Ctrl+K).
 void ShowVideoContextMenu(Host* host, Point at) {
     App& app = TheApp();
     const PlayerState& s = PS();
     const bool music = s.fileLoaded && !s.hasVideo;
     std::vector<MenuItem> items;
-    items.push_back(PlayItem());
-    items.push_back(Item(L"Stop", Action::Stop, "stop_twotone"));
-    items.push_back(Item(L"Previous Item", Action::Previous, "previous_twotone"));
-    items.push_back(Item(L"Next Item", Action::Next, "next_twotone"));
-    items.push_back(Item(L"Hide UI", Action::HideUI, "ui"));
-
-    MenuItem playback{Tr(L"Playback"), L"", "playback"};
-    // In their own submenu, so typing "speed" in the menu finds them.
-    playback.submenu.push_back(SpeedMenu({0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0}));
-    playback.submenu.push_back(MenuItem::Separator());
-    // Text-only groups: a menu group has icons on all of its items or on none.
-    playback.submenu.push_back(Item(L"Next chapter", Action::NextChapter));
-    playback.submenu.push_back(Item(L"Previous chapter", Action::PreviousChapter));
-    MenuItem repeat = Item(L"Repeat", Action::ToggleRepeat);
-    repeat.checked = app.queue().RepeatMode() != Repeat::Off;
-    playback.submenu.push_back(repeat);
-    MenuItem shuffle = Item(L"Shuffle", Action::ToggleShuffle);
-    shuffle.checked = app.queue().Shuffle();
-    playback.submenu.push_back(shuffle);
-    playback.submenu.push_back(Item(L"A-B loop", Action::ABLoop));
-    // Rare, and it writes a file: not among the first commands.
-    if (!music) {
-        playback.submenu.push_back(MenuItem::Separator());
-        playback.submenu.push_back(Item(L"Record", Action::Record));
-    }
-    items.push_back(playback);
-    items.push_back(MenuItem::Separator());
-
-    MenuItem video{Tr(L"Video"), L"", "video"};
-    video.submenu = TrackItems(L"video", "vid", true);
-    video.submenu.push_back(MenuItem::Separator());
-    MenuItem aspect{Tr(L"Aspect ratio")};
-    for (const auto& [label, value] : std::vector<std::pair<const wchar_t*, const char*>>{
-             {L"Default", "auto"}, {L"16:9", "16:9"}, {L"4:3", "4:3"}, {L"21:9", "21:9"}, {L"1:1", "1:1"}}) {
-        MenuItem m{Tr(label)};
-        const std::string v = value;
-        m.radio = true;
-        m.checked = Live().aspect == v;
-        m.action = [v] { Live().SetAspect(v); };  // through LiveState, so the Video tab agrees
-        aspect.submenu.push_back(std::move(m));
-    }
-    video.submenu.push_back(aspect);
-    video.submenu.push_back(Item(L"Zoom in", Action::ZoomIn));
-    video.submenu.push_back(Item(L"Zoom out", Action::ZoomOut));
-    video.submenu.push_back(Item(L"Reset zoom", Action::ZoomReset));
-    video.submenu.push_back(Item(L"Rotate", Action::Rotate));
-    video.submenu.push_back(Item(L"Deinterlace", Action::Deinterlace));
-    video.submenu.push_back(MenuItem::Separator());
-    video.submenu.push_back(Item(L"Fullscreen", Action::Fullscreen, "fullscreen"));
-    video.submenu.push_back(Item(L"Picture in Picture", Action::PictureInPicture, "pip"));
-    video.submenu.push_back(Item(L"Snapshot", Action::Snapshot, "snapshot"));
-    if (!music) items.push_back(video);
-
-    MenuItem audio{Tr(L"Audio"), L"", "audio-tracks"};
-    audio.submenu = TrackItems(L"audio", "aid", true);
-    audio.submenu.push_back(MenuItem::Separator());
-    MenuItem mute = Item(L"Mute", Action::Mute);
-    mute.checked = s.mute;
-    audio.submenu.push_back(mute);
-    items.push_back(audio);
-
-    if (music) {
-        MenuItem lyrics{Tr(L"Lyrics style"), L"", "music"};
-        lyrics.submenu = LyricsStyleItems();
-        items.push_back(std::move(lyrics));
+    if (!s.fileLoaded) {
+        items.push_back(Item(L"Open file", Action::OpenFile, "file"));
+        items.push_back(Item(L"Open folder", Action::OpenFolder, "folder"));
+        items.push_back(Item(L"Open network stream", Action::OpenNetwork, "streaming"));
     } else {
-        MenuItem subs{Tr(L"Subtitle"), L"", "subtitles"};
-        subs.submenu = TrackItems(L"sub", "sid", true);
-        subs.submenu.push_back(MenuItem::Separator());
-        subs.submenu.push_back(Item(L"Add subtitle file…", Action::OpenSubtitles, "add"));
-        items.push_back(subs);
-    }
-    items.push_back(MenuItem::Separator());
-
-    MenuItem queue{Tr(L"Queue"), L"", "list"};
-    const auto& q = app.queue().Items();
-    for (size_t i = 0; i < q.size() && i < 30; ++i) {
-        MenuItem m{q[i].title.empty() ? FileNameOf(q[i].path) : q[i].title};
-        m.radio = true;
-        m.checked = static_cast<int>(i) == app.queue().Current();
-        m.action = [i] { TheApp().PlayIndex(static_cast<int>(i)); };
-        queue.submenu.push_back(std::move(m));
-    }
-    if (queue.submenu.empty()) queue.submenu.push_back({Tr(L"Queue is empty"), L"", "", false, false});
-    items.push_back(queue);
-    if (music) {
-        MenuItem dock{Tr(L"Queue beside the music"), L"", "queue"};
-        const std::string side = QueueDockSide();
-        for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"", L"Not pinned"},
-                                           {"left", L"On the left"},
-                                           {"right", L"On the right"}}) {
-            MenuItem m{Tr(label)};
-            m.radio = true;
-            m.checked = side == value;
-            const std::string v = value;
-            m.action = [v] { SetQueueDockSide(v); };
-            dock.submenu.push_back(std::move(m));
+        items.push_back(PanelRow(L"Audio", "audio-tracks", PanelKind::Tracks, TrackValue(L"audio")));
+        if (music) {
+            MenuItem lyrics{Tr(L"Lyrics style"), L"", "music"};
+            lyrics.submenu = LyricsStyleItems();
+            items.push_back(std::move(lyrics));
+        } else {
+            items.push_back(PanelRow(L"Subtitles", "subtitles", PanelKind::Subtitles, TrackValue(L"sub")));
+            items.push_back(PanelRow(L"Video", "video", PanelKind::Video, L""));
         }
-        items.push_back(std::move(dock));
+        items.push_back(PanelRow(L"Speed", "speed", PanelKind::Settings, panel::SpeedValue(), panel::kPlaySpeed));
+        items.push_back(PanelRow(L"Sleep Timer", "sleep", PanelKind::Settings, panel::SleepValue(), panel::kPlaySleep));
+        items.push_back(MenuItem::Separator());
+        items.push_back(Item(L"Queue", Action::TogglePlaylist, "list"));
+        if (music) {
+            MenuItem dock{Tr(L"Queue beside the music"), L"", "queue"};
+            const std::string side = QueueDockSide();
+            for (const auto& [value, label] : {std::pair<const char*, const wchar_t*>{"", L"Not pinned"},
+                                               {"left", L"On the left"},
+                                               {"right", L"On the right"}}) {
+                MenuItem m{Tr(label)};
+                m.radio = true;
+                m.checked = side == value;
+                const std::string v = value;
+                m.action = [v] { SetQueueDockSide(v); };
+                dock.submenu.push_back(std::move(m));
+            }
+            items.push_back(std::move(dock));
+        }
+        if (audio::ProcessLoopbackSupported()) {
+            MenuItem meters = Item(L"Audio meters", Action::AudioMeters, "vu_twotone");
+            meters.checked = app.config().GetBool("interface.metersWindow");
+            items.push_back(std::move(meters));
+        }
+        if (Enabled(Action::ShowInExplorer)) items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
     }
     items.push_back(MenuItem::Separator());
+    items.push_back(Item(L"All commands…", Action::CommandPalette, "search"));
 
-    items.push_back(Item(L"Media information", Action::ShowInfo, "info"));
-    MenuItem stats = Item(L"Statistics", Action::ToggleStats, "wrench");
-    stats.checked = app.config().GetBool("general.developerMode");
-    items.push_back(stats);
-    if (audio::ProcessLoopbackSupported()) {
-        MenuItem meters = Item(L"Audio meters", Action::AudioMeters, "vu_twotone");
-        meters.checked = app.config().GetBool("interface.metersWindow");
-        items.push_back(std::move(meters));
+    std::vector<MenuItem> quick;
+    if (s.fileLoaded) {
+        quick.push_back(PlayItem());
+        quick.push_back(Item(L"Next Item", Action::Next, "next"));
+        if (!music) quick.push_back(Item(L"Picture in Picture", Action::PictureInPicture, "pip"));
+        quick.push_back(Item(L"Fullscreen", Action::Fullscreen, "fullscreen"));
     }
-    items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
-    items.push_back(MenuItem::Separator());
-
-    MenuItem open{Tr(L"Open Media"), L"", "open"};
-    open.submenu.push_back(Item(L"Open file", Action::OpenFile, "file"));
-    open.submenu.push_back(Item(L"Open folder", Action::OpenFolder, "folder"));
-    open.submenu.push_back(Item(L"Open network stream", Action::OpenNetwork, "streaming"));
-    items.push_back(open);
-    MenuItem settings{Tr(L"Settings"), L"", "settings"};
-    settings.submenu.push_back({Tr(L"Playback settings"), L"", "playback-settings", false, true, false, false,
-                                [] { TogglePlayerPanel(PanelKind::Settings, {}); }});
-    settings.submenu.push_back(Item(L"Customize player", Action::CustomizePlayer, "edit"));
-    settings.submenu.push_back(Item(L"Moonbow Settings", Action::Settings, "preferences"));
-    items.push_back(settings);
-    items.push_back(Item(L"Quit", Action::Quit, "quit"));
-    KeepMenu(host, ShowContextMenu(host, at, std::move(items)));
+    KeepMenu(host, ShowContextMenu(host, at, std::move(items), std::move(quick)));
 }
 
 // Whether text is a, or a + "\n" + b when b is not empty, without building that string per frame.

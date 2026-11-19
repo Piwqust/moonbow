@@ -6,6 +6,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
+#include "app/settings/SettingsUi.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
 #include "app/player/Episodes.h"
@@ -14,6 +15,7 @@
 #include "app/player/PlayerView.h"
 #include "app/player/SubWords.h"
 #include "audio/LoopbackSupport.h"
+#include "core/SettingsSchema.h"
 
 #include <cmath>
 #include <cwctype>
@@ -91,7 +93,7 @@ const std::vector<ActionInfo>& Table() {
         {Action::GoHome, "media.home", L"Library", L"Media", {{VK_HOME, kAlt}}},
         {Action::ToggleSidebar, "media.sidebar", L"Toggle sidebar", L"Media", {{'B', kCtrl}}},
         {Action::TogglePlaylist, "media.playlist", L"Queue", L"Media", {{'L', kCtrl}}},
-        {Action::Search, "media.search", L"Search", L"Media", {{'F', kCtrl}, {'K', kCtrl}}},
+        {Action::Search, "media.search", L"Search", L"Media", {{'F', kCtrl}}},
         {Action::Back, "media.back", L"Back", L"Media", {{VK_LEFT, kAlt}, {VK_BROWSER_BACK, kNone}}},
         {Action::Forward, "media.forward", L"Forward", L"Media", {{VK_RIGHT, kAlt}, {VK_BROWSER_FORWARD, kNone}}},
         {Action::AddBookmark, "media.bookmark", L"Add bookmark", L"Media", {{'D', kCtrl}}},
@@ -100,6 +102,7 @@ const std::vector<ActionInfo>& Table() {
         {Action::ShowInExplorer, "media.show_in_explorer", L"Show in File Explorer", L"Media", {}},
         {Action::Settings, "app.settings", L"Settings", L"App", {{'P', kCtrl}, {VK_OEM_COMMA, kCtrl}}},
         {Action::KeyboardShortcuts, "app.shortcuts", L"Keyboard shortcuts", L"App", {{VK_F1, kNone}, {VK_OEM_2, kCtrl}}},
+        {Action::CommandPalette, "app.commands", L"All commands", L"App", {{'K', kCtrl}}},
         {Action::CustomizePlayer, "app.customize", L"Customize player", L"App", {}},
         {Action::AudioMeters, "app.audio_meters", L"Audio meters", L"App", {{'M', kCtrlShift}}},
         {Action::Quit, "app.quit", L"Quit", L"App", {{'Q', kCtrl}}},
@@ -433,6 +436,51 @@ Action ActionForKey(const KeyEvent& e) {
         if (e.key == VK_VOLUME_MUTE) return Action::Mute;
     }
     return Action::None;
+}
+
+void ShowCommandPalette() {
+    MainWindow* w = TheApp().main();
+    if (!w) return;
+    // The commands by group, in the order of the shortcut list; typing finds them inside.
+    static const std::pair<const wchar_t*, const char*> kGroups[] = {
+        {L"Playback", "playback"}, {L"Audio", "audio-tracks"}, {L"Subtitles", "subtitles"},
+        {L"Video", "video"},       {L"Media", "open"},         {L"App", "preferences"}};
+    std::vector<MenuItem> items;
+    for (const auto& [group, icon] : kGroups) {
+        MenuItem g{Tr(group), L"", icon};
+        for (const ActionInfo& info : AllActions()) {
+            const Action a = info.action;
+            if (std::wcscmp(info.group, group) != 0 || a == Action::CommandPalette || a == Action::ExitFullscreen ||
+                !Enabled(a))
+                continue;
+            MenuItem m{Tr(info.label), ShortcutText(a)};
+            m.action = [a] { Run(a); };
+            g.submenu.push_back(std::move(m));
+        }
+        if (!g.submenu.empty()) items.push_back(std::move(g));
+    }
+    // Every row of the Settings window; one opens the window on a search for its name.
+    MenuItem all{Tr(L"Settings"), L"", "settings"};
+    const settings::Lang lang = sui::Lang();
+    for (const settings::Category& cat : settings::Categories()) {
+        MenuItem c{cat.Label(lang)};
+        for (const settings::Section& sec : cat.sections)
+            for (const settings::Item& it : sec.items) {
+                if (it.hidden || it.Label(lang).empty()) continue;
+                MenuItem m{it.Label(lang)};
+                const std::string id = cat.id;
+                const std::wstring q = it.Label(lang);
+                m.action = [id, q] { ShowSettingsWindow(id, q); };
+                c.submenu.push_back(std::move(m));
+            }
+        if (!c.submenu.empty()) all.submenu.push_back(std::move(c));
+    }
+    items.push_back(MenuItem::Separator());
+    items.push_back(std::move(all));
+    constexpr float kW = 560;
+    const Size client = w->ClientSize();
+    ShowSearchMenu(w, {std::max(8.0f, (client.w - kW) / 2), 64, std::min(kW, client.w - 16), 0}, std::move(items),
+                   Tr(L"Find a command or setting"), std::min(kW, client.w - 16), 460);
 }
 
 bool Enabled(Action a) {
@@ -782,6 +830,7 @@ void Run(Action a) {
                 app.config().SetBool("interface.metersWindow", !app.config().GetBool("interface.metersWindow"));
             break;
         case Action::Quit: app.Quit(); break;
+        case Action::CommandPalette: ShowCommandPalette(); break;
         case Action::SubtitleWords:
             if (!s.fileLoaded || !w) break;
             if (!app.PlayerShown()) app.ShowPlayer(true);

@@ -244,6 +244,12 @@ public:
         langConn_.Reset();
     }
 
+    // Before Open: the first page is the search for these words.
+    void SetQuery(std::wstring q) { query_ = std::move(q); }
+    void Search(const std::wstring& q) {
+        if (search_) search_->SetText(q, true);
+    }
+
     void ShowCategory(const std::string& id) {
         const Category* cat = settings::FindCategory(id);
         if (!cat) return;
@@ -665,9 +671,10 @@ SettingsWindow* g_window = nullptr;
 
 }  // namespace
 
-void ShowSettingsWindow(const std::string& category) {
+void ShowSettingsWindow(const std::string& category, const std::wstring& query) {
     if (g_window && g_window->Hwnd()) {
         if (!category.empty()) g_window->ShowCategory(category);
+        if (!query.empty()) g_window->Search(query);
         HWND h = g_window->Hwnd();
         ui::Host::Activate(h);
         return;
@@ -682,6 +689,7 @@ void ShowSettingsWindow(const std::string& category) {
         if (main && main->Hwnd()) main->Post([w] { delete w; });
     };
     g_window = w;
+    w->SetQuery(query);
     if (!w->Open(category)) {
         g_window = nullptr;
         delete w;

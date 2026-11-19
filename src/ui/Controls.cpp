@@ -1325,8 +1325,17 @@ public:
         for (const MenuItem& m : items_) fit(m);
         if (!filter_.empty())
             for (int i : visible_) fit(At(i));
+        w = std::max(w, 8 + kQuickW * static_cast<float>(quick_.size()));
         float h = kMenuPad * 2 + HeaderH() + (visible_.empty() ? MenuItemH() : ContentH());
-        return {std::min(w, 560.0f), std::min(h, availH)};
+        return {std::min(w, std::max(560.0f, minWidth_)), std::min({h, availH, maxH_})};
+    }
+
+    // Big icon buttons above the list (pause, next, fullscreen), as in the Windows 11 context menu.
+    void SetQuick(std::vector<MenuItem> quick) { quick_ = std::move(quick); }
+    // A search field always on top (the command palette), with this hint while it is empty.
+    void SetSearchField(std::wstring placeholder, float maxHeight) {
+        placeholder_ = std::move(placeholder);
+        maxH_ = maxHeight;
     }
 
     int IndexAt(float y) const {
@@ -1354,11 +1363,26 @@ public:
         p.Shadow(rect, kRadiusPopup);
         p.Fill(rect, c.bgMenu, kRadiusPopup);
         p.Stroke(rect, c.line, kRadiusPopup);
-        if (!filter_.empty()) {
+        if (QuickShown()) {
+            for (size_t j = 0; j < quick_.size(); ++j) {
+                const MenuItem& q = quick_[j];
+                const Rect cell = QuickRect(j);
+                const bool hot = static_cast<int>(j) == quickHot_ && q.enabled;
+                if (hot) p.Fill(cell.Inset(2), c.hover, 6);
+                const Color fg = !q.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
+                p.Icon(q.icon, {cell.Cx() - 12, cell.Cy() - 12, 24, 24}, fg, q.enabled ? c.accentMid : fg);
+            }
+            p.Fill({rect.x + 12, rect.y + kMenuPad + kQuickH + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
+        }
+        if (!filter_.empty() || !placeholder_.empty()) {
             const Rect row{rect.x + 4, rect.y + kMenuPad, rect.w - 8, MenuItemH()};
             p.Icon("search", {row.x + 12, row.Cy() - 10, 20, 20}, c.textTertiary);
-            p.Text(filter_, {row.x + 48, row.y, row.w - 60, row.h}, TextStyle::Body, c.textPrimary, HAlign::Leading,
-                   VAlign::Center, gfx::kTextEllipsis);
+            p.Text(filter_.empty() ? placeholder_ : filter_, {row.x + 48, row.y, row.w - 60, row.h}, TextStyle::Body,
+                   filter_.empty() ? c.textTertiary : c.textPrimary, HAlign::Leading, VAlign::Center, gfx::kTextEllipsis);
+            if (IsFocused() && !filter_.empty()) {  // the caret, so the row reads as a field
+                const float tw = gfx::Text::Get().Measure(filter_, TextStyle::Body).width;
+                if (tw < row.w - 62) p.Fill({row.x + 49 + tw, row.Cy() - 9, 1.5f, 18}, c.accent);
+            }
             p.Fill({rect.x + 12, row.Bottom() + kMenuSepH / 2, rect.w - 24, 1}, c.lineStrong);
             if (visible_.empty())
                 p.Text(g_menuNoMatch, {row.x + 12, row.Bottom() + kMenuSepH, row.w - 24, MenuItemH()}, TextStyle::Body,
@@ -1437,6 +1461,11 @@ public:
     }
 
     bool OnMouseMove(const MouseEvent& e) override {
+        const int q = QuickAt(e.x, e.y);
+        if (q != quickHot_) {
+            quickHot_ = q;
+            Invalidate();
+        }
         SetHighlight(IndexAt(e.y), false);
         return true;
     }
@@ -1450,11 +1479,15 @@ public:
     }
 
     void OnMouseLeave() override {
+        if (quickHot_ >= 0) Invalidate();
+        quickHot_ = -1;
         if (!child_) SetHighlight(-1, false);
     }
 
     void OnClick() override {
-        const int i = IndexAt(GetHost()->MousePos().y);
+        const Point m = GetHost()->MousePos();
+        if (const int q = QuickAt(m.x, m.y); q >= 0) return ActivateQuick(q);
+        const int i = IndexAt(m.y);
         Activate(i);
     }
 
@@ -1471,9 +1504,38 @@ public:
             }
             SetHighlight(visible_[static_cast<size_t>(pos)], true);
         };
+        // The quick row: Up from the first item reaches it, Left/Right move along it.
+        if (quickHot_ >= 0 && QuickShown()) {
+            const int n = static_cast<int>(quick_.size());
+            switch (e.key) {
+                case VK_LEFT:
+                case VK_RIGHT:
+                    for (int k = 0; k < n; ++k) {  // past the disabled ones (no next item)
+                        quickHot_ = (quickHot_ + (e.key == VK_LEFT ? n - 1 : 1)) % n;
+                        if (quick_[static_cast<size_t>(quickHot_)].enabled) break;
+                    }
+                    Invalidate();
+                    return true;
+                case VK_RETURN: case VK_SPACE: ActivateQuick(quickHot_); return true;
+                case VK_DOWN: quickHot_ = -1; highlight_ = -1; step(1); return true;
+                case VK_UP: return true;
+                default: break;
+            }
+        }
         switch (e.key) {
             case VK_DOWN: step(1); return true;
-            case VK_UP: step(-1); return true;
+            case VK_UP: {
+                const auto first = std::find_if(visible_.begin(), visible_.end(),
+                                                [&](int i) { return !At(i).separator && At(i).enabled; });
+                if (QuickShown() && (highlight_ < 0 || (first != visible_.end() && *first == highlight_))) {
+                    SetHighlight(-1, true);
+                    quickHot_ = 0;
+                    Invalidate();
+                    return true;
+                }
+                step(-1);
+                return true;
+            }
             case VK_HOME: highlight_ = -1; step(1); return true;
             case VK_END: highlight_ = -1; step(-1); return true;
             case VK_RETURN: Activate(highlight_); return true;
@@ -1512,8 +1574,19 @@ public:
 
     void Describe(A11y& a) override {
         a.role = Role::Menu;
-        a.items = static_cast<int>(visible_.size());
-        a.item = [this](int k, A11y::Item& it) {
+        const int nq = QuickShown() ? static_cast<int>(quick_.size()) : 0;
+        a.items = nq + static_cast<int>(visible_.size());
+        a.item = [this, nq](int k, A11y::Item& it) {
+            if (k < nq) {
+                const MenuItem& q = quick_[static_cast<size_t>(k)];
+                it.role = Role::MenuItem;
+                it.name = q.label;
+                it.keys = q.shortcut;
+                it.rect = QuickRect(static_cast<size_t>(k));
+                it.enabled = q.enabled;
+                return;
+            }
+            k -= nq;
             const int i = visible_[static_cast<size_t>(k)];
             const MenuItem& m = At(i);
             if (m.separator) {
@@ -1528,9 +1601,13 @@ public:
             if (!m.submenu.empty()) it.expanded = child_ && i == highlight_ ? 1 : 0;
             if (hasChecks_ || m.checked) it.toggle = m.checked ? 1 : 0;
         };
-        a.invokeItem = [this](int k) { Activate(visible_[static_cast<size_t>(k)]); };
+        a.invokeItem = [this, nq](int k) {
+            if (k < nq) ActivateQuick(k);
+            else Activate(visible_[static_cast<size_t>(k - nq)]);
+        };
         const auto at = std::find(visible_.begin(), visible_.end(), highlight_);
-        if (highlight_ >= 0 && at != visible_.end()) a.focusedItem = static_cast<int>(at - visible_.begin());
+        if (quickHot_ >= 0 && nq) a.focusedItem = quickHot_;
+        else if (highlight_ >= 0 && at != visible_.end()) a.focusedItem = nq + static_cast<int>(at - visible_.begin());
     }
 
     bool OnChar(wchar_t ch) override {
@@ -1562,7 +1639,29 @@ private:
         }
     }
 
-    float HeaderH() const { return filter_.empty() ? 0.0f : MenuItemH() + kMenuSepH; }
+    static constexpr float kQuickH = 44, kQuickW = 56;
+    bool QuickShown() const { return !quick_.empty() && filter_.empty() && placeholder_.empty(); }
+    Rect QuickRect(size_t j) const {
+        const float w = (rect.w - 8) / static_cast<float>(quick_.size());
+        return {rect.x + 4 + w * static_cast<float>(j), rect.y + kMenuPad, w, kQuickH};
+    }
+    int QuickAt(float x, float y) const {
+        if (!QuickShown()) return -1;
+        for (size_t j = 0; j < quick_.size(); ++j)
+            if (QuickRect(j).Contains(x, y)) return static_cast<int>(j);
+        return -1;
+    }
+    void ActivateQuick(int j) {
+        if (j < 0 || j >= static_cast<int>(quick_.size()) || !quick_[static_cast<size_t>(j)].enabled) return;
+        Host* host = GetHost();
+        auto action = quick_[static_cast<size_t>(j)].action;
+        host->ClosePopup(Root());
+        if (action) host->Post(action);
+    }
+    float HeaderH() const {
+        if (!filter_.empty() || !placeholder_.empty()) return MenuItemH() + kMenuSepH;
+        return QuickShown() ? kQuickH + kMenuSepH : 0.0f;
+    }
     float RowH(int i) const { return At(i).separator ? kMenuSepH : MenuItemH(); }
     float Top() const { return rect.y + kMenuPad + HeaderH() - scroll_; }
     float ContentH() const {
@@ -1593,6 +1692,8 @@ private:
         visible_.clear();
         for (size_t i = 0; i < items_.size(); ++i) {
             const MenuItem& m = items_[i];
+            // The palette lists commands only: a group row would open its submenu over the results.
+            if (!filter_.empty() && !placeholder_.empty() && !m.submenu.empty()) continue;
             if (filter_.empty() || (!m.separator && Matches(m.label, filter_))) visible_.push_back(static_cast<int>(i));
         }
         // Typing also finds commands inside submenus ("Playback › Speed › 1.5×").
@@ -1638,6 +1739,10 @@ private:
     }
 
     void SetHighlight(int i, bool fromKeyboard) {
+        if (i >= 0 && quickHot_ >= 0) {
+            quickHot_ = -1;
+            Invalidate();
+        }
         if (fromKeyboard) ScrollIntoView(i);
         if (i == highlight_) return;
         highlight_ = i;
@@ -1697,6 +1802,10 @@ private:
     std::vector<int> visible_;    // matching indices: items_, then flat_ (items_.size() + j)
     std::vector<std::pair<float, float>> marks_;  // per visible_ row: x and width of the typed match
     std::wstring filter_;
+    std::vector<MenuItem> quick_;
+    int quickHot_ = -1;
+    std::wstring placeholder_;
+    float maxH_ = 1e6f;
     float minWidth_;
     MenuPopup* parentMenu_;
     MenuPopup* child_ = nullptr;
@@ -1717,13 +1826,26 @@ Widget* ShowMenu(Host* host, const Rect& anchor, std::vector<MenuItem> items, Pl
     return host->ShowPopup(std::make_unique<MenuPopup>(std::move(items), minWidth, nullptr), o);
 }
 
-Widget* ShowContextMenu(Host* host, Point at, std::vector<MenuItem> items) {
+Widget* ShowContextMenu(Host* host, Point at, std::vector<MenuItem> items, std::vector<MenuItem> quick) {
     if (!host || items.empty()) return nullptr;
     PopupOptions o;
     o.anchor = {at.x, at.y, 0, 0};
     o.place = Place::Below;
     o.offset = 2;
-    return host->ShowPopup(std::make_unique<MenuPopup>(std::move(items), 220.0f, nullptr), o);
+    auto menu = std::make_unique<MenuPopup>(std::move(items), 220.0f, nullptr);
+    menu->SetQuick(std::move(quick));
+    return host->ShowPopup(std::move(menu), o);
+}
+
+Widget* ShowSearchMenu(Host* host, const Rect& anchor, std::vector<MenuItem> items, std::wstring placeholder, float width,
+                       float maxHeight) {
+    if (!host || items.empty()) return nullptr;
+    PopupOptions o;
+    o.anchor = anchor;
+    o.place = Place::Below;
+    auto menu = std::make_unique<MenuPopup>(std::move(items), width, nullptr);
+    menu->SetSearchField(std::move(placeholder), maxHeight);
+    return host->ShowPopup(std::move(menu), o);
 }
 
 // --- Dialog --------------------------------------------------------------------------------
