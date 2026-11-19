@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Субтитры с настроением</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&display=swap">
+<style>
+/* Fonts come from this PC by family name (the owner will swap them for free ones later). */
+:root {
+  color-scheme: dark;
+  --base: #0B0C10; --raised: #131519; --card: #1C1E24; --line: #23262E;
+  --ink: #EEF1F6; --ink-2: #A7ABB3; --ink-3: #8E939C;
+  --words: "Onest", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--base); color: var(--ink); font: 15px/1.55 var(--words); }
+.page { max-width: 1240px; margin: 0 auto; padding: 56px 24px 96px; }
+h1 { font: 600 34px/1.15 var(--words); margin: 0 0 12px; }
+h3 { font: 600 17px/1.3 var(--words); margin: 14px 0 4px; }
+p { margin: 0 0 10px; max-width: 72ch; color: var(--ink-2); }
+.eyebrow { font: 500 12px/1 var(--words); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px 24px; margin-top: 32px; }
+.fx { color: var(--ink-3); font-size: 13px; }
+.font { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--card); color: var(--ink-2); margin-left: 6px; vertical-align: 2px; }
+.bar { display: flex; gap: 10px; align-items: center; margin-top: 18px; color: var(--ink-3); font-size: 14px; }
+button { font: 500 14px var(--words); color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+button:hover { background: #22252B; }
+
+.frame { position: relative; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; container-type: inline-size;
+  background: #0d1420 url("subtitle-frame.jpg") center / cover; }
+.cue { position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; padding: 0 8%; color: #fff; }
+.cue .line { display: block; }
+.w { display: inline-block; white-space: pre; }
+
+/* 1. Hong Kong '90s: the first reference. Small, wide spacing, soft, the colors slip apart. */
+.hk .cue { font: 400 2.25cqw/1.45 "Golos", "Arial", sans-serif; letter-spacing: .14em; color: #F4F6FF; bottom: 9%; }
+.hk .cue .line { filter: blur(.35px); text-shadow: -.07em 0 rgba(255,40,90,.42), .07em 0 rgba(40,210,255,.42),
+  0 0 .45em rgba(190,205,255,.55), 0 0 1.1em rgba(110,130,255,.32); animation: vhs 3.2s steps(1) infinite; }
+@keyframes vhs { 0%,100% { transform: none; } 31% { transform: translateX(.6px); } 33% { transform: none; } 71% { transform: translateX(-.5px) skewX(-.4deg); } 72% { transform: none; } }
+
+/* 2. Credits: the second reference. Small acid lime grotesque, nothing around it. */
+.cr .cue { font: 400 1.75cqw/1.18 "Akzidenz-Grotesk Pro", "Helvetica Neue", Arial, sans-serif; color: #DAF45E; letter-spacing: .005em; bottom: 10%; }
+
+/* 3. Film: warm white with red-orange halation, as bright film text bleeds. */
+.fl .cue { font: 500 2.5cqw/1.35 "Futura New", "Futura", sans-serif; color: #FFF3E4; letter-spacing: .03em; }
+.fl .cue .line { text-shadow: 0 0 .12em rgba(255,150,90,.85), 0 0 .45em rgba(255,80,35,.55), 0 0 1.1em rgba(255,60,20,.28); }
+
+/* 4. Noir: a high-contrast italic serif, slow to appear. */
+.nr .cue { font: italic 600 3.1cqw/1.3 "Cormorant", "Cormorant Garamond", Georgia, serif; color: #F3E8D4; letter-spacing: .015em; }
+.nr .cue .line { text-shadow: 0 .04em .25em rgba(0,0,0,.85); }
+
+/* 5. Neon: a tube that flickers on. */
+.ne .cue { font: 500 2.5cqw/1.45 "Neue Machina", "PP Neue Machina Plain", sans-serif; color: #FFF5FC; letter-spacing: .04em; }
+.ne .cue .line { text-shadow: 0 0 .06em #fff, 0 0 .22em #ff5bd9, 0 0 .55em #ff2fc0, 0 0 1.2em rgba(200,20,150,.8); }
+
+/* 6. Terminal: amber phosphor with scan lines, typed letter by letter. */
+.tm .cue { font: 400 2.2cqw/1.5 "IBM Plex Mono", Consolas, monospace; color: #FFB648; letter-spacing: .02em; }
+.tm .cue .line { text-shadow: 0 0 .35em rgba(255,160,40,.75), 0 0 1em rgba(255,120,0,.35);
+  -webkit-mask-image: repeating-linear-gradient(180deg, #000 0 2px, rgba(0,0,0,.55) 2px 3px); mask-image: repeating-linear-gradient(180deg, #000 0 2px, rgba(0,0,0,.55) 2px 3px); }
+
+/* 7. Dream: thin and wide, each word comes out of a blur. */
+.dr .cue { font: 300 2.6cqw/1.4 "Inter Display", "Inter", sans-serif; color: #FFFFFF; letter-spacing: .06em; }
+.dr .cue .line { text-shadow: 0 0 .6em rgba(160,190,255,.45), 0 .03em .12em rgba(0,0,0,.6); }
+
+/* 8. Pixel: a pixel face, hard and small, with a one-pixel drop. */
+.px .cue { font: 400 2.1cqw/1.5 "Medeo Pixel", "Cyrillic Pixel-7", monospace; color: #F2F2F2; letter-spacing: .04em; }
+.px .cue .line { text-shadow: .09em .09em 0 rgba(10,12,40,.9); }
+
+/* entrances: replayed by the button and every few seconds */
+.play .w { animation-fill-mode: both; }
+.play.fl .line, .play.cr .line { animation: fade 0.7s ease-out both; }
+.play.fl .line:nth-child(2), .play.cr .line:nth-child(2) { animation-delay: .25s; }
+@keyframes fade { from { opacity: 0; filter: blur(5px); } to { opacity: 1; filter: blur(0); } }
+.play.nr .line { animation: rise 1.4s cubic-bezier(.2,.7,.2,1) both; }
+.play.nr .line:nth-child(2) { animation-delay: .5s; }
+@keyframes rise { from { opacity: 0; transform: translateY(.35em); } to { opacity: 1; transform: none; } }
+.play.ne .line { animation: tube 1.6s linear both; }
+@keyframes tube { 0% { opacity: 0; } 8% { opacity: .9; } 10% { opacity: .15; } 18% { opacity: 1; } 21% { opacity: .3; } 26% { opacity: 1; } 60% { opacity: .85; } 62% { opacity: 1; } 100% { opacity: 1; } }
+.play.dr .w { animation: dream .9s ease-out both; }
+@keyframes dream { from { opacity: 0; filter: blur(8px); transform: scale(1.04); } to { opacity: 1; filter: blur(0); transform: none; } }
+.play.tm .ch { animation: type .01s steps(1) both; }
+@keyframes type { from { visibility: hidden; } to { visibility: visible; } }
+.play.hk .line { animation: vhsin .5s steps(4) both, vhs 3.2s steps(1) .5s infinite; }
+@keyframes vhsin { 0% { opacity: 0; transform: translateX(-3px); } 50% { opacity: .7; transform: translateX(2px); } 100% { opacity: 1; transform: none; } }
+.play.px .line { animation: pix .45s steps(3) both; }
+@keyframes pix { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .play * { animation: none !important; } }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Moonbow · субтитры с настроением</div>
+  <h1>Субтитры с настроением</h1>
+  <p>Отдельная группа стилей рядом с обычными. Здесь работает то, чего не умеет mpv: мелкая типографика, расслоение цвета, ореол плёнки, неон, развёртка, появление по словам и по буквам. В плеере это возможно только при собственной отрисовке субтитров. Шрифты взяты с этого компьютера.</p>
+  <div class="bar"><button id="replay">Повторить появление</button><span>Появление повторяется само каждые 6 секунд</span></div>
+
+  <div class="grid">
+    <div><div class="frame hk"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Гонконг 90-х <span class="font">Golos</span></h3>
+      <p class="fx">Первый референс: мелко, широкая разрядка, текст чуть мягкий, цвета слегка расходятся, синеватый ореол, лёгкое дрожание кадра.</p></div>
+
+    <div><div class="frame cr"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Титры <span class="font">Akzidenz-Grotesk Pro</span></h3>
+      <p class="fx">Второй референс: мелкий гротеск кислотного лаймового цвета, плотные строки, ничего вокруг. Появляется мягко.</p></div>
+
+    <div><div class="frame fl"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Плёнка <span class="font">Futura New</span></h3>
+      <p class="fx">Тёплый белый с красно-оранжевым ореолом, как яркий текст «растекается» по киноплёнке. Проявляется из размытия.</p></div>
+
+    <div><div class="frame nr"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Нуар <span class="font">Cormorant</span></h3>
+      <p class="fx">Контрастный курсив с засечками, тёплый белый, медленно поднимается строка за строкой.</p></div>
+
+    <div><div class="frame ne"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Неон <span class="font">Neue Machina</span></h3>
+      <p class="fx">Розовая трубка в несколько слоёв свечения. Загорается с мерцанием, как настоящая неоновая вывеска.</p></div>
+
+    <div><div class="frame tm"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Терминал <span class="font">IBM Plex Mono</span></h3>
+      <p class="fx">Янтарный люминофор со строками развёртки. Реплика печатается по буквам.</p></div>
+
+    <div><div class="frame dr"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Сон <span class="font">Inter Display Light</span></h3>
+      <p class="fx">Тонкий широкий шрифт с холодным ореолом. Каждое слово выплывает из размытия.</p></div>
+
+    <div><div class="frame px"><div class="cue"><span class="line">— Видел, как светится небо?</span><span class="line">— Это лунная радуга.</span></div></div>
+      <h3>Пиксели <span class="font">Medeo Pixel</span></h3>
+      <p class="fx">Пиксельный шрифт с жёсткой тенью в один пиксель, как в старой игре.</p></div>
+  </div>
+</div>
+<script>
+// Words (Dream) and letters (Terminal) get their own spans and delays; the button replays the entrances.
+document.querySelectorAll(".dr .line").forEach(function (line, li) {
+  var words = line.textContent.split(/(\s+)/);
+  line.textContent = "";
+  var k = 0;
+  words.forEach(function (w) {
+    var s = document.createElement("span");
+    s.className = "w";
+    s.textContent = w;
+    if (w.trim()) { s.style.animationDelay = (li * 0.55 + (k++) * 0.13) + "s"; }
+    line.appendChild(s);
+  });
+});
+document.querySelectorAll(".tm .line").forEach(function (line, li) {
+  var text = line.textContent, base = li * text.length;
+  line.textContent = "";
+  Array.from(text).forEach(function (ch, i) {
+    var s = document.createElement("span");
+    s.className = "ch";
+    s.textContent = ch;
+    s.style.animationDelay = ((li ? 26 : 0) + i) * 0.045 + "s";
+    line.appendChild(s);
+  });
+});
+var frames = document.querySelectorAll(".frame");
+function replay() {
+  frames.forEach(function (f) { f.classList.remove("play"); void f.offsetWidth; f.classList.add("play"); });
+}
+document.getElementById("replay").addEventListener("click", replay);
+replay();
+setInterval(replay, 6000);
+</script>
+</body>
+</html>
