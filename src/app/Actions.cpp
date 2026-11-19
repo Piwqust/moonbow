@@ -13,7 +13,6 @@
 #include "app/player/LiveState.h"
 #include "app/player/PlayerOverlays.h"
 #include "app/player/PlayerView.h"
-#include "app/player/SubWords.h"
 #include "audio/LoopbackSupport.h"
 #include "core/SettingsSchema.h"
 
@@ -71,7 +70,6 @@ const std::vector<ActionInfo>& Table() {
         {Action::SubtitleDelayDown, "subtitles.delay_down", L"Subtitle delay −50 ms", L"Subtitles", {{'G', kShift}}},
         {Action::SubtitleBigger, "subtitles.bigger", L"Bigger subtitles", L"Subtitles", {{VK_OEM_PLUS, kAlt}}},
         {Action::SubtitleSmaller, "subtitles.smaller", L"Smaller subtitles", L"Subtitles", {{VK_OEM_MINUS, kAlt}}},
-        {Action::SubtitleWords, "subtitles.words", L"Pick a word in subtitles", L"Subtitles", {{'W', kNone}}},
         {Action::Fullscreen, "video.fullscreen", L"Fullscreen", L"Video", {{'F', kNone}, {VK_RETURN, kAlt}, {VK_F11, kNone}}},
         {Action::ExitFullscreen, "video.exit_fullscreen", L"Exit fullscreen", L"Video", {{VK_ESCAPE, kNone}}},
         {Action::HideUI, "video.hide_ui", L"Hide UI", L"Video", {{VK_OEM_5, kCtrl}}},
@@ -302,12 +300,6 @@ std::wstring LanguageName(const std::wstring& code) {
 
 namespace {
 
-// The player's word overlay, when the player view exists.
-SubtitleWords* Words() {
-    MainWindow* w = Win();
-    return w && w->playerView() ? w->playerView()->Words() : nullptr;
-}
-
 void ChangeSpeed(double delta, bool reset = false) {
     const double steps[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0};
     double cur = PS().speed, next = 1.0;
@@ -497,7 +489,6 @@ bool Enabled(Action a) {
         case Action::CloseMedia:
         case Action::AddBookmark:
         case Action::ShowInfo:
-        case Action::SubtitleWords:
         case Action::OpenSubtitles: return s.fileLoaded;
         case Action::ShowInExplorer: {
             const QueueItem* item = TheApp().queue().CurrentItem();
@@ -561,10 +552,7 @@ void Run(Action a) {
         case Action::SeekBackwardShort: SeekBy(-Skip("controls.skipVeryShort", 3)); break;
         case Action::SeekForwardXL: SeekBy(Skip("controls.skipLong", 300)); break;
         case Action::SeekBackwardXL: SeekBy(-Skip("controls.skipLong", 300)); break;
-        case Action::FrameStep:
-            if (SubtitleWords* words = Words()) words->ExpectFrameStep();
-            p.FrameStep(false);
-            break;
+        case Action::FrameStep: p.FrameStep(false); break;
         case Action::FrameBackStep: p.FrameStep(true); break;
         case Action::SpeedUp: ChangeSpeed(+1); break;
         case Action::SpeedDown: ChangeSpeed(-1); break;
@@ -651,12 +639,6 @@ void Run(Action a) {
         }
         case Action::CycleSubtitles: p.CycleTrack("sid"); break;  // named by OnTrackChoice
         case Action::ToggleSubtitles: {
-            // Paused with the word overlay up, mpv's own copy is hidden but the user sees subtitles.
-            if (SubtitleWords* words = Words(); words && words->HidesMpvSubs()) {
-                words->ReleaseKeepHidden();
-                Toast(Tr(L"Subtitles hidden"), "subtitles");
-                break;
-            }
             const bool shown = p.GetPropertyString("sub-visibility") != "no";
             p.Command({"cycle", "sub-visibility"});
             Toast(shown ? Tr(L"Subtitles hidden") : Tr(L"Subtitles shown"), "subtitles");
@@ -700,16 +682,7 @@ void Run(Action a) {
                 CantSaveToast(dir, "video");
                 break;
             }
-            {
-                // The word overlay hides mpv's subtitles while paused: a snapshot with subtitles
-                // shows them for that one frame (mpv runs the three in order).
-                SubtitleWords* words = Words();
-                const bool withSubs = app.config().GetBool("video.screenshotSubtitles");
-                const bool lend = withSubs && words && words->HidesMpvSubs();
-                if (lend) p.SetProperty("sub-visibility", true);
-                p.Screenshot({}, withSubs);
-                if (lend) p.SetProperty("sub-visibility", false);
-            }
+            p.Screenshot({}, app.config().GetBool("video.screenshotSubtitles"));
             SavedToast(Fmt(Tr(L"Snapshot saved to {0}"), {dir}), "snapshot", dir, false);
             break;
         }
@@ -831,12 +804,6 @@ void Run(Action a) {
             break;
         case Action::Quit: app.Quit(); break;
         case Action::CommandPalette: ShowCommandPalette(); break;
-        case Action::SubtitleWords:
-            if (!s.fileLoaded || !w) break;
-            if (!app.PlayerShown()) app.ShowPlayer(true);
-            if (w->PictureInPicture()) w->SetPictureInPicture(false);
-            if (SubtitleWords* words = Words()) words->StartKeyboard();
-            break;
         case Action::JumpTo0: case Action::JumpTo10: case Action::JumpTo20: case Action::JumpTo30:
         case Action::JumpTo40: case Action::JumpTo50: case Action::JumpTo60: case Action::JumpTo70:
         case Action::JumpTo80: case Action::JumpTo90: {

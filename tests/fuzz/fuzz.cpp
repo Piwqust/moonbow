@@ -12,7 +12,6 @@
 
 #include "../../src/app/player/Episodes.h"
 #include "../../src/app/player/Lyrics.h"
-#include "../../src/app/player/SubText.h"
 #include "../../src/core/Json.h"
 #include "../../src/core/Skin.h"
 #include "../../src/library/Playlists.h"
@@ -82,12 +81,6 @@ void FuzzSkin(const uint8_t* d, size_t n) {
     skin::Parse(Text(d, n));
 }
 
-void FuzzAss(const uint8_t* d, size_t n) {
-    const std::wstring w = Wide(d, n);
-    app::subtext::ParseEvents(w);
-    app::subtext::ParseAssHeader(w);
-}
-
 void FuzzM3u(const uint8_t* d, size_t n) {
     static const std::wstring path = [] {
         wchar_t tmp[MAX_PATH];
@@ -118,7 +111,7 @@ struct Target {
 
 constexpr Target kTargets[] = {
     {"tags", FuzzTags}, {"json", FuzzJson}, {"lyrics", FuzzLyrics}, {"skin", FuzzSkin},
-    {"ass", FuzzAss},   {"m3u", FuzzM3u},   {"episode", FuzzEpisode},
+    {"m3u", FuzzM3u},   {"episode", FuzzEpisode},
 };
 
 const Target* Find(const char* name) {

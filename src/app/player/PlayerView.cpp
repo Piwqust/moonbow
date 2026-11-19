@@ -16,7 +16,6 @@
 #include "app/player/PanelTabs.h"
 #include "app/player/PlayerOverlays.h"
 #include "app/player/SubStyle.h"
-#include "app/player/SubWords.h"
 #include "audio/LoopbackSupport.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
@@ -326,9 +325,6 @@ public:
             SeekEdge(edgeSide_);
             return;
         }
-        // On the subtitle line, when a click doesn't pause by itself: pause for the words.
-        if (Host* h = GetHost(); h && owner_->words_->ClaimVideoClick(h->MousePos().x, h->MousePos().y, owner_->SubtitleRect()))
-            return;
         // Settings > Controls > Mouse; play/pause by default, like MPC-HC (a double click undoes it).
         pausedByClick_ = PS().fileLoaded && TheApp().config().GetString("controls.singleClick") == "playPause";
         VideoSingleClick();
@@ -541,10 +537,6 @@ PlayerView::PlayerView(MainWindow* window) : window_(window) {
     // Children paint first-to-last and are hit-tested last-to-first: whatever may lie over the
     // full-size video (the fullscreen side panel, the chips, the bar) comes after it.
     video_ = Add<VideoArea>(window, this);
-    // Right above the video: everything else (panels, chips, the bar) still takes clicks first.
-    words_ = Add<SubtitleWords>(window);
-    words_->forwardDoubleClick = [this](const MouseEvent& e) { return video_->OnDoubleClick(e); };
-    words_->fallbackMenu = [this](const MouseEvent& e) { ShowVideoContextMenu(GetHost(), {e.x, e.y}); };
     music_ = AddChild(CreateMusicView());
     music_->visible = false;
     auto* dock = Add<Panel>();
@@ -658,8 +650,7 @@ Rect PlayerView::PictureRect() const {
 float PlayerView::SubtitleBand(float h) const {
     const PlayerState& s = PS();
     const LiveValues& lv = Live().V();
-    // Hidden from mpv only while the word overlay draws the same line.
-    const bool shown = (lv.subVisible || words_->HidesMpvSubs()) && std::any_of(s.tracks.begin(), s.tracks.end(), [](const Track& t) {
+    const bool shown = lv.subVisible && std::any_of(s.tracks.begin(), s.tracks.end(), [](const Track& t) {
         return t.selected && t.type == L"sub";
     });
     if (!shown || h <= 0) return 0;
@@ -672,17 +663,6 @@ float PlayerView::SubtitleBand(float h) const {
         return static_cast<float>((lines + margin * h / 720) / scale + raised);
     }
     return static_cast<float>((lines + margin) / 720 * h + raised);
-}
-
-// Where a click means the subtitle line: the band above, lifted over a floating bar.
-Rect PlayerView::SubtitleRect() const {
-    const bool immersive = window_->IsFullscreen() || window_->UiHidden();
-    const Rect v = video_->Inner(immersive);
-    const bool over = (immersive || window_->BarOverlays()) && bar_->visible;
-    const float lift = over ? std::max(0.0f, v.Bottom() - bar_->rect.y) : 0.0f;
-    const float band = std::max(SubtitleBand(v.h), v.h * 0.12f);
-    const float top = std::max(v.y, v.Bottom() - lift - band - 12);
-    return {v.x, top, v.w, v.Bottom() - top};
 }
 
 void PlayerView::OnLayout() {
@@ -759,8 +739,6 @@ void PlayerView::OnLayout() {
     const float barSpace = barH + (floats ? kFloatMargin : 0.0f);
     pip_->visible = pip;
     if (pip) pip_->Arrange(rect);
-    words_->Place(audioOnly ? Rect{} : video_->Inner(immersive));
-    if (words_->visible) words_->Arrange(words_->Bounds());
 
     // Only once mpv has nothing left to try: a failed file in a queue is skipped (a toast says so),
     // and the card would flash with the next file's name.
@@ -775,8 +753,8 @@ void PlayerView::OnLayout() {
 
     // Bottom-right of the picture, above a floating bar and above the subtitle lines; top-right
     // when that would put them in the upper half of a small picture.
-    // A floating bar lifts the subtitles above it too (MainWindow::UpdateSubtitleLift). Its room
-    // stays reserved while it is hidden: the chips dropped 72 DIP in one frame as it faded out.
+    // The floating bar's room stays reserved while it is hidden: the chips dropped 72 DIP in one
+    // frame as it faded out.
     const Rect v = video_->Inner(immersive);
     const float lift = immersive || overlay ? barSpace : 0.0f;
     const float bottom = v.Bottom() - lift - std::max(20.0f, SubtitleBand(v.h) + 12);
@@ -890,7 +868,6 @@ void PlayerView::PaintOver(Painter& p) {
     const Rect video = video_->Inner(immersive);
     const bool pip = window_->PictureInPicture();
     if (!pip) stats_->Paint(p, video);
-    words_->Frame();
 
     const float info = PaintTopInfo(p);
     if (video_->Holding()) {

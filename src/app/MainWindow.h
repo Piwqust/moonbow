@@ -49,7 +49,6 @@ public:
     // Pointer moved to (x, y): like PokeChrome, but while the controls are hidden a move of a few
     // pixels (a nudged desk, a jittery sensor) doesn't bring them back.
     void PointerMoved(float x, float y);
-    void UpdateSubtitleLift();
 
     // Picture in Picture: compact always-on-top video; off restores the previous placement.
     void SetPictureInPicture(bool on);
@@ -81,8 +80,6 @@ private:
     HWND video_ = nullptr;
     ui::Rect videoRect_{};
     ui::Point lastPointer_{-1000, -1000};
-    int appliedSubMargin_ = -1;  // sub-margin-y last sent to mpv (UpdateSubtitleLift)
-    uint64_t subMarginToken_ = 0;
     bool videoWanted_ = false;
     RECT appliedVideo_{-1, -1, -1, -1};
     RECT aheadVideo_{};  // where mpv's window goes with the size a frame is drawn ahead for

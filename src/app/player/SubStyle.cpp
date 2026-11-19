@@ -48,7 +48,7 @@ std::wstring ResolveFont(std::wstring font) {
     return font;
 }
 
-// "Inter SemiBold" is how libass finds that face; DirectWrite knows it as Inter at 600.
+// "Segoe UI Semibold" is how libass finds that face; DirectWrite knows it as Segoe UI at 600.
 void SplitWeight(SubtitleStyle& s) {
     static const std::pair<const wchar_t*, int> kWeights[] = {
         {L" Light", 300}, {L" Medium", 500}, {L" SemiBold", 600}, {L" Semibold", 600}, {L" Bold", 700}};
@@ -92,27 +92,22 @@ SubtitleStyle ReadSubtitleStyle(const Config& c) {
 }
 
 const std::vector<SubtitlePreset>& SubtitlePresets() {
-    // Inter is bundled (Player.cpp puts it in mpv's fonts folder); the others come with Windows.
-    // The shadow takes the box color in mpv, so it is set too.
+    // The usual looks of streaming players and caption settings (Netflix, YouTube, Apple TV): white
+    // in Windows' own sans-serif, kept sharp, with a thin outline, a drop shadow or a box. libass
+    // finds "Segoe UI Semibold" by its legacy family name. The shadow takes the box color in mpv.
     static const std::vector<SubtitlePreset> presets = {
-        // The player's font with no hard edge: the outline is blurred into a soft dark halo (libass
-        // blurs only the outline, the letters stay sharp) over a close shadow, as Netflix and Apple TV.
-        {"moonbow", L"Moonbow", L"The player's font and a soft shadow", "Inter SemiBold", false, "#FFFFFF", "thin",
-         "#000000", true, "none", "#000000", 60, 2},
-        // A crisp thin outline: reads on the brightest frame.
-        {"outline", L"Outlined", L"Reads on the brightest frame", "Inter SemiBold", false, "#FFFFFF", "thin", "#000000",
-         true, "none", "#000000", 60, 0.5},
-        // White on a translucent box in the player's night color (Apple's "Transparent Background").
-        {"box", L"Box", L"White text on a translucent box", "Inter Medium", false, "#FFFFFF", "thin", "#0F121A", false,
-         "box", "#0F121A", 70, 0},
+        {"standard", L"Standard", L"Clear letters with a thin outline", "Segoe UI Semibold", false, "#FFFFFF", "thin",
+         "#000000", true, "none", "#000000", 60, 0},
+        {"shadow", L"Shadow", L"No outline, a shadow under the letters", "Segoe UI Semibold", false, "#FFFFFF", "none",
+         "#000000", true, "none", "#000000", 80, 0},
+        // YouTube's default: white on black at 75 %.
+        {"box", L"Box", L"White text on a dark translucent box", "Segoe UI", false, "#FFFFFF", "thin", "#000000",
+         false, "box", "#000000", 75, 0},
+        {"yellow", L"Yellow", L"As on DVDs", "Segoe UI Semibold", false, "#FFE14D", "thin", "#000000", true, "none",
+         "#000000", 60, 0},
         // mpv's own look.
         {"classic", L"Classic", L"As in plain mpv", "", false, "#FFFFFF", "normal", "#000000", true, "none", "#000000",
          60, 0},
-        // The DVD yellow.
-        {"yellow", L"Yellow", L"As on DVDs", "", true, "#FFE14D", "normal", "#000000", true, "none", "#000000", 60, 0},
-        // A book face in warm white.
-        {"book", L"Book", L"A serif face in warm white", "Georgia", false, "#F6F1E7", "thin", "#000000", true, "none",
-         "#000000", 60, 1.5},
     };
     return presets;
 }

@@ -93,7 +93,6 @@ MainWindow::MainWindow() = default;
 
 MainWindow::~MainWindow() {
     if (chromeTimer_) CancelTimer(chromeTimer_);
-    if (subMarginToken_) TheApp().config().Unsubscribe(subMarginToken_);
 }
 
 bool MainWindow::Create() {
@@ -139,11 +138,6 @@ bool MainWindow::Create() {
         return IsFullscreen() && ChromeOpacity() > 0.5f ? 72.0f : 56.0f;
     };
     toastBand = [this] { return TheApp().PlayerShown() ? player_->ToastBand() : Rect{0, 0, ClientSize().w, 0}; };
-    // A new base margin from Settings is what mpv has now; recompute the lift on top of it.
-    subMarginToken_ = TheApp().config().Subscribe("subtitles.marginBottom", [this](const std::string&) {
-        appliedSubMargin_ = -1;
-        RequestLayout();
-    });
 
     onKey = [this](const KeyEvent& e) {
         // The Menu key (Shift+F10) where the focus has no menu of its own: the video's, as a right
@@ -431,33 +425,7 @@ UINT MainWindow::ContentCapMs() {
     return TheApp().OpensFileAtStart() ? 700 : 400;
 }
 
-// While the control bar floats over the picture, subtitles move up above it (as in uosc and
-// YouTube) and go back down when it hides. mpv's sub-margin-y is in pixels of a 720-line OSD.
-void MainWindow::UpdateSubtitleLift() {
-    Player& mpv = TheApp().player();
-    const PlayerState& s = mpv.State();
-    if (!mpv.Ready() || !s.fileLoaded) return;
-    const int base = static_cast<int>(std::lround(TheApp().config().GetDouble("subtitles.marginBottom")));
-    int margin = base;
-    const float h = ClientSize().h;
-    if (player_ && player_->visible && player_->Bar() && player_->Bar()->visible && s.hasVideo && !pip_ &&
-        BarOverlays() && chrome_.Target() > 0.5f && h > 0) {
-        const float lift = h - player_->Bar()->rect.y + 8;
-        margin = base + static_cast<int>(std::lround(std::max(0.0f, lift) / h * 720));
-    } else if (pip_ && player_ && player_->visible && s.hasVideo && player_->PipControlsShown() && h > 0) {
-        // PiP: above the overlay's seek bar (16 DIP from the bottom), so it doesn't strike the line through.
-        margin = base + static_cast<int>(std::lround(26.0f / h * 720));
-    }
-    // Above the seek bar's frame preview while it shows, not under it.
-    if (const Rect v = player_ && !pip_ ? player_->VideoRect() : Rect{}; SeekPreviewTop() > 0 && v.h > 0)
-        margin = std::max(margin, base + static_cast<int>(std::lround(std::max(0.0f, v.Bottom() - SeekPreviewTop() + 8) / v.h * 720)));
-    if (margin == appliedSubMargin_) return;
-    appliedSubMargin_ = margin;
-    mpv.SetProperty("sub-margin-y", std::to_string(margin));
-}
-
 void MainWindow::OnLayoutDone() {
-    if (!DrawingAhead()) UpdateSubtitleLift();
     // Where should the video be this frame?
     Rect target{};
     if ((TheApp().PlayerShown() || TheApp().PlayerPending()) && player_)

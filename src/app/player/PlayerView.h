@@ -14,7 +14,6 @@ class NextEpisodeCard;
 class SkipChapterButton;
 class LibraryPane;
 class NavSidebar;
-class SubtitleWords;
 
 // The player screen: optional side panel (icon rail + compact library list),
 // the video (or the music view for audio files) and the control bar.
@@ -27,8 +26,6 @@ public:
     void SetSidePanel(bool shown);
     bool SidePanel() const { return sideWanted_; }
     ControlBar* Bar() const { return bar_; }
-    // Clickable subtitle words on pause (SubWords.h).
-    SubtitleWords* Words() const { return words_; }
     // Picture in Picture: the hover controls are up, with their seek bar along the bottom edge.
     bool PipControlsShown() const;
 
@@ -46,7 +43,6 @@ public:
 
     void OnLayout() override;
     float SubtitleBand(float h) const;
-    ui::Rect SubtitleRect() const;
     void Paint(ui::Painter& p) override;
     void PaintOver(ui::Painter& p) override;
 
@@ -65,7 +61,6 @@ private:
     ui::Widget* sidePane_ = nullptr;  // the library pane next to the rail in side_
     ErrorCard* error_ = nullptr;
     VideoArea* video_ = nullptr;
-    SubtitleWords* words_ = nullptr;
     ui::Widget* music_ = nullptr;
     ui::Widget* dock_ = nullptr;  // the queue pinned beside the music view (QueueDockSide)
     ui::Widget* pip_ = nullptr;

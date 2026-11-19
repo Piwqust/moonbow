@@ -14,11 +14,6 @@ float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double se
 // Left edge of a box `w` wide centred on `x`: kept over `track` while the track is wider than the
 // box, else inside `bounds` 8 DIP from its edges (small windows).
 float ClampedLeft(float x, float w, const ui::Rect& track, const ui::Rect& bounds);
-// Top of the preview shown now (window DIPs), 0 while none shows: the subtitles move above it
-// instead of hiding under it (MainWindow::UpdateSubtitleLift). The seek bar hides it when the
-// pointer leaves.
-float SeekPreviewTop();
-void HideSeekPreview();
 // Stops the worker (at exit).
 void ShutdownSeekPreview();
 

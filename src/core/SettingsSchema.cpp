@@ -2058,7 +2058,7 @@ void BuildMedia(Builder& b) {
     b.Info("subtitles.preview", L"Subtitle example", L"Пример субтитров", "subtitle-preview")
         .Inferred()
         .Basic("", L"", L"");
-    b.Text("subtitles.font", L"Font", L"Шрифт", "Inter SemiBold")
+    b.Text("subtitles.font", L"Font", L"Шрифт", "Segoe UI Semibold")
         .Hint(L"System, sans-serif", L"Системный, без засечек")
         .Desc(L"Font for text subtitles. Leave empty for the default sans-serif font.",
               L"Шрифт текстовых субтитров. Если пусто — стандартный шрифт без засечек.")
@@ -2113,7 +2113,7 @@ void BuildMedia(Builder& b) {
         .Unit(L"%", L"%")
         .When("subtitles.background", "box")
         .MpvBuild("sub-back-color", BuildSubBackColor);
-    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 2)
+    b.Slider("subtitles.blur", L"Edge softness", L"Размытие краёв", 0, 20, 0.5, 0)
         .Desc(L"Blur the edges of the text and its outline. 0 keeps them sharp.",
               L"Размывать края текста и обводки. 0 — чёткие края.")
         .Mpv("sub-blur");
@@ -2143,23 +2143,6 @@ void BuildMedia(Builder& b) {
         .Desc(L"Override fonts and colors of .ass subtitles. May break karaoke and signs.",
               L"Заменять шрифты и цвета субтитров .ass. Может испортить караоке и надписи.")
         .MpvBool("sub-ass-override", "force", "scale");
-
-    // Read by app/player/SubWords.cpp. The links open in the browser only on a click.
-    b.Sec("words", L"Words in subtitles", L"Слова в субтитрах");
-    b.Toggle("subtitles.wordPicker", L"Pick words on pause", L"Выбор слов на паузе", true)
-        .Desc(L"On pause, a click on a word in the subtitles copies it or looks it up in a dictionary or a translator. "
-              L"Shift-click or drag to pick several words; W does it from the keyboard.",
-              L"На паузе щелчок по слову в субтитрах копирует его или ищет в словаре и переводчике. Несколько слов — "
-              L"щелчок с Shift или протягивание; с клавиатуры — W.");
-    b.Text("subtitles.dictionaryUrl", L"Dictionary link", L"Ссылка на словарь",
-           "https://{lang}.wiktionary.org/w/index.php?search={text}")
-        .Desc(L"Opened in the browser. {text} is replaced with the words, {lang} with the interface language.",
-              L"Открывается в браузере. {text} заменяется словами, {lang} — языком интерфейса.")
-        .When("subtitles.wordPicker", "true");
-    b.Text("subtitles.translateUrl", L"Translator link", L"Ссылка на переводчик",
-           "https://translate.google.com/?sl=auto&tl={lang}&text={text}&op=translate")
-        .Desc(L"Opened in the browser, like the dictionary link.", L"Открывается в браузере, как и ссылка на словарь.")
-        .When("subtitles.wordPicker", "true");
 
     // ===== Library =====
     b.Cat("library", "media", "folder", L"Library", L"Медиатека");

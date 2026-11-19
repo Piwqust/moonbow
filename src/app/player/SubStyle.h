@@ -1,6 +1,6 @@
 #pragma once
-// The Moonbow subtitle style of Settings > Subtitles as Direct2D draws it: the word overlay
-// (SubWords.cpp), the Settings preview and the player's subtitle band read it here, once.
+// The Moonbow subtitle style of Settings > Subtitles as Direct2D draws it: the Settings preview
+// and the player's subtitle band read it here, once.
 #include "ui/Types.h"
 
 #include <string>
@@ -12,7 +12,7 @@ namespace app {
 
 struct SubtitleStyle {
     // mpv's generic families resolved as libass does on Windows, as a DirectWrite family: a weight
-    // in the name ("Inter SemiBold", which libass matches by its legacy family) moves to `weight`.
+    // in the name ("Segoe UI Semibold", which libass matches by its legacy family) moves to `weight`.
     std::wstring font;
     int weight = 400;
     float size = 38;    // mpv's sub-font-size: line height in pixels of a 720-line frame

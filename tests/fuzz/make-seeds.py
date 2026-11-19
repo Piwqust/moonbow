@@ -62,16 +62,6 @@ def text_seeds():
     write("lyrics/cp1251.lrc", "[00:01.00]Привет\r\n[00:02.00]мир\r\n", "cp1251")
     write("lyrics/utf16.lrc", "\ufeff[00:01.00]UTF-16 строка\r\n", "utf-16-le")
 
-    write("ass/events.ass",
-          "[Script Info]\nPlayResX: 1920\nPlayResY: 1080\n\n[V4+ Styles]\n"
-          "Format: Name, Fontname, Fontsize, PrimaryColour, Alignment, MarginL, MarginR, MarginV\n"
-          "Style: Default,Arial,48,&H00FFFFFF,2,10,10,10\n\n[Events]\n"
-          "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-          r"Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\an8\i1}Наверху{\i0}\Nвторая {\b1}строка{\b0}" "\n"
-          r"Dialogue: 0,0:00:04.00,0:00:05.00,Default,,0,0,0,,{\p1}m 0 0 l 10 10{\p0}text\h\n" "\n")
-    write("ass/sub-text.txt", r"1,0,Default,,0000,0000,0000,,Hello {\a6}world" "\n"
-                              r"2,0,Default,,0,0,0,,{\pos(10,20)}Second\Nline" "\n")
-
     write("m3u/ext.m3u8", "\ufeff#EXTM3U\r\n#EXTINF:123,Artist - Title\r\nmusic\\song.mp3\r\n#EXTINF:-1,Radio\r\n"
                           "https://example.org/stream\r\nC:\\Media\\film.mkv\r\n..\\..\\up.flac\r\n"
                           "\\\\server\\share\\x.mp4\r\nfile:///C:/Media/a%20b.mp3\r\n")

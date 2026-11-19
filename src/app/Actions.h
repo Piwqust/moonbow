@@ -30,8 +30,6 @@ enum class Action : int {
     JumpTo0, JumpTo10, JumpTo20, JumpTo30, JumpTo40, JumpTo50, JumpTo60, JumpTo70, JumpTo80, JumpTo90,
     // Settings > Controls > Long skip (5 min by default).
     SeekForwardXL, SeekBackwardXL,
-    // Pick a word in the subtitles from the keyboard (SubWords.h).
-    SubtitleWords,
     // Opens or closes the audio meters window (Settings > Interface > Separate windows).
     AudioMeters,
     // Ctrl+K: one search over the commands and the settings.
