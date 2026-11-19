@@ -7,7 +7,7 @@ namespace app {
 
 // Frame previews for the seek bar tooltip. A worker thread keeps one paused libmpv instance
 // (like mpv's thumbfast) that renders frames of the hovered time with the software render API,
-// 192×108 DIPs at the window's scale: keyframes while the cursor moves, the exact frame once it rests.
+// 256×144 DIPs at the window's scale: keyframes while the cursor moves, the exact frame once it rests.
 // Paints the preview above the time tooltip of `track`, clamped into `bounds` (the window);
 // returns its height or 0.
 float PaintSeekPreview(ui::Painter& p, const ui::Rect& track, float x, double seconds, const ui::Rect& bounds);

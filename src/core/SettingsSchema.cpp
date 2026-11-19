@@ -934,7 +934,7 @@ void BuildApp(Builder& b) {
            {{"never", L"Never", L"Никогда"},
             {"fullscreen", L"In fullscreen", L"В полноэкранном режиме"},
             {"always", L"Always", L"Всегда"}},
-           "fullscreen")
+           "never")
         .Desc(L"Show a thin progress line along the bottom of the video while the controls are hidden.",
               L"Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.");
     // Read by app/player/ControlBar.cpp (SeekBar::Paint).

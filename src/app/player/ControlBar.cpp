@@ -814,6 +814,7 @@ std::unique_ptr<Widget> CreateControl(ControlId id) {
 SeekBar::SeekBar() {
     interactive = true;
     focusable = true;
+    cursor = IDC_HAND;  // a click lands right there (MPC-HC)
     width = Length::Grow();
     height = Length::Px(32);
     conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
@@ -841,7 +842,9 @@ bool SeekBar::OnMouseDown(const MouseEvent& e) {
     dragging_ = true;
     dragFrom_ = s.position;
     dragTime_ = TimeAt(e.x);
-    TheApp().player().SeekAbsolute(dragTime_, false);
+    // A click goes to the exact frame under the pointer; a drag then scrubs by keyframes (fast)
+    // and lands exactly on release.
+    TheApp().player().SeekAbsolute(dragTime_, true);
     Invalidate();
     return true;
 }

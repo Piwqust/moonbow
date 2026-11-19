@@ -24,9 +24,9 @@ namespace app {
 
 namespace {
 
-constexpr int kW = 192, kH = 108;  // the preview box in DIPs; frames are this times the UI scale
+constexpr int kW = 256, kH = 144;  // the preview box in DIPs; frames are this times the UI scale
 constexpr size_t kMaxFrames = 128;     // grid cache of one file, ~10 MB
-constexpr double kRestMs = 150;        // the cursor rests: decode the exact frame
+constexpr double kRestMs = 70;         // the cursor rests: decode the exact frame
 constexpr double kPrefetchMs = 1500;   // neighbours only while the cursor moved recently
 constexpr double kIdleMs = 30000;      // then the preview instance is shut down
 constexpr double kFrameTimeoutMs = 4000;
@@ -317,11 +317,12 @@ private:
             // Read as little as possible: no cache (above), no read-ahead, no back buffer.
             {"demuxer-readahead-secs", "0"}, {"demuxer-max-bytes", "2MiB"},
             {"demuxer-max-back-bytes", "0"}, {"demuxer-seekable-cache", "no"},
-            // Decode fast rather than pretty: no loop filter, no bit-exact tricks, one frame early.
-            {"vd-lavc-skiploopfilter", "all"}, {"vd-lavc-fast", "yes"}, {"vd-lavc-threads", "2"},
+            // Decode fast: no bit-exact tricks, one frame early. The loop filter is skipped only on
+            // frames nothing refers to: skipping it on the others smeared exact frames deep in a GOP.
+            {"vd-lavc-skiploopfilter", "nonref"}, {"vd-lavc-fast", "yes"}, {"vd-lavc-threads", "4"},
             {"video-latency-hacks", "yes"}, {"hr-seek-framedrop", "yes"}, {"hwdec-extra-frames", "0"},
             // The thumbnail scale filter (vf) is set per frame size in Decode.
-            {"sws-scaler", "fast-bilinear"}, {"sws-allow-zimg", "no"}, {"hwdec", "no"},
+            {"sws-scaler", "area"}, {"sws-allow-zimg", "no"}, {"hwdec", "no"},
         };
         for (auto& kv : opts) api.mpv_set_option_string(h_, kv[0], kv[1]);
         if (api.mpv_initialize(h_) < 0) return Close(), false;
@@ -343,7 +344,7 @@ private:
         pixH_ = h;
         char vf[160];
         snprintf(vf, sizeof(vf),
-                 "scale=w=%d:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear", w, h);
+                 "scale=w=%d:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=area", w, h);
         TheApp().player().Api().mpv_set_option_string(h_, "vf", vf);
         loaded_.clear();  // the filter applies from the next load
         return true;
