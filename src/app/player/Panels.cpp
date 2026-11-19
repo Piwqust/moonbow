@@ -145,16 +145,20 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
     switch (g) {
         case Group::Lists:
         {
-            std::vector<Tab> tabs = {{L"Queue", "queue", "queue_twotone"},
-                                     {L"Bookmarks", "bookmarks", "bookmarks_twotone"}};
-            if (HasChaptersTab()) tabs.push_back({L"Chapters", "chapters", "chapters_twotone"});
+            std::vector<Tab> tabs = {{L"Queue"}, {L"Bookmarks"}};
+            if (HasChaptersTab()) tabs.push_back({L"Chapters"});
             pop->SetTabs(std::move(tabs), tab);
             pop->a11yName = Tr(L"Queue");  // as the bar's button that opens it
         }
             pop->build = [](int t) {
                 return t == 1 ? BuildBookmarksTab() : t == 2 ? BuildChaptersTab() : BuildQueueTab(false);
             };
-            pop->place = [] { return PlaceAboveBar(946); };
+            // As tall as the list, like the settings panels (a long queue scrolls), but never shorter
+            // while open: the tabs stay under the pointer when they switch or a row goes.
+            pop->place = [raw, tallest = 300.0f]() mutable {
+                tallest = std::max(tallest, raw->NaturalHeight());
+                return PlaceAboveBar(tallest);
+            };
             break;
         case Group::Mini:
             pop->SetTitle(Tr(L"Queue"));

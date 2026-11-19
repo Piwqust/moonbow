@@ -28,11 +28,9 @@ ui::Color SectionLine();
 
 struct Tab {
     std::wstring label;
-    std::string icon;        // normal icon
-    std::string iconActive;  // selected (two-tone) icon; falls back to `icon`
 };
 
-// Tabs on bgDeep with an accent underline under the selected one. Left/Right switch tabs.
+// Words in a row with a line under the selected one. Left/Right switch tabs.
 class TabBar : public ui::Widget {
 public:
     TabBar(std::vector<Tab> tabs, int selected);
@@ -59,7 +57,6 @@ private:
     int hover_ = -1;
     ui::AnimFloat lineX_, lineW_;
     bool placed_ = false;
-    bool showIcons_ = true;
 };
 
 // --- popover frame ---------------------------------------------------------------------

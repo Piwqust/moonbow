@@ -148,6 +148,7 @@
 {L"Remove from queue", L"Убрать из очереди"},
 {L"“{0}” removed from the queue", L"«{0}» убрано из очереди"},
 {L"Queue cleared", L"Очередь очищена"},
+{L"Clear queue", L"Очистить очередь"},
 {L"Save as playlist", L"Сохранить как плейлист"},
 {L"Save as playlist…", L"Сохранить как плейлист…"},
 {L"From the library…", L"Из медиатеки…"},

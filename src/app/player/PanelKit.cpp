@@ -105,44 +105,27 @@ TabBar::TabBar(std::vector<Tab> tabs, int selected) : tabs_(std::move(tabs)), se
 }
 
 float TabBar::ContentWidth(const Tab& t) const {
-    return (showIcons_ ? 28.0f : 0.0f) + gfx::Text::Get().Measure(Tr(t.label.c_str()), TextStyle::Small).width;
+    return gfx::Text::Get().Measure(Tr(t.label.c_str()), TextStyle::BodyStrong).width;
 }
 
+// The tabs read like the settings panels' title: words in a row from the rows' left edge, the
+// selected one bright with a short line under it.
 void TabBar::OnLayout() {
-    // Tabs share the width (6 DIP inset on both sides) in proportion to their content. When
-    // icon + label leave too little air (four Russian tabs), the tabs show labels only.
-    const float avail = rect.w - 12;
-    const float n = tabs_.empty() ? 1.0f : static_cast<float>(tabs_.size());
-    std::vector<float> content;
-    float total = 0;
-    for (int pass = 0; pass < 2; ++pass) {
-        showIcons_ = pass == 0;
-        content.clear();
-        total = 0;
-        for (const Tab& t : tabs_) {
-            const float w = ContentWidth(t);
-            content.push_back(w);
-            total += w;
-        }
-        if ((avail - total) / n >= 28) break;
-    }
     widths_.clear();
-    const float extra = tabs_.empty() ? 0 : (avail - total) / n;
-    for (float w : content) widths_.push_back(std::max(40.0f, w + extra));
+    for (const Tab& t : tabs_) widths_.push_back(ContentWidth(t) + 24);
     const Rect r = TabRect(selected_);
-    const float lw = std::max(24.0f, r.w - (tabs_.size() > 3 ? 14.0f : 16.0f));
     if (!placed_) {
-        lineX_.Set(r.Cx() - lw / 2);
-        lineW_.Set(lw);
+        lineX_.Set(r.x + 12);
+        lineW_.Set(r.w - 24);
         placed_ = true;
-    } else if (std::abs(lineX_.Target() - (r.Cx() - lw / 2)) > 0.5f || std::abs(lineW_.Target() - lw) > 0.5f) {
-        lineX_.Set(r.Cx() - lw / 2);
-        lineW_.Set(lw);
+    } else if (std::abs(lineX_.Target() - (r.x + 12)) > 0.5f || std::abs(lineW_.Target() - (r.w - 24)) > 0.5f) {
+        lineX_.Set(r.x + 12);
+        lineW_.Set(r.w - 24);
     }
 }
 
 Rect TabBar::TabRect(int i) const {
-    float x = rect.x + 6;
+    float x = rect.x + 8;
     for (int k = 0; k < i && k < static_cast<int>(widths_.size()); ++k) x += widths_[static_cast<size_t>(k)];
     const float w = i >= 0 && i < static_cast<int>(widths_.size()) ? widths_[static_cast<size_t>(i)] : 0;
     return {x, rect.y, w, rect.h};
@@ -160,13 +143,12 @@ void TabBar::SetSelected(int i, bool animate) {
     if (i < 0 || i >= static_cast<int>(tabs_.size())) return;
     selected_ = i;
     const Rect r = TabRect(i);
-    const float lw = std::max(24.0f, r.w - (tabs_.size() > 3 ? 14.0f : 16.0f));
     if (animate && placed_) {
-        lineX_.To(r.Cx() - lw / 2, 180, Ease::Out);
-        lineW_.To(lw, 180, Ease::Out);
+        lineX_.To(r.x + 12, 180, Ease::Out);
+        lineW_.To(r.w - 24, 180, Ease::Out);
     } else {
-        lineX_.Set(r.Cx() - lw / 2);
-        lineW_.Set(lw);
+        lineX_.Set(r.x + 12);
+        lineW_.Set(r.w - 24);
     }
     Invalidate();
 }
@@ -180,25 +162,17 @@ void TabBar::Select(int i) {
 void TabBar::Paint(Painter& p) {
     const Palette& c = P();
     for (int i = 0; i < static_cast<int>(tabs_.size()); ++i) {
-        const Tab& t = tabs_[static_cast<size_t>(i)];
         const Rect r = TabRect(i);
         const bool sel = i == selected_;
         const bool hot = i == hover_ && IsHot();
-        const std::wstring label = Tr(t.label.c_str());
-        const float tw = gfx::Text::Get().Measure(label, TextStyle::Small).width;
-        const float x = std::round(r.Cx() - ContentWidth(t) / 2);
-        // Without the two-tone icon the selected label itself carries the state.
-        const Color fg = sel ? (showIcons_ ? c.textSecondary : c.textPrimary) : hot ? c.textSecondary : c.textTertiary;
-        const std::string& icon = sel && !t.iconActive.empty() ? t.iconActive : t.icon;
-        if (hot && !sel) p.Fill({r.x + 4, r.y + 8, r.w - 8, r.h - 16}, c.hover, 4);
-        if (showIcons_) p.Icon(icon, {x, r.y + 14, 20, 20}, sel ? c.textSecondary : fg, c.accent);
-        p.Text(label, {showIcons_ ? x + 28 : x, r.y + 14, tw + 2, 20}, TextStyle::Small, fg, HAlign::Leading,
-               VAlign::Center, 0);
+        p.Text(Tr(tabs_[static_cast<size_t>(i)].label.c_str()), {r.x + 12, r.y, r.w - 24, r.h - 1}, TextStyle::BodyStrong,
+               sel ? c.textPrimary : hot ? c.textSecondary : c.textTertiary, HAlign::Leading, VAlign::Center, 0);
     }
-    if (!tabs_.empty()) p.Fill({std::round(lineX_.Get()), rect.Bottom() - 2, std::round(lineW_.Get()), 2}, c.accent, 1);
+    if (!tabs_.empty())
+        p.Fill({std::round(lineX_.Get()), rect.Bottom() - 2, std::round(lineW_.Get()), 2}, c.textPrimary, 1);
     if (ShowFocusRing()) {
         const Rect r = TabRect(selected_);
-        PaintFocusRing(p, {r.x + 2, r.y + 6, r.w - 4, r.h - 12}, 4);
+        PaintFocusRing(p, {r.x + 4, r.y + 8, r.w - 8, r.h - 16}, 4);
     }
 }
 
@@ -341,17 +315,15 @@ void Popover::Paint(Painter& p) {
     if (tabs_ || !title_.empty()) {
         p.PushRoundClip(rect, radius);
         const Rect h{rect.x, rect.y, rect.w, kHeaderH};
-        if (tabs_) {
-            p.Fill(h, c.bgDeep);
-        } else {
+        if (!tabs_) {
             // A plain title: the panel's name on its own ground, at the rows' left edge; an inner
             // page names itself after a back arrow.
             const bool inner = back_ && tab_ != 0;
             const std::wstring text = inner && pageTitle ? pageTitle(tab_) : title_;
             const float x = inner ? 46.0f : 20.0f;
             p.Text(text, {h.x + x, h.y, h.w - x - 20, h.h}, TextStyle::BodyStrong, c.textPrimary);
-            p.Fill({h.x, h.Bottom() - 1, h.w, 1}, SectionLine());
         }
+        p.Fill({h.x, h.Bottom() - 1, h.w, 1}, SectionLine());
         p.PopClip();
     }
 }

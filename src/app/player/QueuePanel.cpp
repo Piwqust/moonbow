@@ -174,27 +174,26 @@ ScrollView* ScrollerOf(Widget* w) {
 void SaveQueueAsPlaylist();
 std::vector<MenuItem> AddToQueueItems();
 
-// Small icon button for list headers (24 DIP icons in a 30×28 hit box).
-IconButton* HeaderButton(Widget* parent, const char* icon, const wchar_t* tip, std::function<void()> click, int box = 30,
-                         int iconSize = 24) {
-    auto* b = parent->Add<IconButton>(icon, Tr(tip), box, iconSize);
-    b->width = Length::Px(static_cast<float>(box));
-    b->height = Length::Px(28);
+// Small icon button for list headers (20 DIP icons, as in the settings rows, in a 32×32 hit box).
+IconButton* HeaderButton(Widget* parent, const char* icon, const wchar_t* tip, std::function<void()> click) {
+    auto* b = parent->Add<IconButton>(icon, Tr(tip), 32, 20);
+    b->width = Length::Px(32);
+    b->height = Length::Px(32);
     b->onClick = std::move(click);
     return b;
 }
 
-// Summary line + buttons, 68 DIP tall in the design (40 in the mini player).
+// Summary line + buttons; the summary starts at the rows' text edge.
 class ListHeader : public Widget {
 public:
     ListHeader(std::function<std::wstring()> text, bool compact) : text_(std::move(text)) {
         dir = Dir::Row;
         align = Align::Center;
         width = Length::Grow();
-        height = Length::Px(compact ? 40.0f : 68.0f);
-        pad = compact ? Insets{20, 0, 14, 0} : Insets{28, 0, 18, 0};
-        gap = compact ? 4.0f : 2.0f;  // seven buttons in the queue: room for "4 items · 4:20"
-        label_ = Add<Label>(L"", compact ? TextStyle::Small : TextStyle::Body, Tone::Tertiary);
+        height = Length::Px(compact ? 40.0f : 52.0f);
+        pad = compact ? Insets{20, 0, 14, 0} : Insets{20, 0, 12, 0};
+        gap = 2.0f;
+        label_ = Add<Label>(L"", TextStyle::Small, Tone::Tertiary);
         label_->width = Length::Grow();
         Refresh();
     }
@@ -217,7 +216,7 @@ public:
         focusable = true;
         width = Length::Grow();
         id = "queue-list";  // Panels.cpp gives it the keyboard when the queue opens
-        pad = compact ? Insets{12, 0, 12, 12} : Insets{20, 0, 20, 20};
+        pad = compact ? Insets{12, 0, 12, 12} : Insets{8, 4, 8, 8};
         queueConn_ = Connect(TheApp().queue().changed, [this] {
             // The rows changed under a drag (a removal, a new queue): its indices mean nothing now.
             dragging_ = false;
@@ -253,7 +252,7 @@ public:
     }
 
     float Pitch() const { return covers_ ? 60.0f : compact_ ? 31.0f : 44.0f; }
-    float RowH() const { return covers_ ? 54.0f : compact_ ? 26.0f : 32.0f; }
+    float RowH() const { return covers_ ? 54.0f : compact_ ? 26.0f : 40.0f; }
     int Count() const { return static_cast<int>(TheApp().queue().Items().size()); }
     Rect RowRect(int i) const {
         return {rect.x + pad.l, rect.y + pad.t + Pitch() * static_cast<float>(i), rect.w - pad.H(), RowH()};
@@ -356,39 +355,43 @@ public:
         const Palette& c = P();
         const bool current = i == TheApp().queue().Current();
         const bool hot = !dragging_ && i == hover_ && IsHot();
+        const float radius = compact_ ? 4.0f : kRadiusCard;
         if (floating) {
-            p.Shadow(r, 4, 10, 4, 0.35f);
-            p.Fill(r, c.bgMenu, 4);
-        } else if (current) {
-            p.Fill(r, c.accentFaint, 4);
+            p.Shadow(r, radius, 10, 4, 0.35f);
+            p.Fill(r, c.bgMenu, radius);
         }
-        // The selection (what Enter plays and Del removes) shows after a mouse click too; dimmer
-        // while the keyboard is elsewhere.
-        if (!floating && i == selected_) p.Fill(r, IsFocused() ? c.bgSelected : c.bgSelected.Fade(0.5f), 4);
-        if (!floating && hot) p.Fill(r, c.hover, 4);
-        // The selected, playing and hovered fills are near-equal greys with the neutral accents:
-        // an accent edge says which row Del removes and Enter plays (VF-03), dimmer unfocused.
-        if (!floating && i == selected_)
-            p.Fill({r.x + 1, r.y + 6, 3, r.h - 12}, IsFocused() ? c.accent : c.textTertiary, 1.5f);
-        if (!floating && i == selected_ && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, 4);
+        // The selection (what Enter plays and Del removes) shows once the user picks a row, by
+        // click or keyboard, not for the row the list starts on; dimmer while the keyboard is elsewhere.
+        const bool selected = !floating && i == selected_ && (picked_ || ShowFocusRing());
+        if (selected) p.Fill(r, IsFocused() ? c.bgSelected : c.bgSelected.Fade(0.5f), radius);
+        if (!floating && hot) p.Fill(r, c.hover, radius);
+        if (selected && IsFocused() && ShowFocusRing()) PaintFocusRing(p, r, radius);
         if (covers_) {
             PaintCoverRow(p, i, r, floating, hot, current);
             return;
         }
-        const float box = RowH();
+        // The icon column of the settings rows: the playing row's mark, the drag handle under the
+        // pointer, the position otherwise.
+        const float box = compact_ ? RowH() : 44.0f;
+        const Rect slot = compact_ ? Rect{r.x, r.y, box, r.h} : Rect{r.x + 2, r.y, 40, r.h};
         const bool handleHot = hot && hoverHandle_;
-        p.Icon("move", Rect{r.x, r.y, box, box}.Center(compact_ ? 18.0f : 24.0f, compact_ ? 18.0f : 24.0f),
-               handleHot || floating ? c.textPrimary : c.textTertiary);
+        if (floating || handleHot)
+            p.Icon("move", slot.Center(compact_ ? 18.0f : 20.0f, compact_ ? 18.0f : 20.0f), c.textPrimary);
+        else if (current)
+            p.Icon(PS().paused ? "pause" : "play", slot.Center(compact_ ? 14.0f : 16.0f, compact_ ? 14.0f : 16.0f),
+                   c.textPrimary);
+        else
+            p.Text(std::to_wstring(i + 1), slot, TextStyle::MonoSmall, c.textTertiary, HAlign::Center);
         const TextStyle ts = compact_ ? TextStyle::Small : TextStyle::Body;
-        const float textX = r.x + box + (compact_ ? 8.0f : 10.0f);
+        const float textX = r.x + box + (compact_ ? 8.0f : 0.0f);
         const double d = DurationOf(i);
         const std::wstring dur = d > 0 ? ClockTime(d) : L"";
         // Tabular figures, as in the library's lists: the lengths line up down the column.
         const TextStyle ds = compact_ ? TextStyle::MonoSmall : TextStyle::Mono;
         const float dw = dur.empty() ? 0.0f : gfx::Text::Get().Measure(dur, ds).width + 4;
         const bool showRemove = hot && !compact_ && !removeCold_;
-        const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - (compact_ ? 6.0f : 10.0f);
-        const Color fg = current ? c.accent : hot ? c.textPrimary : RowText();
+        const float right = r.Right() - (showRemove ? 28.0f : 0.0f) - (compact_ ? 6.0f : 12.0f);
+        const Color fg = current || hot ? c.textPrimary : RowText();
         const float avail = std::max(0.0f, right - textX - dw - 10);
         const RowInfo& info = Info(i);
         const std::wstring& title = info.title;
@@ -405,7 +408,7 @@ public:
             RowTip(*this, cut, artist.empty() ? title : title + L"\n" + artist);
         }
         if (showRemove) {
-            const Rect x{r.Right() - 26, r.Cy() - 12, 24, 24};
+            const Rect x{r.Right() - 32, r.Cy() - 12, 24, 24};
             if (hoverRemove_) p.Fill(x, c.hover, 4);
             p.Icon("close", x.Center(18, 18), hoverRemove_ ? c.textPrimary : c.textTertiary);
         }
@@ -548,6 +551,7 @@ public:
         downIndex_ = -1;
         if (i < 0 || !RowRect(i).Contains(e.x, e.y)) return true;
         selected_ = i;
+        picked_ = true;
         if (e.x < RowRect(i).x + RowH() + 4) {
             dragging_ = true;
             dragFrom_ = dropIndex_ = i;
@@ -607,6 +611,7 @@ public:
         const int n = Count();
         if (n == 0) return listKey && e.key != VK_RETURN;
         if (selected_ < 0) selected_ = std::max(0, TheApp().queue().Current());
+        if (listKey) picked_ = true;
         const bool move = e.mods.alt || e.mods.ctrl;
         int target = selected_;
         switch (e.key) {
@@ -688,7 +693,7 @@ public:
 
 private:
     bool OnRemoveButton(int i, float x) const {
-        return !compact_ && !removeCold_ && x >= RowRect(i).Right() - (covers_ ? 32 : 28);
+        return !compact_ && !removeCold_ && x >= RowRect(i).Right() - (covers_ ? 32 : 36);
     }
 
     void AutoScroll(float y) {
@@ -745,6 +750,7 @@ private:
     int dragFrom_ = 0, dropIndex_ = 0;
     float dragY_ = 0, grabDy_ = 0;
     bool scrolled_ = false;
+    bool picked_ = false;  // the user chose a row: the selection shows
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     ScopedConnection queueConn_, playerConn_, libConn_;
 };
@@ -840,14 +846,10 @@ void AddFilesToQueue() {
     if (wasEmpty || !PS().fileLoaded) TheApp().PlayIndex(TheApp().queue().Current() < 0 ? 0 : TheApp().queue().Current());
 }
 
-// Repeat button with a small "1" for repeat-one (the queue header and the control bar).
+// Repeat button with a small "1" for repeat-one (the control bar).
 class RepeatButton : public IconButton {
 public:
-    explicit RepeatButton(bool header) : IconButton("repeat_right", Tr(L"Repeat")) {
-        if (header) {
-            width = Length::Px(30);
-            height = Length::Px(28);
-        }
+    RepeatButton() : IconButton("repeat_right", Tr(L"Repeat")) {
         onClick = [] { Run(Action::ToggleRepeat); };
         conn_ = Connect(TheApp().queue().changed, [this] { Invalidate(); });
     }
@@ -869,24 +871,25 @@ private:
     ScopedConnection conn_;
 };
 
-class ShuffleButton : public IconButton {
-public:
-    ShuffleButton() : IconButton("shuffle_right", Tr(L"Shuffle")) {
-        width = Length::Px(30);
-        height = Length::Px(28);
-        onClick = [] { Run(Action::ToggleShuffle); };
-        conn_ = Connect(TheApp().queue().changed, [this] { Invalidate(); });
-    }
-    void Paint(Painter& p) override {
-        active = TheApp().queue().Shuffle();
-        tooltip = WithKey(Tr(L"Shuffle"), Action::ToggleShuffle);
-        IconButton::Paint(p);
-    }
-    void Describe(A11y& a) override { a.toggle = TheApp().queue().Shuffle() ? 1 : 0; }
-
-private:
-    ScopedConnection conn_;
-};
+// Everything except what is playing, in one change (one Remove per row was O(n²) and froze a
+// 5000-item queue for seconds), with an Undo.
+void ClearQueue() {
+    PlayQueue& q = TheApp().queue();
+    if (q.Items().size() <= (q.CurrentItem() ? 1u : 0u)) return;  // nothing to clear
+    const std::vector<QueueItem> before = q.Items();
+    const int cur = q.Current();
+    const std::wstring name = q.Name();
+    if (const QueueItem* item = q.CurrentItem()) q.Set({*item}, 0, name);
+    else q.Clear();
+    ShowToast(TheApp().main(), Tr(L"Queue cleared"), "remove", 5000, Tr(L"Undo"), [before, cur, name] {
+        // Only onto what the clear left: the playing item alone, or nothing.
+        PlayQueue& now = TheApp().queue();
+        const auto& left = now.Items();
+        const bool same =
+            cur >= 0 ? left.size() == 1 && left[0].path == before[static_cast<size_t>(cur)].path : left.empty();
+        if (same) now.Set(before, std::max(cur, 0), name);
+    });
+}
 
 // Column: header + scrolling list. Keeps the header text in sync.
 class QueueTab : public Widget {
@@ -896,53 +899,32 @@ public:
         width = Length::Grow();
         height = Length::Grow();
         header_ = Add<ListHeader>([] { return QueueSummary(); }, compact);
-        sort_ = HeaderButton(header_, "sort", L"Sort", [this] {
-            std::vector<MenuItem> items;
-            items.push_back({Tr(L"Sort by name"), L"", "", false, true, false, false, [] { SortQueue(0); }});
-            items.push_back({Tr(L"Sort by name, descending"), L"", "", false, true, false, false, [] { SortQueue(1); }});
-            items.push_back({Tr(L"Newest first"), L"", "", false, true, false, false, [] { SortQueue(3); }});
-            items.push_back({Tr(L"Oldest first"), L"", "", false, true, false, false, [] { SortQueue(4); }});
-            items.push_back({Tr(L"Largest first"), L"", "", false, true, false, false, [] { SortQueue(5); }});
-            items.push_back({Tr(L"Reverse order"), L"", "", false, true, false, false, [] { SortQueue(2); }});
-            ShowMenu(GetHost(), sort_->rect, std::move(items), Place::Below, 220);
-        });
-        if (!compact) {
-            header_->Add<RepeatButton>(true);
-            header_->Add<ShuffleButton>();
-        }
-        HeaderButton(header_, "remove", L"Remove selected", [this] {
-            const int sel = list_->Selected();
-            if (sel >= 0) {
-                list_->Remove(sel);
-                return;
-            }
-            // Nothing selected: clear everything except what is playing, in one change (one
-            // Remove per row was O(n²) and froze a 5000-item queue for seconds).
-            PlayQueue& q = TheApp().queue();
-            if (q.Items().size() <= (q.CurrentItem() ? 1u : 0u)) return;  // nothing to clear
-            const std::vector<QueueItem> before = q.Items();
-            const int cur = q.Current();
-            const std::wstring name = q.Name();
-            if (const QueueItem* item = q.CurrentItem()) q.Set({*item}, 0, name);
-            else q.Clear();
-            ShowToast(TheApp().main(), Tr(L"Queue cleared"), "remove", 5000, Tr(L"Undo"), [before, cur, name] {
-                // Only onto what the clear left: the playing item alone, or nothing.
-                PlayQueue& now = TheApp().queue();
-                const auto& left = now.Items();
-                const bool same = cur >= 0 ? left.size() == 1 && left[0].path == before[static_cast<size_t>(cur)].path
-                                           : left.empty();
-                if (same) now.Set(before, std::max(cur, 0), name);
-            });
-        });
-        HeaderButton(header_, "save", L"Save as playlist", [] { SaveQueueAsPlaylist(); });
+        // Two buttons, as the settings panels keep few choices in view: Add, and the rest in a menu
+        // (Repeat and Shuffle live in the Playback panel; Del or the row's x removes one row).
         add_ = HeaderButton(header_, "add", L"Add", [this] {
             ShowMenu(GetHost(), add_->rect, AddToQueueItems(), Place::Below, 200);
         });
+        more_ = HeaderButton(header_, "more", L"More", [this, compact, covers] {
+            auto item = [](const wchar_t* label, std::function<void()> fn, const char* icon = "") {
+                return MenuItem{Tr(label), L"", icon, false, true, false, false, std::move(fn)};
+            };
+            MenuItem sort = item(L"Sort", {}, "sort");
+            sort.enabled = TheApp().queue().Items().size() > 1;
+            sort.submenu = {item(L"Sort by name", [] { SortQueue(0); }),
+                            item(L"Sort by name, descending", [] { SortQueue(1); }),
+                            item(L"Newest first", [] { SortQueue(3); }),
+                            item(L"Oldest first", [] { SortQueue(4); }),
+                            item(L"Largest first", [] { SortQueue(5); }),
+                            item(L"Reverse order", [] { SortQueue(2); })};
+            std::vector<MenuItem> items{sort, item(L"Save as playlist…", [] { SaveQueueAsPlaylist(); }, "save")};
+            if (!compact && !covers && !PS().hasVideo)
+                items.push_back(item(L"Pin beside the music", [] { SetQueueDockSide("right"); }, "sidebar_right"));
+            items.push_back(MenuItem::Separator());
+            items.push_back(item(L"Clear queue", [] { ClearQueue(); }, "remove"));
+            ShowMenu(GetHost(), more_->rect, std::move(items), Place::Below, 240);
+        });
         // Music: the queue can stay beside the cover (PlayerView's dock) instead of this popover.
-        if (covers)
-            HeaderButton(header_, "close", L"Unpin the queue", [] { SetQueueDockSide(""); });
-        else if (!compact && !PS().hasVideo)
-            HeaderButton(header_, "sidebar_right", L"Pin beside the music", [] { SetQueueDockSide("right"); });
+        if (covers) HeaderButton(header_, "close", L"Unpin the queue", [] { SetQueueDockSide(""); });
         auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
@@ -956,8 +938,8 @@ public:
 
 private:
     ListHeader* header_;
-    IconButton* sort_ = nullptr;
     IconButton* add_ = nullptr;
+    IconButton* more_ = nullptr;
     QueueList* list_;
     ScopedConnection conn_, playerConn_, libConn_;
 };
@@ -971,7 +953,7 @@ public:
         focusable = true;
         dir = Dir::None;
         width = Length::Grow();
-        pad = {20, 0, 20, 20};
+        pad = {8, 4, 8, 8};
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & kChangeFile) {
                 CancelEdit();
@@ -996,18 +978,20 @@ public:
         at = {r.x + std::min(r.w / 2, 120.0f), r.Cy()};
         return true;
     }
-    static constexpr float kPitch = 44, kRowH = 32;
-    Rect RowRect(int i) const { return {rect.x + pad.l, rect.y + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH}; }
+    static constexpr float kPitch = 44, kRowH = 40;
+    Rect RowRect(int i) const {
+        return {rect.x + pad.l, rect.y + pad.t + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH};
+    }
     int RowAt(float y) const {
-        const int i = static_cast<int>(std::floor((y - rect.y) / kPitch));
+        const int i = static_cast<int>(std::floor((y - rect.y - pad.t) / kPitch));
         return i >= 0 && i < static_cast<int>(Marks().size()) ? i : -1;
     }
     Size MeasureContent(float availW, float) override {
         const size_t n = Marks().size();
-        return {availW, n == 0 ? 120.0f : kPitch * static_cast<float>(n) + pad.b};
+        return {availW, n == 0 ? 120.0f : pad.V() + kPitch * static_cast<float>(n) - (kPitch - kRowH)};
     }
     void OnLayout() override {
-        if (editor_) editor_->Arrange(RowRect(editIndex_).Inset({-4, 0, 140, 0}));
+        if (editor_) editor_->Arrange(RowRect(editIndex_).Inset({8, 4, 146, 4}));
     }
     void Paint(Painter& p) override {
         const Palette& c = P();
@@ -1027,18 +1011,19 @@ public:
             const int i = static_cast<int>(k);
             const Rect r = RowRect(i);
             const bool hot = i == hover_ && IsHot();
-            if (i == selected_) p.Fill(r, c.bgSelected, 4);
-            if (hot) p.Fill(r, c.hover, 4);
-            if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
+            if (i == selected_) p.Fill(r, c.bgSelected, kRadiusCard);
+            if (hot) p.Fill(r, c.hover, kRadiusCard);
+            if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, kRadiusCard);
             const std::wstring time = PreciseTime(marks[k].time);
             if (!(editor_ && editIndex_ == i)) {
                 const std::wstring name = BookmarkName(marks[k], k);
-                p.Text(name, {r.x, r.y, r.w - 130, r.h}, TextStyle::Body, hot ? c.textPrimary : RowText());
-                if (hot) RowTip(*this, TextCut(p, name, TextStyle::Body, r.w - 130), name);
+                const float w = r.w - 12 - 142;
+                p.Text(name, {r.x + 12, r.y, w, r.h}, TextStyle::Body, hot ? c.textPrimary : RowText());
+                if (hot) RowTip(*this, TextCut(p, name, TextStyle::Body, w), name);
             } else if (hot) {
                 tooltip.clear();
             }
-            p.Text(time, {r.Right() - 130, r.y, 126, r.h}, TextStyle::Mono, c.textTertiary, HAlign::Trailing);
+            p.Text(time, {r.Right() - 142, r.y, 130, r.h}, TextStyle::Mono, c.textTertiary, HAlign::Trailing);
         }
     }
     bool OnMouseMove(const MouseEvent& e) override {
@@ -1214,7 +1199,7 @@ public:
         interactive = true;
         focusable = true;
         width = Length::Grow();
-        pad = {20, 20, 20, 20};
+        pad = {8, 4, 8, 8};
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeChapters | kChangeFile)) {
                 InvalidateLayout();
@@ -1225,7 +1210,7 @@ public:
             }
         });
     }
-    static constexpr float kPitch = 44, kRowH = 32;
+    static constexpr float kPitch = 44, kRowH = 40;
     int Count() const { return static_cast<int>(PS().chapters.size()); }
     Rect RowRect(int i) const {
         return {rect.x + pad.l, rect.y + pad.t + kPitch * static_cast<float>(i), rect.w - pad.H(), kRowH};
@@ -1270,15 +1255,17 @@ public:
             const Rect r = RowRect(i);
             const bool hot = i == hover_ && IsHot();
             const bool isCur = i == cur;
-            if (isCur) p.Fill(r, c.accentFaint, 4);
-            if (hot) p.Fill(r, c.hover, 4);
-            if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, 4);
-            p.Text(std::to_wstring(i + 1), {r.x + 8, r.y, 32, r.h}, TextStyle::Body, isCur ? c.accent : c.accentMid);
+            if (hot) p.Fill(r, c.hover, kRadiusCard);
+            if (i == selected_ && ShowFocusRing()) PaintFocusRing(p, r, kRadiusCard);
+            // As the queue: the chapter playing now has the play mark in the number column.
+            const Rect slot{r.x + 2, r.y, 40, r.h};
+            if (isCur) p.Icon("play", slot.Center(16, 16), c.textPrimary);
+            else p.Text(std::to_wstring(i + 1), slot, TextStyle::MonoSmall, c.textTertiary, HAlign::Center);
             const std::wstring title = ch.title.empty() ? Fmt(Tr(L"Chapter {0}"), static_cast<long long>(i + 1)) : ch.title;
-            p.Text(title, {r.x + 48, r.y, r.w - 48 - 90, r.h}, TextStyle::Body,
-                   isCur ? c.accent : hot ? c.textPrimary : RowText());
-            if (hot) RowTip(*this, TextCut(p, title, TextStyle::Body, r.w - 48 - 90), title);
-            p.Text(FormatTime(ch.time, PS().duration >= 3600), {r.Right() - 90, r.y, 86, r.h}, TextStyle::Mono,
+            const float w = r.w - 44 - 102;
+            p.Text(title, {r.x + 44, r.y, w, r.h}, TextStyle::Body, isCur || hot ? c.textPrimary : RowText());
+            if (hot) RowTip(*this, TextCut(p, title, TextStyle::Body, w), title);
+            p.Text(FormatTime(ch.time, PS().duration >= 3600), {r.Right() - 102, r.y, 90, r.h}, TextStyle::Mono,
                    isCur ? c.textSecondary : c.textTertiary, HAlign::Trailing);
         }
     }
@@ -1358,7 +1345,7 @@ std::unique_ptr<Widget> BuildQueueTab(bool compact, bool covers) {
 }
 
 std::unique_ptr<IconButton> MakeRepeatButton() {
-    return std::make_unique<RepeatButton>(false);
+    return std::make_unique<RepeatButton>();
 }
 
 std::unique_ptr<Widget> BuildBookmarksTab() {
