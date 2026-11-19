@@ -1,4 +1,5 @@
 #include "app/Shell.h"
+#include "audio/LoopbackSupport.h"
 #include "library/MediaTypes.h"
 
 #include "Util.h"
@@ -301,6 +302,11 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Add subtitles", "subtitles", Action::OpenSubtitles));
     items.push_back(item(L"Media information", "info", Action::ShowInfo));
     items.push_back(MenuItem::Separator());
+    if (audio::ProcessLoopbackSupported()) {
+        MenuItem meters = item(L"Audio meters", "vu_twotone", Action::AudioMeters);
+        meters.checked = TheApp().config().GetBool("interface.metersWindow");
+        items.push_back(std::move(meters));
+    }
     items.push_back(item(L"Customize player", "edit", Action::CustomizePlayer));
     items.push_back(item(L"Keyboard shortcuts", "hotkeys", Action::KeyboardShortcuts));
     items.push_back(item(L"Settings", "settings", Action::Settings));

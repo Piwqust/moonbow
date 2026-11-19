@@ -217,6 +217,9 @@ class MusicView : public Widget {
 public:
     MusicView() {
         g_musicView = this;
+        // The view covers the video area: without this a right click on it opened nothing (the
+        // lyrics keep their own menu).
+        onContextMenu = [this](const MouseEvent& e) { ShowPlayerContextMenu(GetHost(), {e.x, e.y}); };
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeFile | kChangeMeta)) RefreshLyrics();
             if (m & kChangeTime) FollowTime();

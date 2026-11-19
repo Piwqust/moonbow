@@ -13,6 +13,7 @@
 #include "app/player/PlayerOverlays.h"
 #include "app/player/PlayerView.h"
 #include "app/player/SubWords.h"
+#include "audio/LoopbackSupport.h"
 
 #include <cmath>
 #include <cwctype>
@@ -100,6 +101,7 @@ const std::vector<ActionInfo>& Table() {
         {Action::Settings, "app.settings", L"Settings", L"App", {{'P', kCtrl}, {VK_OEM_COMMA, kCtrl}}},
         {Action::KeyboardShortcuts, "app.shortcuts", L"Keyboard shortcuts", L"App", {{VK_F1, kNone}, {VK_OEM_2, kCtrl}}},
         {Action::CustomizePlayer, "app.customize", L"Customize player", L"App", {}},
+        {Action::AudioMeters, "app.audio_meters", L"Audio meters", L"App", {{'M', kCtrlShift}}},
         {Action::Quit, "app.quit", L"Quit", L"App", {{'Q', kCtrl}}},
         {Action::JumpTo0, "playback.jump_0", L"Jump to 0%", L"Jump to position", {}},
         {Action::JumpTo10, "playback.jump_10", L"Jump to 10%", L"Jump to position", {}},
@@ -774,6 +776,11 @@ void Run(Action a) {
         case Action::Settings: app.OpenSettings(); break;
         case Action::KeyboardShortcuts: ShowKeyboardShortcutsDialog(); break;
         case Action::CustomizePlayer: ShowCustomizePlayerDialog(); break;
+        case Action::AudioMeters:
+            // Without process loopback (Windows before 10 2004) the window can't measure anything.
+            if (audio::ProcessLoopbackSupported())
+                app.config().SetBool("interface.metersWindow", !app.config().GetBool("interface.metersWindow"));
+            break;
         case Action::Quit: app.Quit(); break;
         case Action::SubtitleWords:
             if (!s.fileLoaded || !w) break;

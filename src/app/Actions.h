@@ -32,6 +32,8 @@ enum class Action : int {
     SeekForwardXL, SeekBackwardXL,
     // Pick a word in the subtitles from the keyboard (SubWords.h).
     SubtitleWords,
+    // Opens or closes the audio meters window (Settings > Interface > Separate windows).
+    AudioMeters,
     Count,
 };
 

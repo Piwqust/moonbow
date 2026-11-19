@@ -17,6 +17,7 @@
 #include "app/player/PlayerOverlays.h"
 #include "app/player/SubStyle.h"
 #include "app/player/SubWords.h"
+#include "audio/LoopbackSupport.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
 
@@ -235,6 +236,11 @@ void ShowVideoContextMenu(Host* host, Point at) {
     MenuItem stats = Item(L"Statistics", Action::ToggleStats, "wrench");
     stats.checked = app.config().GetBool("general.developerMode");
     items.push_back(stats);
+    if (audio::ProcessLoopbackSupported()) {
+        MenuItem meters = Item(L"Audio meters", Action::AudioMeters, "vu_twotone");
+        meters.checked = app.config().GetBool("interface.metersWindow");
+        items.push_back(std::move(meters));
+    }
     items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
     items.push_back(MenuItem::Separator());
 
