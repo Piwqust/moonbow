@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moonbow: интерфейс целиком</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600&family=Inter:wght@400;500&display=swap">
+<style>
+/* Moonbow's night palette (src/core/Skin.cpp) and its type: Onest for words, Inter for numbers. */
+:root {
+  color-scheme: dark;
+  --deep: #08090C;
+  --base: #0B0C10;
+  --raised: #131519;
+  --panel: #17191E;
+  --chrome: #191B20;
+  --card: #1C1E24;
+  --selected: #22252B;
+  --menu: #202329;
+  --hover: rgba(255,255,255,.06);
+  --line: #23262E;
+  --line-strong: #3D4048;
+  --ink: #EEF1F6;
+  --ink-2: #A7ABB3;
+  --ink-3: #8E939C;
+  --ink-4: #63676F;
+  --accent: #EEF1F6;
+  --on-accent: #0B0C10;
+  --words: "Onest", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --nums: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; animation: none !important; } }
+body { margin: 0; background: var(--base); color: var(--ink); font: 15px/1.55 var(--words); }
+.page { max-width: 1160px; margin: 0 auto; padding: 56px 24px 96px; }
+a { color: var(--ink); }
+
+/* type */
+h1 { font: 300 44px/1.1 var(--words); letter-spacing: -.01em; margin: 0 0 16px; text-wrap: balance; }
+h2 { font: 500 28px/1.2 var(--words); margin: 0 0 10px; text-wrap: balance; }
+h3 { font: 500 17px/1.3 var(--words); margin: 0 0 6px; }
+p { margin: 0 0 12px; max-width: 68ch; color: var(--ink-2); }
+.lead { font-size: 18px; color: var(--ink-2); max-width: 62ch; }
+.eyebrow { font: 500 12px/1 var(--words); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
+
+/* nav */
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 0; padding: 0; list-style: none; }
+.toc a { display: inline-block; padding: 7px 14px; border-radius: 999px; background: var(--raised); color: var(--ink-2); text-decoration: none; font-size: 14px; }
+.toc a:hover { background: var(--selected); color: var(--ink); }
+
+section { padding-top: 88px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 4px 0 20px; font-size: 13px; color: var(--ink-3); }
+.meta b { color: var(--ink-2); font-weight: 500; }
+.split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 36px; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.why { display: flex; flex-direction: column; gap: 14px; }
+.why ul { margin: 0; padding-left: 18px; color: var(--ink-2); }
+.why li { margin-bottom: 6px; }
+.why li b { color: var(--ink); font-weight: 500; }
+.variants { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 980px) { .variants { grid-template-columns: minmax(0, 1fr); } }
+.variant h3 span { color: var(--ink-3); margin-right: 6px; }
+.variant p { font-size: 14px; }
+.tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--selected); color: var(--ink-2); margin-left: 6px; vertical-align: 2px; }
+
+/* the stage: a frame of the player's own world */
+.stage { position: relative; border-radius: 14px; overflow: hidden; background: var(--deep); border: 1px solid var(--line); }
+.film { position: relative; aspect-ratio: 16 / 9; width: 100%;
+  background:
+    radial-gradient(60% 70% at 72% 38%, rgba(255,190,120,.30), transparent 60%),
+    radial-gradient(50% 60% at 20% 70%, rgba(80,120,200,.28), transparent 65%),
+    linear-gradient(180deg, #1a1d26 0%, #0d0f15 100%); }
+.film::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
+/* With the controls shown the subtitles lift above them instead of hiding under the bar. */
+.film:has(.bar) .sub { bottom: 44%; transition: bottom .2s ease-out; }
+.film:has(.tiers) .sub { bottom: 56%; }
+.film:has(.preview) .sub { bottom: 66%; }
+.film .sub { position: absolute; left: 0; right: 0; bottom: 12%; text-align: center; font: 500 clamp(12px, 1.7vw, 18px) var(--words); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); z-index: 1; }
+
+/* icons drawn as the app's 1.5 px strokes */
+.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.i.s { width: 16px; height: 16px; }
+.i.l { width: 24px; height: 24px; }
+
+/* control bars */
+.bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; color: var(--ink); }
+.seek { position: relative; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); }
+.seek .done { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 2px; background: var(--accent); }
+.seek .buf { position: absolute; inset: 0 auto 0 0; width: 56%; border-radius: 2px; background: rgba(255,255,255,.22); }
+.seek .knob { position: absolute; top: 50%; left: 38%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--accent); }
+.seek .tick { position: absolute; top: -1px; width: 2px; height: 6px; background: var(--deep); }
+.btn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: var(--ink-2); }
+.btn.on { color: var(--ink); }
+.btn.play { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
+.row { display: flex; align-items: center; gap: 4px; }
+.grow { flex: 1; min-width: 0; }
+.time { font: 500 13px var(--nums); font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+
+/* A: capsule */
+.capsule { left: 50%; bottom: 14px; right: auto; transform: translateX(-50%); width: min(92%, 640px);
+  background: rgba(23,25,30,.86); border: 1px solid rgba(255,255,255,.07); border-radius: 18px; padding: 10px 12px 8px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45); backdrop-filter: blur(18px); }
+.capsule .seek { margin: 2px 6px 8px; }
+/* B: two tiers */
+.tiers { padding: 0 18px 12px; }
+.tiers .top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.tiers .title { font-size: 14px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiers .title span { color: var(--ink-3); }
+.preview { position: absolute; bottom: 22px; left: calc(52% - 64px); width: 128px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.12); background: #2b2f3a; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
+.preview .shot { aspect-ratio: 16/9; background: radial-gradient(70% 80% at 60% 40%, rgba(255,190,120,.45), transparent 65%), #20232c; }
+.preview .cap { padding: 4px 6px; font-size: 11px; color: var(--ink-2); display: flex; justify-content: space-between; gap: 6px; }
+/* C: only what matters */
+.bare { padding: 0 16px 14px; }
+.bare .seek { height: 3px; }
+
+/* menus and panels */
+.menu { width: 260px; background: var(--menu); border: 1px solid var(--line); border-radius: 12px; padding: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.5); font-size: 14px; }
+.menu .quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; }
+.menu .quick span { display: grid; place-items: center; height: 40px; border-radius: 8px; background: rgba(255,255,255,.04); color: var(--ink-2); }
+.menu .item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; color: var(--ink); }
+.menu .item .i { color: var(--ink-2); }
+.menu .item .v { margin-left: auto; color: var(--ink-3); font-size: 13px; }
+.menu .item .k { margin-left: auto; color: var(--ink-4); font: 12px var(--nums); }
+.menu .item.hot { background: var(--hover); }
+.menu .sep { height: 1px; background: var(--line); margin: 5px 8px; }
+.menu .head { padding: 8px 10px 4px; font-size: 12px; color: var(--ink-3); }
+
+/* command palette */
+.palette { width: min(100%, 560px); margin: 0 auto; background: var(--menu); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.palette .field { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 16px; }
+.palette .field .caret { width: 1.5px; height: 20px; background: var(--ink); margin-left: -6px; }
+.palette .group { padding: 6px; }
+.palette .item { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 9px; }
+.palette .item.hot { background: var(--selected); }
+.palette .item .i { color: var(--ink-2); }
+.palette .item .d { color: var(--ink-3); font-size: 13px; }
+.palette .item .k { margin-left: auto; color: var(--ink-4); font: 12px var(--nums); }
+.palette mark { background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--ink-3); }
+.palette .head { padding: 8px 12px 4px; font-size: 12px; color: var(--ink-3); }
+
+/* OSD */
+.osd { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px 8px 12px; border-radius: 999px; background: rgba(23,25,30,.88); border: 1px solid rgba(255,255,255,.07); backdrop-filter: blur(16px); font-size: 14px; }
+.osd .meter { width: 90px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); position: relative; }
+.osd .meter::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 72%; border-radius: 2px; background: var(--accent); }
+.ripple { position: absolute; top: 0; bottom: 0; width: 34%; display: grid; place-items: center; z-index: 2;
+  background: radial-gradient(closest-side, rgba(255,255,255,.12), transparent); }
+.ripple.r { right: 0; } .ripple.l { left: 0; }
+.ripple div { display: flex; flex-direction: column; align-items: center; gap: 4px; font: 500 14px var(--nums); color: #fff; }
+.chip-skip { position: absolute; right: 18px; bottom: 74px; z-index: 3; padding: 9px 16px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 500; font-size: 14px; }
+
+/* library */
+.lib { display: grid; grid-template-columns: 180px minmax(0, 1fr); min-height: 420px; }
+@media (max-width: 760px) { .lib { grid-template-columns: minmax(0, 1fr); } .lib .side { display: none; } }
+.side { background: var(--base); border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.side .it { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--ink-2); }
+.side .it.on { background: var(--selected); color: var(--ink); }
+.side .gap { height: 12px; }
+.main { padding: 18px 20px 22px; background: var(--base); min-width: 0; }
+.hero { position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 21 / 8; margin-bottom: 20px;
+  background: radial-gradient(70% 90% at 70% 30%, rgba(255,190,120,.35), transparent 60%), radial-gradient(60% 80% at 10% 90%, rgba(80,120,200,.3), transparent 60%), #1a1d26; }
+.hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11,12,16,.92) 0%, rgba(11,12,16,.55) 45%, rgba(11,12,16,0) 75%); }
+.hero .txt { position: absolute; left: 22px; bottom: 20px; z-index: 1; max-width: 55%; }
+.hero .txt .k { font-size: 12px; color: var(--ink-3); }
+.hero .txt .t { font: 400 clamp(18px, 2.4vw, 26px)/1.2 var(--words); margin: 4px 0 6px; }
+.hero .txt .s { font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 500; font-size: 14px; }
+.pill.ghost { background: rgba(255,255,255,.08); color: var(--ink); }
+.shelf-h { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 0 10px; }
+.shelf-h b { font-weight: 500; font-size: 16px; }
+.shelf-h span { color: var(--ink-3); font-size: 13px; }
+.shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 620px) { .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.card .art { position: relative; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; background: #1f222b; }
+.card .art.a { background: radial-gradient(80% 90% at 30% 30%, rgba(120,170,255,.35), transparent 60%), #1c1f27; }
+.card .art.b { background: radial-gradient(80% 90% at 70% 40%, rgba(255,140,110,.32), transparent 60%), #1f1c22; }
+.card .art.c { background: radial-gradient(80% 90% at 50% 70%, rgba(140,220,180,.25), transparent 60%), #1b2020; }
+.card .art.d { background: radial-gradient(80% 90% at 40% 30%, rgba(230,210,140,.28), transparent 60%), #211f1a; }
+.card .prog { position: absolute; left: 8px; right: 8px; bottom: 7px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.card .prog i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent); }
+.card .left { position: absolute; right: 8px; top: 7px; font: 500 11px var(--nums); padding: 2px 6px; border-radius: 6px; background: rgba(11,12,16,.75); color: var(--ink-2); }
+.card .n { font-size: 13px; margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .m { font-size: 12px; color: var(--ink-3); }
+
+/* music */
+.music { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; padding: 26px; align-items: center;
+  background: radial-gradient(80% 90% at 22% 40%, rgba(140,90,200,.22), transparent 60%), var(--base); min-height: 420px; }
+@media (max-width: 760px) { .music { grid-template-columns: minmax(0, 1fr); } }
+.cover { aspect-ratio: 1; border-radius: 14px; background: radial-gradient(80% 80% at 35% 30%, #b77ad8, transparent 60%), radial-gradient(70% 70% at 80% 80%, #3b4cc0, transparent 60%), #241c33; box-shadow: 0 20px 50px rgba(0,0,0,.55); max-width: 320px; width: 100%; justify-self: center; }
+.lyrics { display: flex; flex-direction: column; gap: 10px; font: 400 clamp(16px, 2vw, 22px)/1.35 var(--words); color: var(--ink-4); }
+.lyrics .now { color: var(--ink); font-weight: 500; }
+.lyrics .near { color: var(--ink-3); }
+.song { margin-top: 16px; }
+.song .t { font: 500 20px var(--words); }
+.song .a { color: var(--ink-3); font-size: 14px; }
+
+/* settings */
+.settings { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 440px; background: var(--base); }
+@media (max-width: 760px) { .settings { grid-template-columns: minmax(0, 1fr); } .settings .side { display: none; } }
+.search { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: var(--raised); color: var(--ink-3); font-size: 14px; margin-bottom: 18px; }
+.set-h { font: 500 22px var(--words); margin: 0 0 4px; }
+.set-s { color: var(--ink-3); font-size: 13px; margin-bottom: 14px; }
+.set-group { border-radius: 12px; background: var(--panel); padding: 4px 0; margin-bottom: 14px; }
+.set-row { display: flex; align-items: center; gap: 16px; padding: 12px 16px; }
+.set-row + .set-row { border-top: 1px solid var(--line); }
+.set-row .t { font-size: 14px; }
+.set-row .d { font-size: 12.5px; color: var(--ink-3); }
+.set-row .ctl { margin-left: auto; flex: none; color: var(--ink-3); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.toggle { width: 38px; height: 22px; border-radius: 999px; background: var(--line-strong); position: relative; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-2); }
+.toggle.on { background: var(--accent); }
+.toggle.on::after { left: 19px; background: var(--on-accent); }
+.subprev { border-radius: 10px; margin: 4px 16px 12px; aspect-ratio: 16 / 5; position: relative; overflow: hidden;
+  background: radial-gradient(60% 90% at 70% 40%, rgba(255,190,120,.3), transparent 60%), #1a1d26; }
+.subprev span { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; color: #fff; font: 500 15px var(--words); text-shadow: 0 1px 3px #000; }
+.more { padding: 10px 16px; color: var(--ink-2); font-size: 14px; display: flex; justify-content: space-between; }
+
+/* empty and mini */
+.empty { display: grid; place-items: center; text-align: center; padding: 48px 24px; min-height: 380px; background: var(--base); }
+.drop { margin: 22px auto 0; width: min(100%, 420px); padding: 26px; border: 1.5px dashed var(--line-strong); border-radius: 14px; color: var(--ink-3); font-size: 14px; }
+.mini { position: absolute; right: 16px; bottom: 16px; width: 260px; border-radius: 14px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(0,0,0,.55); z-index: 3; }
+.mini .film { aspect-ratio: 16/9; }
+.mini .ctl { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+.mini .ctl .n { font-size: 13px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* motion */
+.motion { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 860px) { .motion { grid-template-columns: minmax(0, 1fr); } }
+.demo { height: 150px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); position: relative; overflow: hidden; cursor: pointer; }
+.demo .btn-anchor { position: absolute; right: 18px; bottom: 14px; width: 30px; height: 30px; border-radius: 8px; background: var(--selected); }
+.demo .pop { position: absolute; right: 12px; bottom: 52px; width: 150px; height: 82px; border-radius: 12px; background: var(--menu); border: 1px solid var(--line);
+  transform-origin: 85% 100%; transform: scale(.92) translateY(6px); opacity: 0; transition: transform .16s cubic-bezier(.2,.8,.2,1), opacity .12s ease-out; }
+.demo:hover .pop, .demo:focus .pop { transform: none; opacity: 1; }
+.demo .pages { position: absolute; inset: 34px 14px 14px; border-radius: 10px; background: var(--menu); overflow: hidden; }
+.demo .pages div { position: absolute; inset: 0; padding: 12px; font-size: 13px; color: var(--ink-2); transition: transform .18s cubic-bezier(.2,.8,.2,1), opacity .18s; }
+.demo .pages .p2 { transform: translateX(30%); opacity: 0; }
+.demo:hover .pages .p1 { transform: translateX(-12%); opacity: 0; }
+.demo:hover .pages .p2 { transform: none; opacity: 1; }
+.demo .toast { position: absolute; top: 16px; left: 50%; padding: 6px 14px; border-radius: 999px; background: var(--menu); font-size: 13px; transform: translate(-50%, -8px); opacity: 0; transition: transform .16s ease-out, opacity .16s ease-out; }
+.demo:hover .toast { transform: translate(-50%, 0); opacity: 1; }
+.hint { position: absolute; left: 14px; top: 12px; font-size: 12px; color: var(--ink-4); }
+
+/* priorities */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 12px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--ink-3); font-size: 13px; }
+td:first-child { color: var(--ink-3); font-family: var(--nums); width: 32px; }
+td b { font-weight: 500; }
+.dots { font-family: var(--nums); letter-spacing: 2px; color: var(--ink); white-space: nowrap; }
+.dots i { color: var(--ink-4); font-style: normal; }
+.tablewrap { overflow-x: auto; }
+footer { margin-top: 72px; color: var(--ink-4); font-size: 13px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="prev" viewBox="0 0 24 24"><path d="M6 5v14M18 6l-9 6 9 6z"/></symbol>
+  <symbol id="next" viewBox="0 0 24 24"><path d="M18 5v14M6 6l9 6-9 6z"/></symbol>
+  <symbol id="vol" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+  <symbol id="cc" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M10.5 10.2a2.3 2.3 0 1 0 0 3.6M16.5 10.2a2.3 2.3 0 1 0 0 3.6"/></symbol>
+  <symbol id="audio" viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M6 18l1.4-1.4M16.6 7.4 18 6"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></symbol>
+  <symbol id="full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="more" viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="pip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="12" width="6" height="4.5" rx="1" fill="currentColor"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v8.5a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9.5h18M3 14.5h18M8 5v14M16 5v14"/></symbol>
+  <symbol id="note" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5z"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="speed" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-8.5-8.5"/><path d="m12 12 6-6"/></symbol>
+  <symbol id="moon" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></symbol>
+  <symbol id="skip" viewBox="0 0 24 24"><path d="M5 6l7 6-7 6zM13 6l7 6-7 6z"/></symbol>
+  <symbol id="bars" viewBox="0 0 24 24"><path d="M6 4v16M12 4v16M18 4v16M4 14h4M10 8h4M16 16h4"/></symbol>
+</svg>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">Moonbow · исследование интерфейса · 19 ноября 2026</div>
+    <h1>Как может выглядеть Moonbow целиком</h1>
+    <p class="lead">Панели настроек уже стали «тихим списком». Здесь тот же подход применён к остальному: панели управления, меню, медиатеке, экрану музыки, окну настроек и сообщениям поверх видео. По каждой части сказано, что сейчас, что предлагаю и почему. Макеты свёрстаны в цветах и шрифте плеера, это направление, а не пиксели.</p>
+    <ul class="toc">
+      <li><a href="#principles">Принципы</a></li>
+      <li><a href="#bar">Панель управления</a></li>
+      <li><a href="#seek">Перемотка</a></li>
+      <li><a href="#menu">Меню</a></li>
+      <li><a href="#palette">Быстрые команды</a></li>
+      <li><a href="#osd">Сообщения</a></li>
+      <li><a href="#library">Медиатека</a></li>
+      <li><a href="#music">Музыка</a></li>
+      <li><a href="#settings">Настройки</a></li>
+      <li><a href="#empty">Пустые экраны</a></li>
+      <li><a href="#mini">Мини-плеер</a></li>
+      <li><a href="#motion">Движение</a></li>
+      <li><a href="#order">С чего начать</a></li>
+    </ul>
+  </header>
+
+  <!-- 1 -->
+  <section id="principles">
+    <div class="eyebrow">01</div>
+    <h2>Пять правил для всего плеера</h2>
+    <div class="split">
+      <div class="why">
+        <ul>
+          <li><b>Говорить словами человека.</b> «Звук отстаёт» вместо «Задержка аудио», «Ровная громкость» вместо «Нормализация». Числа и термины остаются внутри, для тех, кто их ищет.</li>
+          <li><b>Меньше коробок.</b> Рамки, поля и плашки только там, где что-то вводят. Остальное держится на отступах и одной линии между группами.</li>
+          <li><b>Картинка главнее интерфейса.</b> Управление прячется, пока не нужно, и не закрывает лица и субтитры. Обложки и кадры используются как фон и цвет.</li>
+          <li><b>Одно главное действие на экран.</b> На экране одна светлая кнопка: «Смотреть», «Продолжить», «Добавить папку». Остальные кнопки тише.</li>
+          <li><b>Движение объясняет, откуда что взялось.</b> Панель растёт из своей кнопки, вложенный экран уезжает вбок, сообщение опускается сверху. Всё быстро, 120–200 мс.</li>
+        </ul>
+      </div>
+      <div class="why">
+        <p>Эти правила уже работают в новых панелях «Звук», «Видео», «Субтитры» и «Воспроизведение». Дальше то же самое для остальных частей плеера.</p>
+        <p>Монохром Moonbow остаётся: акцентом служит сам свет, светлая кнопка на тёмном. Цвет приходит только из обложек и кадров.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="bar">
+    <div class="eyebrow">02</div>
+    <h2>Панель управления: три подхода</h2>
+    <p>Сейчас это полоса во всю ширину окна со всеми кнопками в один ряд. Кнопок много, они одного веса, и глазу не за что зацепиться.</p>
+    <div class="variants">
+      <div class="variant">
+        <div class="stage"><div class="film"><div class="sub">Мы почти дома.</div>
+          <div class="bar capsule">
+            <div class="seek"><div class="buf"></div><div class="done"></div><div class="knob"></div></div>
+            <div class="row">
+              <span class="btn"><svg class="i"><use href="#prev"/></svg></span>
+              <span class="btn play"><svg class="i"><use href="#pause"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#next"/></svg></span>
+              <span class="time num">41:07 / 1:48:20</span>
+              <span class="grow"></span>
+              <span class="btn"><svg class="i"><use href="#vol"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#cc"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#gear"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#full"/></svg></span>
+            </div>
+          </div>
+        </div></div>
+        <h3><span>А</span>Капсула над видео</h3>
+        <p>Компактная панель плавает над кадром со стеклом и тенью, как в QuickTime и IINA. Видео идёт до краёв окна. Лучше всего в полном экране.</p>
+      </div>
+      <div class="variant">
+        <div class="stage"><div class="film"><div class="sub">Мы почти дома.</div>
+          <div class="bar tiers">
+            <div class="top"><span class="title">Дюна: Часть вторая <span>· Глава 7, Пески</span></span></div>
+            <div class="seek" style="margin-bottom:10px"><div class="buf"></div><div class="done"></div><div class="knob"></div>
+              <span class="tick" style="left:18%"></span><span class="tick" style="left:31%"></span><span class="tick" style="left:52%"></span><span class="tick" style="left:77%"></span></div>
+            <div class="row">
+              <span class="btn play"><svg class="i"><use href="#pause"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#next"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#vol"/></svg></span>
+              <span class="time num" style="margin-left:6px">41:07 <span style="color:var(--ink-4)">/ 1:48:20</span></span>
+              <span class="grow"></span>
+              <span class="btn"><svg class="i"><use href="#audio"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#cc"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#gear"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#list"/></svg></span>
+              <span class="btn"><svg class="i"><use href="#full"/></svg></span>
+            </div>
+          </div>
+        </div></div>
+        <h3><span>Б</span>Две строки <span class="tag">рекомендую</span></h3>
+        <p>Сверху название и глава, под ними перемотка во всю ширину с отметками глав, ниже кнопки: слева воспроизведение, справа инструменты. Так сделано в YouTube и Netflix, и это привычно.</p>
+      </div>
+      <div class="variant">
+        <div class="stage"><div class="film"><div class="sub">Мы почти дома.</div>
+          <div class="bar bare">
+            <div class="row" style="margin-bottom:8px">
+              <span class="btn play"><svg class="i"><use href="#pause"/></svg></span>
+              <span class="time num" style="margin-left:6px">41:07</span>
+              <span class="grow"></span>
+              <span class="time num">−1:07:13</span>
+              <span class="btn"><svg class="i"><use href="#more"/></svg></span>
+            </div>
+            <div class="seek"><div class="done"></div></div>
+          </div>
+        </div></div>
+        <h3><span>В</span>Только главное</h3>
+        <p>Пауза, время и тонкая полоса, остальное спрятано за «…». Очень чисто, но звук и субтитры уходят на второй клик. Подходит как отдельный «киношный» стиль панели.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="seek">
+    <div class="eyebrow">03</div>
+    <h2>Перемотка, которая показывает, куда попадёшь</h2>
+    <div class="split">
+      <div class="stage"><div class="film"><div class="sub">Мы почти дома.</div>
+        <div class="bar tiers">
+          <div class="seek" style="margin-bottom:12px; height:6px"><div class="buf"></div><div class="done"></div><div class="knob" style="width:14px;height:14px;margin:-7px 0 0 -7px"></div>
+            <span class="tick" style="left:18%"></span><span class="tick" style="left:31%"></span><span class="tick" style="left:52%"></span><span class="tick" style="left:77%"></span>
+            <div class="preview"><div class="shot"></div><div class="cap"><span>Глава 8 · Буря</span><span class="num">56:12</span></div></div>
+          </div>
+          <div class="row"><span class="btn play"><svg class="i"><use href="#pause"/></svg></span><span class="time num" style="margin-left:8px">41:07 / 1:48:20</span></div>
+        </div>
+        <span class="chip-skip">Пропустить заставку</span>
+      </div></div>
+      <div class="why">
+        <ul>
+          <li><b>Кадр под курсором.</b> При наведении на полосу видно кадр, время и название главы. Кадры берутся из уже сделанных миниатюр.</li>
+          <li><b>Главы прямо на полосе.</b> Полоса разрезана тонкими промежутками по главам. Наведение на кусок подписывает главу.</li>
+          <li><b>«Пропустить заставку».</b> Если у сериала есть главы «Intro» или «Opening», появляется светлая кнопка на 8 секунд.</li>
+          <li><b>Субтитры поднимаются над панелью</b>, пока она видна, и опускаются обратно, когда она прячется. Сейчас панель их закрывает.</li>
+          <li><b>Полоса толще под курсором.</b> 4 px в покое и 6 px при наведении, бегунок появляется только тогда. Пока не трогаешь, полоса не мешает.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="menu">
+    <div class="eyebrow">04</div>
+    <h2>Меню по правому клику: короче и с ответами</h2>
+    <div class="split">
+      <div class="stage" style="padding:28px; display:flex; gap:20px; justify-content:center; flex-wrap:wrap">
+        <div class="menu" role="presentation">
+          <div class="quick"><span><svg class="i"><use href="#pause"/></svg></span><span><svg class="i"><use href="#next"/></svg></span><span><svg class="i"><use href="#pip"/></svg></span><span><svg class="i"><use href="#full"/></svg></span></div>
+          <div class="sep"></div>
+          <div class="item hot"><svg class="i"><use href="#audio"/></svg>Звук<span class="v">Русский</span></div>
+          <div class="item"><svg class="i"><use href="#cc"/></svg>Субтитры<span class="v">Выкл.</span></div>
+          <div class="item"><svg class="i"><use href="#speed"/></svg>Скорость<span class="v">Обычная</span></div>
+          <div class="item"><svg class="i"><use href="#moon"/></svg>Таймер сна<span class="v">Выкл.</span></div>
+          <div class="sep"></div>
+          <div class="item"><svg class="i"><use href="#list"/></svg>Очередь<span class="k">Ctrl+L</span></div>
+          <div class="item"><svg class="i"><use href="#bars"/></svg>Индикаторы звука<span class="k">Ctrl+Shift+M</span></div>
+          <div class="item"><svg class="i"><use href="#folder"/></svg>Показать в Проводнике</div>
+          <div class="sep"></div>
+          <div class="item"><svg class="i"><use href="#search"/></svg>Все команды…<span class="k">Ctrl+K</span></div>
+        </div>
+      </div>
+      <div class="why">
+        <p>Сейчас в меню 16 строк и 8 подменю, а самые частые действия (пауза, полный экран) спрятаны среди редких.</p>
+        <ul>
+          <li><b>Ряд крупных иконок сверху.</b> Пауза, следующий, картинка в картинке, полный экран. Так сделаны контекстные меню Windows 11 для копирования и вставки.</li>
+          <li><b>Справа текущее значение</b>, как в новых панелях: видно, что включено, не открывая подменю.</li>
+          <li><b>Не больше 10 строк.</b> Редкое уходит в «Все команды…», то есть в поиск по командам.</li>
+          <li>Подменю открывает ту же панель, что и кнопка на панели управления, а не отдельный список.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="palette">
+    <div class="eyebrow">05</div>
+    <h2>Быстрые команды по Ctrl+K</h2>
+    <div class="split">
+      <div class="stage" style="padding:32px 20px; background:linear-gradient(180deg,#101218,#0b0c10)">
+        <div class="palette">
+          <div class="field"><svg class="i"><use href="#search"/></svg><span>субт</span><span class="caret"></span></div>
+          <div class="group">
+            <div class="head">Действия</div>
+            <div class="item hot"><svg class="i"><use href="#cc"/></svg><span><mark>Субт</mark>итры: включить или выключить</span><span class="k">V</span></div>
+            <div class="item"><svg class="i"><use href="#search"/></svg><span>Найти <mark>субт</mark>итры в интернете</span></div>
+            <div class="item"><svg class="i"><use href="#plus"/></svg><span>Добавить файл <mark>субт</mark>итров…</span><span class="k">Ctrl+Shift+L</span></div>
+            <div class="head">Настройки</div>
+            <div class="item"><svg class="i"><use href="#gear"/></svg><span>Размер <mark>субт</mark>итров <span class="d">· Субтитры</span></span></div>
+            <div class="item"><svg class="i"><use href="#globe"/></svg><span>Язык <mark>субт</mark>итров <span class="d">· Субтитры</span></span></div>
+            <div class="head">Медиатека</div>
+            <div class="item"><svg class="i"><use href="#film"/></svg><span>Мастер и Маргарита <span class="d">· есть <mark>субт</mark>итры</span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="why">
+        <p>У Moonbow много возможностей: около 280 настроек и 80 команд. Меню их не вместит, а искать по разделам настроек долго.</p>
+        <ul>
+          <li><b>Одно поле на всё.</b> Команды, настройки и файлы медиатеки, по-русски и по-английски, с опечатками.</li>
+          <li><b>Рядом видна клавиша</b>, так что палитра заодно учит сочетаниям.</li>
+          <li>Настройка открывается сразу на своей строке в окне «Настроек», с подсветкой.</li>
+          <li>Так сделаны VS Code, Linear, Raycast и Figma. Для плеера это редкость и сильная сторона.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="osd">
+    <div class="eyebrow">06</div>
+    <h2>Сообщения поверх видео: одна форма для всего</h2>
+    <div class="split">
+      <div class="stage"><div class="film"><div class="sub">Мы почти дома.</div>
+        <div class="osd"><svg class="i s"><use href="#vol"/></svg><span>Громкость</span><span class="meter"></span><span class="num" style="color:var(--ink-2)">72%</span></div>
+        <div class="ripple r"><div><svg class="i l"><use href="#skip"/></svg>+10 с</div></div>
+      </div></div>
+      <div class="why">
+        <ul>
+          <li><b>Одна капсула вверху по центру.</b> Иконка, слово и, если есть, шкала. Громкость, скорость, дорожка и закладка выглядят одинаково.</li>
+          <li><b>Перемотка показывается у края, куда она идёт</b>: мягкая вспышка «+10 с» справа или «−10 с» слева, как в YouTube.</li>
+          <li><b>Повтор не плодит сообщения.</b> Пять нажатий громкости обновляют одну капсулу, а не рисуют пять.</li>
+          <li>Сообщение исчезает через 1,2 с после последнего изменения. Длинный текст держится дольше, по скорости чтения.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="library">
+    <div class="eyebrow">07</div>
+    <h2>Медиатека: начинать с того, что смотришь</h2>
+    <div class="stage">
+      <div class="lib">
+        <nav class="side">
+          <span class="it on"><svg class="i"><use href="#home"/></svg>Главная</span>
+          <span class="it"><svg class="i"><use href="#film"/></svg>Видео</span>
+          <span class="it"><svg class="i"><use href="#note"/></svg>Музыка</span>
+          <span class="it"><svg class="i"><use href="#globe"/></svg>Сеть</span>
+          <span class="it"><svg class="i"><use href="#clock"/></svg>Недавние</span>
+          <span class="gap"></span>
+          <span class="it"><svg class="i"><use href="#plus"/></svg>Добавить папку</span>
+        </nav>
+        <div class="main">
+          <div class="hero">
+            <div class="txt">
+              <div class="k">Продолжить · 41 из 108 мин</div>
+              <div class="t">Дюна: Часть вторая</div>
+              <div class="s">Остановились на главе «Пески»</div>
+              <span class="pill"><svg class="i s"><use href="#play"/></svg>Продолжить</span>
+              <span class="pill ghost" style="margin-left:6px">С начала</span>
+            </div>
+          </div>
+          <div class="shelf-h"><b>Продолжить просмотр</b><span>Все 12</span></div>
+          <div class="shelf">
+            <div class="card"><div class="art a"><span class="left num">22 мин</span><div class="prog"><i style="width:64%"></i></div></div><div class="n">Тьма · S02E04</div><div class="m">осталось 22 мин</div></div>
+            <div class="card"><div class="art b"><span class="left num">1 ч 10</span><div class="prog"><i style="width:30%"></i></div></div><div class="n">Мастер и Маргарита</div><div class="m">вчера</div></div>
+            <div class="card"><div class="art c"><span class="left num">8 мин</span><div class="prog"><i style="width:86%"></i></div></div><div class="n">Лекция: звук в кино</div><div class="m">3 дня назад</div></div>
+            <div class="card"><div class="art d"><span class="left num">Новое</span></div><div class="n">Тьма · S02E05</div><div class="m">следующая серия</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="split" style="margin-top:22px">
+      <div class="why"><ul>
+        <li><b>Большая карточка «Продолжить»</b> с кадром из фильма на фоне и одной светлой кнопкой. Главная отвечает на вопрос «что смотреть сейчас».</li>
+        <li><b>Прогресс на каждой карточке:</b> полоса внизу и «осталось 22 мин». Следующая серия встаёт рядом сама.</li>
+        <li><b>Подписи человеческие:</b> «вчера», «3 дня назад», «следующая серия» вместо дат и путей.</li>
+      </ul></div>
+      <div class="why"><ul>
+        <li>Боковая панель тоньше: без рамок, выбранный пункт просто светлее.</li>
+        <li>При наведении на карточку кадр чуть увеличивается, а время сменяется кнопкой «▶». Это уже есть, нужно выровнять под новые карточки.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="music">
+    <div class="eyebrow">08</div>
+    <h2>Экран музыки: обложка и слова</h2>
+    <div class="split">
+      <div class="stage">
+        <div class="music">
+          <div>
+            <div class="cover"></div>
+            <div class="song" style="text-align:center"><div class="t">Lune Rouge</div><div class="a">Viz Artist · Night Album</div></div>
+          </div>
+          <div class="lyrics">
+            <span>I walked the city lights alone</span>
+            <span class="near">the river kept the moon</span>
+            <span class="now">and every window held a song</span>
+            <span class="near">I knew the words too soon</span>
+            <span>so stay a little longer</span>
+          </div>
+        </div>
+      </div>
+      <div class="why"><ul>
+        <li><b>Цвет из обложки.</b> Мягкое свечение её основного цвета за обложкой. Это единственное место, где монохром Moonbow впускает цвет, и он принадлежит музыке, а не интерфейсу.</li>
+        <li><b>Текст песни крупно рядом</b>, текущая строка яркая, соседние тише. Нет текста — обложка встаёт по центру.</li>
+        <li><b>Волна песни вместо полосы перемотки</b> (уже сделано) и тот же «тихий список» для очереди справа.</li>
+        <li>Визуализация (спектр, VU) становится режимом «вместо текста», а не ещё одним слоем.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section id="settings">
+    <div class="eyebrow">09</div>
+    <h2>Окно настроек: поиск, простые слова, предпросмотр</h2>
+    <div class="stage">
+      <div class="settings">
+        <nav class="side">
+          <span class="it"><svg class="i"><use href="#gear"/></svg>Основное</span>
+          <span class="it"><svg class="i"><use href="#play"/></svg>Воспроизведение</span>
+          <span class="it"><svg class="i"><use href="#film"/></svg>Видео</span>
+          <span class="it"><svg class="i"><use href="#audio"/></svg>Звук</span>
+          <span class="it on"><svg class="i"><use href="#cc"/></svg>Субтитры</span>
+          <span class="it"><svg class="i"><use href="#bars"/></svg>Интерфейс</span>
+        </nav>
+        <div class="main">
+          <div class="search"><svg class="i s"><use href="#search"/></svg>Найти настройку</div>
+          <div class="set-h">Субтитры</div>
+          <div class="set-s">Как субтитры выбираются и как выглядят.</div>
+          <div class="set-group">
+            <div class="subprev"><span>Мы почти дома.</span></div>
+            <div class="set-row"><div><div class="t">Размер</div><div class="d">Насколько крупно</div></div><div class="ctl">Обычный <svg class="i s"><use href="#chev"/></svg></div></div>
+            <div class="set-row"><div><div class="t">Подложка</div><div class="d">Тёмная плашка за текстом, если фон светлый</div></div><div class="ctl"><span class="toggle on"></span></div></div>
+          </div>
+          <div class="set-group">
+            <div class="set-row"><div><div class="t">Язык по умолчанию</div><div class="d">Если в файле несколько</div></div><div class="ctl">Русский <svg class="i s"><use href="#chev"/></svg></div></div>
+            <div class="set-row"><div><div class="t">Искать в интернете, если субтитров нет</div><div class="d">Спрашивает перед первым поиском</div></div><div class="ctl"><span class="toggle"></span></div></div>
+            <div class="more"><span>Ещё 14 настроек: шрифт, цвет, контур, тайминги</span><svg class="i s"><use href="#chev"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="split" style="margin-top:22px">
+      <div class="why"><ul>
+        <li><b>Поиск сверху всегда</b>, и он же находит команды (см. Ctrl+K).</li>
+        <li><b>Под каждой настройкой одна строка «зачем»</b> простыми словами, без значков (i) и всплывающих подсказок.</li>
+        <li><b>Живой предпросмотр.</b> Меняешь размер или подложку субтитров и сразу видишь кадр с ними. То же для темы, акцента и размера текста.</li>
+      </ul></div>
+      <div class="why"><ul>
+        <li><b>Сначала 4–6 главных настроек раздела</b>, остальное под «Ещё N настроек». Сейчас похоже устроены «Дополнительные параметры», но они спрятаны внизу и выглядят как отдельный мир.</li>
+        <li>Группы как карточки с линиями между строками, как в настройках Windows 11 и macOS. Это узнаётся сразу.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="empty">
+    <div class="eyebrow">10</div>
+    <h2>Пустые экраны и первый запуск</h2>
+    <div class="split">
+      <div class="stage"><div class="empty">
+        <div>
+          <svg class="i" style="width:44px;height:44px;color:var(--ink-3)"><use href="#film"/></svg>
+          <h3 style="margin-top:14px; font-size:20px">Здесь появятся ваши фильмы и сериалы</h3>
+          <p style="margin:6px auto 18px; max-width:44ch">Укажите папку с видео. Moonbow соберёт сериалы по сезонам и запомнит, где вы остановились. Файлы никуда не копируются.</p>
+          <span class="pill"><svg class="i s"><use href="#plus"/></svg>Добавить папку</span>
+          <div class="drop">или перетащите папку или файл в это окно</div>
+        </div>
+      </div></div>
+      <div class="why"><ul>
+        <li><b>Пустой экран объясняет и предлагает действие</b>, а не пишет «Ничего не найдено».</li>
+        <li><b>Перетаскивание видно заранее</b>: пунктирная зона подсказывает, что так можно.</li>
+        <li>Первый запуск сокращается до одного шага: выбрать папку. Тема и акцент берутся из Windows, их можно поменять потом.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section id="mini">
+    <div class="eyebrow">11</div>
+    <h2>Мини-плеер в медиатеке</h2>
+    <div class="split">
+      <div class="stage" style="min-height:320px; background:var(--base)">
+        <div style="padding:18px 20px">
+          <div class="shelf-h"><b>Видео</b><span>124 файла</span></div>
+          <div class="shelf">
+            <div class="card"><div class="art a"></div><div class="n">Тьма · S01</div><div class="m">10 серий</div></div>
+            <div class="card"><div class="art b"></div><div class="n">Мастер и Маргарита</div><div class="m">2 ч 37 мин</div></div>
+            <div class="card"><div class="art c"></div><div class="n">Лекции</div><div class="m">18 файлов</div></div>
+            <div class="card"><div class="art d"></div><div class="n">Отпуск 2025</div><div class="m">42 файла</div></div>
+          </div>
+        </div>
+        <div class="mini">
+          <div class="film" style="aspect-ratio:16/9"></div>
+          <div class="seek" style="border-radius:0; height:3px"><div class="done" style="border-radius:0"></div></div>
+          <div class="ctl"><span class="btn play" style="width:32px;height:32px"><svg class="i s"><use href="#pause"/></svg></span><span class="n grow">Дюна: Часть вторая</span><span class="btn"><svg class="i"><use href="#full"/></svg></span></div>
+        </div>
+      </div>
+      <div class="why"><ul>
+        <li>Пока выбираешь следующее, фильм продолжает играть в углу. Кадр сверху, ниже тонкая полоса и одна строка управления.</li>
+        <li>Клик по кадру возвращает в плеер. Окошко можно перетащить в любой угол, и угол запоминается.</li>
+        <li>Для музыки вместо кадра обложка, а полоса показывает волну песни.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="motion">
+    <div class="eyebrow">12</div>
+    <h2>Движение: откуда что появляется</h2>
+    <p>Наведите на каждый пример.</p>
+    <div class="motion">
+      <div class="demo" tabindex="0"><span class="hint">Панель растёт из кнопки</span><div class="pop"></div><div class="btn-anchor"></div></div>
+      <div class="demo" tabindex="0"><span class="hint" style="z-index:1">Вложенный экран уезжает вбок</span><div class="pages"><div class="p1">Звук<br>Громкость › Как в фильме<br>Эквалайзер › Выкл.</div><div class="p2">‹ Громкость<br>◉ Как в фильме<br>○ Ровная<br>○ Ночью</div></div></div>
+      <div class="demo" tabindex="0"><span class="hint">Сообщение опускается сверху</span><div class="toast">Скорость 1,25×</div></div>
+    </div>
+    <div class="split" style="margin-top:22px">
+      <div class="why"><ul>
+        <li><b>Появление 160 мс</b> с плавным замедлением в конце (ease-out), <b>исчезновение 120 мс</b>: уходит быстрее, чем приходит.</li>
+        <li>Панели и меню масштабируются от точки, откуда их вызвали, а не всплывают в центре.</li>
+      </ul></div>
+      <div class="why"><ul>
+        <li>Если в Windows выключены «Эффекты анимации», остаётся только смена прозрачности, без сдвигов.</li>
+        <li>Кнопки при нажатии чуть темнеют (уже есть). Наведение плавно затухает (уже есть).</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section id="order">
+    <div class="eyebrow">13</div>
+    <h2>С чего начать</h2>
+    <p>Порядок по пользе на единицу работы. Точки показывают пользу и объём работы, из пяти.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>Что</th><th>Польза</th><th>Работа</th><th>Почему сейчас</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><b>Анимация панелей</b>: рост из кнопки, сдвиг вложенных экранов</td><td class="dots">●●●<i>○○</i></td><td class="dots">●●<i>○○○</i></td><td>Закрепит новые панели: без анимации переход на вложенный экран выглядит как мигание.</td></tr>
+          <tr><td>2</td><td><b>Перемотка с кадром и главами</b></td><td class="dots">●●●●●</td><td class="dots">●●●<i>○○</i></td><td>Самое заметное улучшение для видео, а миниатюры у плеера уже есть.</td></tr>
+          <tr><td>3</td><td><b>Единые сообщения поверх видео</b></td><td class="dots">●●●<i>○○</i></td><td class="dots">●●<i>○○○</i></td><td>Сейчас форм сообщений несколько. Одна капсула решает это сразу везде.</td></tr>
+          <tr><td>4</td><td><b>Короткое меню по правому клику</b></td><td class="dots">●●●<i>○○</i></td><td class="dots">●●<i>○○○</i></td><td>Те же строки «значение справа», что в панелях, и кнопки быстрых действий сверху.</td></tr>
+          <tr><td>5</td><td><b>Быстрые команды Ctrl+K</b></td><td class="dots">●●●●<i>○</i></td><td class="dots">●●●<i>○○</i></td><td>Открывает все 280 настроек и 80 команд одним полем. Схема настроек уже знает подписи на двух языках.</td></tr>
+          <tr><td>6</td><td><b>Панель управления «Две строки»</b></td><td class="dots">●●●●<i>○</i></td><td class="dots">●●●●<i>○</i></td><td>Меняет главный экран плеера, поэтому лучше после пунктов 1–3. Старые стили панели остаются в настройках.</td></tr>
+          <tr><td>7</td><td><b>Главная медиатеки с «Продолжить»</b></td><td class="dots">●●●●<i>○</i></td><td class="dots">●●●<i>○○</i></td><td>Данные о просмотре уже есть, нужна новая раскладка и прогресс на карточках.</td></tr>
+          <tr><td>8</td><td><b>Окно настроек: «зачем» под строкой и предпросмотр</b></td><td class="dots">●●●<i>○○</i></td><td class="dots">●●●●<i>○</i></td><td>Много текстов. Делать после палитры: её поиск переиспользуется.</td></tr>
+          <tr><td>9</td><td><b>Цвет из обложки на экране музыки</b></td><td class="dots">●●<i>○○○</i></td><td class="dots">●<i>○○○○</i></td><td>Мелкая правка с заметным эффектом, можно сделать в любой момент.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Moonbow · design/explorations/2026-11-19-interface.html · макеты показывают направление; размеры и цвета берутся из src/core/Skin.cpp и design/DESIGN.md.</footer>
+</div>
+</body>
+</html>
