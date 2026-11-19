@@ -949,7 +949,7 @@ void SeekBar::Paint(Painter& p) {
     if (!s.fileLoaded || s.duration <= 0) return;
     const double pos = dragging_ ? dragTime_ : ShownPosition(s);
     const float k = static_cast<float>(std::clamp(pos / s.duration, 0.0, 1.0));
-    if (!compact && !s.hasVideo) {
+    if (!compact && !s.hasVideo && TheApp().config().GetBool("interface.musicWave")) {
         // Music: the song's own loudness as thin mirrored bars (SoundCloud), played part lit.
         // Until the scan is done (or for a stream) the bars lie flat, then grow into the wave.
         const float playX = t.x + t.w * k;

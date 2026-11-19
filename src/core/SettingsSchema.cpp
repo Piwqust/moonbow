@@ -937,6 +937,10 @@ void BuildApp(Builder& b) {
            "fullscreen")
         .Desc(L"Show a thin progress line along the bottom of the video while the controls are hidden.",
               L"Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.");
+    // Read by app/player/ControlBar.cpp (SeekBar::Paint).
+    b.Toggle("interface.musicWave", L"Song's wave on the seek bar", L"Волна песни на полосе перемотки", true)
+        .Desc(L"For music, draw the seek bar as the song's loudness. When off, it is a plain bar, as for video.",
+              L"Для музыки рисовать полосу перемотки как громкость песни. Если выключить — обычная полоса, как у видео.");
 
     // Read by app/player/DetachedWindows.cpp; closing a window with X turns its row off.
     b.Sec("windows", L"Separate windows", L"Отдельные окна");
