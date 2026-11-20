@@ -3,22 +3,28 @@
 #
 # Content-Security-Policy allows the one inline script (the head of src/layouts/Base.astro) by its hash.
 # scripts/postbuild.mjs fails the build if that script changes and the hash here is still the old one.
-moonbow.angleford.co {
-	root * /var/www/moonbow.angleford.co
+
+# Shared by pages and the 404 page: Caddy serves errors through a route of their own.
+(moonbow_response) {
 	encode zstd gzip
-
-	@notRead not method GET HEAD
-	respond @notRead 405
-
 	header {
 		-Server
 		Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-MR63aP/LP/ccdGQsm3yK6XBo4v6mtPOmN3bdue7TGHk='"
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		?Cache-Control "no-cache"
 	}
+}
+
+moonbow.angleford.co {
+	root * /var/www/moonbow.angleford.co
+	import moonbow_response
+
+	@notRead not method GET HEAD
+	respond @notRead 405
+
 	# Hashed names never change their content; fonts change rarely.
 	header /_astro/* Cache-Control "public, max-age=31536000, immutable"
 	header /fonts/* Cache-Control "public, max-age=604800"
@@ -26,6 +32,7 @@ moonbow.angleford.co {
 	file_server
 
 	handle_errors 404 {
+		import moonbow_response
 		rewrite * /404.html
 		file_server
 	}
