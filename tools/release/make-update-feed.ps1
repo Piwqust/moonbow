@@ -53,7 +53,8 @@ $payload = '{' +
     '"urls":[' + (($urls | ForEach-Object { Q $_ }) -join ',') + ']' +
   '}}'
 
-$blob = [Convert]::FromBase64String($keyText.Trim())
+# Only the base64 characters: a BOM or a line break that came along with the secret is dropped.
+$blob = [Convert]::FromBase64String(($keyText -replace '[^A-Za-z0-9+/=]', ''))
 $cng = [System.Security.Cryptography.CngKey]::Import($blob, [System.Security.Cryptography.CngKeyBlobFormat]::EccPrivateBlob)
 $ecdsa = New-Object System.Security.Cryptography.ECDsaCng($cng)
 $data = [Text.Encoding]::UTF8.GetBytes($payload)

@@ -30,7 +30,8 @@ New-Item -ItemType Directory -Force (Split-Path -Parent $Out) | Out-Null
 [IO.File]::WriteAllText($Out, $private + "`n", (New-Object System.Text.UTF8Encoding $false))
 Write-Host "Private key: $Out (keep a copy somewhere safe, never commit it)"
 if ($SetSecret) {
-  $private | gh secret set MOONBOW_UPDATE_KEY --repo Piwqust/moonbow
+  # --body, not a pipe: Windows PowerShell may put a BOM in front of piped text.
+  gh secret set MOONBOW_UPDATE_KEY --repo Piwqust/moonbow --body $private
   if ($LASTEXITCODE) { throw "gh secret set failed" }
   Write-Host "Stored as the MOONBOW_UPDATE_KEY secret of Piwqust/moonbow"
 }
