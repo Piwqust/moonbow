@@ -8,6 +8,7 @@
 #include "app/I18n.h"
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
+#include "app/player/DetachedWindows.h"
 #include "app/player/Episodes.h"
 #include "app/player/NowPlaying.h"
 #include "app/player/PlayerView.h"
@@ -302,11 +303,9 @@ void TitleBar::ShowAppMenu() {
     items.push_back(item(L"Add subtitles", "subtitles", Action::OpenSubtitles));
     items.push_back(item(L"Media information", "info", Action::ShowInfo));
     items.push_back(MenuItem::Separator());
-    if (audio::ProcessLoopbackSupported()) {
-        MenuItem meters = item(L"Audio meters", "vu_twotone", Action::AudioMeters);
-        meters.checked = TheApp().config().GetBool("interface.metersWindow");
-        items.push_back(std::move(meters));
-    }
+    MenuItem windows{Tr(L"Separate windows"), L"", "window"};
+    windows.submenu = PanelWindowItems();
+    items.push_back(std::move(windows));
     items.push_back(item(L"Customize player", "edit", Action::CustomizePlayer));
     items.push_back(item(L"Keyboard shortcuts", "hotkeys", Action::KeyboardShortcuts));
     items.push_back(item(L"Settings", "settings", Action::Settings));

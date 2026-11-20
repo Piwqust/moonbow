@@ -23,6 +23,9 @@ struct HostOptions {
     HWND owner = nullptr;  // owned windows stay above their owner, no taskbar button
     bool center = true;
     bool showInTaskbar = true;
+    // A tool window: no taskbar button and not in Alt+Tab, on its own (no owner), so it stays on
+    // screen when the main window is minimized (the player's separate windows).
+    bool toolWindow = false;
     // The app's main window: --automation commands go to it and its tree dump is also written
     // to the old %TEMP%\moonbow-tree-<pid>.txt.
     bool mainWindow = false;

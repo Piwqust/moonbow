@@ -1,7 +1,8 @@
 #pragma once
-// The audio meters window's content (Settings > Interface > Separate windows): Moonbow's own sound
-// measured like on a studio desk, in the player's cards: VU meters, EBU R128 loudness, level bars
-// with clip lights, a goniometer with phase correlation and balance, and the spectrum.
+// The audio meters: Moonbow's own sound measured like on a studio desk, in the player's cards:
+// VU meters, EBU R128 loudness, level bars with clip lights, a goniometer with phase correlation
+// and balance, and the spectrum. Each card also lives alone in a window of its own
+// (app/player/DetachedWindows.h); all of them draw from the shared app::AudioFeed.
 
 namespace ui {
 class Widget;
@@ -9,9 +10,14 @@ class Widget;
 
 namespace app {
 
-// Adds the meters to `parent` and returns them.
+// All the cards in a grid (the "Audio meters" window); right click chooses which show.
 ui::Widget* AddMetersView(ui::Widget* parent);
-// The reset button (peaks, clip lights, loudness) for the window's caption row; `view` from AddMetersView.
-void AddMetersTools(ui::Widget* header, ui::Widget* view);
+
+enum class MeterCard { Vu, VuLeft, VuRight, Loudness, Levels, Stereo, Spectrum };
+// One card, to fill a window by itself.
+ui::Widget* AddMeterCard(ui::Widget* parent, MeterCard card);
+
+// The reset button (peaks, clip lights, loudness) for a window's caption row.
+void AddMetersTools(ui::Widget* header);
 
 }  // namespace app

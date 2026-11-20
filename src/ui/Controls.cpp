@@ -1389,6 +1389,8 @@ public:
                        c.textTertiary, HAlign::Leading, VAlign::Center, gfx::kTextEllipsis);
         }
         p.PushClip({rect.x, rect.y + kMenuPad + HeaderH(), rect.w, rect.h - kMenuPad * 2 - HeaderH()});
+        // Rows sit 4 px in from the popup's sides: their corners follow its corner (12 - 4 = 8).
+        const float rowRadius = std::max(0.0f, Theme::Get().Radius(kRadiusPopup) - 4);
         float cy = Top();
         for (size_t k = 0; k < visible_.size(); ++k) {
             const int i = visible_[k];
@@ -1404,7 +1406,7 @@ public:
             }
             const Rect row{rect.x + 4, cy, rect.w - 8, MenuItemH()};
             const bool hot = i == highlight_ && m.enabled;
-            if (hot) p.Fill(row, c.hover, 4);
+            if (hot) p.FillRaw(row, c.hover, rowRadius);
             // A note is information, so it keeps text contrast; a disabled command may fade.
             const Color fg = m.note ? c.textSecondary : !m.enabled ? c.textDisabled : hot ? c.textPrimary : c.textSecondary;
             float x = row.x + 12;

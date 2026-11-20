@@ -407,6 +407,7 @@ bool Host::Create(const HostOptions& options) {
     DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
     if (!options.resizable) style &= ~WS_MAXIMIZEBOX;
     DWORD exStyle = options.owner || !options.showInTaskbar ? 0 : WS_EX_APPWINDOW;
+    if (options.toolWindow) exStyle = WS_EX_TOOLWINDOW;
     if (g_automation) exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
 
     RECT work;

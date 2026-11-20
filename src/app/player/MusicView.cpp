@@ -9,10 +9,12 @@
 // analog VU meters), fed by
 // audio/LoopbackCapture from Moonbow's own sound; a pause brings the cover back.
 #include "Util.h"
+#include "app/Actions.h"
 #include "app/App.h"
 #include "app/MainWindow.h"
 #include "app/StandInArt.h"
 #include "app/library/LibraryCommon.h"
+#include "app/player/AudioFeed.h"
 #include "app/player/ControlBar.h"
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
@@ -217,6 +219,9 @@ class MusicView : public Widget {
 public:
     MusicView() {
         g_musicView = this;
+        // Always takes the mouse: a double click toggles fullscreen and a move brings the bar back
+        // there, as over a video (with lyrics their lines take clicks too).
+        interactive = true;
         // The view covers the video area: without this a right click on it opened nothing (the
         // lyrics keep their own menu).
         onContextMenu = [this](const MouseEvent& e) { ShowPlayerContextMenu(GetHost(), {e.x, e.y}); };
@@ -224,10 +229,6 @@ public:
             if (m & (kChangeFile | kChangeMeta)) RefreshLyrics();
             if (m & kChangeTime) FollowTime();
             if (m & (kChangeMeta | kChangeFile | kChangeState)) Invalidate();
-            // The capture parked itself after a long frame (a busy UI thread): a paint wakes it.
-            // Only while the view is still drawn; hidden or minimized it stays parked.
-            if ((m & kChangeTime) && capture_ && capture_->Stalled() && AnimFloat::Now() - lastPaint_ < 1000)
-                Invalidate();
         });
         vizToken_ = TheApp().config().Subscribe("audio.visualizer", [this](const std::string&) {
             ReadVisualizerSetting();
@@ -255,13 +256,16 @@ public:
         lyricsBtn_->onClick = [this] { LyricsClicked(); };
         queueBtn_ = Add<MusicPill>("list", L"Queue");
         queueBtn_->id = "music-queue";
-        queueBtn_->onClick = [this] { TogglePlayerPanel(PanelKind::Queue, queueBtn_->rect); };
+        // No anchor: the panel opens at the right edge, where Place() makes room for it. Anchored
+        // to this pill it covered the cover (or the meters) and the title, and the view still
+        // moved them aside for a panel on the right.
+        queueBtn_->onClick = [] { TogglePlayerPanel(PanelKind::Queue, {}); };
     }
     ~MusicView() override {
         if (g_musicView == this) g_musicView = nullptr;
         TheApp().config().Unsubscribe(vizToken_);
         TheApp().config().Unsubscribe(lyricsToken_);
-        TheApp().player().SetSignalTap(false);
+        AudioFeed::Get().Detach(this);
         *alive_ = false;
         net::Cancel(onlineReq_);
     }
@@ -282,9 +286,8 @@ public:
         char text[160];
         snprintf(text, sizeof text, " viz=%d frames=%llu captured=%llu cpu=%.0fms level=%.2f top=%.2f%s%s",
                  static_cast<int>(style_), static_cast<unsigned long long>(frame_.serial),
-                 static_cast<unsigned long long>(capture_ ? capture_->Captured() : 0),
-                 capture_ ? capture_->CpuSeconds() * 1000 : 0.0, frame_.level, top,
-                 capture_ && capture_->Failed() ? " failed" : "", capture_ && capture_->Stalled() ? " parked" : "");
+                 static_cast<unsigned long long>(AudioFeed::Get().Captured()), AudioFeed::Get().CpuMs(), frame_.level,
+                 top, AudioFeed::Get().Failed() ? " failed" : "", AudioFeed::Get().Stalled() ? " parked" : "");
         out += text;
     }
 
@@ -294,10 +297,15 @@ public:
         Rect area, left, cover;
         Rect title;             // the title line; the artist line and the pills follow it
         Rect viz, viz2;         // the visualizer next to the cover (viz2: the right wing)
+        Rect vu;                // the VU pair in place of the cover (empty: another style)
         bool beside = false;    // the cover stays and the visualizer has viz (and viz2)
         bool textLeft = false;  // the text starts at title.x instead of centering under the cover
         bool shown = false, wide = false, oneLine = false;
         bool full = false;      // lyrics only: no cover, the lyrics across the view
+        // The text under the cover grows with a tall view (1 up to 900 DIP, 1.5 from 1350): on a
+        // large screen the title would look lost under the big cover or meters. The pills keep
+        // their size: they are controls, like the bar's.
+        float ts = 1;
     };
     Geometry Place() const {
         // An open popover (queue, tracks, settings) takes the right side: center the cover and
@@ -309,6 +317,8 @@ public:
         // 320 leaves a usable cover next to the compact library too (844 - 420 DIP at 1280 wide).
         if (panel && rect.w - (panel::kPanelW + panel::kGap) >= 320) area.w -= panel::kPanelW + panel::kGap;
         Geometry g;
+        g.ts = std::clamp(rect.h / 900.0f, 1.0f, 1.5f);
+        const float ts = g.ts;
         // With lyrics in a wide view the cover and its text take the left half.
         g.shown = lyricsOn_ && !lyrics_.Empty();
         g.wide = g.shown && area.w >= kWideLyrics;
@@ -317,20 +327,36 @@ public:
             g.full = true;
             g.wide = g.oneLine = false;
         }
-        const float extra = (g.oneLine ? 32.0f : 0.0f) + kPillsH;
+        const float extra = (g.oneLine ? 32.0f * ts : 0.0f) + kPillsH;
         g.area = area;
         g.left = area;
         if (g.wide) g.left.w = std::floor(area.w * 0.5f);
         // Layout: cover centered, text 88 DIP under it (1920×1080: 738 cover, 73 top margin).
         const float side =
-            std::floor(std::max(96.0f, std::min({g.left.w - 96, rect.h - 180 - extra, g.wide ? 620.0f : 738.0f})));
-        const float block = side + 88 + 30 + extra;
+            std::floor(std::max(96.0f, std::min({g.left.w - 96, rect.h - 62 - (88 + 30) * ts - extra, g.wide ? 620.0f : 738.0f})));
+        const float block = side + (88 + 30) * ts + extra;
         const float top = rect.y + std::max(24.0f, (rect.h - block) / 2);
         g.cover = {std::round(g.left.Cx() - side / 2), std::round(top), side, side};
-        g.title = {g.left.x + 48, g.cover.Bottom() + 70, g.left.w - 96, 36};
+        g.title = {g.left.x + 48, g.cover.Bottom() + 70 * ts, g.left.w - 96, 36 * ts};
         const VizLayout layout =
             g.shown || style_ == VizStyle::Off || style_ == VizStyle::Spectrometer ? VizLayout::Replace : layout_;
-        if (layout == VizLayout::Wings) {
+        if (layout == VizLayout::Replace && style_ == VizStyle::Vu) {
+            // The meters take the cover's place in their own shape: as wide as the view and as
+            // tall as its height allow, with no 738 cap, so they keep growing on a large screen.
+            // The title goes right under them and the whole block is centred, so a squarish
+            // window leaves no hole between the needles and the title. The cover (on a pause)
+            // sits in the middle of the same box, no taller than it.
+            const float room = rect.h - 62 - (88 + 30) * ts - extra;  // 180 at ts 1, as the cover's
+            const Rect box = VizPaint::VuPairBox({0, 0, g.left.w - 96, std::max(96.0f, room)});
+            if (!box.Empty()) {
+                const float bh = std::max(box.h, 96.0f);
+                const float t = rect.y + std::max(24.0f, (rect.h - (bh + (88 + 30) * ts + extra)) / 2);
+                g.vu = {std::round(g.left.Cx() - box.w / 2), std::round(t), box.w, bh};
+                const float cs = std::floor(std::min(side, bh));
+                g.cover = {std::round(g.left.Cx() - cs / 2), std::round(t + (bh - cs) / 2), cs, cs};
+                g.title = {g.left.x + 48, g.vu.Bottom() + 70 * ts, g.left.w - 96, 36 * ts};
+            }
+        } else if (layout == VizLayout::Wings) {
             // Mirrored bars grow out of the cover's sides, the low notes next to it.
             const float wing = std::floor((area.w - side) / 2 - 64);
             if (wing >= 120) {
@@ -341,13 +367,13 @@ public:
         } else if (layout == VizLayout::Side) {
             // The cover and its text take the right 40 %, the visualizer the rest at the cover's height.
             const float colW = std::floor(area.w * 0.4f);
-            const float s2 = std::floor(std::max(96.0f, std::min({colW - 96, rect.h - 180 - extra, 560.0f})));
+            const float s2 = std::floor(std::max(96.0f, std::min({colW - 96, rect.h - 62 - (88 + 30) * ts - extra, 560.0f})));
             if (area.w - colW >= 320) {
                 g.beside = true;
                 g.left = {area.Right() - colW, area.y, colW, area.h};
-                const float t2 = rect.y + std::max(24.0f, (rect.h - (s2 + 88 + 30 + extra)) / 2);
+                const float t2 = rect.y + std::max(24.0f, (rect.h - (s2 + (88 + 30) * ts + extra)) / 2);
                 g.cover = {std::round(g.left.Cx() - s2 / 2), std::round(t2), s2, s2};
-                g.title = {g.left.x + 24, g.cover.Bottom() + 70, g.left.w - 48, 36};
+                g.title = {g.left.x + 24, g.cover.Bottom() + 70 * ts, g.left.w - 48, 36 * ts};
                 g.viz = {area.x + 64, g.cover.y, g.left.x - area.x - 96, s2};
             }
         } else if (layout == VizLayout::Below) {
@@ -357,6 +383,7 @@ public:
             const Rect viz{x, y + s2 + 48, area.w - 128, rect.Bottom() - 40 - (y + s2 + 48)};
             if (viz.h >= 120 && area.w >= 560) {
                 g.beside = g.textLeft = true;
+                g.ts = 1;  // beside a small cover
                 g.cover = {x, y, s2, s2};
                 const float textH = 36 + 22 + kPillsH;
                 g.title = {x + s2 + 32, std::round(y + (s2 - textH) / 2), area.Right() - 64 - (x + s2 + 32), 36};
@@ -422,7 +449,6 @@ public:
         p.PopOpacity();
         p.PopClip();
 
-        lastPaint_ = AnimFloat::Now();
         lyricsBtn_->visible = queueBtn_->visible = !g.full;
         if (g.full) {
             PaintLyricsOnly(p, g);
@@ -434,8 +460,12 @@ public:
         if (gone < 1 && !loading) {
             p.PushOpacity((1 - gone) * appear);
             p.Shadow(cover, 16, 40, 12, 0.55f * (1 - gone) * appear);
-            if (bmp) p.Image(bmp, cover, 16, true);
-            else PaintGeneratedArt(p, cover, ArtSeed(path));
+            if (bmp) {
+                p.Image(bmp, cover, 16, true);
+                p.ImageOutline(cover, 16);
+            } else {
+                PaintGeneratedArt(p, cover, ArtSeed(path));
+            }
             p.PopOpacity();
         }
         // Beside the cover the band stays in place at rest (a pause, before the first frame): one
@@ -449,7 +479,7 @@ public:
         if (viz > 0) {
             p.PushOpacity(viz);
             if (!g.beside) {
-                PaintVisualizer(p, left, cover, bmp);
+                PaintVisualizer(p, g, bmp);
             } else {
                 PaintBand(p, g.viz, g.viz2.w > 0, false);
                 if (g.viz2.w > 0) PaintBand(p, g.viz2, false, false);
@@ -467,13 +497,28 @@ public:
         // text is light rather than the palette's text colors.
         const Color white = Color::Hex(0xFFFFFF);
         const Rect titleBox = g.title;
-        const Rect secondBox{titleBox.x, titleBox.y + 36, titleBox.w, 22};
+        const float ts = g.ts;
+        const Rect secondBox{titleBox.x, titleBox.y + 36 * ts, titleBox.w, 22 * ts};
         const HAlign textAlign = g.textLeft ? HAlign::Leading : HAlign::Center;
-        p.Text(title, titleBox, TextStyle::Title, white.Fade(0.8f), textAlign);
-        if (!second.empty())
-            p.Text(second, secondBox, TextStyle::Body, white.Fade(0.55f), textAlign);
-        const bool cut = p.Measure(title, TextStyle::Title).width > titleBox.w ||
-                         (!second.empty() && p.Measure(second, TextStyle::Body).width > secondBox.w);
+        // A style drawn `ts` times larger in `box` (Geometry::ts).
+        auto scaled = [&](const std::wstring& text, const Rect& box, TextStyle style, Color c) {
+            if (ts == 1) {
+                p.Text(text, box, style, c, textAlign);
+                return;
+            }
+            D2D1_MATRIX_3X2_F old;
+            p.Ctx()->GetTransform(&old);
+            const D2D1_POINT_2F at{textAlign == HAlign::Center ? box.Cx() : box.x, box.y};
+            p.Ctx()->SetTransform(D2D1::Matrix3x2F::Scale(ts, ts, at) * old);
+            const float w = box.w / ts;
+            p.Text(text, {textAlign == HAlign::Center ? box.Cx() - w / 2 : box.x, box.y, w, box.h / ts}, style, c,
+                   textAlign);
+            p.Ctx()->SetTransform(old);
+        };
+        scaled(title, titleBox, TextStyle::Title, white.Fade(0.8f));
+        if (!second.empty()) scaled(second, secondBox, TextStyle::Body, white.Fade(0.55f));
+        const bool cut = p.Measure(title, TextStyle::Title).width * ts > titleBox.w ||
+                         (!second.empty() && p.Measure(second, TextStyle::Body).width * ts > secondBox.w);
         titleTip_->visible = cut;
         if (cut) {
             titleTip_->rect = {titleBox.x, titleBox.y, titleBox.w, second.empty() ? titleBox.h : secondBox.Bottom() - titleBox.y};
@@ -482,7 +527,7 @@ public:
 
         // The pills: under the artist, or under the sung line when it shows there.
         const float textEnd =
-            titleBox.y - 70 + (oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f);
+            titleBox.y + ((oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f) - 70) * ts;
         lyricsBtn_->active = shown;
         lyricsBtn_->dim = lyrics_.Empty() && !pending_ && !onlineReq_;
         queueBtn_->active = PlayerPanelOpen(PanelKind::Queue);
@@ -512,16 +557,15 @@ public:
             box_ = {};
             std::fill(lineRects_.begin(), lineRects_.end(), Rect{});
             if (oneLine && current_ >= 0)
-                p.Text(lyrics_.lines[static_cast<size_t>(current_)].text,
-                       {left.x + 48, cover.Bottom() + (second.empty() ? 106.0f : 138.0f), left.w - 96, 24},
-                       TextStyle::Large, white.Fade(0.9f), HAlign::Center);
+                scaled(lyrics_.lines[static_cast<size_t>(current_)].text,
+                       {left.x + 48, g.title.y + (second.empty() ? 36.0f : 68.0f) * ts, left.w - 96, 24 * ts},
+                       TextStyle::Large, white.Fade(0.9f));
         }
     }
 
     // Lyrics only: over the blurred cover, the title as one dim line on top and the lyrics in a
     // column across the rest. No visualizer: the capture rests.
     void PaintLyricsOnly(Painter& p, const Geometry& g) {
-        if (capture_) capture_->SetRunning(false);
         titleTip_->visible = false;
         source_->visible = false;
         const Rect& area = g.area;
@@ -554,6 +598,7 @@ public:
     }
 
     bool OnMouseMove(const MouseEvent& e) override {
+        if (MainWindow* w = TheApp().main(); w && w->BarOverlays()) w->PointerMoved(e.x, e.y);
         const int hit = LineAt(e.x, e.y);
         if (hit != hovered_) {
             hovered_ = hit;
@@ -627,6 +672,13 @@ public:
         ClearHover();  // the column glides to the line: no second highlight next to the sung one
         return true;
     }
+    // Settings > Controls > Mouse, as on a video: fullscreen by default. On a lyrics line the second
+    // click seeks there again, like the first.
+    bool OnDoubleClick(const MouseEvent& e) override {
+        if (LineAt(e.x, e.y) >= 0) return OnMouseDown(e);
+        VideoDoubleClick();
+        return true;
+    }
     bool OnWheel(const WheelEvent& e) override {
         if (lyrics_.synced || lyrics_.Empty() || e.horizontal || !box_.Contains(e.x, e.y)) return false;
         const float maxScroll = std::max(0.0f, totalH_ - box_.h);
@@ -643,33 +695,25 @@ private:
         layout_ = VizLayoutOf(TheApp().config().GetString("audio.visualizerLayout"));
         style_ = audio::ProcessLoopbackSupported() ? VizStyleOf(TheApp().config().GetString("audio.visualizer"))
                                                    : VizStyle::Off;
-        // While it is on, volume 0 still carries a (silent) signal to listen to (Player::SetSignalTap).
-        TheApp().player().SetSignalTap(style_ != VizStyle::Off);
-        if (style_ == VizStyle::Off) {
-            capture_.reset();
+        // The shared capture runs for this view only while a visualization is chosen.
+        if (style_ != VizStyle::Off) {
+            AudioFeed::Get().Attach(this);
+        } else {
+            AudioFeed::Get().Detach(this);
             vizShow_.Set(0);
         }
     }
 
     // Runs the capture while the song plays and this view is drawn; returns how far the cover
     // has given way to the visualizer (0..1).
-    float UpdateVisualizer(const PlayerState& s) {
+    float UpdateVisualizer(const PlayerState& /*s*/) {
         if (style_ == VizStyle::Off) return 0;
-        const bool playing = s.fileLoaded && !s.paused && !s.eof && !s.idle;
-        if (playing && !capture_ && GetHost())
-            capture_ = std::make_unique<audio::LoopbackCapture>(GetHost()->Hwnd(), ui::Host::kRepaintMessage);
-        bool show = false;
-        if (capture_) {
-            // Windows' "Animation effects" off: the first frame with sound in it stays, still (WCAG 2.3.3).
-            const bool still = AnimFloat::ReducedMotion() && frame_.level > 0.05f;
-            capture_->SetGain(TheApp().player().OutputGain());
-            capture_->SetRunning(playing && !still);
-            if (!still) capture_->Take(frame_);
-            show = playing && !capture_->Failed();
-        }
+        AudioFeed& feed = AudioFeed::Get();
+        feed.Pull(this);
+        frame_ = feed.Frame();
+        const bool show = feed.IsLive();
         if (style_ == VizStyle::Vu) {
-            const float ref = static_cast<float>(std::atof(TheApp().config().GetString("audio.vuReference").c_str()));
-            if (viz_.UpdateNeedles(frame_, show, ref) && !show) Invalidate();  // falling back to the stop after a pause
+            if (viz_.UpdateNeedles(frame_, show, feed.Reference()) && !show) Invalidate();  // falling back to the stop after a pause
         }
         const float target = show ? 1.0f : 0.0f;
         if (vizShow_.Target() != target) vizShow_.To(target, 220, Ease::InOut);
@@ -682,14 +726,15 @@ private:
     }
 
     // Monochrome on the video background, like the title (the view is dark in both themes).
-    void PaintVisualizer(Painter& p, const Rect& left, const Rect& cover, ID2D1Bitmap* bmp) {
+    void PaintVisualizer(Painter& p, const Geometry& g, ID2D1Bitmap* bmp) {
+        const Rect& left = g.left;
+        const Rect& cover = g.cover;
         const Color white = Color::Hex(0xFFFFFF);
         const Color fg = white.Fade(0.86f), dim = white.Fade(0.4f);
         // The bar styles take a wider band than the square cover, at the same height, so the
-        // title below stays where it was.
-        // Two VU meters side by side need more width than bars to be read.
-        const float w = std::floor(std::min(left.w - 96, cover.w * (style_ == VizStyle::Vu ? 2.2f : 1.5f)));
-        const Rect band{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
+        // title below stays where it was. The VU pair has its own box (Place).
+        const float w = std::floor(std::min(left.w - 96, cover.w * 1.5f));
+        const Rect band = style_ == VizStyle::Vu && !g.vu.Empty() ? g.vu : Rect{std::round(left.Cx() - w / 2), cover.y, w, cover.h};
         switch (style_) {
             case VizStyle::Spectrum: viz_.Spectrum(p, band, frame_, white, false, false); break;
             case VizStyle::Waveform: viz_.Waveform(p, band, frame_, white); break;
@@ -958,7 +1003,6 @@ private:
 
     void SetLyrics(Lyrics l) {
         lyrics_ = std::move(l);
-        interactive = !lyrics_.Empty();
         layoutW_ = -1;
         lineRects_.clear();
         hovered_ = -1;
@@ -968,6 +1012,17 @@ private:
         scroll_.Set(static_cast<float>(current_));
         Invalidate();
     }
+
+public:
+    // For the lyrics window (MusicLyrics): what the view holds, and the line sung now.
+    const Lyrics& LyricsNow(int* line) {
+        TakeLoadedLyrics();
+        if (line)
+            *line = lyrics_.synced ? lyrics_.LineAt(LyricsTime(TheApp().player().State().position) + kLead) : -1;
+        return lyrics_;
+    }
+
+private:
 
     // Playback moved: when another line starts, glide the column to it.
     void FollowTime() {
@@ -1410,10 +1465,8 @@ private:
     Config::Token vizToken_ = 0;
     VizStyle style_ = VizStyle::Off;
     VizLayout layout_ = VizLayout::Replace;
-    std::unique_ptr<audio::LoopbackCapture> capture_;
     audio::VisualFrame frame_;
     AnimFloat vizShow_{0};  // 0 = the cover, 1 = the visualizer
-    double lastPaint_ = 0;
     bool artWaited_ = false;   // the cover was being looked up at the last paint
     AnimFloat art_{1.0f};      // the stand-in art's fade-in after that lookup
     VizPaint viz_;  // the visualizer's drawing, shared with the meters window
@@ -1434,6 +1487,15 @@ void ShowMusicLyrics() {
     if (g_musicView) g_musicView->ShowLyrics();
 }
 
+const Lyrics& MusicLyrics(int* line) {
+    static const Lyrics kNone;
+    if (!g_musicView) {
+        if (line) *line = -1;
+        return kNone;
+    }
+    return g_musicView->LyricsNow(line);
+}
+
 bool MusicCoverReady() {
     return !g_musicView || g_musicView->CoverReady();
 }
@@ -1445,7 +1507,7 @@ Rect MusicToastSlot() {
     if (g.full) return {g.area.x, g_musicView->rect.y + 60, g.area.w, 40};
     // The title is 70 DIP under the cover (Paint): a 40 DIP toast sits in the middle of the gap.
     if (g.textLeft) return {g.viz.x, g.viz.y - 44, g.viz.w, 40};
-    return {g.left.x, g.title.y - 55, g.left.w, 40};
+    return {g.left.x, std::round(g.title.y - 35 * g.ts - 20), g.left.w, 40};
 }
 
 std::vector<MenuItem> LyricsStyleItems() {

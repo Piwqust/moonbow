@@ -46,6 +46,10 @@
 #     nav settings [<page>]          open (or switch) the Settings window; pages:
 #       general interface privacy controls playback video audio subtitles library network
 #       performance recording extensions
+#   window open <id> | window close <id> | window list
+#                         a part of the player in a separate window (app/player/DetachedWindows.h):
+#                         controls seekbar cover nowplaying lyrics queue viz meters vu vu.left vu.right
+#                         loudness levels stereo spectrum; list replies "<id> open|closed|unavailable"
 #   panel <name>          open the player's side panel on a tab (switches to the player screen):
 #     tracks (= audio) subtitles settings queue chapters bookmarks speed; panel close
 #   open <path|url>       play a file, folder, playlist or URL (no dialog); fails if missing

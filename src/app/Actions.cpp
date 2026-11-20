@@ -9,6 +9,7 @@
 #include "app/settings/SettingsUi.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/DetachedWindows.h"
 #include "app/player/Episodes.h"
 #include "app/player/LiveState.h"
 #include "app/player/PlayerOverlays.h"
@@ -451,6 +452,11 @@ void ShowCommandPalette() {
         }
         if (!g.submenu.empty()) items.push_back(std::move(g));
     }
+    // Any part of the player in a window of its own (app/player/DetachedWindows.h).
+    MenuItem windows{Tr(L"Separate windows"), L"", "window"};
+    windows.submenu = PanelWindowItems();
+    std::erase_if(windows.submenu, [](const MenuItem& m) { return m.separator; });
+    items.push_back(std::move(windows));
     // Every row of the Settings window; one opens the window on a search for its name.
     MenuItem all{Tr(L"Settings"), L"", "settings"};
     const settings::Lang lang = sui::Lang();

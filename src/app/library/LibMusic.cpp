@@ -105,6 +105,7 @@ public:
                 p.Fill(rect, c.bgDeep.Fade(appear), radius);
                 p.Image(bmp, rect, radius, true, appear);
             }
+            p.ImageOutline(rect, radius, appear);
             return;
         }
         if (loading) {

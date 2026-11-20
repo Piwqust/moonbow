@@ -34,9 +34,14 @@ public:
     void VuPair(ui::Painter& p, const ui::Rect& r, bool rest, ui::Color ink);
     void VuMeter(ui::Painter& p, const ui::Rect& m, int ch, bool rest, ui::Color ink);
     static ui::Rect FitVu(const ui::Rect& r);  // the largest meter that fits, centered
+    // Where VuPair puts the two meters in `r`; false when they would be too small to draw.
+    static bool PlaceVuPair(const ui::Rect& r, ui::Rect& left, ui::Rect& right);
+    static ui::Rect VuPairBox(const ui::Rect& r);  // the two meters' bounds in `r` (empty: none)
 
     // Lines go straight to the context (Painter has no line call); made once per device.
     ID2D1StrokeStyle* RoundStroke(ID2D1DeviceContext5* ctx);
+    // A stroke with its own cap at each end: round or flat (a flat end stops exactly at the point).
+    ID2D1StrokeStyle* CapStroke(ID2D1DeviceContext5* ctx, bool roundStart, bool roundEnd);
     ID2D1SolidColorBrush* LineBrush(ID2D1DeviceContext5* ctx, ui::Color c, float opacity);
 
 private:
@@ -48,6 +53,8 @@ private:
     Hold holds_[2];               // the highest needle position of the last moment
     double vuAt_ = 0;             // when the needles last moved (AnimFloat::Now)
     gfx::ComPtr<ID2D1StrokeStyle> roundStroke_;
+    gfx::ComPtr<ID2D1StrokeStyle> capStrokes_[4];  // CapStroke: roundStart | roundEnd << 1
+    uint32_t capGen_ = 0;
     gfx::ComPtr<ID2D1SolidColorBrush> lineBrush_;
     uint32_t strokeGen_ = 0, lineGen_ = 0;
 };

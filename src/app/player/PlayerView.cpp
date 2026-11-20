@@ -9,6 +9,7 @@
 #include "app/StandInArt.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/ControlBar.h"
+#include "app/player/DetachedWindows.h"
 #include "app/player/Episodes.h"
 #include "app/player/LiveState.h"
 #include "app/player/NowPlaying.h"
@@ -147,7 +148,6 @@ MenuItem PanelRow(const wchar_t* label, const char* icon, PanelKind kind, std::w
 // most as big icons on top, what plays with its value on the right (a row opens the same panel
 // as its bar button), a few tools, and everything else behind "All commands" (Ctrl+K).
 void ShowVideoContextMenu(Host* host, Point at) {
-    App& app = TheApp();
     const PlayerState& s = PS();
     const bool music = s.fileLoaded && !s.hasVideo;
     std::vector<MenuItem> items;
@@ -184,11 +184,10 @@ void ShowVideoContextMenu(Host* host, Point at) {
             }
             items.push_back(std::move(dock));
         }
-        if (audio::ProcessLoopbackSupported()) {
-            MenuItem meters = Item(L"Audio meters", Action::AudioMeters, "vu_twotone");
-            meters.checked = app.config().GetBool("interface.metersWindow");
-            items.push_back(std::move(meters));
-        }
+        // Any part of the player in a window of its own: the cover, the seek bar, the meters...
+        MenuItem windows{Tr(L"Separate windows"), L"", "window"};
+        windows.submenu = PanelWindowItems();
+        items.push_back(std::move(windows));
         if (Enabled(Action::ShowInExplorer)) items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
     }
     items.push_back(MenuItem::Separator());
@@ -1128,6 +1127,7 @@ void MiniPlayer::Paint(Painter& p) {
             // Square cover centered over a dimmed, cropped copy of itself.
             p.Image(bmp, v, 4, true, 0.35f * appear);
             p.Image(bmp, {std::round(v.Cx() - v.h / 2), v.y, v.h, v.h}, 0, true, appear);
+            p.ImageOutline(v, 4, appear);
         } else if (!TheApp().images().Loading(path, px) && !compact_) {
             // No artwork: the stand-in record of the music view and the library, where a cover goes.
             p.PushOpacity(appear);

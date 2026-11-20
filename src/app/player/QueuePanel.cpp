@@ -428,6 +428,7 @@ public:
         if (!bmp || appear < 1) p.Fill(art, c.bgSelected, 4);
         if (bmp) {
             p.Image(bmp, art, 4, true, appear);
+            p.ImageOutline(art, 4, appear);
         } else if (!images.Loading(item.path, px)) {  // no icon while the cover is on its way
             p.Icon(library::KindOf(item.path) == library::MediaKind::Audio ? "music" : "video", art.Center(20, 20),
                    c.textTertiary.Fade(appear));

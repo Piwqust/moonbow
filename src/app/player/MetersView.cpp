@@ -2,6 +2,8 @@
 
 #include "app/App.h"
 #include "app/I18n.h"
+#include "app/player/AudioFeed.h"
+#include "app/player/DetachedWindows.h"
 #include "app/player/VizPaint.h"
 #include "audio/LoopbackCapture.h"
 #include "core/SettingsSchema.h"
@@ -24,8 +26,6 @@ using namespace ui;
 
 namespace {
 
-constexpr unsigned kMetersTap = 2;       // Player::SetSignalTap listener of the meters window
-constexpr size_t kHistoryMax = 3000;     // loudness history points: 5 min at 10 per second
 constexpr float kHistoryTop = 0, kHistoryBottom = -50;  // LUFS
 // The window's own options (Settings schema, hidden: set from the right-click menu).
 constexpr const char* kCardKeys[] = {"interface.metersVu", "interface.metersLoudness", "interface.metersLevels",
@@ -90,7 +90,7 @@ settings::Lang SchemaLang() {
     return CurrentLanguage() == Language::Russian ? settings::Lang::Ru : settings::Lang::En;
 }
 
-// "0 VU = −10 dBFS (loud modern masters)" without its explanation; "(EBU)" and the like stay.
+// "0 VU = −7 dBFS (loud modern masters)" without its explanation; "(EBU)" and the like stay.
 std::wstring ShortLabel(std::wstring label) {
     const size_t open = label.find(L" (");
     if (open != std::wstring::npos && label.find(L' ', open + 2) != std::wstring::npos) label.resize(open);
@@ -134,108 +134,69 @@ MenuItem ActionItem(std::wstring label, std::function<void()> fn, std::string ic
     return m;
 }
 
-// What every card reads; the view refreshes it once per frame, before the cards paint.
-struct Feed {
-    // The menu's choices, read when a setting changes.
-    struct Options {
-        bool cards[5] = {true, true, true, true, true};  // kCardKeys order
-        bool onTop = false, balance = true, gonioDots = false, spectrumLine = false, spectrumPeaks = true;
-        float target = audio::kLoudnessNone;  // LUFS, none: no target line
-        size_t historyN = 600;                // points the graph shows
-        float floor = -60;                    // level bars, dBFS
-        double holdMs = 1500;                 // 0: no hold, < 0: until reset
-    } opt;
 
-    void Load() {
-        Config& c = Settings();
-        for (int i = 0; i < 5; ++i) opt.cards[i] = c.GetBool(kCardKeys[i]);
-        opt.onTop = c.GetBool("interface.metersOnTop");
-        viz.vuPeak = c.GetBool("interface.metersVuPeak");
-        opt.balance = c.GetBool("interface.metersBalance");
-        opt.gonioDots = c.GetString("interface.metersGonio") == "dots";
-        opt.spectrumLine = c.GetString("interface.metersSpectrumStyle") == "line";
-        opt.spectrumPeaks = c.GetBool("interface.metersSpectrumPeaks");
-        const std::string target = c.GetString("interface.metersTarget");
-        opt.target = target == "off" ? audio::kLoudnessNone : static_cast<float>(std::atof(target.c_str()));
-        opt.historyN = std::clamp<size_t>(static_cast<size_t>(std::atoi(c.GetString("interface.metersHistory").c_str())) * 10,
-                                          100, kHistoryMax);
-        opt.floor = std::min(-20.0f, static_cast<float>(std::atof(c.GetString("interface.metersFloor").c_str())));
-        const std::string peakHold = c.GetString("interface.metersPeakHold");
-        opt.holdMs = peakHold == "hold" ? -1.0 : peakHold == "off" ? 0.0 : std::atof(peakHold.c_str());
-    }
-
-    struct Hold {
-        float db = -200;
-        double at = 0;
-    };
-    std::unique_ptr<audio::LoopbackCapture> capture;
-    audio::VisualFrame frame;
-    VizPaint viz;
-    bool live = false;
-    float reference = -10;
-    Hold hold[2], max[2];
-    std::vector<float> history;  // short-term loudness, oldest first
-    double historyAt = 0;
-
-    std::function<void(std::vector<MenuItem>&)> common;  // the view's entries under each card's own
-
-    void ResetLoudness() {
-        history.clear();
-        if (capture) capture->ResetLoudness();
-        frame.integrated = frame.range = audio::kLoudnessNone;
-    }
-    void ResetClips() {
-        for (Hold& h : max) h = {};
-    }
-    void Reset() {
-        ResetClips();
-        for (Hold& h : hold) h = {};
-        ResetLoudness();
-    }
-};
-
-// A card of the window: the panel colour, a title and an optional note on the right.
+// A card: the panel colour, a title and an optional note on the right. Each card draws from the
+// shared AudioFeed, so it works alone in a window of its own as well as in the meters' grid.
 class Card : public Widget {
 public:
-    Card(Feed& feed, const wchar_t* title) : feed_(feed), title_(title) {
+    Card(const wchar_t* title, const char* panelId) : title_(title), panelId_(panelId) {
         width = Length::Grow();
         height = Length::Grow();
-        // Right click: this card's options, then the window's.
+        feed_.Attach(this);
+        // Right click: this card's options, then the grid's and the window's.
         onContextMenu = [this](const MouseEvent& e) {
             std::vector<MenuItem> items;
             Menu(items);
-            if (!items.empty()) items.push_back(MenuItem::Separator());
-            if (feed_.common) feed_.common(items);
+            // In the grid: this card alone in a window of its own.
+            if (common) {
+                if (!items.empty()) items.push_back(MenuItem::Separator());
+                const std::string id = panelId_;
+                MenuItem own = ActionItem(Tr(L"Open in a separate window"), [id] { TogglePanelWindow(id); }, "open");
+                own.checked = PanelWindowOpen(id);
+                items.push_back(std::move(own));
+                items.push_back(MenuItem::Separator());
+                common(items);
+            }
+            AppendPanelWindowMenu(GetHost(), items);
             ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
         };
     }
+    ~Card() override { feed_.Detach(this); }
+
+    // Set by the meters' grid: its own entries (which cards show, reset), under the card's.
+    std::function<void(std::vector<MenuItem>&)> common;
 
     void Paint(Painter& p) override {
+        feed_.Pull(this);
         p.Fill(rect, P().bgPanel, kRadiusCard);
         const Rect head{rect.x + 14, rect.y + 10, rect.w - 28, 18};
         const std::wstring note = Note();
         const float noteW = note.empty() ? 0 : p.Measure(note, TextStyle::Small).width + 12;
-        p.Text(Tr(title_), {head.x, head.y, head.w - noteW, head.h}, TextStyle::SmallMedium, P().textSecondary);
+        p.Text(Title(), {head.x, head.y, head.w - noteW, head.h}, TextStyle::SmallMedium, P().textSecondary);
         if (!note.empty()) p.Text(note, head, TextStyle::Small, P().textTertiary, HAlign::Trailing);
         PaintBody(p, {rect.x + 14, rect.y + 38, rect.w - 28, rect.h - 38 - 14});
     }
 
 protected:
+    virtual std::wstring Title() const { return Tr(title_); }
     virtual std::wstring Note() const { return {}; }
     virtual void PaintBody(Painter& p, const Rect& r) = 0;
     virtual void Menu(std::vector<MenuItem>& /*items*/) {}
-    Feed& feed_;
+    AudioFeed& feed_ = AudioFeed::Get();
+    VizPaint viz_;  // brushes and strokes; the VU card's needles
 
 private:
     const wchar_t* title_;
+    const char* panelId_;
 };
 
-// --- the VU pair --------------------------------------------------------------------------------
+// --- the VU meters: the pair, or one channel of it ---------------------------------------------
 
 // The calibration sits on the meters it moves, at the card's top right.
 class VuCard : public Card {
 public:
-    explicit VuCard(Feed& f) : Card(f, L"VU meters") {
+    // `ch`: -1 the pair, 0 left, 1 right.
+    explicit VuCard(int ch) : Card(L"VU meters", ch < 0 ? "vu" : ch == 0 ? "vu.left" : "vu.right"), ch_(ch) {
         const settings::Item* item = settings::FindItem("audio.vuReference");
         if (!item) return;
         std::vector<ui::Choice> choices;
@@ -257,11 +218,24 @@ public:
     ~VuCard() override { Settings().Unsubscribe(token_); }
 
     void OnLayout() override {
-        if (calib_) calib_->Arrange({rect.Right() - 8 - 196, rect.y + 6, 196, 28});
+        // A narrow single meter: the calibration goes, the menu still has it.
+        const float w = std::min(196.0f, rect.w - 120);
+        calib_->visible = w >= 150;
+        if (calib_->visible) calib_->Arrange({rect.Right() - 8 - w, rect.y + 6, w, 28});
     }
 
 protected:
-    void PaintBody(Painter& p, const Rect& r) override { feed_.viz.VuPair(p, r, false, P().textPrimary); }
+    std::wstring Title() const override {
+        if (ch_ < 0) return Tr(L"VU meters");
+        return Tr(L"VU meter") + std::wstring(ch_ == 0 ? L" · L" : L" · R");
+    }
+    void PaintBody(Painter& p, const Rect& r) override {
+        viz_.vuPeak = feed_.Opt().vuPeak;
+        // The needles swing by their own physics; after a pause they fall back to the stop.
+        if (viz_.UpdateNeedles(feed_.Frame(), feed_.IsLive(), feed_.Reference()) && !feed_.IsLive()) Invalidate();
+        if (ch_ < 0) viz_.VuPair(p, r, false, P().textPrimary);
+        else viz_.VuMeter(p, VizPaint::FitVu(r), ch_, false, P().textPrimary);
+    }
     void Menu(std::vector<MenuItem>& items) override {
         items.push_back(RadioItem("audio.vuReference"));
         items.push_back(CheckItem("interface.metersVuPeak"));
@@ -275,21 +249,23 @@ private:
                 calib_->SetSelected(static_cast<int>(i));
     }
 
+    int ch_;
     Dropdown* calib_ = nullptr;
     Config::Token token_ = 0;
 };
+
 
 // --- EBU R128 loudness: integrated large, M / S / LRA, and the last minute as a graph ------------
 
 class LoudnessCard : public Card {
 public:
-    explicit LoudnessCard(Feed& f) : Card(f, L"Loudness") {}
+    LoudnessCard() : Card(L"Loudness", "loudness") {}
 
 protected:
     std::wstring Note() const override { return L"EBU R128"; }
 
     void PaintBody(Painter& p, const Rect& r) override {
-        const audio::VisualFrame& f = feed_.frame;
+        const audio::VisualFrame& f = feed_.Frame();
         const Color primary = P().textPrimary, tertiary = P().textTertiary;
         // Integrated: the whole song so far.
         const std::wstring big = Number(f.integrated);
@@ -298,7 +274,7 @@ protected:
         p.Text(L"LUFS", {r.x + bigW + 8, r.y + 10, 60, 18}, TextStyle::Small, tertiary);
         p.Text(Tr(L"Integrated loudness"), {r.x, r.y + 32, r.w, 18}, TextStyle::Small, P().textSecondary);
         // Against the chosen target: + louder, − quieter.
-        const float target = feed_.opt.target;
+        const float target = feed_.Opt().target;
         if (target > audio::kLoudnessNone) {
             const bool known = f.integrated > audio::kLoudnessNone;
             p.Text(known ? Number(f.integrated - target, 1, true) + L" LU" : L"—", {r.x, r.y + 6, r.w, 22}, TextStyle::Mono,
@@ -313,8 +289,8 @@ protected:
             const wchar_t* head;
             float value;
             const wchar_t* unit;
-        } cols[] = {{L"M", feed_.live ? f.momentary : audio::kLoudnessNone, L"LUFS"},
-                    {L"S", feed_.live ? f.shortTerm : audio::kLoudnessNone, L"LUFS"},
+        } cols[] = {{L"M", feed_.IsLive() ? f.momentary : audio::kLoudnessNone, L"LUFS"},
+                    {L"S", feed_.IsLive() ? f.shortTerm : audio::kLoudnessNone, L"LUFS"},
                     {L"LRA", f.range, L"LU"}};
         for (int i = 0; i < 3; ++i) {
             const Rect c{r.x + colW * i, y, colW - 6, 16};
@@ -347,13 +323,13 @@ private:
             p.Fill({g.x, y, g.w, 1}, P().line);
             p.Text(Number(l, 0), {r.x, y - 8, labelW - 6, 16}, TextStyle::Micro, P().textTertiary, HAlign::Trailing);
         }
-        if (feed_.opt.target > audio::kLoudnessNone) {
-            const float y = std::round(yOf(feed_.opt.target));
+        if (feed_.Opt().target > audio::kLoudnessNone) {
+            const float y = std::round(yOf(feed_.Opt().target));
             p.Fill({g.x, y, g.w, 1}, P().accent.Fade(0.6f));
             p.Text(Tr(L"target"), {g.x, y - 15, g.w - 2, 14}, TextStyle::Micro, P().textSecondary, HAlign::Trailing);
         }
         const std::vector<float>& all = feed_.history;
-        const size_t n = feed_.opt.historyN, skip = all.size() > n ? all.size() - n : 0;
+        const size_t n = feed_.Opt().historyN, skip = all.size() > n ? all.size() - n : 0;
         const std::vector<float> h(all.begin() + static_cast<std::ptrdiff_t>(skip), all.end());
         if (h.size() < 2) return;
         ID2D1DeviceContext5* ctx = p.Ctx();
@@ -364,8 +340,8 @@ private:
                 if (auto area = Polyline(ctx, run.data(), run.size(), true, g.Bottom()))
                     p.FillGeometry(area.Get(), P().accent.Fade(0.10f));
                 if (auto line = Polyline(ctx, run.data(), run.size(), false))
-                    if (ID2D1SolidColorBrush* b = feed_.viz.LineBrush(ctx, P().accent, 0.9f * p.Opacity()))
-                        ctx->DrawGeometry(line.Get(), b, 1.5f, feed_.viz.RoundStroke(ctx));
+                    if (ID2D1SolidColorBrush* b = viz_.LineBrush(ctx, P().accent, 0.9f * p.Opacity()))
+                        ctx->DrawGeometry(line.Get(), b, 1.5f, viz_.RoundStroke(ctx));
             }
             run.clear();
         };
@@ -384,7 +360,7 @@ private:
 
 class LevelsCard : public Card {
 public:
-    explicit LevelsCard(Feed& f) : Card(f, L"Levels") {
+    LevelsCard() : Card(L"Levels", "levels") {
         height = Length::Px(132);
         interactive = true;
         tooltip = Tr(L"Click a clip light to reset it");
@@ -418,7 +394,7 @@ protected:
         constexpr float contentH = 86, numW = 62, letterW = 18, lightW = 8;
         // Taller than its content (the spectrum hidden): the bars in the middle.
         const Rect r{body.x, body.y + std::max(0.0f, std::floor((body.h - contentH) / 2)), body.w, contentH};
-        const float floor = feed_.opt.floor;
+        const float floor = feed_.Opt().floor;
         const float barX = r.x + letterW, barW = r.w - letterW - lightW - 10 - 3 * numW - 8;
         const float numX = r.Right() - 3 * numW;
         const wchar_t* heads[] = {L"RMS", L"Peak", L"Max"};
@@ -427,9 +403,9 @@ protected:
         for (int ch = 0; ch < 2; ++ch) {
             const float y = r.y + 18 + ch * 24;
             p.Text(ch == 0 ? L"L" : L"R", {r.x, y, letterW, 18}, TextStyle::SmallMedium, P().textSecondary);
-            const float rms = feed_.live ? Db(feed_.frame.rms[ch]) : -200.0f;
-            const float peak = feed_.live ? Db(feed_.frame.peak[ch]) : -200.0f;
-            PaintBar(p, {barX, y + 3, barW, 12}, rms, peak, feed_.opt.holdMs != 0 ? feed_.hold[ch].db : -200.0f, floor);
+            const float rms = feed_.IsLive() ? Db(feed_.Frame().rms[ch]) : -200.0f;
+            const float peak = feed_.IsLive() ? Db(feed_.Frame().peak[ch]) : -200.0f;
+            PaintBar(p, {barX, y + 3, barW, 12}, rms, peak, feed_.Opt().holdMs != 0 ? feed_.hold[ch].db : -200.0f, floor);
             // The clip light: lit once the song went over full scale, until clicked.
             const bool clipped = feed_.max[ch].db >= 0;
             lights_[ch] = {barX + barW + 6, y + 3, lightW, 12};
@@ -478,7 +454,7 @@ private:
 
 class StereoCard : public Card {
 public:
-    explicit StereoCard(Feed& f) : Card(f, L"Stereo") {}
+    StereoCard() : Card(L"Stereo", "stereo") {}
 
 protected:
     void Menu(std::vector<MenuItem>& items) override {
@@ -487,20 +463,20 @@ protected:
     }
 
     void PaintBody(Painter& p, const Rect& r) override {
-        const float meters = feed_.opt.balance ? 92.0f : 42.0f;
+        const float meters = feed_.Opt().balance ? 92.0f : 42.0f;
         const float side = std::floor(std::min(r.w, r.h - meters - 8));
         if (side > 40) PaintGonio(p, {std::round(r.Cx() - side / 2), r.y, side, side});
-        const audio::VisualFrame& f = feed_.frame;
+        const audio::VisualFrame& f = feed_.Frame();
         const float y = r.Bottom() - meters;
         // +1: the channels move together (mono); 0: unrelated; below 0: out of phase, which
         // cancels out on a mono speaker.
         const float corr = f.correlation;
-        PaintScale(p, {r.x, y, r.w, 40}, Tr(L"Correlation"), feed_.live ? Number(corr, 2, true) : L"—",
-                   feed_.live ? corr : 0, feed_.live, corr < 0 ? Red() : P().accent, L"−1", L"0", L"+1");
-        if (!feed_.opt.balance) return;
+        PaintScale(p, {r.x, y, r.w, 40}, Tr(L"Correlation"), feed_.IsLive() ? Number(corr, 2, true) : L"—",
+                   feed_.IsLive() ? corr : 0, feed_.IsLive(), corr < 0 ? Red() : P().accent, L"−1", L"0", L"+1");
+        if (!feed_.Opt().balance) return;
         // Balance: how much louder one side is, ±6 dB across the bar.
         const float l = Db(f.rms[0]), rr = Db(f.rms[1]);
-        const bool balanced = feed_.live && l > -90 && rr > -90;
+        const bool balanced = feed_.IsLive() && l > -90 && rr > -90;
         const float bal = balanced ? std::clamp(rr - l, -6.0f, 6.0f) : 0;
         std::wstring text = L"—";
         if (balanced)
@@ -516,7 +492,7 @@ private:
         p.StrokeCircle({cx, cy}, rad - 0.5f, grid);
         p.StrokeCircle({cx, cy}, rad * 0.5f, grid.Fade(0.6f));
         ID2D1DeviceContext5* ctx = p.Ctx();
-        if (ID2D1SolidColorBrush* b = feed_.viz.LineBrush(ctx, grid, p.Opacity())) {
+        if (ID2D1SolidColorBrush* b = viz_.LineBrush(ctx, grid, p.Opacity())) {
             const float d = rad * 0.7071f;
             ctx->DrawLine({cx, cy - rad}, {cx, cy + rad}, b, 1);
             ctx->DrawLine({cx - rad, cy}, {cx + rad, cy}, b, 1);
@@ -529,7 +505,7 @@ private:
         p.Text(L"R", {cx + d - 8, cy - d - 8, 16, 16}, TextStyle::Micro, label, HAlign::Center);
         p.Text(L"M", {cx + 4, r.y - 2, 16, 16}, TextStyle::Micro, label);
         p.Text(L"S", {r.Right() - 14, cy + 2, 16, 16}, TextStyle::Micro, label);
-        if (!feed_.live) {
+        if (!feed_.IsLive()) {
             p.FillCircle({cx, cy}, 2, P().accent.Fade(0.5f));
             return;
         }
@@ -537,16 +513,16 @@ private:
         std::vector<D2D1_POINT_2F> pts(audio::kGonioPoints);
         const float k = rad * 0.62f;
         for (int i = 0; i < audio::kGonioPoints; ++i) {
-            const float l = feed_.frame.gonio[i * 2], rr = feed_.frame.gonio[i * 2 + 1];
+            const float l = feed_.Frame().gonio[i * 2], rr = feed_.Frame().gonio[i * 2 + 1];
             pts[static_cast<size_t>(i)] = {cx + (rr - l) * k, cy - (l + rr) * k};
         }
         p.PushRoundClip(r, rad);  // inside the circle: loud corners would draw the clamp's square
-        if (feed_.opt.gonioDots) {
+        if (feed_.Opt().gonioDots) {
             const Color dot = P().accent.Fade(0.6f);
             for (const D2D1_POINT_2F& pt : pts) p.Fill({pt.x - 0.75f, pt.y - 0.75f, 1.5f, 1.5f}, dot);
         } else if (auto trace = Polyline(ctx, pts.data(), pts.size(), false)) {
-            if (ID2D1SolidColorBrush* b = feed_.viz.LineBrush(ctx, P().accent, 0.55f * p.Opacity()))
-                ctx->DrawGeometry(trace.Get(), b, 1.0f, feed_.viz.RoundStroke(ctx));
+            if (ID2D1SolidColorBrush* b = viz_.LineBrush(ctx, P().accent, 0.55f * p.Opacity()))
+                ctx->DrawGeometry(trace.Get(), b, 1.0f, viz_.RoundStroke(ctx));
         }
         p.PopClip();
     }
@@ -576,7 +552,7 @@ private:
 
 class SpectrumCard : public Card {
 public:
-    explicit SpectrumCard(Feed& f) : Card(f, L"Spectrum") {}
+    SpectrumCard() : Card(L"Spectrum", "spectrum") {}
 
 protected:
     std::wstring Note() const override { return std::wstring(L"40 ") + Tr(L"Hz") + L" – 16 " + Tr(L"kHz"); }
@@ -596,8 +572,8 @@ protected:
             p.Text(Number(db, 0), {bars.Right() + 4, y - 8, dbW - 4, 16}, TextStyle::Micro, P().textTertiary,
                    HAlign::Trailing);
         }
-        if (feed_.opt.spectrumLine) PaintLine(p, bars);
-        else feed_.viz.Spectrum(p, bars, feed_.frame, P().accent, false, false, !feed_.live, feed_.opt.spectrumPeaks);
+        if (feed_.Opt().spectrumLine) PaintLine(p, bars);
+        else viz_.Spectrum(p, bars, feed_.Frame(), P().accent, false, false, !feed_.IsLive(), feed_.Opt().spectrumPeaks);
         // Bands are log-spaced from 40 Hz to 16 kHz (audio::SpectrumAnalyzer).
         const float step = bars.w / audio::kBands;
         for (int hz : {50, 100, 200, 500, 1000, 2000, 5000, 10000}) {
@@ -610,22 +586,23 @@ protected:
 private:
     // The bands as one smooth curve over a soft area, the peaks as dots above it.
     void PaintLine(Painter& p, const Rect& r) {
-        const audio::VisualFrame& f = feed_.frame;
+        const audio::VisualFrame& f = feed_.Frame();
         const float step = r.w / audio::kBands;
         auto yOf = [&](float level) { return r.Bottom() - std::clamp(level, 0.0f, 1.0f) * r.h * 0.9f; };
         std::vector<D2D1_POINT_2F> pts;
         for (int i = 0; i < audio::kBands; ++i)
-            pts.push_back({r.x + step * (i + 0.39f), yOf(feed_.live ? f.bands[i] : 0.0f)});
+            pts.push_back({r.x + step * (i + 0.39f), yOf(feed_.IsLive() ? f.bands[i] : 0.0f)});
         ID2D1DeviceContext5* ctx = p.Ctx();
         if (auto area = Polyline(ctx, pts.data(), pts.size(), true, r.Bottom())) p.FillGeometry(area.Get(), P().accent.Fade(0.14f));
         if (auto line = Polyline(ctx, pts.data(), pts.size(), false))
-            if (ID2D1SolidColorBrush* b = feed_.viz.LineBrush(ctx, P().accent, 0.9f * p.Opacity()))
-                ctx->DrawGeometry(line.Get(), b, 2.0f, feed_.viz.RoundStroke(ctx));
-        if (feed_.opt.spectrumPeaks && feed_.live)
+            if (ID2D1SolidColorBrush* b = viz_.LineBrush(ctx, P().accent, 0.9f * p.Opacity()))
+                ctx->DrawGeometry(line.Get(), b, 2.0f, viz_.RoundStroke(ctx));
+        if (feed_.Opt().spectrumPeaks && feed_.IsLive())
             for (int i = 0; i < audio::kBands; ++i)
                 if (f.peaks[i] > 0.02f) p.FillCircle({pts[static_cast<size_t>(i)].x, yOf(f.peaks[i])}, 1.5f, P().accent);
     }
 };
+
 
 // --- the view: two rows of cards, the right column a fixed share of the width -------------------
 
@@ -641,8 +618,8 @@ public:
         top_->dir = Dir::Row;
         top_->gap = 8;
         top_->width = Length::Grow();
-        cards_[0] = top_->Add<VuCard>(feed_);
-        cards_[1] = top_->Add<LoudnessCard>(feed_);
+        cards_[0] = top_->Add<VuCard>(-1);
+        cards_[1] = top_->Add<LoudnessCard>();
         bottom_ = Add<Widget>();
         bottom_->dir = Dir::Row;
         bottom_->gap = 8;
@@ -652,40 +629,25 @@ public:
         left_->gap = 8;
         left_->width = Length::Grow();
         left_->height = Length::Grow();
-        cards_[2] = left_->Add<LevelsCard>(feed_);
-        cards_[4] = left_->Add<SpectrumCard>(feed_);
-        cards_[3] = bottom_->Add<StereoCard>(feed_);
-        // Right click between the cards: the window's entries alone.
-        feed_.common = [this](std::vector<MenuItem>& items) { CommonMenu(items); };
+        cards_[2] = left_->Add<LevelsCard>();
+        cards_[4] = left_->Add<SpectrumCard>();
+        cards_[3] = bottom_->Add<StereoCard>();
+        for (Card* c : cards_) c->common = [this](std::vector<MenuItem>& items) { CommonMenu(items); };
+        // Right click between the cards: the grid's entries and the window's.
         onContextMenu = [this](const MouseEvent& e) {
             std::vector<MenuItem> items;
             CommonMenu(items);
+            AppendPanelWindowMenu(GetHost(), items);
             ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
         };
-        feed_.Load();
-        Arrange();
+        Load();
         options_ = Settings().Subscribe("interface.meters", [this](const std::string&) {
-            feed_.Load();
-            Arrange();
-            ApplyOnTop();
+            Load();
             InvalidateLayout();
             Invalidate();
         });
-
-        TheApp().player().SetSignalTap(true, kMetersTap);
-        conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
-            if (m & (kChangeTime | kChangeState | kChangeFile | kChangeVolume)) Invalidate();
-        });
     }
-    ~MetersView() override {
-        Settings().Unsubscribe(options_);
-        TheApp().player().SetSignalTap(false, kMetersTap);
-    }
-
-    void Reset() {
-        feed_.Reset();
-        Invalidate();
-    }
+    ~MetersView() override { Settings().Unsubscribe(options_); }
 
     void OnLayout() override {
         // The right column keeps a share of the width, or takes the row when its neighbour is hidden.
@@ -697,109 +659,58 @@ public:
 
     void DebugInfo(std::string& out) const override {
         Widget::DebugInfo(out);
-        const audio::VisualFrame& f = feed_.frame;
+        const AudioFeed& feed = AudioFeed::Get();
+        const audio::VisualFrame& f = feed.Frame();
         float gonio = 0;
         for (float v : f.gonio) gonio = std::max(gonio, std::fabs(v));
         char text[256];
         snprintf(text, sizeof text,
                  " frames=%llu rms=%.3f/%.3f peak=%.3f/%.3f lufs=%.1f/%.1f/%.1f lra=%.1f corr=%.2f gonio=%.2f history=%zu%s",
                  static_cast<unsigned long long>(f.serial), f.rms[0], f.rms[1], f.peak[0], f.peak[1], f.momentary,
-                 f.shortTerm, f.integrated, f.range, f.correlation, gonio, feed_.history.size(),
-                 feed_.capture && feed_.capture->Failed() ? " failed" : "");
+                 f.shortTerm, f.integrated, f.range, f.correlation, gonio, feed.history.size(),
+                 feed.Failed() ? " failed" : "");
         out += text;
     }
 
-    void Paint(Painter& p) override {
-        Feed& f = feed_;
-        if (!onTopApplied_) ApplyOnTop();
-        const PlayerState& s = TheApp().player().State();
-        const bool playing = s.fileLoaded && !s.paused && !s.eof && !s.idle;
-        if (playing && !f.capture && GetHost())
-            f.capture = std::make_unique<audio::LoopbackCapture>(GetHost()->Hwnd(), Host::kRepaintMessage);
-        if (s.loadSerial != serial_) {  // a new song: its own loudness and loudest moments
-            serial_ = s.loadSerial;
-            f.Reset();
-        }
-        f.live = false;
-        if (f.capture) {
-            // Windows' "Animation effects" off: the first frame with sound in it stays (WCAG 2.3.3).
-            const bool still = AnimFloat::ReducedMotion() && f.frame.level > 0.05f;
-            f.capture->SetGain(TheApp().player().OutputGain());
-            f.capture->SetRunning(playing && !still);
-            if (!still) f.capture->Take(f.frame);
-            f.live = playing && !f.capture->Failed();
-        }
-        f.reference = static_cast<float>(std::atof(Settings().GetString("audio.vuReference").c_str()));
-        if (f.viz.UpdateNeedles(f.frame, f.live, f.reference) && !f.live) Invalidate();  // falling to the stop
-        const double now = AnimFloat::Now();
-        for (int ch = 0; ch < 2; ++ch) {
-            const float db = f.live ? Db(f.frame.peak[ch]) : -200.0f;
-            // The peak readout holds the highest value for a moment, like a desk's peak meter.
-            const double holdMs = f.opt.holdMs;
-            if (db >= f.hold[ch].db || (holdMs >= 0 && now - f.hold[ch].at > holdMs)) f.hold[ch] = {db, now};
-            if (db > f.max[ch].db) f.max[ch] = {db, now};
-        }
-        // The loudness graph takes a point every 100 ms while the sound plays.
-        if (f.live && now - f.historyAt >= 100) {
-            f.historyAt = now;
-            f.history.push_back(f.frame.shortTerm > audio::kLoudnessNone ? f.frame.shortTerm : f.frame.momentary);
-            if (f.history.size() > kHistoryMax) f.history.erase(f.history.begin());
-        }
-        p.Fill(rect, P().bgBase);
-    }
+    void Paint(Painter& p) override { p.Fill(rect, P().bgBase); }
 
 private:
     // Shows the chosen cards; a row or column with none of its cards goes too.
-    void Arrange() {
-        const Feed::Options& o = feed_.opt;
-        for (int i = 0; i < 5; ++i) cards_[i]->visible = o.cards[i];
-        top_->visible = o.cards[0] || o.cards[1];
-        left_->visible = o.cards[2] || o.cards[4];
-        bottom_->visible = left_->visible || o.cards[3];
+    void Load() {
+        bool on[5];
+        for (int i = 0; i < 5; ++i) on[i] = Settings().GetBool(kCardKeys[i]);
+        for (int i = 0; i < 5; ++i) cards_[i]->visible = on[i];
+        top_->visible = on[0] || on[1];
+        left_->visible = on[2] || on[4];
+        bottom_->visible = left_->visible || on[3];
         // The level bars alone below: a strip of their own height, not half the window.
-        const bool barsOnly = o.cards[2] && !o.cards[4] && !o.cards[3];
+        const bool barsOnly = on[2] && !on[4] && !on[3];
         bottom_->height = barsOnly && top_->visible ? Length::Px(132) : Length::Grow();
-        cards_[2]->height = o.cards[4] ? Length::Px(132) : Length::Grow();
+        cards_[2]->height = on[4] ? Length::Px(132) : Length::Grow();
         top_->height = Length::Grow(1.1f);
-    }
-
-    void ApplyOnTop() {
-        Host* host = GetHost();
-        if (!host || !host->Hwnd()) return;
-        onTopApplied_ = true;
-        SetWindowPos(host->Hwnd(), feed_.opt.onTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     void CommonMenu(std::vector<MenuItem>& items) {
         MenuItem show;
         show.label = Tr(L"Show");
         int shown = 0;
-        for (bool on : feed_.opt.cards) shown += on;
+        for (Card* c : cards_) shown += c->visible;
         // Display order, not kCardKeys' order; the last card shown can't go.
-        for (int i : {0, 1, 2, 3, 4}) show.submenu.push_back(CheckItem(kCardKeys[i], !(feed_.opt.cards[i] && shown == 1)));
+        for (int i : {0, 1, 2, 3, 4}) show.submenu.push_back(CheckItem(kCardKeys[i], !(cards_[i]->visible && shown == 1)));
         items.push_back(std::move(show));
-        items.push_back(CheckItem("interface.metersOnTop"));
         items.push_back(MenuItem::Separator());
-        items.push_back(ActionItem(Tr(L"Reset peaks and loudness"), [this] { Reset(); }, "refresh"));
+        items.push_back(ActionItem(Tr(L"Reset peaks and loudness"), [] { AudioFeed::Get().Reset(); }, "refresh"));
         items.push_back(ActionItem(Tr(L"Restore the default meter settings"), [] {
             for (const char* k : kCardKeys) Settings().Reset(k);
             for (const char* k : kOptionKeys) Settings().Reset(k);
         }));
-        items.push_back(MenuItem::Separator());
-        items.push_back(ActionItem(Tr(L"Close the meters"), [] { Settings().SetBool("interface.metersWindow", false); },
-                                   "close"));
     }
 
-    Feed feed_;
     Widget* top_ = nullptr;
     Widget* bottom_ = nullptr;
     Widget* left_ = nullptr;
-    Widget* cards_[5] = {};  // kCardKeys order: VU, loudness, levels, stereo, spectrum
-    uint64_t serial_ = 0;
-    bool onTopApplied_ = false;
+    Card* cards_[5] = {};  // kCardKeys order: VU, loudness, levels, stereo, spectrum
     Config::Token options_ = 0;
-    ScopedConnection conn_;
 };
 
 }  // namespace
@@ -808,11 +719,23 @@ Widget* AddMetersView(Widget* parent) {
     return parent->Add<MetersView>();
 }
 
-void AddMetersTools(Widget* header, Widget* view) {
-    auto* meters = static_cast<MetersView*>(view);
+Widget* AddMeterCard(Widget* parent, MeterCard card) {
+    switch (card) {
+        case MeterCard::Vu: return parent->Add<VuCard>(-1);
+        case MeterCard::VuLeft: return parent->Add<VuCard>(0);
+        case MeterCard::VuRight: return parent->Add<VuCard>(1);
+        case MeterCard::Loudness: return parent->Add<LoudnessCard>();
+        case MeterCard::Levels: return parent->Add<LevelsCard>();
+        case MeterCard::Stereo: return parent->Add<StereoCard>();
+        case MeterCard::Spectrum: return parent->Add<SpectrumCard>();
+    }
+    return nullptr;
+}
+
+void AddMetersTools(Widget* header) {
     auto* reset = header->Add<IconButton>("refresh", Tr(L"Reset peaks and loudness"), 40, 20);
     reset->height = Length::Px(40);
-    reset->onClick = [meters] { meters->Reset(); };
+    reset->onClick = [] { AudioFeed::Get().Reset(); };
 }
 
 }  // namespace app

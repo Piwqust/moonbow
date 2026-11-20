@@ -686,8 +686,12 @@ public:
         ID2D1Bitmap* bmp = nullptr;
         if (!file.empty() && GetHost()) bmp = TheApp().images().Get(file, static_cast<int>(rect.h * GetHost()->Scale()));
         p.Fill(rect, c.bgCard, 6);
-        if (bmp) p.Image(bmp, rect, 6, true);
-        else p.Icon("video", rect.Center(32, 32), c.textTertiary, c.accentMid);
+        if (bmp) {
+            p.Image(bmp, rect, 6, true);
+            p.ImageOutline(rect, 6);
+        } else {
+            p.Icon("video", rect.Center(32, 32), c.textTertiary, c.accentMid);
+        }
     }
 
 private:

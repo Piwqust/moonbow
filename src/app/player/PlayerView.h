@@ -102,6 +102,10 @@ bool MusicCoverReady();
 ui::Rect MusicToastSlot();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
+// The playing song's lyrics as the music view holds them, and the line sung now (`line`, -1: none
+// or unsynced). The reference stays valid until the next file loads.
+struct Lyrics;
+const Lyrics& MusicLyrics(int* line);
 
 // Library-mode mini player (bottom-right): small video, seek, title, controls on hover.
 class MiniPlayer : public ui::Widget {

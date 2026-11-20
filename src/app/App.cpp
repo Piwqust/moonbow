@@ -1200,6 +1200,8 @@ void App::ShowOnboarding() {
 void App::BeginQuit() {
     // The close hides the window first; the final FlushStores skips a hidden one.
     SaveWindowPlacement();
+    // The separate windows close with the app and open again next time.
+    CloseDetachedWindows();
     quitting_ = true;
     player_.Detach();
 }
@@ -1415,6 +1417,22 @@ bool App::AutomationCommand(const std::wstring& command, std::string* reply) {
         Navigate(Route{section, path});
         r = "route " + arg;
         return true;
+    }
+
+    if (verb == "window") {
+        // window open <id> | window close <id> | window list (app/player/DetachedWindows.h)
+        const size_t sp2 = arg.find(' ');
+        const std::string what = arg.substr(0, sp2), id = sp2 == std::string::npos ? "" : arg.substr(sp2 + 1);
+        if (what == "list") {
+            r = PanelWindowsState();
+            return true;
+        }
+        if ((what == "open" || what == "close") && SetPanelWindow(id, what == "open")) {
+            r = "window " + what + " " + id;
+            return true;
+        }
+        r = "unknown or unavailable window: " + arg;
+        return false;
     }
 
     if (verb == "panel") {

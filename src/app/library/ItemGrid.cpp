@@ -504,6 +504,7 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
             p.PushRoundClip(t, t.w / 2);
             p.Image(bmp, t, 0, true, opacity * appear);
             p.PopClip();
+            p.ImageOutline(t, t.w / 2, opacity * appear);
         } else if (zoom > 0) {
             // Hovered: the picture grows inside the card's frame, the frame stays put.
             const float dx = t.w * kHoverZoom * zoom / 2, dy = t.h * kHoverZoom * zoom / 2;
@@ -511,9 +512,11 @@ void ItemGrid::PaintThumb(Painter& p, const Entry& e, const Rect& t, float radiu
             p.Fill(t, c.bgDeep.Fade(appear));
             p.Image(bmp, {t.x - dx, t.y - dy, t.w + 2 * dx, t.h + 2 * dy}, 0, true, opacity * appear);
             p.PopClip();
+            p.ImageOutline(t, radius, opacity * appear);
         } else {
             p.Fill(t, c.bgDeep.Fade(appear), radius);
             p.Image(bmp, t, radius, true, opacity * appear);
+            p.ImageOutline(t, radius, opacity * appear);
         }
         return;
     }

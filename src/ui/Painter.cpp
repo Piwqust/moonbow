@@ -108,6 +108,11 @@ void Painter::Image(ID2D1Bitmap* bitmap, const Rect& r, float radius, bool cover
         ctx_->FillRectangle(dst.D2D(), brush.Get());
 }
 
+void Painter::ImageOutline(const Rect& r, float radius, float opacity) {
+    const float v = Theme::Get().Mode() == ThemeMode::Dark ? 1.0f : 0.0f;
+    Stroke(r, Color{v, v, v, 0.1f * opacity}, radius);
+}
+
 void Painter::Shadow(const Rect& r, float radius, float blur, float dy, float alpha) {
     if (alpha < 0) alpha = P().shadow.a;
     radius = Theme::Get().Radius(radius);  // once: radius + grow is not a design radius

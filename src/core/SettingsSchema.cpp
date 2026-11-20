@@ -978,6 +978,7 @@ void BuildApp(Builder& b) {
     b.Toggle("interface.metersLevels", L"Levels", L"Уровни", true).Hidden();
     b.Toggle("interface.metersStereo", L"Stereo", L"Стерео", true).Hidden();
     b.Toggle("interface.metersSpectrum", L"Spectrum", L"Спектр", true).Hidden();
+    // Read once by app/player/DetachedWindows.cpp: the meters window's place before windows.json.
     b.Toggle("interface.metersOnTop", L"Keep above other windows", L"Поверх других окон", false).Hidden();
     b.Toggle("interface.metersVuPeak", L"Show the held peak", L"Показывать удержанный пик", true).Hidden();
     b.Pick("interface.metersTarget", L"Loudness target", L"Целевая громкость",
@@ -1933,8 +1934,9 @@ void BuildMedia(Builder& b) {
            {{"-20", L"0 VU = −20 dBFS (SMPTE)", L"0 VU = −20 dBFS (SMPTE)"},
             {"-18", L"0 VU = −18 dBFS (EBU)", L"0 VU = −18 dBFS (EBU)"},
             {"-14", L"0 VU = −14 dBFS", L"0 VU = −14 dBFS"},
-            {"-10", L"0 VU = −10 dBFS (loud modern masters)", L"0 VU = −10 dBFS (громкие современные записи)"}},
-           "-10")
+            {"-10", L"0 VU = −10 dBFS", L"0 VU = −10 dBFS"},
+            {"-7", L"0 VU = −7 dBFS (loud modern masters)", L"0 VU = −7 dBFS (громкие современные записи)"}},
+           "-7")
         .Desc(L"The RMS level of the music that puts the needles at 0 VU. Studio references (−18, −20) suit quiet "
               L"recordings; with today's loud releases they keep the needles in the red.",
               L"Средний (RMS) уровень музыки, при котором стрелки стоят на 0 VU. Студийные значения (−18, −20) "

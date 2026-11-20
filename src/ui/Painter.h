@@ -40,6 +40,9 @@ public:
     ID2D1DeviceContext5* Ctx() const { return ctx_; }
 
     void Fill(const Rect& r, Color c, float radius = 0);
+    // Fill with a radius the skin already mapped (derived corners, such as a row concentric with
+    // its popup), so a result that happens to equal a design radius is not mapped twice.
+    void FillRaw(const Rect& r, Color c, float radius);
     // Stroke drawn inside `r` (crisp 1 px borders on integer rects).
     void Stroke(const Rect& r, Color c, float radius = 0, float width = 1);
     void FillCircle(Point center, float radius, Color c);
@@ -57,6 +60,9 @@ public:
 
     // Bitmap scaled to cover (crop) or contain `r`, with rounded corners.
     void Image(ID2D1Bitmap* bitmap, const Rect& r, float radius = 0, bool cover = true, float opacity = 1);
+    // The 1 px edge inside a cover or a frame: white (dark theme) or black (light) at 10 %, never a
+    // palette grey, whose tint would show as a fringe on the picture. Pass the image's own opacity.
+    void ImageOutline(const Rect& r, float radius = 0, float opacity = 1);
 
     // Soft drop shadow under a rounded rect (approximated with stacked fills).
     void Shadow(const Rect& r, float radius, float blur = 15, float dy = 8, float alpha = -1);
@@ -78,7 +84,6 @@ public:
 
 private:
     ID2D1SolidColorBrush* Brush(Color c);
-    void FillRaw(const Rect& r, Color c, float radius);  // radius already mapped by the skin
 
     struct ClipEntry {
         Rect rect;

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cwchar>
+#include <string_view>
 
 namespace app {
 
@@ -37,6 +38,24 @@ ID2D1StrokeStyle* VizPaint::RoundStroke(ID2D1DeviceContext5* ctx) {
                                                    D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
     if (factory) factory->CreateStrokeStyle(props, nullptr, 0, &roundStroke_);
     return roundStroke_.Get();
+}
+
+ID2D1StrokeStyle* VizPaint::CapStroke(ID2D1DeviceContext5* ctx, bool roundStart, bool roundEnd) {
+    const uint32_t gen = gfx::Gpu::Get().Generation();
+    if (capGen_ != gen) {
+        for (auto& st : capStrokes_) st.Reset();
+        capGen_ = gen;
+    }
+    gfx::ComPtr<ID2D1StrokeStyle>& st = capStrokes_[(roundStart ? 1 : 0) | (roundEnd ? 2 : 0)];
+    if (!st) {
+        gfx::ComPtr<ID2D1Factory> factory;
+        ctx->GetFactory(&factory);
+        const auto props = D2D1::StrokeStyleProperties(roundStart ? D2D1_CAP_STYLE_ROUND : D2D1_CAP_STYLE_FLAT,
+                                                       roundEnd ? D2D1_CAP_STYLE_ROUND : D2D1_CAP_STYLE_FLAT,
+                                                       D2D1_CAP_STYLE_FLAT, D2D1_LINE_JOIN_ROUND);
+        if (factory) factory->CreateStrokeStyle(props, nullptr, 0, &st);
+    }
+    return st.Get();
 }
 
 // Lines go straight to the context (Painter has no line call); one brush, made once per device.
@@ -123,22 +142,37 @@ Rect VizPaint::FitVu(const Rect& r) {
     return {std::round(r.Cx() - w / 2), std::round(r.Cy() - h / 2), w, h};
 }
 
-// Left and right meters side by side, or one above the other when `r` is tall.
-void VizPaint::VuPair(Painter& p, const Rect& r, bool rest, Color ink) {
-    constexpr float space = 24;
+// Left and right meters side by side, or one above the other when that makes them larger. The gap
+// between them follows the space, so a small pair stays tight and a large one breathes.
+bool VizPaint::PlaceVuPair(const Rect& r, Rect& left, Rect& right) {
+    const float space = std::clamp(std::min(r.w, r.h) * 0.04f, 12.0f, 48.0f);
     const float wSide = std::min((r.w - space) / 2, r.h * kVuAspect);
     const float wStack = std::min(r.w, (r.h - space) / 2 * kVuAspect);
     const float w = std::floor(std::max(wSide, wStack)), h = std::floor(w / kVuAspect);
-    if (w < 40) return;
+    if (w < 40) return false;
     if (wSide >= wStack) {
         const float x = std::round(r.Cx() - (2 * w + space) / 2), y = std::round(r.Cy() - h / 2);
-        VuMeter(p, {x, y, w, h}, 0, rest, ink);
-        VuMeter(p, {x + w + space, y, w, h}, 1, rest, ink);
+        left = {x, y, w, h};
+        right = {std::round(x + w + space), y, w, h};
     } else {
         const float x = std::round(r.Cx() - w / 2), y = std::round(r.Cy() - (2 * h + space) / 2);
-        VuMeter(p, {x, y, w, h}, 0, rest, ink);
-        VuMeter(p, {x, y + h + space, w, h}, 1, rest, ink);
+        left = {x, y, w, h};
+        right = {x, std::round(y + h + space), w, h};
     }
+    return true;
+}
+
+Rect VizPaint::VuPairBox(const Rect& r) {
+    Rect a, b;
+    if (!PlaceVuPair(r, a, b)) return {};
+    return {a.x, a.y, b.Right() - a.x, b.Bottom() - a.y};
+}
+
+void VizPaint::VuPair(Painter& p, const Rect& r, bool rest, Color ink) {
+    Rect a, b;
+    if (!PlaceVuPair(r, a, b)) return;
+    VuMeter(p, a, 0, rest, ink);
+    VuMeter(p, b, 1, rest, ink);
 }
 
 namespace {
@@ -183,64 +217,116 @@ struct Mark {
 constexpr Mark kMarks[] = {{-20, L"−20"}, {-10, L"−10"}, {-7, nullptr}, {-5, L"−5"}, {-3, L"−3"}, {-2, nullptr},
                            {-1, L"−1"},   {0, L"0"},     {1, L"+1"},    {2, nullptr}, {3, L"+3"}};
 
+// The meter's numbers at any size: a 12 DIP style drawn under a scale about `at`, so they grow
+// with the meter instead of stepping between the fixed styles. `at` is the text's centre, or the
+// middle of its left (Leading) or right (Trailing) edge.
+constexpr float kBaseText = 12;  // Small, SmallMedium and MonoSmall
+void SizedText(Painter& p, std::wstring_view text, D2D1_POINT_2F at, HAlign align, TextStyle style, float size,
+               Color c) {
+    const gfx::TextMetrics tm = p.Measure(text, style);
+    const float w = tm.width + 4, h = tm.height;
+    const float x = align == HAlign::Center ? at.x - w / 2 : align == HAlign::Leading ? at.x : at.x - w;
+    ID2D1DeviceContext5* ctx = p.Ctx();
+    D2D1_MATRIX_3X2_F old;
+    ctx->GetTransform(&old);
+    ctx->SetTransform(D2D1::Matrix3x2F::Scale(size / kBaseText, size / kBaseText, at) * old);
+    p.Text(text, {x, at.y - h / 2, w, h}, style, c, align);
+    ctx->SetTransform(old);
+}
+
 }  // namespace
 
 void VizPaint::VuMeter(Painter& p, const Rect& m, int ch, bool rest, Color ink) {
     ID2D1DeviceContext5* ctx = p.Ctx();
-    ID2D1StrokeStyle* round = RoundStroke(ctx);
     const float o = p.Opacity();
     const VuGeom g = VuGeom::Of(m);
-    const bool big = m.h >= 150;
-    const float track = std::max(4.0f, std::round(m.h * 0.04f));
+    // Everything follows the meter's height, from a wing beside a small cover to a 4K screen; the
+    // numbers grow too, and drop away where they would crowd: the in-between ones under 150 DIP,
+    // all of them under 70, the channel and the reading under 56.
+    const float u = m.h;
+    const float track = std::max(3.0f, std::round(u * 0.03f));
     const float zero = VuPos(0);
     const float pos = rest ? 0.0f : needles_[ch].pos;
+    const float labelSize = std::clamp(7.0f + u * 0.022f, 9.0f, 28.0f);
+    const bool labels = u >= 70, allLabels = u >= 150, row = u >= 56;
     auto line = [&](float alpha) { return LineBrush(ctx, ink, alpha * o); };
 
-    // The track, a little stronger past 0 VU where a desk meter turns red; then the level.
-    if (ID2D1SolidColorBrush* b = line(0.10f)) Arc(ctx, g, 0, zero, g.R, b, track, round);
-    if (ID2D1SolidColorBrush* b = line(0.26f)) Arc(ctx, g, zero, 1, g.R, b, track, round);
+    // The track in one piece, then the part past 0 VU over it, where a desk meter turns red: its
+    // flat start is a clean edge at 0, with no cap bulging into the quiet part.
+    if (ID2D1SolidColorBrush* b = line(0.10f)) Arc(ctx, g, 0, 1, g.R, b, track, CapStroke(ctx, true, true));
+    if (ID2D1SolidColorBrush* b = line(0.18f)) Arc(ctx, g, zero, 1, g.R, b, track, CapStroke(ctx, false, true));
+    // The level, from the stop to the needle: flat at the needle's end, so it stops on the needle.
     if (pos > 0.002f)
-        if (ID2D1SolidColorBrush* b = line(0.8f)) Arc(ctx, g, 0, std::min(pos, 1.0f), g.R, b, track, round);
+        if (ID2D1SolidColorBrush* b = line(0.75f))
+            Arc(ctx, g, 0, std::min(pos, 1.0f), g.R, b, track, CapStroke(ctx, true, false));
 
-    // Ticks outside the track, numbers outside the ticks, upright in the player's type.
-    const TextStyle labelStyle = big ? TextStyle::Small : TextStyle::Micro;
-    const float tick0 = g.R + track / 2 + 3, tickLen = std::max(3.0f, m.h * 0.035f);
-    const float labelR = tick0 + tickLen + (big ? 12.0f : 9.0f);
+    // Ticks outside the track; each number outside its tick at the same gap whatever its width:
+    // pushed out along the tick by the half of the label that faces the arc.
+    const float tick0 = g.R + track / 2 + std::max(2.0f, u * 0.012f), tickLen = std::max(3.0f, u * 0.04f);
+    const float tickW = std::max(1.25f, u * 0.0035f);
+    const float labelGap = labelSize * 0.45f;
+    ID2D1StrokeStyle* flat = CapStroke(ctx, false, false);
     for (const Mark& mk : kMarks) {
         const float at = VuPos(static_cast<float>(mk.vu));
         const bool hot = mk.vu >= 0;
+        const float len = mk.text ? tickLen : tickLen * 0.55f;
         if (ID2D1SolidColorBrush* b = line(mk.text ? (hot ? 0.7f : 0.45f) : 0.3f))
-            ctx->DrawLine(g.At(at, tick0), g.At(at, tick0 + (mk.text ? tickLen : tickLen * 0.6f)), b, 1.5f, round);
-        if (!mk.text || (!big && (mk.vu == -1 || mk.vu == 1 || mk.vu == -3))) continue;
-        const D2D1_POINT_2F c = g.At(at, labelR);
-        p.Text(mk.text, {c.x - 20, c.y - 8, 40, 16}, labelStyle, ink.Fade(mk.vu == 0 ? 0.9f : hot ? 0.7f : 0.5f),
-               HAlign::Center);
+            ctx->DrawLine(g.At(at, tick0), g.At(at, tick0 + len), b, mk.vu == 0 ? tickW * 1.4f : tickW, flat);
+        if (!mk.text || !labels || (!allLabels && (mk.vu == -1 || mk.vu == 1 || mk.vu == -3))) continue;
+        const gfx::TextMetrics tm = p.Measure(mk.text, TextStyle::Small);
+        const float k = labelSize / kBaseText;
+        const D2D1_POINT_2F a = g.At(at, 0), b = g.At(at, 1);
+        const float dx = b.x - a.x, dy = b.y - a.y;  // the tick's direction, unit length
+        const float half = (std::fabs(dx) * tm.width / 2 + std::fabs(dy) * tm.height / 2) * k;
+        SizedText(p, mk.text, g.At(at, tick0 + tickLen + labelGap + half), HAlign::Center, TextStyle::Small,
+                  labelSize, ink.Fade(mk.vu == 0 ? 0.9f : hot ? 0.7f : 0.5f));
     }
 
-    // The held peak: a bright mark across the track that stays a moment, as on a desk.
+    // The held peak: a bright bar across the track that stays a moment, as on a desk.
     if (vuPeak && !rest && holds_[ch].pos > zero * 0.15f)
-        if (ID2D1SolidColorBrush* b = line(1.0f))
-            ctx->DrawLine(g.At(holds_[ch].pos, g.R - track / 2 - 2), g.At(holds_[ch].pos, g.R + track / 2 + 2), b, 2.0f,
-                          round);
+        if (ID2D1SolidColorBrush* b = line(1.0f)) {
+            const float over = std::max(2.0f, u * 0.006f);
+            ctx->DrawLine(g.At(holds_[ch].pos, g.R - track / 2 - over), g.At(holds_[ch].pos, g.R + track / 2 + over), b,
+                          std::max(2.0f, u * 0.005f), flat);
+        }
 
-    // The needle from the pivot through the track, and the pivot.
-    if (ID2D1SolidColorBrush* b = line(1.0f)) {
-        ctx->DrawLine(g.At(pos, m.h * 0.06f), g.At(pos, g.R + track / 2 + 1), b, std::max(1.5f, m.h * 0.012f), round);
-        ctx->DrawEllipse(D2D1::Ellipse(g.pivot, m.h * 0.035f, m.h * 0.035f), b, 1.5f);
+    // The needle: one tapered blade from a short tail behind the hub into the ticks, so it reads
+    // the scale like a real pointer; the hub sits over its root.
+    const float hub = std::max(2.5f, std::round(u * 0.022f));
+    const float w0 = std::max(2.0f, u * 0.011f), w1 = std::max(1.0f, u * 0.0035f);
+    const float r0 = -hub * 2.2f, r1 = tick0 + tickLen * 0.6f;
+    gfx::ComPtr<ID2D1Factory> factory;
+    ctx->GetFactory(&factory);
+    gfx::ComPtr<ID2D1PathGeometry> blade;
+    gfx::ComPtr<ID2D1GeometrySink> sink;
+    if (factory && SUCCEEDED(factory->CreatePathGeometry(&blade)) && SUCCEEDED(blade->Open(&sink))) {
+        const D2D1_POINT_2F a = g.At(pos, 0), b = g.At(pos, 1);
+        const float dx = b.x - a.x, dy = b.y - a.y, nx = -dy, ny = dx;  // along and across the needle
+        auto pt = [&](float r, float w) {
+            return D2D1::Point2F(g.pivot.x + dx * r + nx * w / 2, g.pivot.y + dy * r + ny * w / 2);
+        };
+        const D2D1_POINT_2F pts[] = {pt(r0, w0 * 0.8f), pt(0, w0), pt(r1, w1), pt(r1, -w1), pt(0, -w0)};
+        sink->BeginFigure(pt(r0, -w0 * 0.8f), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLines(pts, static_cast<UINT32>(std::size(pts)));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        if (SUCCEEDED(sink->Close())) p.FillGeometry(blade.Get(), ink);
     }
-    p.FillCircle({g.pivot.x, g.pivot.y}, m.h * 0.018f, ink);
+    p.FillCircle({g.pivot.x, g.pivot.y}, hub, ink);
 
-    // The channel at the bottom left, the reading in VU at the bottom right.
-    const float rowH = big ? 18.0f : 14.0f, rowY = m.Bottom() - rowH;
-    p.Text(ch == 0 ? L"L" : L"R", {m.x, rowY, 40, rowH}, big ? TextStyle::SmallMedium : TextStyle::Micro, ink.Fade(0.6f));
+    // The channel under the scale's left end and the reading under its right end, on the hub's line.
+    if (!row) return;
+    const float rowSize = std::clamp(7.5f + u * 0.024f, 9.0f, 30.0f);
+    const float rowY = std::min(g.pivot.y, m.Bottom() - rowSize * 0.75f);
+    const float left = g.At(0, g.R).x - track / 2, right = g.At(1, g.R).x + track / 2;
+    SizedText(p, ch == 0 ? L"L" : L"R", {left, rowY}, HAlign::Leading, TextStyle::SmallMedium, rowSize, ink.Fade(0.6f));
     std::wstring value = L"—";
     if (!rest && pos > 0.01f) {
         wchar_t t[32];
         swprintf_s(t, L"%+.1f", 20 * std::log10(pos) + 3);
         value = t[0] == L'-' ? L"−" + std::wstring(t + 1) : t;
     }
-    p.Text(value + L" VU", {m.Right() - 90, rowY, 90, rowH}, big ? TextStyle::MonoSmall : TextStyle::Micro,
-           ink.Fade(pos > zero && !rest ? 1.0f : 0.6f), HAlign::Trailing);
+    SizedText(p, value + L" VU", {right, rowY}, HAlign::Trailing, TextStyle::MonoSmall, rowSize,
+              ink.Fade(pos > zero && !rest ? 1.0f : 0.6f));
 }
 
 }  // namespace app
