@@ -1,0 +1,32 @@
+# The site's server block for Caddy 2 (https://moonbow.angleford.co).
+# `npm run build`, then the contents of dist/ go to /var/www/moonbow.angleford.co (see ../README.md).
+#
+# Content-Security-Policy allows the one inline script (the head of src/layouts/Base.astro) by its hash.
+# scripts/postbuild.mjs fails the build if that script changes and the hash here is still the old one.
+moonbow.angleford.co {
+	root * /var/www/moonbow.angleford.co
+	encode zstd gzip
+
+	@notRead not method GET HEAD
+	respond @notRead 405
+
+	header {
+		-Server
+		Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-MR63aP/LP/ccdGQsm3yK6XBo4v6mtPOmN3bdue7TGHk='"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		?Cache-Control "no-cache"
+	}
+	# Hashed names never change their content; fonts change rarely.
+	header /_astro/* Cache-Control "public, max-age=31536000, immutable"
+	header /fonts/* Cache-Control "public, max-age=604800"
+
+	file_server
+
+	handle_errors 404 {
+		rewrite * /404.html
+		file_server
+	}
+}

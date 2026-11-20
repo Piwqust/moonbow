@@ -10,17 +10,33 @@
 - **С сервером:** `npm run build && npm run preview`, затем http://127.0.0.1:4471/.
 - **Разработка:** `npm run dev` (Astro и пересборка клиентского скрипта на лету).
 
-Для хостинга нужна папка `dist/`: это обычная статика, подойдёт любой хостинг (Netlify, Cloudflare
-Pages, GitHub Pages, свой nginx). Страница 404 лежит в `dist/404.html`.
+Для хостинга нужна папка `dist/`: обычная статика, страница 404 лежит в `dist/404.html`.
 
-## Адреса
+## Адрес и публикация
 
-- Сайт публикуется на GitHub Pages репозитория: `https://piwqust.github.io/moonbow/` (workflow
-  `.github/workflows/moonbow-site.yml`, деплоится `dist-local/`, поэтому работает и в подпапке). Свой домен:
-  поменяйте `SITE_URL` в `astro.config.mjs` и `site.url` в `src/data/site.ts`.
-- Кнопки «Скачать» ведут на `releases/latest/download/Moonbow-windows-x64-setup.exe` и `.zip`: имена файлов без
-  версии (`tools/package-release.ps1`), поэтому ссылки сами переходят на новый релиз. Размеры файлов в
-  `src/data/site.ts` (`download`) обновляйте вручную.
+Сайт живёт на https://moonbow.angleford.co: статика на своём сервере за Caddy 2.
+
+1. `npm run build`. Сборка остановится, если встроенный скрипт в `src/layouts/Base.astro` изменился, а в
+   `deploy/Caddyfile` остался старый хеш: впишите новый (он есть в сообщении) и в файл, и на сервер.
+2. Содержимое `dist/` скопировать на сервер в `/var/www/moonbow.angleford.co`. Удобно через новую папку и
+   переименование, тогда посетитель не застанет сайт наполовину обновлённым:
+
+   ```bash
+   tar -C dist -czf - . | ssh <сервер> 'rm -rf /var/www/moonbow.angleford.co.new &&
+     mkdir /var/www/moonbow.angleford.co.new && tar -C /var/www/moonbow.angleford.co.new -xzf - &&
+     rm -rf /var/www/moonbow.angleford.co.old && { mv /var/www/moonbow.angleford.co /var/www/moonbow.angleford.co.old || true; } &&
+     mv /var/www/moonbow.angleford.co.new /var/www/moonbow.angleford.co'
+   ```
+
+3. Блок сервера: `deploy/Caddyfile` (заголовки безопасности, CSP, кэш, своя 404). После правки на сервере:
+   `caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy`.
+
+Другой домен: поменяйте `SITE_URL` в `astro.config.mjs`, `site.url` в `src/data/site.ts` и имя в
+`deploy/Caddyfile`.
+
+Кнопки «Скачать» ведут на `releases/latest/download/Moonbow-windows-x64-setup.exe` и `.zip`: имена файлов без
+версии (`tools/package-release.ps1`), поэтому ссылки сами переходят на новый релиз. Размеры файлов в
+`src/data/site.ts` (`download`) обновляйте вручную.
 
 ## Откуда берутся данные
 
@@ -54,5 +70,6 @@ Pages, GitHub Pages, свой nginx). Страница 404 лежит в `dist/4
 
 - Astro собирает статичный HTML. Весь клиентский код (`src/client`, GSAP) собирается esbuild в один
   обычный скрипт `public/assets/site.js` без модулей и роутера: поэтому сайт открывается с диска.
-- `scripts/postbuild.mjs` вписывает в подвал настоящий вес кода каждой страницы и делает `dist-local/`.
+- `scripts/postbuild.mjs` вписывает в подвал настоящий вес кода каждой страницы, делает `dist-local/` и
+  сверяет хеш встроенного скрипта с `deploy/Caddyfile`.
 - Плавной прокрутки и загрузчика нет намеренно (см. DESIGN.md).

@@ -3,6 +3,8 @@
 //    where the footer says how much it weighs ({{page-kb}}). The number is the real one for that file.
 // 2. Copies dist/ to dist-local/ with relative links, so the site opens by double click
 //    (dist-local/index.html), with no server. dist/ stays as it is for hosting.
+// 3. Checks that deploy/Caddyfile allows every inline script by its hash (Content-Security-Policy).
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -79,3 +81,19 @@ for (const file of walk(local).filter((f) => f.endsWith('.html') || f.endsWith('
   fs.writeFileSync(file, text);
 }
 console.log(`dist-local: open ${path.join(local, 'index.html')}`);
+
+// ---- 3. The server's Content-Security-Policy allows inline scripts only by hash. If a page's inline
+// script changed, the live site would block it: stop here and print the hash to put into deploy/Caddyfile.
+const caddy = fs.readFileSync('deploy/Caddyfile', 'utf8');
+const unlisted = new Set();
+for (const file of pages) {
+  const html = fs.readFileSync(file, 'utf8');
+  for (const m of html.matchAll(/<script(?![^>]*\ssrc=)(?![^>]*type="application\/ld\+json")[^>]*>([\s\S]*?)<\/script>/g)) {
+    const hash = `'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`;
+    if (!caddy.includes(hash)) unlisted.add(hash);
+  }
+}
+if (unlisted.size) {
+  console.error(`deploy/Caddyfile: script-src does not list ${[...unlisted].join(' ')}. Put it there and on the server.`);
+  process.exitCode = 1;
+}

@@ -12,7 +12,7 @@ interface Props {
 }
 const { title, description = site.description, image = '/og.png' } = Astro.props;
 const fullTitle = title ? `${title} | Moonbow` : 'Moonbow: плеер для Windows, который успевает за восемь кадров';
-// The site may live under a sub-path (github.io/moonbow): join strings, don't resolve URLs.
+// The site may also be hosted under a sub-path: join strings, don't resolve URLs.
 const root = String(Astro.site ?? site.url).replace(/\/$/, '');
 const canonical = root + Astro.url.pathname;
 const ogImage = root + image;

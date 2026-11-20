@@ -24,6 +24,7 @@
   <a href="#keyboard">Keyboard</a> ·
   <a href="#questions">Questions</a> ·
   <a href="#build-from-source">Build</a> ·
+  <a href="https://moonbow.angleford.co">Website</a> ·
   <b>English</b> ·
   <a href="README.ru.md">Русский</a>
 </p>
@@ -288,13 +289,16 @@ tests\build-tests.bat
 
 This makes `build\Moonbow.exe` next to `libmpv-2.dll`. How the code is organised: [ARCHITECTURE.md](ARCHITECTURE.md).
 How to work on it without disturbing your desktop, and the rules for changes: [CONTRIBUTING.md](CONTRIBUTING.md).
-The project's website lives in [`site/`](site/README.md), the changes by version in [CHANGELOG.md](CHANGELOG.md).
+The website, [moonbow.angleford.co](https://moonbow.angleford.co), lives in [`site/`](site/README.md); the changes by
+version are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License and credits
 
 Moonbow is free software under the [GNU General Public License v3.0 or later](LICENSE). It plays media through
 [mpv](https://mpv.io) (libmpv, built by [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake))
-and FFmpeg, and sets its text in Onest and Inter. The full list with licenses and sources is in
+and FFmpeg, and sets its text in Onest and Inter. Its interface started from
+[VLC Redesign](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) by Juxtopposed (CC BY 4.0),
+reworked into a monochrome player of its own. The full list with licenses and sources is in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The films, series and albums in the screenshots are made up;
 their frames and covers are photographs from Unsplash.
 

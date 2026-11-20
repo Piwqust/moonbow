@@ -24,6 +24,7 @@
   <a href="#клавиши">Клавиши</a> ·
   <a href="#вопросы">Вопросы</a> ·
   <a href="#сборка-из-исходников">Сборка</a> ·
+  <a href="https://moonbow.angleford.co">Сайт</a> ·
   <a href="README.md">English</a> ·
   <b>Русский</b>
 </p>
@@ -290,14 +291,17 @@ tests\build-tests.bat
 ```
 
 Получится `build\Moonbow.exe` рядом с `libmpv-2.dll`. Устройство кода: [ARCHITECTURE.md](ARCHITECTURE.md). Как
-работать над плеером, не мешая своему рабочему столу, и правила изменений: [CONTRIBUTING.md](CONTRIBUTING.md). Сайт
-проекта лежит в [`site/`](site/README.md), изменения по версиям — в [CHANGELOG.md](CHANGELOG.md).
+работать над плеером, не мешая своему рабочему столу, и правила изменений: [CONTRIBUTING.md](CONTRIBUTING.md). Сайт,
+[moonbow.angleford.co](https://moonbow.angleford.co), лежит в [`site/`](site/README.md); изменения по версиям — в
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Лицензия и благодарности
 
 Moonbow — свободная программа под [GNU General Public License v3.0 или новее](LICENSE). Медиа он играет через
 [mpv](https://mpv.io) (libmpv в сборке [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake))
-и FFmpeg, текст набран шрифтами Onest и Inter. Полный список с лицензиями и исходниками:
+и FFmpeg, текст набран шрифтами Onest и Inter. Интерфейс вырос из
+[VLC Redesign](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) от Juxtopposed (CC BY 4.0) и
+переделан в монохромный плеер со своим лицом. Полный список с лицензиями и исходниками:
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Фильмы, сериалы и альбомы на снимках выдуманы, их кадры и обложки —
 фотографии с Unsplash.
 

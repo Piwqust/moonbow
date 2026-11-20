@@ -33,9 +33,13 @@ libplacebo, FreeType, HarfBuzz and others.
 
 ### Interface design and icons
 
-The layout of the windows, the type scale and the icon set (`design/icons`) started from the Figma Community file
-**"VLC Redesign (Community)"** and were then changed: monochrome palette, new logo, Russian interface, new
-screens. The reference exports in `design/ref` come from that file.
+The window layout, the type scale and the icon set (`design/icons`) are adapted from
+[**VLC Redesign**](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) by Juxtopposed (Figma
+Community), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changes: a monochrome
+palette, Moonbow's own name and logo, a Russian interface, and many screens and controls that the design does not
+have (music, lyrics, subtitle styles, statistics, the installer and others). The
+reference exports in `design/ref` and `design/ref/components` are frames of that file. Juxtopposed does not endorse
+Moonbow, and Moonbow is not affiliated with VLC or VideoLAN.
 
 ## Used by the website (`site/`)
 

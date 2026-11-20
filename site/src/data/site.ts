@@ -9,7 +9,7 @@
 
 export const site = {
   name: 'Moonbow',
-  url: 'https://piwqust.github.io/moonbow',
+  url: 'https://moonbow.angleford.co',
   source: { href: 'https://github.com/Piwqust/moonbow' },
   releases: 'https://github.com/Piwqust/moonbow/releases/latest',
   issues: 'https://github.com/Piwqust/moonbow/issues/new/choose',
