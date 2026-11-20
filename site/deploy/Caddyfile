@@ -29,6 +29,16 @@ moonbow.angleford.co {
 	header /_astro/* Cache-Control "public, max-age=31536000, immutable"
 	header /fonts/* Cache-Control "public, max-age=604800"
 
+	# Moonbow's update mirror: .github/workflows/release.yml copies the setup and the signed feed there
+	# (when the MOONBOW_MIRROR_URL variable is set), src/app/Updater.h reads them when GitHub cannot be
+	# reached. A folder of its own: deploying the site replaces /var/www/moonbow.angleford.co as a whole.
+	header /update/moonbow-update.json Cache-Control "no-cache"
+	header /update/v* Cache-Control "public, max-age=31536000, immutable"
+	handle_path /update/* {
+		root * /var/www/moonbow-updates
+		file_server
+	}
+
 	file_server
 
 	handle_errors 404 {

@@ -21,6 +21,7 @@
 #include "app/Shell.h"
 #include "app/Skins.h"
 #include "app/SettingsActions.h"
+#include "app/Updater.h"
 #include "app/player/PlayerView.h"
 #include "app/settings/ShortcutStore.h"
 #include "core/SettingsSchema.h"
@@ -537,6 +538,8 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
             FlushStores();
         });
     }
+    // Before lastVersion moves on below: the updater notes a version the user went back from.
+    Updater::Get().Start(main_.get());
     // Once after an update: what the new version brings. Not on a first start (onboarding) or after
     // going back to an older version.
     if (const std::string last = UiValue("lastVersion"), now = json::ToUtf8(net::AppVersion()); last != now) {
@@ -551,6 +554,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         DispatchMessageW(&msg);
     }
     Trace("close: message loop ended");
+    Updater::Get().OnExit();  // a downloaded update installs now, once this process has ended
     FlushStores();
     Trace("close: stores saved");
     ShutdownSeekPreview();
@@ -1202,6 +1206,7 @@ void App::BeginQuit() {
 
 void App::EndSession() {
     if (!main_) return;
+    Updater::Get().SessionEnding();
     // The usual close (hide, mpv shut down on another thread), unless it already runs.
     if (!quitting_) SendMessageW(main_->Hwnd(), WM_CLOSE, 0, 0);
     FlushStores();

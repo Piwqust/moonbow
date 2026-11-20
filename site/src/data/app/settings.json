@@ -1,7 +1,7 @@
 {
-  "count": 253,
-  "valueCount": 236,
-  "hiddenCount": 58,
+  "count": 256,
+  "valueCount": 238,
+  "hiddenCount": 57,
   "pages": [
     {
       "id": "general",
@@ -32,6 +32,43 @@
                 }
               ],
               "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "updates",
+          "ru": "Обновления",
+          "en": "Updates",
+          "settings": [
+            {
+              "key": "general.updateStatus",
+              "kind": "info",
+              "ru": "Версия Moonbow",
+              "en": "Moonbow version",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "general.checkUpdates",
+              "kind": "toggle",
+              "ru": "Проверять обновления автоматически",
+              "en": "Check for updates automatically",
+              "descRu": "Раз в день Moonbow спрашивает у GitHub, вышла ли новая версия. Больше ничего не отправляется: ни идентификатора, ни настроек, ни списка файлов.",
+              "descEn": "Once a day Moonbow asks GitHub whether a new version is out. Nothing else is sent: no id, no settings, no list of files.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "general.installUpdates",
+              "kind": "toggle",
+              "ru": "Устанавливать обновления при закрытии",
+              "en": "Install updates when Moonbow closes",
+              "descRu": "Новая версия скачивается в фоне и устанавливается, когда вы закроете Moonbow. Прежняя версия остаётся на компьютере: вернуться к ней можно в окне «О программе».",
+              "descEn": "A new version downloads in the background and installs the next time you close Moonbow. The previous version stays on the computer: About Moonbow takes you back to it.",
+              "basic": false,
               "advanced": false
             }
           ]

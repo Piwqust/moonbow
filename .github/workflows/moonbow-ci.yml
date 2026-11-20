@@ -42,6 +42,13 @@ jobs:
         shell: cmd
         run: tests\build-tests.bat
 
+      # The release scripts sign the update feed under PowerShell 7 too: a throwaway key here.
+      - name: Update feed scripts
+        shell: pwsh
+        run: |
+          ./tools/release/new-update-key.ps1 -Out "$env:RUNNER_TEMP/throwaway-key.txt"
+          ./tools/release/make-update-feed.ps1 -Version 0.0.1 -Setup build/MoonbowThumbs.dll -Out "$env:RUNNER_TEMP/feed.json" -KeyFile "$env:RUNNER_TEMP/throwaway-key.txt"
+
       - name: Upload the build
         uses: actions/upload-artifact@v7
         with:

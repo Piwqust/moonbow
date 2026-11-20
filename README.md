@@ -54,7 +54,7 @@ one with nothing around the video. Moonbow is the attempt to keep all three.
   <tr>
     <td valign="top"><b>328 ms</b> from a double-click to a playing film. The window shows at 60 ms and never waits for the video engine.</td>
     <td valign="top">Black, white and grey, so the only colour on screen is your film. No ads, no account, no telemetry.</td>
-    <td valign="top"><b>236</b> settings, <b>79</b> commands, <b>84</b> file types. On screen only what you need now; the rest is one shortcut away.</td>
+    <td valign="top"><b>238</b> settings, <b>79</b> commands, <b>84</b> file types. On screen only what you need now; the rest is one shortcut away.</td>
   </tr>
 </table>
 
@@ -180,7 +180,10 @@ the [release page](https://github.com/Piwqust/moonbow/releases/latest).
 > The build is not code-signed yet, so Windows SmartScreen may show a blue "Windows protected your PC" window
 > before the first run. Press **More info**, then **Run anyway**.
 
-**Updating.** Run the newer installer: it shows what changed and keeps your settings and library. The two previous
+**Updating.** From 0.2 on, Moonbow updates itself: once a day it checks for a new version, downloads it in the
+background and installs it when you close Moonbow, or at once with **Restart now**. Settings and the library stay.
+**Settings → General → Updates** turns this off. The update is signed, and Moonbow checks the signature and the
+file before running it. Version 0.1.0 does not update itself yet: run the newer installer once. The two previous
 versions stay on the computer; **About Moonbow → Versions on this computer → Go back to it** returns to one.
 **Removing.** Windows Settings → Apps. Your settings stay unless you tick **Also delete settings, library and logs**.
 
@@ -248,7 +251,9 @@ same for videos; for music, choose Moonbow in Windows Settings → Apps → Defa
 <summary><b>Does it send anything anywhere?</b></summary>
 <br>
 
-No. There is no telemetry, and logs and crash reports stay on your computer until you attach them to an issue
+Only the update check. Once a day Moonbow downloads a small file from GitHub that says which version is the latest;
+the request carries nothing but Moonbow's version in its User-Agent, and **Settings → General → Updates** turns it
+off. There is no telemetry, and logs and crash reports stay on your computer until you attach them to an issue
 yourself. The online features above are off until you turn them on.
 </details>
 

@@ -10,6 +10,7 @@
 #include "app/App.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "app/Updater.h"
 #include "app/dialogs/DialogKit.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
@@ -1228,6 +1229,39 @@ private:
     std::wstring url_;
 };
 
+// "Moonbow is up to date" / "Moonbow 0.2.0 is ready…" with the button that fits (app/Updater.h).
+// Changed in place: the click that changes the status runs inside the link.
+class AboutUpdate : public Widget {
+public:
+    AboutUpdate() {
+        dir = Dir::Row;
+        align = Align::Center;
+        gap = 12;
+        width = Length::Grow();
+        status_ = Add<Label>(L"", TextStyle::Body, Tone::Tertiary);
+        status_->wrap = true;
+        status_->width = Length::Grow();
+        action_ = Add<LinkButton>(L"", TextStyle::Body);
+        action_->onClick = [] { Updater::Get().RunAction(); };
+        conn_ = Connect(Updater::Get().changed, [this] { Refresh(); });
+        Refresh();
+    }
+
+private:
+    void Refresh() {
+        const Updater& u = Updater::Get();
+        status_->SetText(u.StatusText());
+        action_->text = u.ActionText();
+        action_->visible = !action_->text.empty();
+        InvalidateLayout();
+        Invalidate();
+    }
+
+    Label* status_ = nullptr;
+    LinkButton* action_ = nullptr;
+    ScopedConnection conn_;
+};
+
 }  // namespace
 
 void ShowAboutDialog(Host* host) {
@@ -1252,6 +1286,8 @@ void ShowAboutDialog(Host* host) {
         auto* news = names->Add<LinkButton>(Tr(L"What's new"), TextStyle::Body);
         news->onClick = [host] { ShowWhatsNew({}, host); };
     }
+
+    body->Add<AboutUpdate>();
 
     // mpv starts with the first file; before that its versions aren't known.
     Player& player = TheApp().player();

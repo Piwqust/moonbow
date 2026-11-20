@@ -29,5 +29,9 @@ If Moonbow ships a libmpv build with a known flaw, report that here too: the fix
 
 ## Supported versions
 
-Only the latest version is supported. Fixes ship in a new version; Moonbow does not update itself yet, so
-install the new release over the old one.
+Only the latest version is supported. Fixes ship in a new version, which Moonbow 0.2 and later install by
+themselves (Settings → General → Updates); on 0.1.0, install the new release over the old one.
+
+The update feed (`moonbow-update.json` on each release) is signed with ECDSA P-256, and Moonbow runs a downloaded
+setup only when the feed's signature checks out against the key built into it and the file's size and SHA-256 match
+the feed (`src/setup/UpdateFeed.cpp`). A way to make Moonbow install something else counts as a vulnerability.

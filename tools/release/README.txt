@@ -17,7 +17,10 @@ Install
 Portable: unpack Moonbow-windows-x64.zip into any folder and run Moonbow.exe.
 
 Update and go back
-- Run the newer installer. It shows what changed; your settings and library stay.
+- The installed Moonbow updates itself: once a day it checks GitHub for a new version,
+  downloads it in the background and installs it when you close Moonbow ("Restart now"
+  does it at once). Settings > General > Updates turns this off.
+- The portable copy only says that a new version is out.
 - The two previous versions stay on the computer: About Moonbow > Versions on this
   computer > Go back to it.
 - Settings and the library live in %APPDATA%\Moonbow and survive updates.
@@ -27,7 +30,7 @@ If something goes wrong
 2. Open an issue at https://github.com/Piwqust/moonbow/issues and attach those files,
    with what you did, what you expected and what happened.
 For a file that plays wrong, turn on "Detailed playback log" there, open the file again
-and attach mpv.log. Moonbow sends nothing by itself.
+and attach mpv.log. Besides the daily update check, Moonbow sends nothing by itself.
 
 License: GNU GPL v3 or later (LICENSE.txt). Third-party parts: THIRD_PARTY_NOTICES.md.
 
@@ -43,8 +46,10 @@ License: GNU GPL v3 or later (LICENSE.txt). Third-party parts: THIRD_PARTY_NOTIC
 Без установки: распакуйте Moonbow-windows-x64.zip в любую папку и запустите Moonbow.exe.
 
 Обновление и возврат
-- Запустите установщик новой версии. Он покажет, что изменилось; настройки и медиатека
-  останутся.
+- Установленный Moonbow обновляется сам: раз в день проверяет на GitHub, вышла ли новая
+  версия, скачивает её в фоне и ставит, когда вы закрываете Moonbow (кнопка
+  «Перезапустить» делает это сразу). Выключить: Настройки > Общие > Обновления.
+- Версия без установки только сообщает, что вышла новая версия.
 - Две прошлые версии остаются на компьютере: О программе > Версии на этом компьютере >
   Вернуться на неё.
 - Настройки и медиатека лежат в %APPDATA%\Moonbow и при обновлении не теряются.
@@ -54,6 +59,7 @@ License: GNU GPL v3 or later (LICENSE.txt). Third-party parts: THIRD_PARTY_NOTIC
 2. Создайте issue на https://github.com/Piwqust/moonbow/issues и приложите эти файлы:
    что делали, чего ждали и что случилось.
 Если неправильно играет конкретный файл, включите там же «Подробный журнал
-воспроизведения», откройте файл ещё раз и приложите mpv.log. Сам Moonbow ничего не отправляет.
+воспроизведения», откройте файл ещё раз и приложите mpv.log. Кроме ежедневной проверки
+обновлений, сам Moonbow ничего не отправляет.
 
 Лицензия: GNU GPL v3 или новее (LICENSE.txt). Сторонние части: THIRD_PARTY_NOTICES.md.

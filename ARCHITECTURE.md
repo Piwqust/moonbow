@@ -17,7 +17,8 @@ src/ui       Types, Theme (monochrome palettes), Painter, Anim, Widget (tree + f
 src/core     Json, Config + SettingsSchema (settings store/schema), Paths
 src/library  MediaLibrary, History, Playlists, Bookmarks/Favorites, Thumbnails
 src/app      App (player, queue, navigation), Actions (commands + shortcuts), MainWindow, Shell (title bar,
-             sidebar, library pane), LibraryView (page interface), I18n
+             sidebar, library pane), LibraryView (page interface), I18n, Updater (self-update)
+src/setup    the setup inside Moonbow.exe (install, update, switch versions, uninstall), UpdateFeed (signed feed)
 src/app/player   PlayerView, ControlBar (+ SeekBar, volume, control registry), Panels (popovers), MusicView, MiniPlayer
 src/app/library  library pages (CreateLibraryView)
 src/app/settings settings window

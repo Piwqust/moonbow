@@ -1,0 +1,116 @@
+name: Release
+
+# A pushed tag v<version> (tools/release.ps1 makes one) becomes a published GitHub release with the
+# installer, the portable zip, the signed update feed (moonbow-update.json) and the debug symbols.
+# Installed Moonbows read releases/latest/download/moonbow-update.json (src/app/Updater.h).
+#
+# Secrets and variables (Settings > Secrets and variables > Actions):
+#   MOONBOW_UPDATE_KEY   secret, required: the feed's signing key (tools/release/new-update-key.ps1)
+#   MOONBOW_MIRROR_URL   variable, optional: the mirror, e.g. https://moonbow.angleford.co/update.
+#                        When set, the setup and the feed are also copied there over SSH before the
+#                        release is published, with the secrets MIRROR_SSH_KEY (private key),
+#                        MIRROR_SSH_HOST, MIRROR_SSH_PORT, MIRROR_SSH_USER and MIRROR_PATH
+#                        (e.g. /var/www/moonbow-updates, served by site/deploy/Caddyfile).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to (re)publish, e.g. v0.2.0 (it must exist)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: The tag matches the version in res/app.rc
+        shell: pwsh
+        run: |
+          $version = [regex]::Match((Get-Content -Raw res/app.rc), 'VALUE "ProductVersion", "([^"]+)"').Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "Tag $env:TAG, but res/app.rc says $version" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Cache libmpv
+        id: libmpv
+        uses: actions/cache@v6
+        with:
+          path: third_party/mpv
+          key: libmpv-20261017
+
+      - name: Fetch libmpv
+        if: steps.libmpv.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./tools/fetch-libmpv.ps1 -Tag 20261017
+
+      # Build (/W4), core tests, installer, zip, symbols and the signed feed.
+      - name: Package
+        shell: pwsh
+        env:
+          MOONBOW_UPDATE_KEY: ${{ secrets.MOONBOW_UPDATE_KEY }}
+          MIRROR: ${{ vars.MOONBOW_MIRROR_URL }}
+        run: ./tools/package-release.ps1 -RequireFeed -Mirror "$env:MIRROR"
+
+      - name: The feed verifies
+        shell: pwsh
+        run: |
+          $feed = Get-Content -Raw "dist/release/$env:TAG/moonbow-update.json" | ConvertFrom-Json
+          $manifest = $feed.payload | ConvertFrom-Json
+          if ($manifest.version -ne $env:VERSION) { throw "The feed says $($manifest.version)" }
+          $hash = (Get-FileHash -Algorithm SHA256 "dist/release/$env:TAG/Moonbow-windows-x64-setup.exe").Hash.ToLower()
+          if ($manifest.setup.sha256 -ne $hash) { throw "The feed's hash does not match the setup" }
+          Write-Host "moonbow-update.json: $($manifest.version), $($manifest.setup.size) bytes, $($manifest.setup.urls -join ' ')"
+
+      - name: Copy to the mirror
+        if: vars.MOONBOW_MIRROR_URL != ''
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
+          SSH_HOST: ${{ secrets.MIRROR_SSH_HOST }}
+          SSH_PORT: ${{ secrets.MIRROR_SSH_PORT }}
+          SSH_USER: ${{ secrets.MIRROR_SSH_USER }}
+          MIRROR_PATH: ${{ secrets.MIRROR_PATH }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/mirror_key"
+          printf '%s\n' "$SSH_KEY" > "$key"
+          chmod 600 "$key"
+          ssh_opts=(-i "$key" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts")
+          dir="dist/release/$TAG"
+          # The setup first, the feed last: the mirror never points at a file it does not have.
+          ssh "${ssh_opts[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p '$MIRROR_PATH/$TAG'"
+          scp -P "${SSH_PORT:-22}" -i "$key" -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+            "$dir/Moonbow-windows-x64-setup.exe" "$SSH_USER@$SSH_HOST:$MIRROR_PATH/$TAG/"
+          scp -P "${SSH_PORT:-22}" -i "$key" -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+            "$dir/moonbow-update.json" "$SSH_USER@$SSH_HOST:$MIRROR_PATH/moonbow-update.json.new"
+          ssh "${ssh_opts[@]}" "$SSH_USER@$SSH_HOST" "mv '$MIRROR_PATH/moonbow-update.json.new' '$MIRROR_PATH/moonbow-update.json'"
+          rm -f "$key"
+
+      - name: Publish the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/release/publish.ps1 -Version $env:VERSION -Repo $env:GITHUB_REPOSITORY
+
+      - name: Keep the symbols with the run too
+        uses: actions/upload-artifact@v7
+        with:
+          name: moonbow-symbols-${{ env.TAG }}
+          path: dist/symbols/
+          retention-days: 90

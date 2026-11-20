@@ -33,6 +33,7 @@
 #include "../src/net/Secret.h"
 #include "../src/setup/Installer.h"
 #include "../src/setup/Package.h"
+#include "../src/setup/UpdateFeed.h"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -4066,6 +4067,62 @@ void TestSetupInstallSwitch() {
     CHECK(FileExists(data + L"\\settings.json"));
 }
 
+// --- update feed (src/setup/UpdateFeed.cpp) --------------------------------------------------
+
+// Signed by tools/release/make-update-feed.ps1 with a throwaway test key (not Moonbow's).
+constexpr std::string_view kTestUpdateKey =
+    "2c2c2c54db08dbb7458ec9f8ab75b1728c7507e82cc5a683efa6fdd014d31bb768ff8a925e471115fb144b8b5adb9d92d7419b920aa1d544d0ff4139c860b854";
+constexpr std::string_view kOtherUpdateKey =
+    "69853591d508ae28bab2ea0f7b21e4cb54e2632030ca65591598ac8831cc26658cbb0e0eb71ce79bdda3f818cf079064e840b21c8e89d01861fe811d7bba0e17";
+constexpr std::string_view kTestFeed = R"feed({"payload":"{\"product\":\"Moonbow\",\"version\":\"0.2.0\",\"date\":\"2026-11-20\",\"page\":\"https://github.com/Piwqust/moonbow/releases/tag/v0.2.0\",\"setup\":{\"name\":\"Moonbow-windows-x64-setup.exe\",\"size\":10,\"sha256\":\"7cfd04622312f702a7fd3d8b0d5030df46d437941f4e330881b6db480b7c7db1\",\"urls\":[\"https://github.com/Piwqust/moonbow/releases/download/v0.2.0/Moonbow-windows-x64-setup.exe\",\"https://moonbow.angleford.co/update/v0.2.0/Moonbow-windows-x64-setup.exe\"]}}","signature":"RBA8UeRALWDGnMGVnRDazVAorz9Sr22MbquQlLJsZydHCkAFaCan5g6wNcmK+pae/dr2v5HWakNnHlEfWYnx3g=="})feed";
+
+void TestUpdateFeed() {
+    CHECK(setup::Sha256Hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+
+    setup::UpdateInfo info;
+    std::string error;
+    CHECK_MSG(setup::ParseUpdateFeed(kTestFeed, {kOtherUpdateKey, kTestUpdateKey}, &info, &error), "%s", error.c_str());
+    CHECK(info.version == L"0.2.0");
+    CHECK(info.setupName == L"Moonbow-windows-x64-setup.exe");
+    CHECK(info.setupSize == 10);
+    CHECK(info.setupSha256 == setup::Sha256Hex("fake setup"));
+    CHECK(info.page == L"https://github.com/Piwqust/moonbow/releases/tag/v0.2.0");
+    CHECK(info.urls.size() == 2 && info.urls[1] == L"https://moonbow.angleford.co/update/v0.2.0/Moonbow-windows-x64-setup.exe");
+
+    // Moonbow's own key did not sign it, nor did another one.
+    CHECK(!setup::ParseUpdateFeed(kTestFeed, &info, &error));
+    CHECK(!setup::ParseUpdateFeed(kTestFeed, {kOtherUpdateKey}, &info, &error));
+    // One changed character of the payload, of the signature, or a missing part.
+    std::string changed(kTestFeed);
+    changed.replace(changed.find("0.2.0"), 5, "9.2.0");
+    CHECK(!setup::ParseUpdateFeed(changed, {kTestUpdateKey}, &info, &error));
+    changed = kTestFeed;
+    const size_t sig = changed.find("\"signature\":\"") + 13;
+    changed[sig] = changed[sig] == 'A' ? 'B' : 'A';
+    CHECK(!setup::ParseUpdateFeed(changed, {kTestUpdateKey}, &info, &error));
+    CHECK(!setup::ParseUpdateFeed("{\"payload\":\"{}\"}", {kTestUpdateKey}, &info, &error));
+    CHECK(!setup::ParseUpdateFeed("not json", {kTestUpdateKey}, &info, &error));
+    CHECK(!setup::ParseUpdateFeed("", {kTestUpdateKey}, &info, &error));
+    CHECK(!setup::VerifySignature("data", std::string(64, '\0'), "zz"));
+
+    // The setup on disk against the manifest: size first, then the hash.
+    const std::wstring dir = MakeDir(L"update-feed");
+    WriteFile(dir + L"\\good.exe", "fake setup");
+    WriteFile(dir + L"\\bad.exe", "fake setuP");
+    WriteFile(dir + L"\\long.exe", "fake setup!");
+    CHECK(setup::SetupMatches(dir + L"\\good.exe", info));
+    CHECK(!setup::SetupMatches(dir + L"\\bad.exe", info));
+    CHECK(!setup::SetupMatches(dir + L"\\long.exe", info));
+    CHECK(!setup::SetupMatches(dir + L"\\missing.exe", info));
+    CHECK(setup::FileSha256(dir + L"\\good.exe") == setup::Sha256Hex("fake setup"));
+
+    // MOONBOW_UPDATE_FEED replaces the list (tests, trying a feed before a release).
+    CHECK(setup::UpdateFeedUrls().size() == 2);
+    SetEnvironmentVariableW(L"MOONBOW_UPDATE_FEED", L"http://127.0.0.1:1/feed.json");
+    CHECK(setup::UpdateFeedUrls().size() == 1);
+    SetEnvironmentVariableW(L"MOONBOW_UPDATE_FEED", nullptr);
+}
+
 // The Inno beta's folder: plain files, no versions\. They are kept as a version of their own.
 void TestSetupFromInno() {
     const std::wstring dir = MakeDir(L"inno") + L"\\Moonbow";
@@ -4173,6 +4230,7 @@ const TestCase kTests[] = {
     {"setup_package", TestSetupPackage},
     {"setup_install_switch", TestSetupInstallSwitch},
     {"setup_from_inno", TestSetupFromInno},
+    {"update_feed", TestUpdateFeed},
 };
 
 }  // namespace

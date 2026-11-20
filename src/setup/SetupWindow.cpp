@@ -313,7 +313,12 @@ public:
         host_.onCloseRequest = [this] { return !working_; };
         host_.onDestroyed = [] { PostQuitMessage(0); };
 
-        Go(FirstPage(), false);
+        if (req_.autoUpdate && req_.previewPage.empty()) {
+            Go(Page::Work, false);
+            Start();
+        } else {
+            Go(FirstPage(), false);
+        }
         host_.Show();
         Host::Activate(host_.Hwnd());
         gfx::Gpu::Get().CreateDeviceAsync(host_.Hwnd(), Host::kDeviceReadyMessage);
@@ -658,7 +663,10 @@ private:
         if (req_.op != Op::Uninstall)
             CenteredText(page_, 236, 540, 22, Tr(L"Nothing changed: Moonbow is as it was."), TextStyle::Body, Tone::Secondary);
         CenteredText(page_, 272, 560, 60, error_, TextStyle::Small, Tone::Tertiary);
-        Buttons(420, Tr(L"Retry"), [this] { Start(); }, Tr(L"Close"), [this] { host_.Close(); });
+        Buttons(420, Tr(L"Retry"), [this] { Start(); }, req_.autoUpdate ? Tr(L"Open Moonbow") : Tr(L"Close"), [this] {
+            if (req_.autoUpdate) Launch();
+            host_.Close();
+        });
     }
 
     // --- the work ----------------------------------------------------------------------------------
@@ -674,7 +682,7 @@ private:
         progress_ = 0;
         error_.clear();
         started_ = GetTickCount64();
-        host_.Post([this] { Go(Page::Work, true); });
+        if (page_id_ != Page::Work || !page_) host_.Post([this] { Go(Page::Work, true); });
         if (!req_.previewPage.empty()) return;
         const Request req = req_;
         const std::wstring dir = dir_;
@@ -713,9 +721,16 @@ private:
         working_ = false;
         result_ = ok_ ? 0 : 1;
         Go(ok_ ? Page::Done : Page::Error, true);
+        // "Restart to update": a moment on "Moonbow is updated", then the new Moonbow.
+        if (ok_ && req_.autoUpdate)
+            host_.StartTimer(900, [this] {
+                Launch();
+                host_.Close();
+            });
     }
 
     void Launch() {
+        if (Host::Automation()) return;  // background test runs never open a player window
         ShellExecuteW(nullptr, L"open", (dir_ + L"\\Moonbow.exe").c_str(), nullptr, dir_.c_str(), SW_SHOWNORMAL);
     }
 

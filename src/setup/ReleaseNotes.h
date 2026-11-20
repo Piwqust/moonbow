@@ -16,6 +16,13 @@ struct ReleaseNote {
 };
 
 inline constexpr ReleaseNote kReleaseNotes[] = {
+    {L"0.2.0",
+     L"Moonbow updates itself: a new version downloads in the background and installs when you close Moonbow.\n"
+     L"Settings › General › Updates shows the version, checks now and turns updates off.\n"
+     L"Every update is signed and checked before it runs.",
+     L"Moonbow обновляется сам: новая версия скачивается в фоне и ставится, когда вы закрываете Moonbow.\n"
+     L"В Настройки › Общие › Обновления видна версия, там же можно проверить сейчас или выключить обновления.\n"
+     L"Каждое обновление подписано и проверяется перед запуском."},
     {L"0.1.0",
      L"The first beta: videos and music in one fast, quiet player.\n"
      L"A library that remembers where you stopped, with playlists and bookmarks.\n"
