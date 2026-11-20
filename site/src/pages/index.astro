@@ -210,11 +210,11 @@ const cropSrc = (name: string) => Object.entries(cropFiles).find(([p]) => p.spli
   /* ---------- Everything: the index */
   .index { margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--c-line); }
   .index li { border-bottom: 1px solid var(--c-line); }
-  .index__row { display: grid; grid-template-columns: 4rem minmax(0, 4fr) minmax(0, 6fr); align-items: baseline; column-gap: var(--gutter); padding-block: clamp(1rem, 2vw, 1.6rem); transition: background-color 0.18s; }
+  .index__row { display: grid; grid-template-columns: 4rem minmax(0, 4fr) minmax(0, 6fr); align-items: baseline; column-gap: var(--gutter); padding-block: clamp(1rem, 2vw, 1.6rem); transition: background-color 0.18s; -webkit-tap-highlight-color: transparent; }
   .index__title { font-size: var(--t-l); letter-spacing: -0.03em; line-height: 1.1; }
   .index__sum { font-size: var(--t-body); max-width: 36rem; transition: color 0.18s; }
   @media (hover: hover) { .index__row:hover .index__sum { color: var(--c-fg); } }
-  .index__thumb { display: none; }
+  .index__thumb { display: none; outline: 1px solid var(--image-outline); outline-offset: -1px; }
   @media (hover: hover) { .index__row:hover { background: rgb(255 255 255 / 0.025); } }
   .index__row:active { background: rgb(255 255 255 / 0.05); }
 
@@ -222,7 +222,8 @@ const cropSrc = (name: string) => Object.entries(cropFiles).find(([p]) => p.spli
     position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; width: clamp(16rem, 24vw, 24rem);
     translate: 1.5rem -50%; visibility: hidden; opacity: 0;
     aspect-ratio: 16 / 10; overflow: clip; border-radius: 6px; background: #000;
-    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 30px 80px -20px rgb(0 0 0 / 0.9);
+    outline: 1px solid var(--image-outline); outline-offset: -1px;
+    box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.9);
   }
   .preview__strip { position: absolute; inset: 0; }
   .preview__frame { position: absolute; inset: 0; transform: translate3d(0, calc((var(--pos, 0) - var(--i)) * 108%), 0); }
@@ -267,7 +268,7 @@ const cropSrc = (name: string) => Object.entries(cropFiles).find(([p]) => p.spli
     .beauty__note { padding-left: var(--gutter); }
     .index__row { grid-template-columns: 2.25rem minmax(0, 1fr); row-gap: 0.5rem; }
     .index__sum { grid-column: 2; font-size: var(--t-s); }
-    .index__thumb { display: block; grid-column: 2; margin-top: 0.5rem; border-radius: 6px; overflow: clip; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07); }
+    .index__thumb { display: block; grid-column: 2; margin-top: 0.5rem; border-radius: 6px; overflow: clip; }
     .finale__specs { grid-template-columns: 1fr 1fr; }
     .finale__h { font-size: clamp(2.6rem, 13.5vw, 4rem); }
   }

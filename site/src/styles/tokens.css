@@ -51,6 +51,7 @@
   --c-accent: #ffffff;    /* the Play button */
   --c-on-accent: #0b0c10;
   --c-curtain: #000000;   /* shutter, black frame */
+  --image-outline: oklch(1 0 0 / 0.1); /* 1 px edge inside every screenshot: pure white, never a palette grey */
   --spectrum: #d2c8f2, #c6dcf4, #d3ead0, #f2e6c4, #f6cbbb; /* lilac → peach, outer to inner? see Logo */
 
   --f-body: 'Onest', 'Onest Fallback', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;

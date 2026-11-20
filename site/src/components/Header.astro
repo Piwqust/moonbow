@@ -83,6 +83,7 @@ const isHere = (href: string) => here === href || here === href.replace(/\/$/, '
       display: grid; position: fixed; inset: 0; z-index: 2; background: var(--c-bg);
       padding: calc(var(--header-h) + 1.5rem) var(--gutter) calc(2rem + env(safe-area-inset-bottom));
       align-content: space-between;
+      overflow-y: auto; overscroll-behavior: contain; /* a short landscape phone scrolls the menu, never the page behind */
     }
     .menu ul { display: grid; gap: 0.25rem; }
     .menu a { display: block; font-size: clamp(2.25rem, 11vw, 3.25rem); letter-spacing: -0.045em; line-height: 1.15; padding-block: 0.15rem; color: var(--c-soft); }

@@ -47,10 +47,15 @@ import FrameCounter from './FrameCounter.astro';
   /* A long exposure: white at first, the spectrum develops after the mark has been in view a while
      (motion/exposure.ts). Reduced motion: the colours are simply there. */
   .ftr__brand :global(.ftr__mark path) { transition: stroke 2.4s ease-in; }
-  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(1)), .ftr__brand:hover :global(.ftr__mark path:nth-child(1)) { stroke: #d2c8f2; }
-  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(2)), .ftr__brand:hover :global(.ftr__mark path:nth-child(2)) { stroke: #c6dcf4; }
-  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(3)), .ftr__brand:hover :global(.ftr__mark path:nth-child(3)) { stroke: #f6cbbb; }
-  .ftr__brand:hover :global(.ftr__mark path) { transition-duration: 0.45s; }
+  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(1)) { stroke: #d2c8f2; }
+  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(2)) { stroke: #c6dcf4; }
+  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(3)) { stroke: #f6cbbb; }
+  @media (hover: hover) {
+    .ftr__brand:hover :global(.ftr__mark path) { transition-duration: 0.45s; }
+    .ftr__brand:hover :global(.ftr__mark path:nth-child(1)) { stroke: #d2c8f2; }
+    .ftr__brand:hover :global(.ftr__mark path:nth-child(2)) { stroke: #c6dcf4; }
+    .ftr__brand:hover :global(.ftr__mark path:nth-child(3)) { stroke: #f6cbbb; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .ftr__brand :global(.ftr__mark path:nth-child(1)) { stroke: #d2c8f2; }
     .ftr__brand :global(.ftr__mark path:nth-child(2)) { stroke: #c6dcf4; }

@@ -92,8 +92,8 @@ const alts: Record<string, string> = {
 <style>
   /* ---------- Shared */
   .gate { --frame-gap: 7%; --lane: clamp(1.6rem, 2.8vw, 2.75rem); --ar: 2542 / 1631; }
-  .gate__img { position: relative; aspect-ratio: var(--ar); background: #000; overflow: clip; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.09); border-radius: 4px; }
-  :global(.motion) .gate__img { box-shadow: none; border-radius: 0; }
+  .gate__img { position: relative; aspect-ratio: var(--ar); background: #000; overflow: clip; outline: 1px solid var(--image-outline); outline-offset: -1px; border-radius: 4px; }
+  :global(.motion) .gate__img { outline: none; border-radius: 0; }
   .gate__img :global(img) { width: 100%; height: 100%; object-fit: cover; }
   .gate__black { position: absolute; inset: 0; background: #000; }
   .gate__num { font-family: var(--f-mono); font-size: var(--t-xl); line-height: 0.9; letter-spacing: -0.06em; font-weight: 300; color: var(--c-fg); }

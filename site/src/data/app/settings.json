@@ -2877,8 +2877,12 @@
                   "en": "0 VU = −14 dBFS"
                 },
                 {
-                  "ru": "0 VU = −10 dBFS (громкие современные записи)",
-                  "en": "0 VU = −10 dBFS (loud modern masters)"
+                  "ru": "0 VU = −10 dBFS",
+                  "en": "0 VU = −10 dBFS"
+                },
+                {
+                  "ru": "0 VU = −7 dBFS (громкие современные записи)",
+                  "en": "0 VU = −7 dBFS (loud modern masters)"
                 }
               ],
               "basic": false,
