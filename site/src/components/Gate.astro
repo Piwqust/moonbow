@@ -1,0 +1,218 @@
+---
+// The signature: twelve frames of cinema (1/24 s each) from a double click to a full picture.
+// With motion: a sticky projector gate; scrolling pulls the strip down one frame at a time
+// (src/client/motion/gate.ts). Without motion: each frame with its text, one under another.
+import { Picture } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+import { frames, trace, measured } from '../data/site';
+import PlayIcon from './PlayIcon.astro';
+
+const files = import.meta.glob<{ default: ImageMetadata }>('../assets/frames/*.{png,jpg}', { eager: true });
+const img = (name: string) => Object.entries(files).find(([p]) => p.split('/').pop()!.replace(/\.\w+$/, '') === name)?.[1].default;
+const FRAME = 1000 / 24;
+const sec = (ms: number) => (ms / 1000).toFixed(3).replace('.', ',');
+const n2 = (i: number) => String(i + 1).padStart(2, '0');
+const rows = frames.map((f, i) => {
+  const start = i * FRAME, end = (i + 1) * FRAME;
+  return { ...f, i, start, end, events: trace.filter((e) => e.ms >= start && e.ms < end), src: f.shot === 'none' ? undefined : img(f.shot) };
+});
+const alts: Record<string, string> = {
+  window: 'Пустое окно Moonbow в цвете тёмной темы',
+  player: 'Плеер Moonbow с заголовком «Дом у моря S01E04», панелью управления и чёрным полем под картинку',
+  fade0: 'Тот же плеер, на чёрном поле едва проступает маяк',
+  fade1: 'Картинка проявилась на треть: маяк под вечерним небом',
+  fade2: 'Картинка проявилась больше чем на три четверти',
+  fade3: 'Картинка почти целиком',
+  full: 'Плеер с полной картинкой: белый маяк под синим небом',
+};
+---
+<div class="gate" data-gate style={`--n:${rows.length}`}>
+  <div class="gate__track" data-gate-track>
+    <div class="gate__stage">
+      <ol class="gate__log edge" aria-hidden="true" data-gate-log>
+        {trace.map((e) => (
+          <li data-ms={e.ms}><span class="gate__ms">{sec(e.ms)}</span><span>{e.log}</span></li>
+        ))}
+      </ol>
+
+      <div class="gate__film">
+        <div class="gate__aperture" data-gate-aperture>
+          <ol class="gate__frames" data-gate-frames>
+            {rows.map((r) => (
+              <li class="gate__frame" style={`--i:${r.i}; grid-row:${r.i + 1}`} data-frame={r.i}>
+                <span class="gate__edge edge" aria-hidden="true">MOONBOW {n2(r.i)}  {sec(r.start)} с</span>
+                <div class="gate__img">
+                  {r.src ? (
+                    <Picture src={r.src} alt={alts[r.shot]} formats={['avif', 'webp']} fallbackFormat="jpg"
+                      width={Math.min(1280, r.src!.width)} widths={[640, 960, 1280, 1600].filter((w) => w <= r.src!.width)} sizes="(max-width: 800px) 92vw, 56vw"
+                      loading={r.i < 3 ? 'eager' : 'lazy'} decoding="async" quality={80} />
+                  ) : (
+                    <div class="gate__black" role="img" aria-label="Чёрный кадр: окна ещё нет"></div>
+                  )}
+                  {r.events.length > 0 && r.i < 8 && (
+                    <span class="gate__type edge" aria-hidden="true">{r.events.map((e) => <span>{sec(e.ms)}  {e.log}</span>)}</span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div class="gate__ruler" data-gate-ruler>
+          <ol aria-label="Кадры">
+            {rows.map((r) => (
+              <li><button type="button" data-goto={r.i} aria-label={`Кадр ${r.i + 1}: ${r.title}`}><span>{n2(r.i)}</span></button></li>
+            ))}
+          </ol>
+          <button type="button" class="gate__real" data-gate-real>
+            <PlayIcon /><span class="roll"><span>С настоящей скоростью</span><span aria-hidden="true">С настоящей скоростью</span></span>
+          </button>
+        </div>
+      </div>
+
+      <ol class="gate__texts" data-gate-texts>
+        {rows.map((r) => (
+          <li class="gate__text" style={`grid-row:${r.i + 1}`} data-text={r.i}>
+            <p class="gate__no"><span class="gate__num">{n2(r.i)}</span><span class="edge">кадр, {sec(r.start)} с</span></p>
+            <h3 class="gate__title t-m">{r.title}</h3>
+            <p class="gate__p soft">{r.text}</p>
+            {r.events.length > 0 && (
+              <ul class="gate__events edge">
+                {r.events.map((e) => <li><span class="gate__ms">{sec(e.ms)} с</span> {e.ru}</li>)}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p class="gate__live sr-only" aria-live="polite" data-gate-live></p>
+    </div>
+  </div>
+  <div class="wrap"><p class="gate__note edge">Время от старта процесса, медиана {measured.runs} запусков по журналу MOONBOW_TRACE: {measured.machine}, {measured.file}. Кадры со 2-го по 7-й, 9-й и 12-й сняты с настоящего окна Moonbow, а 8-й, 10-й и 11-й смешаны из соседних по той же кривой, по которой плеер проявляет картинку (200 мс). <a class="link" href="/speed/">Как это измерено</a></p></div>
+</div>
+
+<style>
+  /* ---------- Shared */
+  .gate { --frame-gap: 7%; --lane: clamp(1.6rem, 2.8vw, 2.75rem); --ar: 2542 / 1631; }
+  .gate__img { position: relative; aspect-ratio: var(--ar); background: #000; overflow: clip; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.09); border-radius: 4px; }
+  :global(.motion) .gate__img { box-shadow: none; border-radius: 0; }
+  .gate__img :global(img) { width: 100%; height: 100%; object-fit: cover; }
+  .gate__black { position: absolute; inset: 0; background: #000; }
+  .gate__num { font-family: var(--f-mono); font-size: var(--t-xl); line-height: 0.9; letter-spacing: -0.06em; font-weight: 300; color: var(--c-fg); }
+  .gate__no { display: flex; align-items: baseline; gap: 0.9rem; }
+  .gate__title { font-weight: 500; margin-top: 0.9rem; }
+  .gate__p { margin-top: 0.6rem; max-width: 30rem; }
+  .gate__events { margin-top: 1rem; display: grid; gap: 0.3rem; color: var(--c-soft); }
+  .gate__ms { color: var(--c-fg); }
+  .gate__note { margin-top: 1.25rem; max-width: 46rem; line-height: 1.6; }
+  .gate__note .link { color: var(--c-soft); }
+  .gate__edge { display: none; }
+  /* The trace line of the moment, typed in the black part of the frame (motion mode only). */
+  .gate__type { display: none; }
+  :global(.motion) .gate__type {
+    display: grid; gap: 0.3rem; position: absolute; left: 50%; top: 52%; translate: -50% -50%;
+    font-size: clamp(0.75rem, 1.1vw, 1rem); color: var(--c-fg); white-space: pre; text-align: left;
+  }
+
+  /* ---------- Static: no motion. Frame left, text right, one per row. */
+  .gate__stage { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); row-gap: clamp(2rem, 5vw, 4rem); max-width: var(--max); margin-inline: auto; padding-inline: var(--gutter); }
+  .gate__frames, .gate__texts { display: contents; }
+  .gate__frame { grid-column: 1 / span 7; }
+  .gate__text { grid-column: 9 / span 4; align-self: center; }
+  .gate__log, .gate__ruler { display: none; }
+  .gate__film { display: contents; }
+  .gate__aperture { display: contents; }
+  @media (max-width: 800px) {
+    .gate__frame, .gate__text { grid-column: 1 / -1; grid-row: auto !important; }
+  }
+
+  /* ---------- Motion: the projector. */
+  :global(.motion) .gate__track { height: calc(var(--n) * 62svh + 38rem); }
+  /* Sticky at the middle of the screen and only as tall as its content, so nothing hangs empty
+     under it when it lets go and the note follows right below. */
+  :global(.motion) .gate__stage {
+    position: sticky; top: max(calc(var(--header-h) + 0.5rem), calc(50svh - 19rem)); align-items: center; align-content: center;
+    grid-template-rows: auto; row-gap: 0;
+  }
+  :global(.motion) .gate__log { display: grid; grid-column: 1 / span 2; align-self: center; gap: 0.55rem; }
+  :global(.motion) .gate__log li { position: relative; display: grid; gap: 0.1rem; padding-left: 1rem; color: color-mix(in srgb, var(--c-muted) 55%, transparent); transition: color 0.16s; }
+  :global(.motion) .gate__log li .gate__ms { color: inherit; }
+  :global(.motion) .gate__log li.is-past { color: var(--c-muted); }
+  :global(.motion) .gate__log li.is-now { color: var(--c-fg); }
+  :global(.motion) .gate__log li.is-now::before { content: ''; position: absolute; left: 0; top: 0.4em; width: 0.45rem; height: 0.45rem; background: var(--c-fg); }
+
+  :global(.motion) .gate__film { display: grid; grid-column: 3 / span 7; gap: 1rem; }
+  :global(.motion) .gate__aperture {
+    display: block; position: relative; overflow: clip; aspect-ratio: auto;
+    padding-inline: var(--lane); background: #050506;
+    border-radius: 4px;
+  }
+  /* Perforations: four sprocket holes per frame on each side, moving with the film. */
+  :global(.motion) .gate__aperture::before, :global(.motion) .gate__aperture::after {
+    content: ''; position: absolute; top: 0; bottom: 0; width: var(--lane); z-index: 2; pointer-events: none;
+    background-image: linear-gradient(to bottom, transparent 18%, #1a1c22 18%, #1a1c22 82%, transparent 82%);
+    background-size: 36% calc(var(--fh, 400px) * (1 + var(--gap-k, 0.07)) / 4);
+    background-repeat: repeat-y; background-position-x: 14%;
+    background-position-y: calc(var(--pos, 0) * var(--fh, 400px) * (1 + var(--gap-k, 0.07)));
+  }
+  :global(.motion) .gate__aperture::before { left: 0; }
+  :global(.motion) .gate__aperture::after { right: 0; background-position-x: 86%; }
+  :global(.motion) .gate__frames { display: block; position: relative; aspect-ratio: var(--ar); }
+  :global(.motion) .gate__frame {
+    position: absolute; inset: 0;
+    transform: translate3d(0, calc((var(--pos, 0) - var(--i)) * (100% + var(--frame-gap))), 0); /* the next frame comes from above: film runs down */
+  }
+  :global(.motion) .gate__img { height: 100%; aspect-ratio: auto; }
+  :global(.motion) .gate__edge {
+    display: flex; align-items: center; justify-content: flex-start; position: absolute; top: 0; left: calc(var(--lane) * -0.48); width: calc(var(--lane) * 0.44); height: 100%;
+    writing-mode: vertical-rl; rotate: 180deg; padding-block: 0.8rem;
+    font-size: 0.625rem; letter-spacing: 0.14em; color: #6b707a; white-space: pre; overflow: hidden;
+  }
+
+  :global(.motion) .gate__ruler { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .gate__ruler ol { display: flex; gap: 3px; }
+  .gate__ruler ol button {
+    display: grid; place-items: end start; width: clamp(1.6rem, 2.6vw, 2.4rem); height: 2rem; padding: 0.2rem 0.25rem;
+    border: 1px solid var(--c-line-strong); color: var(--c-muted); font: 0.625rem/1 var(--f-mono);
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .gate__ruler ol button.is-past { border-color: var(--c-muted); color: var(--c-soft); }
+  .gate__ruler ol button.is-now { background: var(--c-fg); border-color: var(--c-fg); color: var(--c-bg); }
+  /* Hover: a frame-line bar slides under the number, like the cell being pulled into the gate. */
+  .gate__ruler ol button { box-shadow: inset 0 0 0 var(--c-fg); transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.16s cubic-bezier(0.6, 0, 0.25, 1); }
+  @media (hover: hover) { .gate__ruler ol button:hover { border-color: var(--c-fg); color: var(--c-fg); box-shadow: inset 0 -4px 0 var(--c-fg); } .gate__ruler ol button.is-now:hover { color: var(--c-bg); box-shadow: inset 0 -4px 0 var(--c-bg); } }
+  .gate__ruler ol button:focus-visible { box-shadow: inset 0 -4px 0 currentColor; }
+  .gate__real { display: inline-flex; align-items: center; gap: 0.55rem; min-height: 2.5rem; padding: 0 1rem 0 0.8rem; border-radius: var(--r-pill); border: 1px solid var(--c-line-strong); font-size: 0.9375rem; font-weight: 500; transition: border-color 0.18s, background-color 0.18s; }
+  .gate__real :global(svg) { width: 0.8rem; height: 0.8rem; }
+  @media (hover: hover) { .gate__real:hover { border-color: var(--c-fg); } }
+  .gate__real[aria-pressed='true'] { background: var(--c-fg); color: var(--c-bg); border-color: var(--c-fg); }
+
+  :global(.motion) .gate__texts { display: grid; grid-column: 10 / span 3; align-self: center; }
+  :global(.motion) .gate__text { grid-area: 1 / 1; grid-row: 1 !important; visibility: hidden; }
+  :global(.motion) .gate__text.is-now { visibility: visible; }
+
+  @media (max-width: 1100px) and (min-width: 801px) {
+    :global(.motion) .gate__log { display: none; }
+    :global(.motion) .gate__film { grid-column: 1 / span 7; }
+    :global(.motion) .gate__texts { grid-column: 8 / span 5; }
+  }
+  @media (max-width: 800px) {
+    :global(.motion) .gate__track { height: calc(var(--n) * 48svh + 44rem); }
+    :global(.motion) .gate__stage { align-content: start; padding-top: calc(var(--header-h) + 0.5rem); row-gap: 1.25rem; }
+    :global(.motion) .gate__log { display: none; }
+    :global(.motion) .gate__film, :global(.motion) .gate__texts { grid-column: 1 / -1; }
+    :global(.motion) .gate__texts { align-self: start; }
+    .gate { --lane: 0.9rem; }
+    :global(.motion) .gate__edge { display: none; }
+    :global(.motion) .gate__type { font-size: 0.6875rem; }
+    .gate__ruler ol { flex-wrap: wrap; row-gap: 3px; }
+    .gate__ruler ol li { flex: 1 1 calc(100% / 6 - 3px); }
+    .gate__ruler ol button { height: 2.4rem; font-size: 0.625rem; }
+    :global(.motion) .gate__stage { top: calc(var(--header-h) + 0.5rem); }
+    .gate__ruler ol { gap: 2px; }
+    .gate__ruler { gap: 0.75rem; }
+    .gate__ruler ol { width: 100%; }
+    .gate__ruler ol li { flex: 1 1 0; min-width: 0; }
+    .gate__ruler ol button { width: 100%; min-width: 0; height: 1.6rem; font-size: 0.5rem; }
+    .gate__real { width: 100%; justify-content: center; }
+    .gate__num { font-size: 2.6rem; }
+  }
+</style>

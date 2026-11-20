@@ -1,35 +1,56 @@
 ---
 import Base from '../layouts/Base.astro';
+import PlayIcon from '../components/PlayIcon.astro';
+import { nav } from '../data/site';
 ---
-<Base title="Страница не найдена" description="Такой страницы на сайте Moonbow нет. Вернитесь на главную или откройте список возможностей плеера.">
-  <section class="nf wrap">
-    <p class="nf__time time" aria-hidden="true">-:--:--.---</p>
-    <div class="nf__card" data-reveal="fade" data-intro>
-      <p class="nf__badge"><span aria-hidden="true">!</span> Битый файл</p>
-      <h1 class="nf__title">Не удалось открыть страницу</h1>
-      <p class="prose">По этому адресу ничего нет: ссылка устарела или в ней опечатка. Длительность неизвестна, перематывать некуда.</p>
-      <div class="nf__row">
-        <a class="btn btn--solid" href="/">
-          <span class="btn__fill" aria-hidden="true"></span>
-          <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
-          На главную
-        </a>
-        <a class="seek" href="/vozmozhnosti/">Возможности</a>
+<Base title="Кадр потерян" description="Такой страницы на сайте Moonbow нет. Вернитесь на главную или откройте раздел.">
+  <section class="lost wrap" aria-labelledby="lost-h">
+    <div class="lost__film" aria-hidden="true">
+      <div class="lost__aperture">
+        <span class="lost__edge edge">MOONBOW  --  -,--- с</span>
+        <div class="lost__frame"><span class="edge">кадра нет</span></div>
       </div>
+    </div>
+    <div class="lost__text">
+      <p class="edge lost__no">404</p>
+      <h1 id="lost-h" class="t-xl lost__h">Кадр потерян</h1>
+      <p class="soft lost__p">Такой страницы нет. Когда файл не открывается, Moonbow показывает карточку ошибки и предлагает следующий. Мы предлагаем главную.</p>
+      <div class="lost__actions">
+        <a class="play" href="/"><PlayIcon /><span class="roll"><span>На главную</span><span aria-hidden="true">На главную</span></span></a>
+      </div>
+      <ul class="lost__links">
+        {nav.map((n) => <li><a class="link" href={n.href}>{n.label}</a></li>)}
+        <li><a class="link" href="/download/">Скачать</a></li>
+      </ul>
     </div>
   </section>
 </Base>
 
 <style>
-  .nf { min-height: 100svh; display: grid; align-content: center; gap: calc(var(--u) * 4); padding-top: var(--header-h); padding-bottom: calc(var(--u) * 6); }
-  .nf__time { font-weight: 100; white-space: nowrap; color: var(--c-dim); font-size: min(13.5rem, calc((100vw - 2 * var(--gutter)) / 6.75)); line-height: 0.9; margin-left: -0.04em; }
-  .nf__card {
-    max-width: 34rem; padding: clamp(1.25rem, 3vw, 2rem); background: var(--c-raised); border: 1px solid var(--c-line); border-radius: var(--r-window);
-    display: grid; gap: 1rem; justify-items: start;
+  .lost { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); row-gap: 3rem; align-items: center; min-height: min(72svh, 46rem); padding-block: 3rem; }
+  .lost__film { grid-column: 1 / span 6; }
+  .lost__aperture {
+    position: relative; padding-inline: 2.75rem; background: #050506; border-radius: 4px;
+    background-image:
+      linear-gradient(to bottom, transparent 18%, #1a1c22 18%, #1a1c22 82%, transparent 82%),
+      linear-gradient(to bottom, transparent 18%, #1a1c22 18%, #1a1c22 82%, transparent 82%);
+    background-size: 1rem 25%, 1rem 25%;
+    background-position: 0.3rem 0, calc(100% - 0.3rem) 0;
+    background-repeat: repeat-y;
   }
-  /* Moonbow's "broken file" badge: the only place where the player uses red as a sign. */
-  .nf__badge { display: inline-flex; align-items: center; gap: 0.5rem; font-size: var(--t-xs); padding: 0.25rem 0.7rem 0.25rem 0.3rem; border-radius: var(--r-pill); background: var(--c-line); }
-  .nf__badge span { display: grid; place-items: center; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: #c42b1c; color: #fff; font-weight: 600; font-size: 0.75rem; }
-  .nf__title { font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; }
-  .nf__row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.75rem; margin-top: 0.5rem; }
+  .lost__edge { position: absolute; left: 1.45rem; top: 0; bottom: 0; writing-mode: vertical-rl; rotate: 180deg; font-size: 0.625rem; letter-spacing: 0.14em; color: #6b707a; display: flex; align-items: center; white-space: pre; }
+  .lost__frame { aspect-ratio: 2542 / 1631; background: #000; display: grid; place-items: center; border-block: 0.6rem solid #050506; }
+  .lost__frame .edge { color: var(--c-muted); }
+  .lost__text { grid-column: 8 / span 5; }
+  .lost__no { color: var(--c-fg); }
+  .lost__h { margin-top: 0.5rem; margin-left: -0.04em; }
+  .lost__p { margin-top: 1.25rem; max-width: 28rem; }
+  .lost__actions { margin-top: 2rem; }
+  .lost__links { margin-top: 1.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: var(--t-s); color: var(--c-soft); }
+  .lost__links a { display: inline-flex; min-height: 2rem; align-items: center; }
+  @media (max-width: 900px) {
+    .lost__film, .lost__text { grid-column: 1 / -1; }
+    .lost__aperture { padding-inline: 2rem; }
+    .lost__edge { left: 1.05rem; }
+  }
 </style>

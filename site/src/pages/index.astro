@@ -1,283 +1,282 @@
 ---
 import Base from '../layouts/Base.astro';
 import Shot from '../components/Shot.astro';
-import { stops, tones, facts, stack, download } from '../data/site';
-import { fmt, LOG_MIN, LOG_MAX, ticks } from '../motion/time';
+import Gate from '../components/Gate.astro';
+import PlayIcon from '../components/PlayIcon.astro';
+import FrameCounter from '../components/FrameCounter.astro';
+import { Picture } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+import { areas, facts, download, shots } from '../data/site';
+import settings from '../data/app/settings.json';
+import actions from '../data/app/actions.json';
+import formats from '../data/app/formats.json';
 
-const screens = [...new Set(stops.map((s) => s.shot))];
-const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 100;
+const nFormats = Object.values(formats).reduce((a, v) => a + v.length, 0);
+const files = import.meta.glob<{ default: ImageMetadata }>('../assets/shots/*.{png,jpg}', { eager: true });
+const shotSrc = (name: string) => Object.entries(files).find(([p]) => p.split('/').pop()!.replace(/\.\w+$/, '') === name)?.[1].default;
+const cropFiles = import.meta.glob<{ default: ImageMetadata }>('../assets/shots/crops/*.{png,jpg}', { eager: true });
+const cropSrc = (name: string) => Object.entries(cropFiles).find(([p]) => p.split('/').pop()!.replace(/\.\w+$/, '') === name)?.[1].default ?? shotSrc(name);
 ---
 <Base>
-  <section class="hero wrap" aria-labelledby="hero-title">
-    <div class="hero__clock">
-      <p class="hero__time time" aria-hidden="true" data-clock>0:00:00.085</p>
-      <p class="label hero__note" data-clock-note>
-        <span data-clock-static>Через 0,085 секунды после запуска Moonbow уже показывает первый кадр.</span>
-        <span data-clock-live hidden>Столько вы на сайте. Moonbow за это время успел бы показать первый кадр <span class="time" data-clock-count>0</span>&nbsp;раз.</span>
-      </p>
-    </div>
+  <!-- POSTER -->
+  <section class="hero wrap" aria-labelledby="hero-h">
     <div class="hero__text">
-      <h1 class="display" id="hero-title" data-split="lines" data-intro>Плеер для своих фильмов, сериалов и&nbsp;музыки</h1>
-      <p class="lead" data-reveal="fade" data-intro data-delay="0.25">Moonbow для Windows 10 и 11. Открывает файл быстрее, чем вы моргнёте, и потом ничего не мигает.</p>
-      <div class="hero__cta" data-reveal="fade" data-intro data-delay="0.4">
-        <a class="btn btn--solid" href={download.url}>
-          <span class="btn__fill" aria-hidden="true"></span>
-          <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
-          Скачать для Windows
-        </a>
-        <a class="seek hero__more" href="/vozmozhnosti/">Что он умеет</a>
+      <h1 id="hero-h" class="hero__h t-xl">
+        <span class="sr-only">Moonbow, плеер для Windows. </span>
+        <span class="hero__line">Двойной щелчок.</span>
+        <span class="hero__line">Восемь кадров.</span>
+        <span class="hero__line">Фильм идёт.</span>
+      </h1>
+      <p class="hero__lead t-m soft">Видео- и музыкальный плеер для Windows&nbsp;10 и&nbsp;11. Красивый, мгновенный и умеет всё: медиатека, сериалы, субтитры, тексты песен и {settings.valueCount}&nbsp;настроек на случай, если захочется больше.</p>
+      <div class="hero__actions">
+        <a class="play" href="/download/"><PlayIcon /><span class="roll"><span>Скачать для Windows</span><span aria-hidden="true">Скачать для Windows</span></span></a>
+        <a class="ghost" href="/features/"><span class="roll"><span>Что он умеет</span><span aria-hidden="true">Что он умеет</span></span></a>
       </div>
+      <p class="hero__meta edge">Бесплатно. {download.setup.size}. {download.requirements}.</p>
     </div>
-    <Shot class="hero__shot" name="player-film" eager sizes="(max-width: 767px) 100vw, 64vw"
-      alt="Moonbow играет фильм «Вечер у воды»: девушка смотрит на город на закате, внизу панель управления" />
+    <figure class="hero__shot">
+      <div class="strip">
+        <span class="strip__edge edge" aria-hidden="true"><span class="strip__brand">MOONBOW  </span>S01E04  13:51  24 FPS</span>
+        <Shot name="hero" eager intro sizes="(max-width: 800px) 100vw, 60vw" />
+      </div>
+      <figcaption class="hero__cap">
+        <span class="soft">Серия «Дом у моря» в Moonbow. Цвет на этой странице есть только в кадре.</span>
+      </figcaption>
+    </figure>
+    <FrameCounter class="hero__fc" />
   </section>
 
-  <section class="evening" aria-labelledby="evening-title" data-evening>
-    <div class="wrap evening__intro grid">
-      <h2 class="display" id="evening-title" data-split="lines">Один вечер с&nbsp;Moonbow, по&nbsp;секундам</h2>
-      <p class="prose" data-reveal="fade">Часы слева идут по логарифмической шкале: каждый следующий шаг в несколько раз длиннее предыдущего. От первых миллисекунд после запуска до недели спустя.</p>
+  <!-- THE BET -->
+  <section class="bet wrap" aria-labelledby="bet-h">
+    <h2 id="bet-h" class="bet__label edge">Спор</h2>
+    <p class="bet__text t-l" data-split="lines">Спор был простой: на Windows нет плеера, который одновременно красивый, мгновенный и умеет всё. Обычно выбираешь два из трёх: красивый и бедный, всеядный и тяжёлый, быстрый и голый. Moonbow написан, чтобы не выбирать.</p>
+    <ol class="bet__terms">
+      <li><a href="#instant" class="roll-host frameline"><span class="bet__n edge">1</span><span class="roll"><span>Мгновенный</span><span aria-hidden="true">Мгновенный</span></span><span class="bet__d soft">Фильм идёт на восьмом кадре</span></a></li>
+      <li><a href="#beautiful" class="roll-host frameline"><span class="bet__n edge">2</span><span class="roll"><span>Красивый</span><span aria-hidden="true">Красивый</span></span><span class="bet__d soft">Весь цвет в кадре</span></a></li>
+      <li><a href="#everything" class="roll-host frameline"><span class="bet__n edge">3</span><span class="roll"><span>Умеет всё</span><span aria-hidden="true">Умеет всё</span></span><span class="bet__d soft">{settings.valueCount} настроек, {actions.count} команд</span></a></li>
+    </ol>
+  </section>
+
+  <!-- 1. INSTANT -->
+  <section class="chapter" id="instant" aria-labelledby="instant-h">
+    <header class="chapter__head wrap">
+      <p class="chapter__no edge">1  Мгновенный</p>
+      <h2 id="instant-h" class="t-mega chapter__title" data-split="lines">Восемь кадров</h2>
+      <p class="chapter__lead t-m soft" data-reveal="down">В кино за секунду проходит 24 кадра. От двойного щелчка по файлу до идущего фильма Moonbow тратит восемь. Прокрутите, и плёнка пройдёт через окно по одному кадру, какими они были на самом деле.</p>
+    </header>
+    <Gate />
+    <div class="facts wrap">
+      <h3 class="sr-only">Другие замеры</h3>
+      <ul class="facts__list">
+        {facts.map((f) => (
+          <li class="facts__item" data-reveal="down">
+            <p class="facts__value">{f.value}</p>
+            <p class="facts__label">{f.label}</p>
+            <p class="facts__note muted">{f.note}</p>
+          </li>
+        ))}
+      </ul>
+      <p class="facts__more"><a class="link" href="/speed/">Как это измерено и что сделано ради скорости</a></p>
     </div>
+  </section>
 
-    <div class="wrap evening__body grid">
-      <div class="evening__left">
-        <div class="evening__clock">
-          <p class="evening__time time" aria-hidden="true" data-ev-time>{fmt(stops[0].t)}</p>
-          <p class="label evening__unit" aria-hidden="true" data-ev-unit>{stops[0].unit}</p>
-          <div class="ruler" aria-label="Шкала времени вечера">
-            <div class="ruler__track" aria-hidden="true">
-              {ticks.map((k) => (
-                <span class:list={['ruler__tick', { 'is-minor': k.minor }]} style={`left:${pos(k.t)}%`}><span class="time">{k.label}</span></span>
-              ))}
-              <span class="ruler__head" data-ev-head style={`left:${pos(stops[0].t)}%`}></span>
-            </div>
-            <ol class="ruler__stops">
-              {stops.map((s, i) => (
-                <li style={`left:${pos(s.t)}%`}>
-                  <a href={`#t${i}`} data-ev-jump={i} aria-label={`${s.unit}: ${s.title}`}><span></span></a>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
+  <!-- 2. BEAUTIFUL -->
+  <section class="chapter beauty" id="beautiful" aria-labelledby="beautiful-h">
+    <header class="chapter__head wrap">
+      <p class="chapter__no edge">2  Красивый</p>
+      <h2 id="beautiful-h" class="t-mega chapter__title" data-split="lines">Весь цвет в кадре</h2>
+    </header>
+    <div class="beauty__story wrap">
+      <p class="t-m" data-reveal="down">Лунная радуга бывает ночью у водопадов, при полной луне. Глазу она кажется белой: в темноте мы почти не различаем цвета.</p>
+      <p class="soft" data-reveal="down">Цвет в ней есть, его видно только на длинной выдержке. Отсюда имя и главное правило интерфейса: всё белое, серое и чёрное, а цветными остаются только ваши фильмы и обложки. Никаких цветных кнопок, полос и значков, которые спорят с кадром.</p>
+    </div>
+    <div class="wall wrap">
+      <figure class="wall__a"><Shot name="library-home" sizes="(max-width: 800px) 100vw, 64vw" /><figcaption class="soft">Главная медиатеки: продолжить с того места, где остановились.</figcaption></figure>
+      <figure class="wall__b"><Shot name="music-lyrics" sizes="(max-width: 800px) 100vw, 40vw" /><figcaption class="soft">Песня с обложкой и синхронным текстом.</figcaption></figure>
+      <figure class="wall__c"><Shot name="series" sizes="(max-width: 800px) 100vw, 40vw" /><figcaption class="soft">Сериал сам раскладывается по сезонам.</figcaption></figure>
+      <figure class="wall__d"><Shot name="subtitles" sizes="(max-width: 800px) 100vw, 56vw" /><figcaption class="soft">Стиль субтитров выбирается на живом кадре.</figcaption></figure>
+    </div>
+    <p class="beauty__note wrap soft">Есть светлая тема, системная, скины «Чёрный OLED», «Высокий контраст» и «Сепия», пять оттенков белого для акцента и свой JSON-скин, который перечитывается на лету.</p>
+  </section>
 
-        <ol class="evening__stops">
-          {stops.map((s, i) => (
-            <li class="stop" id={`t${i}`} data-stop={i}>
-              <p class="stop__time label"><span class="time">{fmt(s.t)}</span> <span>{s.unit}</span></p>
-              <h3 class="stop__title">{s.title}</h3>
-              <p class="prose">{s.text}</p>
-              <Shot class="stop__shot" name={s.shot} alt={s.alt} dark={s.dark} sizes="100vw" />
+  <!-- 3. EVERYTHING -->
+  <section class="chapter all" id="everything" aria-labelledby="everything-h">
+    <header class="chapter__head wrap">
+      <p class="chapter__no edge">3  Умеет всё</p>
+      <h2 id="everything-h" class="t-mega chapter__title" data-split="lines">Умеет всё</h2>
+      <p class="chapter__lead t-m soft" data-reveal="down">{settings.valueCount} настроек, {actions.count} команд, {nFormats} форматов файлов. На виду только то, что нужно сейчас. Остальное ждёт в коротких панелях у кнопок, в палитре Ctrl+K и в поиске по настройкам.</p>
+    </header>
+    <div class="wrap">
+      <ol class="index" data-index>
+        {areas.map((a, i) => {
+          const src = cropSrc(a.shot);
+          return (
+            <li>
+              <a href={`/features/#${a.id}`} data-row={i} class="index__row roll-host frameline">
+                <span class="index__n edge">{String(i + 1).padStart(2, '0')}</span>
+                <span class="index__title"><span class="roll"><span>{a.title}</span><span aria-hidden="true">{a.title}</span></span></span>
+                <span class="index__sum soft">{a.summary}</span>
+                {src && <span class="index__thumb" aria-hidden="true"><Picture src={src} alt={shots[a.shot]?.alt ?? a.title} formats={['avif', 'webp']} fallbackFormat="jpg" width={720} widths={[480, 720]} sizes="40vw" loading="lazy" decoding="async" quality={70} /></span>}
+              </a>
             </li>
-          ))}
-        </ol>
-      </div>
-
-      <div class="evening__screen">
-        <div class="screen__stack">
-          {screens.map((name, i) => {
-            const s = stops.find((x) => x.shot === name && !x.dark) ?? stops[0];
-            return <div class="screen" data-screen={name} style={i ? 'opacity:0;visibility:hidden' : undefined}>
-              <Shot name={name} alt={s.alt} dark={i === 0 && stops[0].dark} sizes="58vw" />
-            </div>;
+          );
+        })}
+      </ol>
+      <div class="preview" data-index-preview aria-hidden="true">
+        <div class="preview__strip">
+          {areas.map((a, i) => {
+            const src = shotSrc(a.shot);
+            return src && <div class="preview__frame" style={`--i:${i}`}><Picture src={src} alt={shots[a.shot]?.alt ?? a.title} formats={['avif', 'webp']} fallbackFormat="jpg" width={720} widths={[480, 720]} sizes="26vw" loading="lazy" decoding="async" quality={70} /></div>;
           })}
         </div>
       </div>
     </div>
   </section>
 
-  <section class="mono wrap" aria-labelledby="mono-title">
-    <div class="grid">
-      <h2 class="mono__statement" id="mono-title" data-split="lines">Интерфейс Moonbow серый. Цветным на&nbsp;экране бывает только ваш фильм.</h2>
-      <p class="prose mono__text" data-reveal="fade">Оранжевый акцент исходного макета заменён шкалой белого: пять тонов на выбор. Есть светлая тема, скины «Чёрный OLED», «Высокий контраст» и «Сепия», а свой скин в JSON перезагружается на лету.</p>
-    </div>
-    <ul class="tones" aria-label="Тона акцента">
-      {tones.map((t, i) => (
-        <li class="tone" style={`--tone:${t.hex};--i:${i}`} data-reveal="fade" data-delay={String(i * 0.06)}>
-          <span class="tone__name">{t.name}</span>
-          <span class="tone__hex time">{t.hex}</span>
-        </li>
-      ))}
-    </ul>
-    <div class="mono__pair grid">
-      <Shot class="mono__shot mono__shot--a" name="home-light" alt="Главная медиатеки Moonbow в светлой теме" caption="Светлая тема. Та же шкала, зеркально." sizes="(max-width: 767px) 100vw, 50vw" />
-      <Shot class="mono__shot mono__shot--b" name="settings" alt="Окно настроек Moonbow с поиском по параметрам" caption="Около 240 настроек, у каждой поиск и сброс." sizes="(max-width: 767px) 100vw, 40vw" />
-    </div>
-  </section>
-
-  <section class="facts wrap" aria-labelledby="facts-title">
-    <div class="grid">
-      <h2 class="facts__title" id="facts-title" data-split="lines">Родная программа Windows, без браузера внутри</h2>
-      <p class="prose facts__text" data-reveal="fade">Интерфейс нарисован на Direct2D и DirectComposition, видео идёт через libmpv. Поэтому окно появляется сразу, а плеер не занимает память, как ещё один Chrome.</p>
-    </div>
-    <dl class="facts__list grid">
-      {facts.map((f) => (
-        <div class="fact" data-reveal="fade">
-          <dt class="label">{f.label}</dt>
-          <dd class="fact__value time">{f.value}</dd>
-        </div>
-      ))}
-    </dl>
-    <ul class="stack label" aria-label="Технологии">
-      {stack.map((s) => <li>{s}</li>)}
-    </ul>
-  </section>
-
-  <section class="finale wrap" aria-labelledby="finale-title">
-    <h2 class="display finale__title" id="finale-title" data-split="lines">Дальше ваш вечер</h2>
+  <!-- FINALE -->
+  <section class="finale wrap" aria-labelledby="finale-h">
+    <h2 id="finale-h" class="t-mega finale__h" data-split="lines">Откройте свой фильм</h2>
     <div class="finale__row">
-      <a class="btn" href={download.url}>
-        <span class="btn__fill" aria-hidden="true"></span>
-        <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
-        Скачать Moonbow
-      </a>
-      <p class="label">Windows 10 и 11, 64 бит. Версия {download.version}, {download.size}. Бесплатно, GPL-3.0.</p>
+      <a class="play finale__play" href="/download/"><PlayIcon /><span class="roll"><span>Скачать для Windows</span><span aria-hidden="true">Скачать для Windows</span></span></a>
+      <dl class="finale__specs">
+        <div><dt class="edge">Установщик</dt><dd>{download.setup.size}</dd></div>
+        <div><dt class="edge">Архив zip</dt><dd>{download.zip.size}</dd></div>
+        <div><dt class="edge">Система</dt><dd>{download.requirements}</dd></div>
+        <div><dt class="edge">Цена</dt><dd>Бесплатно, GPL-3.0</dd></div>
+      </dl>
     </div>
+    <p class="finale__note muted">Ставится в вашу папку пользователя, без прав администратора. Подписи кода пока нет, поэтому Windows SmartScreen спросит, доверяете ли вы файлу. <a class="link" href="/download/">Подробнее об установке</a></p>
   </section>
 </Base>
 
 <style>
-  /* Hero: the clock is a poster line across the grid, then text and the window. */
+  /* ---------- Poster */
   .hero {
-    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
-    padding-top: calc(var(--header-h) + var(--u) * 1.5); padding-bottom: calc(var(--u) * 8);
-    align-items: start;
+    position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    min-height: calc(100svh - var(--header-h)); align-content: center; row-gap: 2rem;
+    padding-block: clamp(1.5rem, 4vh, 3rem) clamp(4.5rem, 9vh, 6rem);
   }
-  .hero__clock { grid-column: 1 / -1; }
-  .hero__time {
-    font-weight: 100; line-height: 0.88; letter-spacing: -0.02em; white-space: nowrap;
-    font-size: min(13.5rem, calc((100vw - 2 * var(--gutter)) / 6.75)); margin-left: -0.04em;
+  .hero__text { grid-column: 1 / span 5; grid-row: 1; align-self: center; position: relative; z-index: 1; }
+  .hero__h { font-weight: 400; font-size: clamp(2.3rem, 0.9rem + 3.9vw, 5.1rem); line-height: 0.98; letter-spacing: -0.045em; }
+  .hero__line { display: block; white-space: nowrap; }
+  .hero__lead { margin-top: clamp(1.25rem, 2.5vw, 2rem); max-width: 30rem; }
+  .hero__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: clamp(1.5rem, 3vw, 2.25rem); }
+  .hero__meta { margin-top: 1rem; }
+  .hero__shot { grid-column: 6 / span 7; grid-row: 1; align-self: center; }
+  .hero__cap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-top: 0.9rem; font-size: var(--t-s); padding-left: var(--lane); }
+  .hero :global(.hero__fc) { position: absolute; right: var(--gutter); bottom: 1.25rem; }
+
+  /* ---------- The bet */
+  .bet { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); padding-block: clamp(5rem, 14vw, 12rem) clamp(4rem, 9vw, 8rem); }
+  .bet__label { grid-column: 1 / span 2; padding-top: 0.7em; }
+  .bet__text { grid-column: 3 / span 9; text-indent: 0; }
+  .bet__terms { grid-column: 3 / span 10; margin-top: clamp(2.5rem, 5vw, 4rem); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--c-line); }
+  .bet__terms a { display: grid; gap: 0.4rem; padding: 1.25rem 1.25rem 1.25rem 0; min-height: 7.5rem; align-content: start; border-right: 1px solid var(--c-line); margin-right: 1.25rem; }
+  .bet__terms li:last-child a { border-right: 0; }
+  .bet__terms .roll { font-size: var(--t-m); letter-spacing: -0.015em; }
+  .bet__n { color: var(--c-fg); }
+  .bet__d { font-size: var(--t-s); transition: color 0.18s; }
+  @media (hover: hover) { .bet__terms a:hover .bet__d { color: var(--c-fg); } }
+
+  /* ---------- Chapters */
+  .chapter { padding-top: clamp(4rem, 10vw, 9rem); }
+  .chapter__head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); }
+  .chapter__no { grid-column: 1 / -1; color: var(--c-fg); white-space: pre; }
+  .chapter__title { grid-column: 1 / -1; margin-top: 0.5rem; margin-left: -0.05em; }
+  .chapter__lead { grid-column: 5 / span 7; margin-top: clamp(1.25rem, 2.5vw, 2rem); }
+
+  .facts { margin-top: clamp(4rem, 8vw, 7rem); }
+  .facts__list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: var(--gutter); border-top: 1px solid var(--c-line); }
+  .facts__item { padding-top: 1.25rem; }
+  .facts__value { font-size: var(--t-xl); letter-spacing: -0.05em; line-height: 1; font-weight: 300; }
+  .facts__label { margin-top: 0.75rem; font-weight: 500; }
+  .facts__note { margin-top: 0.4rem; font-size: var(--t-s); max-width: 18rem; }
+  .facts__more { margin-top: 1.5rem; }
+  .facts__more .link { display: inline-block; padding-block: 0.7rem; }
+
+  /* ---------- Beautiful: the wall */
+  .beauty__story { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); margin-top: clamp(1.5rem, 3vw, 2.5rem); }
+  .beauty__story p:first-child { grid-column: 5 / span 6; }
+  .beauty__story p:last-child { grid-column: 5 / span 5; margin-top: 1.25rem; }
+  .wall { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); row-gap: clamp(2rem, 5vw, 4.5rem); margin-top: clamp(3rem, 7vw, 6rem); }
+  .wall figcaption { margin-top: 0.8rem; font-size: var(--t-s); }
+  .wall__a { grid-column: 1 / span 8; }
+  .wall__b { grid-column: 9 / span 4; align-self: end; }
+  .wall__c { grid-column: 2 / span 5; }
+  .wall__d { grid-column: 7 / span 6; margin-top: clamp(3rem, 9vw, 9rem); }
+  .beauty__note { margin-top: clamp(2.5rem, 5vw, 4rem); max-width: calc(var(--max)); font-size: var(--t-s); }
+  .beauty__note { padding-left: calc(var(--gutter) + (100% - 2 * var(--gutter)) / 12 * 4); }
+
+  /* ---------- Everything: the index */
+  .index { margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--c-line); }
+  .index li { border-bottom: 1px solid var(--c-line); }
+  .index__row { display: grid; grid-template-columns: 4rem minmax(0, 4fr) minmax(0, 6fr); align-items: baseline; column-gap: var(--gutter); padding-block: clamp(1rem, 2vw, 1.6rem); transition: background-color 0.18s; }
+  .index__title { font-size: var(--t-l); letter-spacing: -0.03em; line-height: 1.1; }
+  .index__sum { font-size: var(--t-body); max-width: 36rem; transition: color 0.18s; }
+  @media (hover: hover) { .index__row:hover .index__sum { color: var(--c-fg); } }
+  .index__thumb { display: none; }
+  @media (hover: hover) { .index__row:hover { background: rgb(255 255 255 / 0.025); } }
+  .index__row:active { background: rgb(255 255 255 / 0.05); }
+
+  .preview {
+    position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; width: clamp(16rem, 24vw, 24rem);
+    translate: 1.5rem -50%; visibility: hidden; opacity: 0;
+    aspect-ratio: 16 / 10; overflow: clip; border-radius: 6px; background: #000;
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 30px 80px -20px rgb(0 0 0 / 0.9);
   }
-  .hero__note { margin-top: calc(var(--u) * 1.2); max-width: 46ch; }
-  .hero__text { grid-column: 1 / span 4; padding-top: calc(var(--u) * 5); }
-  .hero__text .display { font-size: clamp(2rem, 1.2rem + 2.3vw, 3.4rem); line-height: 1.02; }
-  .hero__text .lead { margin-top: calc(var(--u) * 2); font-size: var(--t-body); color: var(--c-muted); max-width: 30ch; }
-  .hero__cta { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.75rem; margin-top: calc(var(--u) * 3.5); }
-  .hero__more { font-size: var(--t-s); color: var(--c-fg); }
-  .hero__shot { grid-column: 5 / -1; margin-top: calc(var(--u) * 5); }
-  :global(html.motion) .hero__shot :global(.shot__dark) { opacity: 1; }
+  .preview__strip { position: absolute; inset: 0; }
+  .preview__frame { position: absolute; inset: 0; transform: translate3d(0, calc((var(--pos, 0) - var(--i)) * 108%), 0); }
+  .preview__frame :global(img) { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
 
-  /* The evening */
-  .evening { padding-top: calc(var(--u) * 10); }
-  .evening__intro { row-gap: calc(var(--u) * 2); }
-  .evening__intro .display { grid-column: 1 / span 7; }
-  .evening__intro .prose { grid-column: 9 / -1; align-self: end; }
-  .evening__body { margin-top: calc(var(--u) * 6); }
-  .evening__left { grid-column: 1 / span 5; }
-  .evening__clock {
-    position: sticky; top: 0; z-index: 2; background: var(--c-bg);
-    padding: calc(var(--header-h) + var(--u) * 1.5) 0 calc(var(--u) * 2);
+  /* ---------- Finale */
+  .finale { padding-top: clamp(6rem, 16vw, 14rem); }
+  .finale__h { margin-left: -0.05em; max-width: 12ch; }
+  .finale__row { display: flex; flex-wrap: wrap; align-items: center; gap: 2rem clamp(2rem, 5vw, 5rem); margin-top: clamp(2rem, 4vw, 3rem); }
+  .finale__play { --h: 4rem; font-size: 1.2rem; padding-inline: 1.5em 1.9em; }
+  .finale__specs { display: grid; grid-template-columns: repeat(4, auto); gap: 0.5rem 2.5rem; }
+  .finale__specs dd { margin-top: 0.25rem; }
+  .finale__note { margin-top: 2rem; max-width: 40rem; font-size: var(--t-s); }
+
+  /* ---------- Tablet */
+  @media (max-width: 1100px) {
+    .hero__text { grid-column: 1 / span 6; }
+    .hero__shot { grid-column: 7 / span 6; }
+    .finale__specs { grid-template-columns: repeat(2, auto); }
   }
-  .evening__clock::after {
-    content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 4rem;
-    background: linear-gradient(var(--c-bg), rgb(9 9 9 / 0)); pointer-events: none;
+  /* ---------- Phone: re-composed, not shrunk */
+  @media (max-width: 800px) {
+    .hero { min-height: 0; align-content: start; row-gap: 2.25rem; padding-top: 1.5rem; padding-bottom: 5rem; }
+    .hero__text, .hero__shot { grid-column: 1 / -1; grid-row: auto; }
+    .hero__h { font-size: clamp(2.3rem, 11.4vw, 3.4rem); }
+    .hero__shot { margin-inline: calc(var(--gutter) * -1); }
+    .hero__shot .strip { border-radius: 0; }
+    .strip :global(.window) { border-radius: 3px; }
+    .hero__cap { padding-inline: var(--gutter); }
+    .hero :global(.hero__fc) { position: static; grid-column: 1 / -1; justify-self: start; margin-top: -0.75rem; }
+    .bet__label, .bet__text, .bet__terms { grid-column: 1 / -1; }
+    .bet__label { padding: 0 0 1rem; }
+    .bet__terms { grid-template-columns: 1fr; }
+    .bet__terms a { border-right: 0; margin-right: 0; min-height: 0; border-bottom: 1px solid var(--c-line); grid-template-columns: 1.5rem auto; column-gap: 0.75rem; }
+    .bet__terms li:last-child a { border-bottom: 0; }
+    .bet__d { grid-column: 2; }
+    .chapter__lead { grid-column: 1 / -1; }
+    .chapter__title { font-size: clamp(2.6rem, 13.5vw, 4rem); }
+    .facts__list { grid-template-columns: 1fr 1fr; row-gap: 2rem; }
+    .beauty__story p:first-child, .beauty__story p:last-child { grid-column: 1 / -1; }
+    .wall__a, .wall__b, .wall__c, .wall__d { grid-column: 1 / -1; margin-top: 0; }
+    .beauty__note { padding-left: var(--gutter); }
+    .index__row { grid-template-columns: 2.25rem minmax(0, 1fr); row-gap: 0.5rem; }
+    .index__sum { grid-column: 2; font-size: var(--t-s); }
+    .index__thumb { display: block; grid-column: 2; margin-top: 0.5rem; border-radius: 6px; overflow: clip; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07); }
+    .finale__specs { grid-template-columns: 1fr 1fr; }
+    .finale__h { font-size: clamp(2.6rem, 13.5vw, 4rem); }
   }
-  .evening__time {
-    font-weight: 200; white-space: nowrap; line-height: 1; letter-spacing: -0.03em;
-    font-size: min(5.4rem, calc((41.6vw - var(--gutter)) / 7));
+  /* Touch or reduced motion: thumbnails inline, no floating gate. */
+  @media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+    .preview { display: none; }
   }
-  .evening__unit { margin-top: 0.5rem; min-height: 1.4em; }
-
-  .ruler { position: relative; margin-top: calc(var(--u) * 2.5); height: 3.25rem; }
-  .ruler__track { position: absolute; inset: 0 0 auto; height: 3.25rem; border-top: 1px solid var(--c-line-strong); }
-  .ruler__tick { position: absolute; top: 0; height: 0.5rem; border-left: 1px solid var(--c-line-strong); }
-  .ruler__tick > span { position: absolute; top: 1.35rem; left: 0; translate: -50% 0; font-size: 0.6875rem; color: var(--c-muted); white-space: nowrap; }
-  .ruler__head {
-    position: absolute; top: -0.5rem; width: 3px; height: 1rem; margin-left: -1.5px; border-radius: 2px;
-    background: var(--c-accent); box-shadow: 0 0 0 3px var(--c-bg);
-  }
-  .ruler__stops { position: absolute; inset: -0.75rem 0 auto; height: 1.5rem; }
-  .ruler__stops li { position: absolute; top: 0; translate: -50% 0; }
-  .ruler__stops a { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; }
-  .ruler__stops a span { width: 5px; height: 5px; border-radius: 50%; background: var(--c-muted); transition: scale 0.3s var(--ease-out), background 0.3s; }
-  @media (hover: hover) { .ruler__stops a:hover span { scale: 1.8; background: var(--c-fg); } }
-  .ruler__stops a:focus-visible span { scale: 1.8; background: var(--c-fg); }
-
-  .evening__stops { padding-top: 12vh; padding-bottom: 30vh; }
-  .stop { min-height: 72vh; padding-top: 6vh; color: var(--c-muted); transition: color 0.4s; }
-  .stop.is-active { color: var(--c-fg); }
-  .stop.is-active .prose { color: var(--c-fg); }
-  .stop .prose { transition: color 0.4s; max-width: 34ch; }
-  .stop__time { display: flex; gap: 0.75rem; }
-  .stop__title { font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; margin: 0.6rem 0 1rem; max-width: 14ch; }
-  .stop__shot { display: none; margin-top: calc(var(--u) * 3); }
-
-  .evening__screen { grid-column: 6 / -1; }
-  .screen__stack { position: sticky; top: calc(50vh - 18vw + var(--header-h) / 2); display: grid; }
-  .screen { grid-area: 1 / 1; }
-
-  /* Without JS the stage cannot follow scroll: every stop shows its own window instead. */
-  html:not(.js) .evening__screen, html:not(.js) .ruler__head { display: none; }
-  html:not(.js) .stop__shot { display: block; }
-  html:not(.js) .evening__left { grid-column: 1 / span 7; }
-
-  /* Monochrome */
-  .mono { padding-top: calc(var(--u) * 10); padding-bottom: calc(var(--u) * 12); }
-  .mono__statement { grid-column: 1 / span 10; font-size: var(--t-xl); font-weight: 300; letter-spacing: -0.045em; line-height: 1.02; margin-left: -0.04em; }
-  .mono__text { grid-column: 7 / span 5; margin-top: calc(var(--u) * 4); }
-  .tones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; margin-top: calc(var(--u) * 7); }
-  .tone {
-    position: relative; aspect-ratio: 3 / 4; background: var(--tone); color: #0e0e0e;
-    display: flex; flex-direction: column; justify-content: end; gap: 0.15rem; padding: clamp(0.5rem, 1.2vw, 1.25rem);
-    transition: translate 0.5s var(--ease-out);
-  }
-  .tone:first-child { border-radius: var(--r-window) 0 0 var(--r-window); }
-  .tone:last-child { border-radius: 0 var(--r-window) var(--r-window) 0; }
-  .tone__name { font-weight: 500; font-size: clamp(0.8125rem, 0.7rem + 0.5vw, 1.25rem); letter-spacing: -0.02em; }
-  .tone__hex { font-size: 0.75rem; }
-  .mono__pair { margin-top: calc(var(--u) * 9); align-items: end; }
-  .mono__shot--a { grid-column: 1 / span 7; }
-  .mono__shot--b { grid-column: 9 / -1; margin-bottom: calc(var(--u) * 8); }
-
-  /* Facts */
-  .facts { padding-block: calc(var(--u) * 10); border-top: 1px solid var(--c-line); }
-  .facts__title { grid-column: 1 / span 6; font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; }
-  .facts__text { grid-column: 8 / -1; }
-  .facts__list { margin-top: calc(var(--u) * 8); row-gap: calc(var(--u) * 4); }
-  .fact { grid-column: span 3; border-top: 1px solid var(--c-line-strong); padding-top: 1rem; display: flex; flex-direction: column-reverse; justify-content: start; gap: 0.5rem; }
-  .fact__value { font-size: clamp(2.5rem, 1.5rem + 3.4vw, 4.75rem); font-weight: 200; letter-spacing: -0.04em; line-height: 1; }
-  .stack { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: calc(var(--u) * 6); }
-
-  /* Finale */
-  .finale { padding-block: calc(var(--u) * 14) calc(var(--u) * 10); }
-  .finale__title { font-size: var(--t-mega); line-height: 0.92; letter-spacing: -0.06em; margin-left: -0.05em; }
-  .finale__row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; margin-top: calc(var(--u) * 5); }
-
-  @media (max-width: 1023px) and (min-width: 768px) {
-    .hero__text { grid-column: 1 / span 5; }
-    .hero__shot { grid-column: 6 / -1; }
-  }
-
-  @media (max-width: 767px) {
-    .hero { grid-template-columns: minmax(0, 1fr); padding-bottom: calc(var(--u) * 4); }
-    .hero__text, .hero__shot, .hero__clock { grid-column: 1 / -1; }
-    .hero__text { padding-top: calc(var(--u) * 4); }
-    .hero__shot { margin-top: calc(var(--u) * 5); }
-
-    .evening__intro .display, .evening__intro .prose { grid-column: 1 / -1; }
-    .evening__left { grid-column: 1 / -1; }
-    .evening__screen { display: none; }
-    .evening__clock { padding-top: calc(var(--header-h) + 0.25rem); }
-    .evening__time { font-size: calc((100vw - 2 * var(--gutter)) / 7.4); }
-    .ruler__tick.is-minor > span { display: none; }
-    .stop { min-height: 0; padding-top: 10vh; color: var(--c-fg); }
-    .stop .prose { color: var(--c-muted); }
-    .stop__shot { display: block; }
-    .evening__stops { padding-bottom: 6vh; }
-
-    .mono__statement, .mono__text { grid-column: 1 / -1; }
-    .tones { grid-template-columns: 1fr; gap: 2px; }
-    .tone { aspect-ratio: auto; min-height: 3.5rem; flex-direction: row; justify-content: space-between; align-items: center; }
-    .tone:first-child { border-radius: var(--r-window) var(--r-window) 0 0; }
-    .tone:last-child { border-radius: 0 0 var(--r-window) var(--r-window); }
-    .mono__shot--a, .mono__shot--b { grid-column: 1 / -1; margin-bottom: calc(var(--u) * 3); }
-
-    .facts__title, .facts__text { grid-column: 1 / -1; }
-    .facts__text { margin-top: calc(var(--u) * 2); }
-    .fact { grid-column: span 2; }
+  @media (prefers-reduced-motion: reduce) and (min-width: 801px) {
+    .index__row { grid-template-columns: 4rem minmax(0, 3fr) minmax(0, 5fr) minmax(0, 2fr); }
+    .index__thumb { display: block; border-radius: 4px; overflow: clip; align-self: center; }
   }
 </style>
-
-<script>
-  import { startHome } from '../motion/home';
-  startHome();
-</script>

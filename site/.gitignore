@@ -23,5 +23,8 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# QA output
+# local build for opening from disk, client bundle, QA output
+dist-local/
+public/assets/site.js
+public/assets/site.js.map
 .shots/

@@ -1,23 +1,73 @@
 ---
+import { nav, site, download } from '../data/site';
 import Logo from './Logo.astro';
-import { nav, source } from '../data/site';
-const year = 2026;
+import FrameCounter from './FrameCounter.astro';
 ---
-<footer class="site-footer">
-  <div class="site-footer__row">
-    <a class="brand" href="/" aria-label="Moonbow, на главную"><Logo /> <span>moonbow</span></a>
-    <nav aria-label="Внизу страницы">
-      <ul>
-        {nav.map((n) => <li><a class="seek" href={n.href}>{n.label}</a></li>)}
-        <li><a class="seek" href={source.url}>{source.label}</a></li>
-      </ul>
-    </nav>
-  </div>
-  <div class="site-footer__row" style="margin-top: 2.5rem">
-    <small>
-      Moonbow, {year}. Свободная программа под лицензией GPL-3.0-or-later, воспроизведение на libmpv.
-      Шрифты сайта: Onest и JetBrains Mono. Скриншоты настоящие, сняты с Moonbow; кадры и обложки в демо-файлах:
-      фотографии с Unsplash, <a href="/skachat/#avtory">авторы</a>.
-    </small>
+<footer class="ftr">
+  <div class="wrap">
+    <div class="ftr__top grid">
+      <a class="ftr__brand" href="/" aria-label="Moonbow, на главную" data-exposure>
+        <Logo class="ftr__mark" />
+        <span class="ftr__word" aria-hidden="true">moonbow</span>
+      </a>
+      <nav class="ftr__col" aria-label="Разделы сайта">
+        <p class="ftr__h">Разделы</p>
+        <ul>
+          <li><a class="ftr__a" href="/">Главная</a></li>
+          {nav.map((n) => <li><a class="ftr__a" href={n.href}>{n.label}</a></li>)}
+          <li><a class="ftr__a" href="/download/">Скачать</a></li>
+        </ul>
+      </nav>
+      <div class="ftr__col">
+        <p class="ftr__h">Файлы</p>
+        <ul>
+          <li><a class="ftr__a" href={download.setup.href} data-no-shutter>{download.setup.label}, {download.setup.size}</a></li>
+          <li><a class="ftr__a" href={download.zip.href} data-no-shutter>{download.zip.label}, {download.zip.size}</a></li>
+          <li><a class="ftr__a" href={site.source.href} data-no-shutter>Исходный код</a></li>
+        </ul>
+      </div>
+      <div class="ftr__col ftr__col--note">
+        <p class="ftr__h">Moonbow {site.version}</p>
+        <p class="ftr__p">Бесплатно, с открытым кодом под лицензией {site.license}. Без рекламы, без учётных записей, ничего не отправляет в сеть, пока вы сами не включите онлайн-функции.</p>
+      </div>
+    </div>
+    <div class="ftr__bottom">
+      <p class="ftr__p">Набрано шрифтами Onest и Geist Mono. Кадры и обложки на снимках экрана: фото с Unsplash, авторы на странице <a class="link" href="/download/#credits">«Скачать»</a>. Код этой страницы весит {'{{page-kb}}'}&nbsp;КБ.</p>
+      <FrameCounter />
+    </div>
   </div>
 </footer>
+
+<style>
+  .ftr { border-top: 1px solid var(--c-line); padding-block: clamp(3rem, 7vw, 6rem) clamp(1.5rem, 3vw, 2.5rem); margin-top: clamp(4rem, 10vw, 9rem); }
+  .ftr__top { row-gap: 2.5rem; align-items: start; }
+  .ftr__brand { grid-column: 1 / span 5; display: inline-flex; flex-direction: column; gap: 1rem; align-self: start; width: fit-content; }
+  .ftr__brand :global(.ftr__mark) { width: clamp(5rem, 9vw, 8rem); height: auto; transition: translate 0.22s cubic-bezier(0.6, 0, 0.25, 1); }
+  @media (hover: hover) { .ftr__brand:hover :global(.ftr__mark) { translate: 0 -4px; } }
+  /* A long exposure: white at first, the spectrum develops after the mark has been in view a while
+     (motion/exposure.ts). Reduced motion: the colours are simply there. */
+  .ftr__brand :global(.ftr__mark path) { transition: stroke 2.4s ease-in; }
+  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(1)), .ftr__brand:hover :global(.ftr__mark path:nth-child(1)) { stroke: #d2c8f2; }
+  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(2)), .ftr__brand:hover :global(.ftr__mark path:nth-child(2)) { stroke: #c6dcf4; }
+  .ftr__brand:global(.is-exposed) :global(.ftr__mark path:nth-child(3)), .ftr__brand:hover :global(.ftr__mark path:nth-child(3)) { stroke: #f6cbbb; }
+  .ftr__brand:hover :global(.ftr__mark path) { transition-duration: 0.45s; }
+  @media (prefers-reduced-motion: reduce) {
+    .ftr__brand :global(.ftr__mark path:nth-child(1)) { stroke: #d2c8f2; }
+    .ftr__brand :global(.ftr__mark path:nth-child(2)) { stroke: #c6dcf4; }
+    .ftr__brand :global(.ftr__mark path:nth-child(3)) { stroke: #f6cbbb; }
+  }
+  .ftr__word { font-weight: 500; font-size: clamp(2.5rem, 1.5rem + 4vw, 5rem); letter-spacing: -0.045em; line-height: 0.9; margin-left: -0.04em; }
+  .ftr__col { grid-column: span 2; display: grid; gap: 0.75rem; align-content: start; }
+  .ftr__col--note { grid-column: span 3; }
+  .ftr__h { font-size: var(--t-s); color: var(--c-fg); font-weight: 500; }
+  .ftr__col ul { display: grid; gap: 0.15rem; }
+  .ftr__a { display: inline-flex; min-height: 2rem; align-items: center; color: var(--c-soft); font-size: 0.9375rem; transition: color 0.18s; }
+  @media (hover: hover) { .ftr__a:hover { color: var(--c-fg); text-decoration: underline; text-underline-offset: 0.22em; } }
+  .ftr__p { font-size: var(--t-s); color: var(--c-muted); line-height: 1.55; max-width: 34rem; }
+  .ftr__bottom { margin-top: clamp(3rem, 6vw, 5rem); padding-top: 1.25rem; border-top: 1px solid var(--c-line); display: flex; gap: 2rem; justify-content: space-between; align-items: end; flex-wrap: wrap; }
+  @media (max-width: 900px) {
+    .ftr__brand { grid-column: 1 / -1; }
+    .ftr__col { grid-column: span 6; }
+    .ftr__col--note { grid-column: 1 / -1; }
+  }
+</style>
