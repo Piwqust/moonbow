@@ -13,13 +13,14 @@
 Для хостинга нужна папка `dist/`: это обычная статика, подойдёт любой хостинг (Netlify, Cloudflare
 Pages, GitHub Pages, свой nginx). Страница 404 лежит в `dist/404.html`.
 
-## Что заменить перед публикацией
+## Адреса
 
-Помечено `placeholder` в `src/data/site.ts`:
-
-- адрес сайта `https://moonbow-player.example`: ещё в `astro.config.mjs` и `public/robots.txt`;
-- ссылки на установщик и zip (`download.setup.href`, `download.zip.href`);
-- ссылка на исходный код (`site.source`): у репозитория пока нет публичного адреса.
+- Сайт публикуется на GitHub Pages репозитория: `https://piwqust.github.io/moonbow/` (workflow
+  `.github/workflows/moonbow-site.yml`, деплоится `dist-local/`, поэтому работает и в подпапке). Свой домен:
+  поменяйте `SITE_URL` в `astro.config.mjs` и `site.url` в `src/data/site.ts`.
+- Кнопки «Скачать» ведут на `releases/latest/download/Moonbow-windows-x64-setup.exe` и `.zip`: имена файлов без
+  версии (`tools/package-release.ps1`), поэтому ссылки сами переходят на новый релиз. Размеры файлов в
+  `src/data/site.ts` (`download`) обновляйте вручную.
 
 ## Откуда берутся данные
 

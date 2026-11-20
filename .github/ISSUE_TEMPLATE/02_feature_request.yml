@@ -1,0 +1,21 @@
+name: Idea
+description: Something Moonbow should do, or do differently. Можно по-русски.
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The situation, not the solution yet. What gets in the way today?
+      placeholder: I watch series in the evening and always have to find where the intro ends.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+      description: What you would press or see. Screenshots of other players are welcome.
+  - type: textarea
+    id: now
+    attributes:
+      label: What you do now instead

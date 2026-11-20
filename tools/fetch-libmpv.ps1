@@ -27,7 +27,10 @@ Invoke-WebRequest $asset.browser_download_url -OutFile $archive
 
 $extract = Join-Path $work "x"
 New-Item -ItemType Directory -Force $extract | Out-Null
-tar -xf $archive -C $extract
+# Windows' own bsdtar reads .7z; a GNU tar earlier on PATH (Git for Windows, CI runners) does not.
+$tar = Join-Path $env:SystemRoot "System32	ar.exe"
+if (-not (Test-Path $tar)) { $tar = "tar" }
+& $tar -xf $archive -C $extract
 if ($LASTEXITCODE -ne 0) { throw "tar failed to extract $archive" }
 
 if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }

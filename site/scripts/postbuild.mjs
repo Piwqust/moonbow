@@ -39,6 +39,16 @@ for (const file of pages) {
 }
 console.log(report.join('\n'));
 
+// ---- Sitemap and robots.txt from SITE_URL (works under a sub-path, unlike Astro's integration).
+const config = fs.readFileSync('astro.config.mjs', 'utf8');
+const siteUrl = (config.match(/SITE_URL = '([^']+)'/) || [])[1].replace(/\/$/, '');
+const urls = pages
+  .map((f) => path.relative(dist, f).replace(/\\/g, '/'))
+  .filter((p) => p !== '404.html')
+  .map((p) => `${siteUrl}/${p.replace(/index\.html$/, '')}`);
+fs.writeFileSync(path.join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`);
+fs.writeFileSync(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`);
+
 // ---- 2. dist-local: relative links for file://
 fs.rmSync(local, { recursive: true, force: true });
 fs.cpSync(dist, local, { recursive: true });

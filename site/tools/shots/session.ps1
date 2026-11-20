@@ -15,7 +15,7 @@ function New-Moonbow([string]$Name, [hashtable]$Settings = @{}, [string[]]$Files
   if (Test-Path $data) { Remove-Item -Recurse -Force $data }
   New-Item -ItemType Directory -Force $data | Out-Null
   [IO.File]::WriteAllText("$data\ui.json", '{"onboarded":"1","window.placement":"100,60,2660,1700,0"}', $Enc)
-  $s = @{ "general.language" = "ru"; "general.theme" = "dark" }
+  $s = @{ "general.language" = $(if ($script:Lang) { $script:Lang } else { "ru" }); "general.theme" = "dark" }
   foreach ($k in $Settings.Keys) { $s[$k] = $Settings[$k] }
   $json = ($s | ConvertTo-Json -Compress)
   $a = @{ DataDir = $data; Exe = $Exe; Settings = $json; Scale = 1.6 }

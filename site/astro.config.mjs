@@ -1,15 +1,14 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import sitemap from '@astrojs/sitemap';
 
-// PLACEHOLDER: the production address. Canonical links, OG tags and the sitemap use it.
-// Change it here, in src/data/site.ts (site.url) and in public/robots.txt.
-export const SITE_URL = 'https://moonbow-player.example';
+// The address the site is published at. Canonical links, OG tags, the sitemap and robots.txt use it
+// (the last two are written by scripts/postbuild.mjs, so a sub-path like /moonbow works).
+// GitHub Pages of this repository; change it here if the site moves to a domain of its own.
+export const SITE_URL = 'https://piwqust.github.io/moonbow';
 
 export default defineConfig({
   site: SITE_URL,
   trailingSlash: 'always',
-  integrations: [sitemap()],
   build: { inlineStylesheets: 'always', format: 'directory' },
   // The client code is one classic script built by scripts/build-client.mjs, not Astro's module
   // scripts: the built site must also work when opened from disk (file://), where modules can't load.

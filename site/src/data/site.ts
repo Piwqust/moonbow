@@ -1,17 +1,18 @@
 // Every word on the site lives here or in src/data/app/*.json (generated from the player's code by
 // `npm run extract`). Facts come from the repository: README.md, STATUS.md, qa/perf, src/.
 //
-// PLACEHOLDERS the owner must replace (all marked `placeholder: true` below):
-//   - site.url: the production address (also astro.config.mjs and public/robots.txt)
-//   - download.setup.href / download.zip.href: where the installer and the zip are published
-//   - site.source: the public source repository (the repo has no public remote yet)
+// Addresses: the GitHub repository Piwqust/moonbow and its releases. The download links point at
+// releases/latest/download/<file>, so they follow each new release as long as the file names stay
+// the same (tools/package-release.ps1). site.url must match SITE_URL in astro.config.mjs.
 // Media on the screenshots is invented: films, the series "Дом у моря" and "Северный ветер", the
 // artists and albums. Frames and covers are Unsplash photos (credits below), the sound is synthesized.
 
 export const site = {
   name: 'Moonbow',
-  url: 'https://moonbow-player.example', // placeholder
-  source: { href: 'https://example.com/moonbow-source', placeholder: true },
+  url: 'https://piwqust.github.io/moonbow',
+  source: { href: 'https://github.com/Piwqust/moonbow' },
+  releases: 'https://github.com/Piwqust/moonbow/releases/latest',
+  issues: 'https://github.com/Piwqust/moonbow/issues/new/choose',
   version: '0.1.0 beta',
   description:
     'Moonbow: видео- и музыкальный плеер для Windows 10 и 11. Фильм идёт через треть секунды после двойного щелчка, а медиатека, субтитры и тексты песен уже внутри.',
@@ -27,18 +28,16 @@ export const nav = [
 
 export const download = {
   setup: {
-    href: 'https://moonbow-player.example/download/Moonbow-0.1.0-beta-setup.exe', // placeholder
-    placeholder: true,
+    href: 'https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64-setup.exe',
     label: 'Установщик',
     size: '46 МБ',
-    file: 'Moonbow-0.1.0-beta-setup.exe',
+    file: 'Moonbow-windows-x64-setup.exe',
   },
   zip: {
-    href: 'https://moonbow-player.example/download/Moonbow-0.1.0-beta.zip', // placeholder
-    placeholder: true,
+    href: 'https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64.zip',
     label: 'Архив zip',
     size: '48 МБ',
-    file: 'Moonbow-0.1.0-beta.zip',
+    file: 'Moonbow-windows-x64.zip',
   },
   requirements: 'Windows 10 или 11, 64 бит',
 };

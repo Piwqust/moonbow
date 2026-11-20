@@ -31,6 +31,7 @@ const online = [
       <a class="ghost" href={download.zip.href} data-no-shutter><span class="roll"><span>Архив zip</span><span aria-hidden="true">Архив zip</span></span></a>
     </div>
     <p class="phone-note soft">Это файл для компьютера с Windows. С телефона его не установить: откройте эту страницу на компьютере.</p>
+    <p class="checks soft">Все версии, что нового и контрольные суммы SHA-256 у каждого файла: <a class="link" href={site.releases} data-no-shutter>страница релиза на GitHub</a>. Нашли ошибку: <a class="link" href={site.issues} data-no-shutter>напишите в issues</a>.</p>
     <dl class="specs">
       <div><dt class="edge">Установщик</dt><dd>{download.setup.size}, {download.setup.file}</dd></div>
       <div><dt class="edge">Архив</dt><dd>{download.zip.size}, без установки</dd></div>
@@ -72,7 +73,7 @@ const online = [
   <section class="build wrap" aria-labelledby="build-h">
     <h2 id="build-h" class="t-l">Собрать из исходников</h2>
     <p class="soft build__lead">Нужен Visual Studio 2022 с компонентом «Разработка классических приложений на C++». CMake не нужен. <a class="link" href={site.source.href} data-no-shutter>Исходный код</a> под лицензией GPL-3.0-or-later.</p>
-    <pre class="code"><code>powershell -ExecutionPolicy Bypass -File tools\fetch-libmpv.ps1
+    <pre class="code"><code>powershell -ExecutionPolicy Bypass -File tools\fetch-libmpv.ps1 -Tag 20261017
 build.bat
 build\Moonbow.exe "D:\Видео\фильм.mkv"</code></pre>
   </section>
@@ -95,6 +96,7 @@ build\Moonbow.exe "D:\Видео\фильм.mkv"</code></pre>
   .get__main { --h: 4rem; font-size: 1.2rem; padding-inline: 1.5em 1.9em; }
   .specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem var(--gutter); margin-top: clamp(2.5rem, 5vw, 3.5rem); border-top: 1px solid var(--c-line); padding-top: 1.25rem; }
   .specs dd { margin-top: 0.35rem; font-size: var(--t-s); }
+  .checks { margin-top: 1.25rem; font-size: var(--t-s); max-width: 40rem; }
   .phone-note { display: none; margin-top: 1rem; font-size: var(--t-s); max-width: 30rem; }
   @media (hover: none) and (pointer: coarse), (max-width: 600px) { .phone-note { display: block; } }
 

@@ -1,0 +1,52 @@
+name: Website
+
+# Publishes site/ to GitHub Pages. The deploy step runs only once the repository is public
+# (Pages for private repositories needs a paid plan) and Pages is set to "GitHub Actions"
+# under Settings → Pages.
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/moonbow-site.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # dist-local has relative links, so it works under github.io/moonbow/ as well as on a domain of its own.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist-local
+
+  deploy:
+    needs: build
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

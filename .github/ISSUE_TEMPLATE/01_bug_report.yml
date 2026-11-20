@@ -1,0 +1,61 @@
+name: Bug report
+description: Something plays wrong, looks wrong or crashes. Можно по-русски.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The logs make most problems solvable: **Settings → General → Diagnostics → Logs and crash reports**.
+        For a security problem, do not open an issue: see [SECURITY.md](https://github.com/Piwqust/moonbow/blob/main/SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: I opened an MKV from Explorer; the picture stayed black while the sound played.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Press ...
+        3. See ...
+  - type: input
+    id: version
+    attributes:
+      label: Moonbow version
+      description: Logo menu → About Moonbow.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed with
+      options:
+        - Installer (setup.exe)
+        - Portable zip
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows and graphics card
+      placeholder: Windows 11 24H2, NVIDIA RTX 3060 (driver 572.16)
+    validations:
+      required: true
+  - type: input
+    id: media
+    attributes:
+      label: The file, if one file is the problem
+      description: Container, codecs, resolution or HDR. Ctrl+I in Moonbow shows them.
+      placeholder: MKV, HEVC 10-bit 3840×2160 HDR10, E-AC3 5.1
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Drag the files from the logs folder here. For one file that plays wrong, turn on "Detailed playback log" first, open the file again and attach mpv.log.

@@ -12,9 +12,10 @@ interface Props {
 }
 const { title, description = site.description, image = '/og.png' } = Astro.props;
 const fullTitle = title ? `${title} | Moonbow` : 'Moonbow: плеер для Windows, который успевает за восемь кадров';
-const base = Astro.site ?? new URL(site.url);
-const canonical = new URL(Astro.url.pathname, base).href;
-const ogImage = new URL(image, base).href;
+// The site may live under a sub-path (github.io/moonbow): join strings, don't resolve URLs.
+const root = String(Astro.site ?? site.url).replace(/\/$/, '');
+const canonical = root + Astro.url.pathname;
+const ogImage = root + image;
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
@@ -44,7 +45,7 @@ const jsonLd = {
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="sitemap" href="/sitemap.xml" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ru_RU" />
     <meta property="og:site_name" content="Moonbow" />

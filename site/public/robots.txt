@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://moonbow-player.example/sitemap-index.xml

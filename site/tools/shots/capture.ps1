@@ -2,9 +2,12 @@
 # make-media.mjs, 1280x800 at 200 %. Hidden --automation instances only: nothing shows on screen.
 #   powershell -File site\tools\shots\capture.ps1 [-Only hero,series]
 # Writes PNGs to site\src\assets\shots\. Look at every one before using it.
-param([string]$Only = "")
+# -Language en takes the English interface (README.md); -OutDir puts the PNGs elsewhere.
+param([string]$Only = "", [string]$Language = "ru", [string]$OutDir = "")
 $OnlyList = @($Only -split "," | Where-Object { $_ })
 . "$PSScriptRoot\session.ps1"
+$script:Lang = $Language
+if ($OutDir) { $ShotsOut = $OutDir }
 $want = { param($n) $OnlyList.Count -eq 0 -or $OnlyList -contains $n }
 $hero = Join-Path $Media "Видео\Сериалы\Дом у моря\Дом у моря S01E04.mp4"
 $song = Join-Path $Media "Музыка\Lunar Drift\Glass Hours\01 Glass Hours.mp3"
@@ -47,10 +50,10 @@ try {
   if (& $want "meters") {
     Cmd $id "open $song"; Idle $id; Start-Sleep -Milliseconds 800
     Cmd $id "action app.audio_meters"; Start-Sleep -Milliseconds 2500
-    Shot $id "meters" "Индикаторы"
+    Shot $id "meters" $(if ($Language -eq "en") { "Audio meters" } else { "Индикаторы" })
     Cmd $id "action app.audio_meters"
   }
-  if (& $want "settings") { Cmd $id "nav settings subtitles"; Idle $id; Start-Sleep -Milliseconds 900; Shot $id "settings" "Настройки" }
+  if (& $want "settings") { Cmd $id "nav settings subtitles"; Idle $id; Start-Sleep -Milliseconds 900; Shot $id "settings" $(if ($Language -eq "en") { "Settings" } else { "Настройки" }) }
 } finally { Stop-Moonbow $id }
 
 # The light theme: its own instance, so no other window is open.
