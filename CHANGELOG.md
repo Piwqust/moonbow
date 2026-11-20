@@ -3,7 +3,7 @@
 What changes for the person using Moonbow, newest first. The release notes on GitHub are taken from here.
 The day-by-day development journal (in Russian) is in [`changelog/`](changelog/README.md).
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-20)
 
 ### Updates
 - Moonbow updates itself. Once a day it checks GitHub for a new version, downloads it in the background and installs
