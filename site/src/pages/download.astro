@@ -1,0 +1,132 @@
+---
+import Base from '../layouts/Base.astro';
+import PlayIcon from '../components/PlayIcon.astro';
+import { download, site, credits } from '../data/site';
+
+const data = [
+  ['settings.json', 'настройки и переназначенные клавиши'],
+  ['ui.json', 'вид страниц, раскладка панели, размер окна'],
+  ['library.json, library-cache.json', 'папки медиатеки и результаты сканирования'],
+  ['history.json', 'история и места, где вы остановились (выключается в «Конфиденциальности»)'],
+  ['playlists.json, bookmarks.json, favorites.json', 'плейлисты, закладки, избранное'],
+  ['file-settings.json', 'настройки отдельных файлов: дорожки, задержки'],
+  ['online\\', 'кэш онлайн-функций, только если вы их включили'],
+  ['mpv.conf', 'ваш конфиг mpv, если нужен: читается при старте'],
+];
+// One line per photographer (some took several of the photos).
+const authors = credits.filter((c, i, all) => all.findIndex((x) => x.author === c.author) === i);
+const online = [
+  ['Тексты песен из LRCLIB', 'выключено, пока не включите'],
+  ['Субтитры из OpenSubtitles', 'нужен ваш ключ'],
+  ['Постеры и описания из TMDB', 'нужен ваш ключ'],
+  ['Видео с YouTube и других сайтов', 'только если рядом лежит ваш yt-dlp.exe'],
+];
+---
+<Base title="Скачать" description="Скачать Moonbow для Windows 10 и 11: установщик 46 МБ или zip. Ставится без прав администратора, обновляется и откатывается сам, ничего не отправляет в сеть.">
+  <header class="phead wrap">
+    <p class="edge phead__no">Скачать</p>
+    <h1 class="t-xl phead__h">Moonbow {site.version}</h1>
+    <div class="get">
+      <a class="play get__main" href={download.setup.href} data-no-shutter><PlayIcon /><span class="roll"><span>Скачать установщик</span><span aria-hidden="true">Скачать установщик</span></span></a>
+      <a class="ghost" href={download.zip.href} data-no-shutter><span class="roll"><span>Архив zip</span><span aria-hidden="true">Архив zip</span></span></a>
+    </div>
+    <p class="phone-note soft">Это файл для компьютера с Windows. С телефона его не установить: откройте эту страницу на компьютере.</p>
+    <p class="checks soft">Все версии, что нового и контрольные суммы SHA-256 у каждого файла: <a class="link" href={site.releases} data-no-shutter>страница релиза на GitHub</a>. Нашли ошибку: <a class="link" href={site.issues} data-no-shutter>напишите в issues</a>.</p>
+    <dl class="specs">
+      <div><dt class="edge">Установщик</dt><dd>{download.setup.size}, {download.setup.file}</dd></div>
+      <div><dt class="edge">Архив</dt><dd>{download.zip.size}, без установки</dd></div>
+      <div><dt class="edge">Система</dt><dd>{download.requirements}, видеокарта с Direct3D 11</dd></div>
+      <div><dt class="edge">Лицензия</dt><dd>Бесплатно, {site.license}</dd></div>
+    </dl>
+  </header>
+
+  <section class="steps wrap" aria-labelledby="steps-h">
+    <h2 id="steps-h" class="t-l">Установка</h2>
+    <ol class="steps__list">
+      <li><span class="edge steps__n">01</span><h3>Запустите установщик</h3><p class="soft">Права администратора не нужны: Moonbow ставится в вашу папку, %LOCALAPPDATA%\Programs\Moonbow, и добавляет ярлык в меню «Пуск». Галочка «Открывать видео в Moonbow» включена, её можно снять.</p></li>
+      <li><span class="edge steps__n">02</span><h3>Если Windows спросит</h3><p class="soft">У сборки пока нет цифровой подписи, поэтому SmartScreen может показать синее окно. Нажмите «Подробнее», затем «Выполнить в любом случае».</p></li>
+      <li><span class="edge steps__n">03</span><h3>Откройте свой фильм</h3><p class="soft">При первом запуске короткое знакомство: папка медиатеки, тема, язык, приватность. Потом можно просто перетащить файл в окно.</p></li>
+    </ol>
+    <p class="steps__note soft">Обновление и откат делает тот же установщик: он сам понимает, ставить, обновлять, возвращать прежнюю версию или переустанавливать. На компьютере хранятся текущая и две предыдущие версии, вернуться можно из «О программе». Удаление: «Параметры Windows», раздел «Приложения»; настройки остаются, если не отметить «Удалить также настройки».</p>
+  </section>
+
+  <section class="where wrap" aria-labelledby="where-h">
+    <div class="where__head">
+      <h2 id="where-h" class="t-l">Где лежат ваши данные</h2>
+      <p class="soft">Всё в одной папке: %APPDATA%\Moonbow. Файлы на диске Moonbow никогда не перемещает и не изменяет. Если файл данных повреждён, плеер сохранит его копию, начнёт заново и один раз скажет об этом.</p>
+    </div>
+    <dl class="where__list">
+      {data.map(([k, v]) => <div><dt class="edge">{k}</dt><dd class="soft">{v}</dd></div>)}
+    </dl>
+  </section>
+
+  <section class="privacy wrap" aria-labelledby="privacy-h">
+    <div class="where__head">
+      <h2 id="privacy-h" class="t-l">Сеть только по вашему слову</h2>
+      <p class="soft">Moonbow не показывает рекламу, не просит учётную запись и сам ничего не скачивает. Всё, что ходит в интернет, выключено, пока вы не включите это в настройках.</p>
+    </div>
+    <dl class="where__list">
+      {online.map(([k, v]) => <div><dt>{k}</dt><dd class="soft">{v}</dd></div>)}
+    </dl>
+  </section>
+
+  <section class="build wrap" aria-labelledby="build-h">
+    <h2 id="build-h" class="t-l">Собрать из исходников</h2>
+    <p class="soft build__lead">Нужен Visual Studio 2022 с компонентом «Разработка классических приложений на C++». CMake не нужен. <a class="link" href={site.source.href} data-no-shutter>Исходный код</a> под лицензией GPL-3.0-or-later.</p>
+    <pre class="code"><code>powershell -ExecutionPolicy Bypass -File tools\fetch-libmpv.ps1 -Tag 20261017
+build.bat
+build\Moonbow.exe "D:\Видео\фильм.mkv"</code></pre>
+  </section>
+
+  <section class="credits wrap" id="credits" aria-labelledby="credits-h">
+    <h2 id="credits-h" class="t-l">Кадры на снимках экрана</h2>
+    <p class="soft build__lead">Фильмы, сериалы «Дом у моря» и «Северный ветер», исполнители и альбомы на снимках выдуманы для этого сайта. Кадры и обложки: фотографии с Unsplash (лицензия Unsplash), звук синтезирован. Снимок образца субтитров взят из самого плеера.</p>
+    <ul class="credits__list">
+      {authors.map((c) => <li><a class="link" href={c.source} data-no-shutter rel="noopener">{c.author}</a></li>)}
+    </ul>
+  </section>
+</Base>
+
+<style>
+  .phead { padding-top: clamp(2.5rem, 7vw, 6rem); }
+  .phead__no { color: var(--c-fg); }
+  .phead__h { margin-top: 0.4rem; margin-left: -0.05em; }
+  .get { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: clamp(2rem, 4vw, 3rem); }
+  .get .ghost { height: 4rem; padding-inline: 1.6em; }
+  .get__main { --h: 4rem; font-size: 1.2rem; padding-inline: 1.5em 1.9em; }
+  .specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem var(--gutter); margin-top: clamp(2.5rem, 5vw, 3.5rem); border-top: 1px solid var(--c-line); padding-top: 1.25rem; }
+  .specs dd { margin-top: 0.35rem; font-size: var(--t-s); }
+  .checks { margin-top: 1.25rem; font-size: var(--t-s); max-width: 40rem; }
+  .phone-note { display: none; margin-top: 1rem; font-size: var(--t-s); max-width: 30rem; }
+  @media (hover: none) and (pointer: coarse), (max-width: 600px) { .phone-note { display: block; } }
+
+  .steps, .where, .privacy, .build, .credits { padding-top: clamp(5rem, 11vw, 9rem); }
+  .steps__list { margin-top: 2.5rem; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); row-gap: 2.5rem; }
+  .steps__list li { grid-column: span 4; border-top: 1px solid var(--c-line); padding-top: 1rem; }
+  .steps__list li:nth-child(2) { margin-top: 2.5rem; }
+  .steps__list li:nth-child(3) { margin-top: 5rem; }
+  .steps__n { color: var(--c-fg); }
+  .steps__list h3 { margin-top: 0.75rem; font-size: var(--t-m); font-weight: 500; letter-spacing: -0.015em; }
+  .steps__list p { margin-top: 0.6rem; font-size: var(--t-s); line-height: 1.6; }
+  .steps__note { margin-top: 3rem; max-width: 44rem; font-size: var(--t-s); line-height: 1.6; }
+
+  .where, .privacy { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); row-gap: 2rem; }
+  .where__head { grid-column: 1 / span 5; display: grid; gap: 0.9rem; align-content: start; }
+  .where__head p { font-size: var(--t-s); line-height: 1.6; max-width: 30rem; }
+  .where__list { grid-column: 7 / span 6; border-top: 1px solid var(--c-line); }
+  .where__list div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--gutter); padding-block: 0.85rem; border-bottom: 1px solid var(--c-line); font-size: var(--t-s); }
+  .where__list dt.edge { color: var(--c-fg); word-break: break-word; }
+
+  .build__lead { margin-top: 0.75rem; max-width: 42rem; font-size: var(--t-s); line-height: 1.6; }
+  .code { margin-top: 1.5rem; padding: 1.25rem 1.5rem; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: 6px; overflow-x: auto; font: 0.875rem/1.7 var(--f-mono); color: var(--c-fg); max-width: 52rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .credits__list { margin-top: 1.5rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; font-size: var(--t-s); color: var(--c-soft); max-width: 60rem; }
+  .credits__list a { display: inline-flex; min-height: 1.75rem; align-items: center; }
+
+  @media (max-width: 900px) {
+    .phead__h { font-size: clamp(2.6rem, 13.5vw, 4rem); }
+    .specs { grid-template-columns: 1fr 1fr; }
+    .steps__list li { grid-column: 1 / -1; margin-top: 0 !important; }
+    .where__head, .where__list { grid-column: 1 / -1; }
+    .where__list div { grid-template-columns: 1fr; row-gap: 0.25rem; }
+  }
+</style>

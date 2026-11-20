@@ -1,17 +1,95 @@
 ---
-import Logo from './Logo.astro';
 import { nav } from '../data/site';
-const path = Astro.url.pathname;
+import Logo from './Logo.astro';
+import PlayIcon from './PlayIcon.astro';
+const here = Astro.url.pathname;
+const isHere = (href: string) => here === href || here === href.replace(/\/$/, '');
 ---
-<header class="site-header">
-  <a class="brand" href="/" aria-label="Moonbow, на главную" aria-current={path === '/' ? 'page' : undefined}>
-    <Logo /> <span>moonbow</span>
-  </a>
-  <nav aria-label="Основная">
-    <ul class="nav">
-      {nav.map((n) => (
-        <li><a class="seek" href={n.href} aria-current={path.startsWith(n.href) ? 'page' : undefined}>{n.label}</a></li>
-      ))}
-    </ul>
-  </nav>
+<header class="hdr" data-header>
+  <div class="hdr__bar wrap">
+    <a class="hdr__brand" href="/" aria-label="Moonbow, на главную">
+      <Logo class="hdr__mark" />
+      <span class="hdr__word">moonbow</span>
+    </a>
+    <nav class="hdr__nav" aria-label="Разделы">
+      <ul>
+        {nav.map((n) => (
+          <li>
+            <a href={n.href} aria-current={isHere(n.href) ? 'page' : undefined}>
+              <span class="roll"><span>{n.label}</span><span aria-hidden="true">{n.label}</span></span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+    <a class="play play--small hdr__cta" href="/download/" aria-current={isHere('/download/') ? 'page' : undefined}>
+      <PlayIcon /><span class="roll"><span>Скачать</span><span aria-hidden="true">Скачать</span></span>
+    </a>
+    <button class="hdr__menu" type="button" aria-expanded="false" aria-controls="menu" data-menu-open>
+      <span class="roll"><span>Меню</span><span aria-hidden="true">Меню</span></span>
+    </button>
+  </div>
+  <div class="menu" id="menu" hidden data-menu>
+    <nav aria-label="Разделы">
+      <ul>
+        <li><a href="/" aria-current={here === '/' ? 'page' : undefined}>Главная</a></li>
+        {nav.map((n) => <li><a href={n.href} aria-current={isHere(n.href) ? 'page' : undefined}>{n.label}</a></li>)}
+        <li><a href="/download/" aria-current={isHere('/download/') ? 'page' : undefined}>Скачать</a></li>
+      </ul>
+    </nav>
+    <button class="menu__close" type="button" data-menu-close>Закрыть</button>
+  </div>
 </header>
+
+<style>
+  .hdr {
+    position: sticky; top: 0; z-index: var(--z-header);
+    transition: translate 0.3s cubic-bezier(0.6, 0, 0.25, 1), background-color 0.2s, box-shadow 0.2s;
+  }
+  :global(html.hdr-away) .hdr { translate: 0 -100%; }
+  :global(html.hdr-solid) .hdr { background: var(--c-bg); box-shadow: 0 1px 0 var(--c-line); }
+  .hdr__bar { display: flex; align-items: center; gap: clamp(1rem, 3vw, 2.5rem); height: var(--header-h); }
+  .hdr__brand { display: inline-flex; align-items: center; gap: 0.55rem; margin-right: auto; padding-block: 0.5rem; }
+  .hdr__brand :global(.hdr__mark) { width: 2.1rem; height: auto; color: var(--c-fg); transition: translate 0.22s cubic-bezier(0.6, 0, 0.25, 1); }
+  .hdr__word { font-weight: 500; font-size: 1.3rem; letter-spacing: -0.04em; line-height: 1; }
+  .hdr__brand :global(.hdr__mark path) { transition: stroke 0.45s ease-out; }
+  /* Hover: the white arcs show their hidden spectrum, the moonbow on a long exposure. */
+  @media (hover: hover) {
+    .hdr__brand:hover :global(.hdr__mark) { translate: 0 -2px; }
+    .hdr__brand:hover :global(.hdr__mark path:nth-child(1)) { stroke: #d2c8f2; }
+    .hdr__brand:hover :global(.hdr__mark path:nth-child(2)) { stroke: #c6dcf4; }
+    .hdr__brand:hover :global(.hdr__mark path:nth-child(3)) { stroke: #f6cbbb; }
+  }
+  .hdr__brand:focus-visible :global(.hdr__mark path:nth-child(1)) { stroke: #d2c8f2; }
+  .hdr__brand:focus-visible :global(.hdr__mark path:nth-child(2)) { stroke: #c6dcf4; }
+  .hdr__brand:focus-visible :global(.hdr__mark path:nth-child(3)) { stroke: #f6cbbb; }
+  .hdr__nav ul { display: flex; gap: clamp(1rem, 2.4vw, 2.25rem); }
+  .hdr__nav a { position: relative; display: inline-flex; align-items: center; min-height: 2.75rem; padding-inline: 0.45rem; margin-inline: -0.45rem; font-size: 0.9375rem; color: var(--c-soft); transition: color 0.18s; }
+  .hdr__nav a[aria-current='page'] { color: var(--c-fg); }
+  /* A bar under the label, like the played part of a seek bar: drawn from the left on hover,
+     full under the current page. */
+  .hdr__nav a::after { content: ''; position: absolute; left: 0.45rem; right: 0.45rem; bottom: 0.45rem; height: 2px; background: var(--c-fg); scale: 0 1; transform-origin: left; transition: scale 0.26s cubic-bezier(0.6, 0, 0.25, 1); }
+  .hdr__nav a[aria-current='page']::after { scale: 1 1; }
+  @media (hover: hover) { .hdr__nav a:hover { color: var(--c-fg); } .hdr__nav a:hover::after { scale: 1 1; } }
+  .hdr__nav a:focus-visible::after { scale: 1 1; }
+  .hdr__cta[aria-current='page'] { box-shadow: 0 0 0 5px rgb(255 255 255 / 0.18); }
+  .hdr__brand { padding-inline: 0.4rem; margin-left: -0.4rem; }
+  .hdr__menu, .menu { display: none; }
+
+  @media (max-width: 800px) {
+    .hdr__nav, .hdr__cta { display: none; }
+    .hdr__menu { display: inline-flex; align-items: center; min-height: 2.75rem; padding-inline: 0.25rem; font-weight: 500; }
+    .menu:not([hidden]) {
+      display: grid; position: fixed; inset: 0; z-index: 2; background: var(--c-bg);
+      padding: calc(var(--header-h) + 1.5rem) var(--gutter) calc(2rem + env(safe-area-inset-bottom));
+      align-content: space-between;
+    }
+    .menu ul { display: grid; gap: 0.25rem; }
+    .menu a { display: block; font-size: clamp(2.25rem, 11vw, 3.25rem); letter-spacing: -0.045em; line-height: 1.15; padding-block: 0.15rem; color: var(--c-soft); }
+    .menu a[aria-current='page'] { color: var(--c-fg); }
+    .menu a[aria-current='page']::before { content: ''; display: inline-block; width: 0.32em; height: 0.32em; background: var(--c-fg); margin-right: 0.3em; vertical-align: 0.2em; }
+    .menu__close { justify-self: start; min-height: 2.75rem; font-weight: 500; color: var(--c-soft); }
+    :global(html.menu-open) .hdr { translate: none; }
+    :global(html.menu-open) .hdr__bar { position: relative; z-index: 3; }
+  }
+</style>

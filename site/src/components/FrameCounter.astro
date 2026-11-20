@@ -1,0 +1,20 @@
+---
+// Time on this page in frames of cinema (24 a second). It's a button: it pauses, like the player.
+interface Props { class?: string }
+const { class: cls } = Astro.props;
+---
+<button class:list={['fc', 'edge', cls]} type="button" data-frames aria-pressed="false" title="Пауза и продолжение">
+  <span class="fc__state" aria-hidden="true"></span>
+  <span>вы здесь <span class="fc__n" data-frames-n>0</span> <span data-frames-unit>кадров</span></span>
+  <span class="sr-only">. Счётчик кадров, 24 в секунду. Нажмите, чтобы поставить на паузу.</span>
+</button>
+
+<style>
+  .fc { display: inline-flex; align-items: center; gap: 0.6em; min-height: 2.25rem; padding: 0 0.85em 0 0.7em; border-radius: var(--r-pill); border: 1px solid var(--c-line); color: var(--c-soft); transition: border-color 0.18s, color 0.18s; white-space: nowrap; }
+  .fc__n { color: var(--c-fg); display: inline-block; min-width: 5ch; text-align: right; }
+  .fc [data-frames-unit] { display: inline-block; min-width: 6ch; }
+  /* A tiny pause glyph while running, a play triangle when paused. */
+  .fc__state { width: 0.55em; height: 0.7em; border-inline: 0.18em solid currentColor; box-sizing: border-box; }
+  .fc.is-paused .fc__state { border: 0; width: 0.6em; height: 0.7em; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+  @media (hover: hover) { .fc:hover { border-color: var(--c-line-strong); color: var(--c-fg); } }
+</style>

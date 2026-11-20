@@ -1,10 +1,15 @@
 ---
-// Moonbow's mark: the white three-band rainbow from res/moonbow.ico, without the tile.
+// The Moonbow mark: three concentric half circles, radii 19, 13 and 7, band 3.6, flat ends on one line
+// (design/brand-exploration-2026-10-25/moonbow.html). `spectrum` tints each band with the pale moonbow
+// spectrum, as the brand allows on the site; by default the mark is white.
+interface Props { spectrum?: boolean; class?: string; title?: string }
+const { spectrum = false, class: cls, title } = Astro.props;
+const bands = [
+  { r: 19, c: spectrum ? 'var(--b1, #d2c8f2)' : 'currentColor' },
+  { r: 13, c: spectrum ? 'var(--b2, #c6dcf4)' : 'currentColor' },
+  { r: 7, c: spectrum ? 'var(--b3, #f6cbbb)' : 'currentColor' },
+];
 ---
-<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-  <g fill="none" stroke="currentColor" stroke-width="2.4">
-    <path d="M3.5 22.5a12.5 12.5 0 0 1 25 0" />
-    <path d="M7.5 22.5a8.5 8.5 0 0 1 17 0" />
-    <path d="M11.5 22.5a4.5 4.5 0 0 1 9 0" />
-  </g>
+<svg class={cls} viewBox="0 0 42 21" fill="none" role={title ? 'img' : undefined} aria-hidden={title ? undefined : 'true'} aria-label={title}>
+  {bands.map(({ r, c }) => <path d={`M${21 - r} 21A${r} ${r} 0 0 1 ${21 + r} 21`} stroke={c} stroke-width="3.6" />)}
 </svg>

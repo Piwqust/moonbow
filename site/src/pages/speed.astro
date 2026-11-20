@@ -1,0 +1,194 @@
+---
+import Base from '../layouts/Base.astro';
+import { trace, measured, fadeMs } from '../data/site';
+
+const FRAME = 1000 / 24;
+const SPAN = 550; // ms shown on the ruler
+const sec = (ms: number) => (ms / 1000).toFixed(3).replace('.', ',');
+const frameOf = (ms: number) => Math.floor(ms / FRAME) + 1;
+// Spread of the same 20 runs (src/data/measurements/startup-2026-11-20.txt): the middle half.
+const spread: Record<string, [number, number]> = {
+  wWinMain: [27, 29], 'config loaded': [38, 44], 'window shown': [56, 66], 'first frame': [94, 114],
+  'mpv ready': [96, 116], 'hardware device': [227, 248], 'device switch': [243, 265], 'file loaded': [285, 324],
+  'playback started': [319, 362],
+};
+const fadeEnd = 328 + fadeMs;
+const cells = Array.from({ length: Math.floor(SPAN / FRAME) }, (_, i) => i); // 13 frames = 0.542 s
+
+const decisions = [
+  { t: 'Окно раньше движка', p: 'Очередь строится при запуске, видеодвижок никто не ждёт. Поэтому в самом первом кадре окна уже есть плеер: заголовок с именем файла, панель управления, чёрное поле под картинку.' },
+  { t: 'Первый кадр без драйвера видеокарты', p: 'Устройство Direct3D 11 создаётся в самом начале процесса, а первые кадры рисует программный WARP, пока просыпается драйвер. На видеокарту рисование переходит примерно через 0,24 с, когда окно давно на экране.' },
+  { t: 'Переезд на видеокарту без мигания', p: 'Устройство DirectComposition не привязано к видеокарте и переживает переход. Новая цепочка кадров встаёт под тот же визуальный слой только после своего второго кадра. Раньше в этот момент на один кадр мелькал серый фон: его нашла запись экрана на 60 кадрах в секунду.' },
+  { t: 'Всё, что окну не нужно, потом', p: 'Шрифты загружаются в фоне, перетаскивание файлов регистрируется после первого кадра, у окна нет лишнего SWP_FRAMECHANGED. Окно с ~60 мс стало появляться за ~50 на тех же замерах.' },
+  { t: 'Ввод раньше кадра', p: 'Кадры рисуются из WM_PAINT, поэтому нажатие обрабатывается раньше следующего кадра, а не после конца анимации. Задержка вывода: один кадр. Перетаскивание окна стало стоить 5 мс вместо 62.' },
+  { t: 'Превью кадра за 28 мс', p: 'Превью на полосе перемотки строит отдельный постоянный экземпляр mpv, который перематывает по ключевым кадрам. 1080p: было 144 мс, стало 28. 4K: было 589 мс, стало 86. Процессор при перемотке занят в 10 до 20 раз меньше, а через 30 секунд без дела этот экземпляр выгружается.' },
+  { t: 'Медиатека в фоне', p: 'Сканирование идёт в четыре фоновых потока, кэш сохраняется по ходу, теги читает свой парсер. При следующем запуске проверка 3 500 файлов занимает около 0,1 с. Превью карточек, которые уже ушли с экрана, отменяются.' },
+  { t: 'Кадры не ходят в оперативную память', p: 'Кроп, резкость и деинтерлейс работают на видеокарте, поэтому аппаратное декодирование не выключается и кадры не копируются в RAM. На тестовом 4K-файле это 620 МБ памяти вместо 1,3 ГБ.' },
+  { t: 'Покой значит покой', p: 'В простое медиатеки 0 % процессора. На паузе с видео 0 мс процессорного времени за 10 секунд. Свойства mpv для статистики отслеживаются, только пока её окно открыто.' },
+];
+const other = [
+  ['Кадр интерфейса', 'раскладка меньше 0,1 мс, отрисовка около 0,7 мс'],
+  ['Медиатека в простое', '0 % процессора, около 92 МБ памяти'],
+  ['Видео 1080p', 'около 6 % одного ядра при воспроизведении, 0 % на паузе'],
+  ['Превью кадра', '28 мс для 1080p, 86 мс для 4K'],
+  ['Первый скан 3 500 файлов', '16 до 19 с (было около 60 с)'],
+  ['Повторный запуск медиатеки', 'около 0,1 с на проверку 3 500 файлов'],
+  ['Закрытие', '0,1 до 0,21 с'],
+];
+---
+<Base title="Скорость" description="Как Moonbow открывает фильм за треть секунды: журнал запуска по кадрам, что сделано ради скорости и как проверить это на своём компьютере.">
+  <header class="phead wrap">
+    <p class="edge phead__no">Скорость</p>
+    <h1 class="t-xl phead__h">Треть секунды</h1>
+    <p class="phead__lead t-m soft">Столько проходит от двойного щелчка по файлу до идущего фильма. Ниже журнал запуска по кадрам кино, что сделано, чтобы он был таким коротким, и как проверить это на своём компьютере.</p>
+  </header>
+
+  <section class="tl wrap" aria-labelledby="tl-h">
+    <h2 id="tl-h" class="t-l">Журнал запуска</h2>
+    <p class="soft tl__lead">Медиана {measured.runs} запусков двойным щелчком по видео 1080p. Ячейки сверху: кадры кино по 1/24 секунды. Рамка у последней метки: картинка проявляется из чёрного {fadeMs} мс.</p>
+    <div class="ruler" aria-hidden="true"><div class="ruler__in">
+      <div class="ruler__cells">
+        {cells.map((i) => <span class:list={['ruler__cell', (i + 1) * FRAME > 328 && i * FRAME <= 328 && 'is-go']}><span class="edge">{String(i + 1).padStart(2, '0')}</span></span>)}
+      </div>
+      <div class="ruler__track">
+        <span class="ruler__fade" style={`left:${(328 / SPAN) * 100}%; width:${((fadeEnd - 328) / SPAN) * 100}%`}></span>
+        {trace.map((e, i) => (
+          <span class:list={['ruler__mark', e.log === 'playback started' && 'is-go']} style={`left:${(e.ms / SPAN) * 100}%; --row:${i % 4}`}>
+            <span class="edge ruler__label">{e.ms} мс<br />{e.log}</span>
+          </span>
+        ))}
+      </div>
+      <div class="ruler__axis edge"><span>0</span><span>0,1 с</span><span>0,2 с</span><span>0,3 с</span><span>0,4 с</span><span>0,5 с</span></div>
+    </div></div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <caption class="sr-only">Журнал запуска Moonbow, время от старта процесса</caption>
+        <thead><tr><th scope="col">Событие</th><th scope="col">Медиана</th><th scope="col">Половина запусков</th><th scope="col">Кадр</th><th scope="col">Строка журнала</th></tr></thead>
+        <tbody>
+          {trace.map((e) => (
+            <tr class:list={[e.log === 'playback started' && 'is-go']}>
+              <td>{e.ru}</td>
+              <td class="edge num">{sec(e.ms)} с</td>
+              <td class="edge num">{spread[e.log] ? `${spread[e.log][0]} до ${spread[e.log][1]} мс` : ''}</td>
+              <td class="edge num">{String(frameOf(e.ms)).padStart(2, '0')}</td>
+              <td class="edge">{e.log}</td>
+            </tr>
+          ))}
+          <tr><td>Картинка проявилась целиком</td><td class="edge num">{sec(fadeEnd)} с</td><td class="edge num"></td><td class="edge num">{String(frameOf(fadeEnd)).padStart(2, '0')}</td><td class="edge">+{fadeMs} мс</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tl__method edge">Как мерили: {measured.date}, {measured.machine}. Фоновые тестовые экземпляры (--automation), каждый раз с чистой папкой данных, по очереди со стартом медиатеки. Время берётся из журнала MOONBOW_TRACE и считается от старта процесса, без времени на сам двойной щелчок и Проводник. Сценарий: qa/perf/firstframe.ps1 в исходном коде.</p>
+  </section>
+
+  <section class="dec wrap" aria-labelledby="dec-h">
+    <h2 id="dec-h" class="t-l">Что для этого сделано</h2>
+    <ol class="dec__list">
+      {decisions.map((d, i) => (
+        <li class="dec__item" data-reveal="down">
+          <span class="edge dec__n">{String(i + 1).padStart(2, '0')}</span>
+          <h3 class="dec__t">{d.t}</h3>
+          <p class="soft dec__p">{d.p}</p>
+        </li>
+      ))}
+    </ol>
+  </section>
+
+  <section class="other wrap" aria-labelledby="other-h">
+    <div class="other__head"><h2 id="other-h" class="t-l">Другие замеры</h2>
+    <p class="soft other__lead">Из журнала разработки, октябрь 2026: RTX 4080, экран 2560×1440 на 144 Гц.</p></div>
+    <dl class="other__list">
+      {other.map(([k, v]) => <div><dt>{k}</dt><dd class="soft">{v}</dd></div>)}
+    </dl>
+  </section>
+
+  <section class="try wrap" aria-labelledby="try-h">
+    <h2 id="try-h" class="t-l">Проверьте сами</h2>
+    <p class="soft try__lead">Moonbow пишет такой же журнал на любом компьютере, если задать одну переменную окружения. В командной строке:</p>
+    <pre class="code"><code>set MOONBOW_TRACE=1
+"%LOCALAPPDATA%\Programs\Moonbow\Moonbow.exe" "D:\Видео\фильм.mkv"
+notepad %TEMP%\moonbow-trace.txt</code></pre>
+    <p class="soft try__lead">В журнале метки времени запуска, а потом раз в секунду статистика кадров интерфейса: сколько их было и сколько заняли раскладка, отрисовка и вывод.</p>
+  </section>
+</Base>
+
+<style>
+  .phead { padding-top: clamp(2.5rem, 7vw, 6rem); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); }
+  .phead__no, .phead__h { grid-column: 1 / -1; }
+  .phead__no { color: var(--c-fg); }
+  .phead__h { margin-top: 0.4rem; margin-left: -0.05em; }
+  .phead__lead { grid-column: 5 / span 7; margin-top: clamp(1.25rem, 2.5vw, 2rem); }
+
+  .tl { padding-top: clamp(4rem, 9vw, 8rem); }
+  .tl__lead { margin-top: 0.75rem; max-width: 42rem; }
+  .ruler { margin-top: 3rem; }
+  .ruler__cells { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 3px; width: calc(13 * 1000 / 24 / 550 * 100%); }
+  .ruler__cell { height: 2.25rem; border: 1px solid var(--c-line-strong); display: grid; align-items: end; padding: 0.25rem; }
+  .ruler__cell .edge { font-size: 0.625rem; }
+  .ruler__cell.is-go { background: var(--c-fg); border-color: var(--c-fg); }
+  .ruler__cell.is-go .edge { color: var(--c-bg); }
+  .ruler__track { position: relative; height: 12.5rem; border-bottom: 1px solid var(--c-line-strong); margin-top: 0.5rem; }
+  .ruler__fade { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #000, rgb(238 241 246 / 0.16)); border-left: 1px solid var(--c-fg); }
+  .ruler__mark { position: absolute; bottom: 0; height: calc(2.4rem + var(--row) * 2.5rem); border-left: 1px solid var(--c-muted); }
+  .ruler__mark.is-go { border-color: var(--c-fg); height: 11.5rem; }
+  .ruler__label { position: absolute; z-index: 2; top: -0.2rem; left: 0; padding: 0 0.4rem; background: var(--c-bg); white-space: nowrap; font-size: 0.6875rem; line-height: 1.3; }
+  .ruler__mark.is-go .ruler__label { background: none; }
+  .ruler__mark.is-go .ruler__label { color: var(--c-fg); }
+  .ruler__axis { display: flex; justify-content: space-between; width: calc(500 / 550 * 100% + 2ch); margin-top: 0.4rem; }
+
+  .table-wrap { margin-top: 3rem; overflow-x: auto; }
+  .table { width: 100%; border-collapse: collapse; font-size: var(--t-s); }
+  .table th { text-align: left; font-weight: 500; color: var(--c-muted); padding: 0.6rem 1rem 0.6rem 0; border-bottom: 1px solid var(--c-line-strong); white-space: nowrap; }
+  .table td { padding: 0.75rem 1rem 0.75rem 0; border-bottom: 1px solid var(--c-line); vertical-align: top; }
+  .table .num { white-space: nowrap; color: var(--c-fg); }
+  .table tr.is-go td { color: var(--c-fg); font-weight: 500; }
+  .tl__method { margin-top: 1.5rem; max-width: 52rem; line-height: 1.6; }
+
+  .dec { padding-top: clamp(5rem, 11vw, 9rem); }
+  .dec__list { margin-top: 2.5rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(2rem, 4vw, 3.5rem) var(--gutter); }
+  .dec__item { border-top: 1px solid var(--c-line); padding-top: 1rem; }
+  .dec__n { color: var(--c-fg); }
+  .dec__t { margin-top: 0.75rem; font-size: var(--t-m); line-height: 1.25; letter-spacing: -0.015em; font-weight: 500; }
+  .dec__p { margin-top: 0.75rem; font-size: var(--t-s); line-height: 1.6; }
+
+  .other { padding-top: clamp(5rem, 11vw, 9rem); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); }
+  .other__head { grid-column: 1 / span 4; align-self: start; }
+  .other__lead { margin-top: 0.75rem; font-size: var(--t-s); }
+  .other__list { grid-column: 6 / span 7; border-top: 1px solid var(--c-line); }
+  .other__list div { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); column-gap: var(--gutter); padding-block: 0.9rem; border-bottom: 1px solid var(--c-line); }
+  .other__list dt { font-weight: 500; }
+
+  .try { padding-top: clamp(5rem, 11vw, 9rem); }
+  .try__lead { margin-top: 0.75rem; max-width: 40rem; }
+  .code { margin-top: 1.5rem; padding: 1.25rem 1.5rem; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: 6px; overflow-x: auto; font: 0.875rem/1.7 var(--f-mono); color: var(--c-fg); max-width: 52rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  @media (max-width: 900px) {
+    .phead__lead { grid-column: 1 / -1; }
+    .phead__h { font-size: clamp(2.6rem, 13.5vw, 4rem); }
+    .ruler { overflow-x: auto; padding-bottom: 0.5rem; }
+    .ruler__in { min-width: 44rem; }
+  }
+  /* Phones: the table below says the same in a column; keep only the strip of frames. */
+  @media (max-width: 600px) {
+    .ruler { overflow: visible; }
+    .ruler__in { min-width: 0; }
+    .ruler__cells { width: 100%; gap: 2px; }
+    .ruler__cell { height: 1.75rem; padding: 0.15rem; }
+    .ruler__cell .edge { font-size: 0.5rem; }
+    .ruler__track, .ruler__axis { display: none; }
+  }
+  @media (max-width: 900px) {
+    .table thead { display: none; }
+    .table tr { display: grid; grid-template-columns: auto auto 1fr; column-gap: 1rem; padding-block: 0.75rem; border-bottom: 1px solid var(--c-line); }
+    .table td { border: 0; padding: 0; }
+    .table td:first-child { grid-column: 1 / -1; margin-bottom: 0.35rem; }
+    .table td:nth-child(3)::before { content: 'половина: '; color: var(--c-muted); }
+    .table td:nth-child(4)::before { content: 'кадр '; color: var(--c-muted); }
+    .table td:nth-child(5), .table td:empty { display: none; }
+    .dec__list { grid-template-columns: 1fr; }
+    .dec__item:nth-child(n) { margin-top: 0; }
+    .other__head, .other__list { grid-column: 1 / -1; grid-row: auto; }
+    .other__list { margin-top: 1.5rem; }
+  }
+</style>

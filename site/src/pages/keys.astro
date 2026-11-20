@@ -1,0 +1,116 @@
+---
+import Base from '../layouts/Base.astro';
+import actions from '../data/app/actions.json';
+
+const all = actions.groups.flatMap((g) => g.actions);
+const byId = (id: string) => all.find((a) => a.id === id)!;
+const withKeys = all.filter((a) => a.keys.length).length;
+// The keys people press every evening, big. Labels and keys come from the player's code.
+const top = ['playback.play_pause', 'playback.seek_forward', 'audio.volume_up', 'video.fullscreen', 'playback.frame_step', 'app.commands'].map(byId);
+const caps = (k: string) => k.split(' + ');
+---
+<Base title="Клавиши" description={`Все ${actions.count} команд Moonbow и их клавиши: воспроизведение, звук, субтитры, видео, медиатека. Любую клавишу можно переназначить, есть раскладка как в YouTube.`}>
+  <header class="phead wrap">
+    <p class="edge phead__no">Клавиши</p>
+    <h1 class="t-xl phead__h">Руки на клавиатуре</h1>
+    <p class="phead__lead t-m soft">{actions.count} команд, у {withKeys} есть клавиша с первого запуска. Любую можно переназначить в настройках, в разделе «Управление»; там же раскладка как в YouTube. Полный список в самом плеере по F1.</p>
+  </header>
+
+  <section class="top wrap" aria-labelledby="top-h">
+    <h2 id="top-h" class="sr-only">Самые нужные</h2>
+    <ul class="top__list">
+      {top.map((a) => (
+        <li class="top__item">
+          <span class="top__keys">{caps(a.keysRu[0]).map((k, i) => <>{i > 0 && <span class="top__plus" aria-hidden="true">+</span>}<kbd class="cap cap--big">{k}</kbd></>)}</span>
+          <span class="top__label soft">{a.ru}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="all wrap" aria-labelledby="all-h">
+    <h2 id="all-h" class="t-l">Все команды</h2>
+    <div class="search">
+      <label for="keys-q" class="sr-only">Поиск по командам и клавишам</label>
+      <svg class="search__icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+      <input id="keys-q" type="search" aria-label="Поиск по командам и клавишам" placeholder="Например: субтитры или Ctrl" autocomplete="off" data-filter="#keys-list" />
+      <span class="edge search__count" data-filter-count="keys-q" aria-live="polite">{actions.count}</span>
+    </div>
+    <p class="search__empty soft" data-filter-empty="keys-q" hidden>Такой команды нет. Попробуйте другое слово.</p>
+    <div id="keys-list" class="groups">
+      {actions.groups.map((g) => (
+        <section class="group" data-group aria-labelledby={`g-${g.id}`}>
+          <h3 id={`g-${g.id}`} class="group__h">{g.ru} <span class="edge">{g.actions.length}</span></h3>
+          <ul>
+            {g.id === 'jump-to-position' && g.actions.every((a) => a.keysRu.length === 0) ? (
+              <li class="key" data-item data-count={g.actions.length} data-text={`${g.ru} ${g.actions.map((a) => `${a.ru} ${a.en}`).join(' ')}`}>
+                <span class="key__name">{g.actions[0].ru.replace(/\d+\s*%/, '')}0, 10, 20 … 90 %</span>
+                <span class="key__keys"><span class="edge muted">без клавиши, можно назначить</span></span>
+              </li>
+            ) : g.actions.map((a) => (
+              <li class="key" data-item data-text={`${g.ru} ${a.ru} ${a.en} ${a.keysRu.join(' ')} ${a.keys.join(' ')}`}>
+                <span class="key__name">{a.ru}</span>
+                <span class="key__keys">
+                  {a.keysRu.length === 0 && <span class="edge muted">без клавиши</span>}
+                  {a.keysRu.map((k, j) => (
+                    <span class="key__combo">{j > 0 && <span class="edge key__or">или</span>}{caps(k).map((c) => <kbd class="cap">{c}</kbd>)}</span>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  </section>
+</Base>
+
+<style>
+  .phead { padding-top: clamp(2.5rem, 7vw, 6rem); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); }
+  .phead__no, .phead__h { grid-column: 1 / -1; }
+  .phead__no { color: var(--c-fg); }
+  .phead__h { margin-top: 0.4rem; margin-left: -0.05em; }
+  .phead__lead { grid-column: 5 / span 7; margin-top: clamp(1.25rem, 2.5vw, 2rem); }
+
+  /* A keycap: the edge print voice on a raised key. */
+  .cap {
+    display: inline-grid; place-items: center; min-width: 2rem; height: 2rem; padding: 0 0.55rem;
+    font: 500 0.8125rem/1 var(--f-mono); color: var(--c-fg); background: var(--c-raised);
+    border: 1px solid var(--c-line-strong); border-bottom-width: 3px; border-radius: 6px; white-space: nowrap;
+  }
+  .cap--big { min-width: 4.5rem; height: 4.5rem; padding: 0 1.1rem; font-size: 1.25rem; border-radius: 10px; border-bottom-width: 5px; }
+
+  .top { margin-top: clamp(3rem, 7vw, 6rem); }
+  .top__list { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--gutter); border-top: 1px solid var(--c-line); padding-top: 2rem; }
+  .top__item { display: grid; gap: 1rem; align-content: start; }
+  .top__keys { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .top__plus { color: var(--c-muted); }
+  .top__label { font-size: var(--t-s); }
+
+  .all { padding-top: clamp(5rem, 11vw, 9rem); }
+  .search { position: relative; display: flex; align-items: center; margin-top: 2rem; max-width: 42rem; border-bottom: 1px solid var(--c-line-strong); transition: border-color 0.18s; }
+  .search:focus-within { border-color: var(--c-fg); }
+  .search__icon { width: 1.25rem; height: 1.25rem; color: var(--c-muted); flex: none; }
+  .search input { flex: 1; min-width: 0; background: none; border: 0; padding: 1rem 0.75rem; font-size: var(--t-m); color: var(--c-fg); }
+  .search input::placeholder { color: var(--c-muted); }
+  .search input:focus { outline: none; }
+  .search:focus-within { box-shadow: 0 1px 0 var(--c-fg); }
+  .search input:focus-visible { outline: 2px solid var(--c-fg); outline-offset: 4px; border-radius: 2px; }
+  .search__empty { margin-top: 1.5rem; }
+  .groups { margin-top: 3rem; columns: 2; column-gap: calc(var(--gutter) * 2); }
+  .group { break-inside: avoid; margin-bottom: 3rem; }
+  .group__h { font-size: var(--t-m); font-weight: 500; letter-spacing: -0.015em; padding-bottom: 0.75rem; border-bottom: 1px solid var(--c-line-strong); }
+  .group__h .edge { margin-left: 0.4rem; }
+  .key { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3rem; padding-block: 0.5rem; border-bottom: 1px solid var(--c-line); font-size: var(--t-s); }
+  .key__keys { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.35rem; }
+  .key__combo { display: inline-flex; align-items: center; gap: 0.25rem; }
+  .key__or { margin-inline: 0.35rem 0.1rem; }
+
+  @media (max-width: 900px) {
+    .phead__lead { grid-column: 1 / -1; }
+    .phead__h { font-size: clamp(2.6rem, 13.5vw, 4rem); }
+    .top__list { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 2rem; }
+    .cap--big { min-width: 3.5rem; height: 3.5rem; font-size: 1rem; }
+    .groups { columns: 1; }
+  }
+</style>

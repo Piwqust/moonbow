@@ -1,0 +1,907 @@
+{
+  "count": 79,
+  "groups": [
+    {
+      "id": "playback",
+      "ru": "Воспроизведение",
+      "en": "Playback",
+      "actions": [
+        {
+          "id": "playback.play_pause",
+          "ru": "Воспроизведение / пауза",
+          "en": "Play / Pause",
+          "keys": [
+            "Space",
+            "Media Play"
+          ],
+          "keysRu": [
+            "Пробел",
+            "Медиа: пуск/пауза"
+          ]
+        },
+        {
+          "id": "playback.stop",
+          "ru": "Стоп",
+          "en": "Stop",
+          "keys": [
+            "S",
+            "Media Stop"
+          ],
+          "keysRu": [
+            "S",
+            "Медиа: стоп"
+          ]
+        },
+        {
+          "id": "playback.previous",
+          "ru": "Предыдущий файл",
+          "en": "Previous item",
+          "keys": [
+            "P",
+            "PgUp",
+            "Media Prev"
+          ],
+          "keysRu": [
+            "P",
+            "PgUp",
+            "Медиа: назад"
+          ]
+        },
+        {
+          "id": "playback.next",
+          "ru": "Следующий файл",
+          "en": "Next item",
+          "keys": [
+            "N",
+            "PgDn",
+            "Media Next"
+          ],
+          "keysRu": [
+            "N",
+            "PgDn",
+            "Медиа: далее"
+          ]
+        },
+        {
+          "id": "playback.seek_forward",
+          "ru": "Вперёд на 10 с",
+          "en": "Seek forward 10 s",
+          "keys": [
+            "→"
+          ],
+          "keysRu": [
+            "→"
+          ]
+        },
+        {
+          "id": "playback.seek_backward",
+          "ru": "Назад на 10 с",
+          "en": "Seek backward 10 s",
+          "keys": [
+            "←"
+          ],
+          "keysRu": [
+            "←"
+          ]
+        },
+        {
+          "id": "playback.seek_forward_long",
+          "ru": "Вперёд на 1 мин",
+          "en": "Seek forward 1 min",
+          "keys": [
+            "Ctrl + →"
+          ],
+          "keysRu": [
+            "Ctrl + →"
+          ]
+        },
+        {
+          "id": "playback.seek_backward_long",
+          "ru": "Назад на 1 мин",
+          "en": "Seek backward 1 min",
+          "keys": [
+            "Ctrl + ←"
+          ],
+          "keysRu": [
+            "Ctrl + ←"
+          ]
+        },
+        {
+          "id": "playback.seek_forward_short",
+          "ru": "Вперёд на 3 с",
+          "en": "Seek forward 3 s",
+          "keys": [
+            "Shift + →"
+          ],
+          "keysRu": [
+            "Shift + →"
+          ]
+        },
+        {
+          "id": "playback.seek_backward_short",
+          "ru": "Назад на 3 с",
+          "en": "Seek backward 3 s",
+          "keys": [
+            "Shift + ←"
+          ],
+          "keysRu": [
+            "Shift + ←"
+          ]
+        },
+        {
+          "id": "playback.frame_step",
+          "ru": "Следующий кадр",
+          "en": "Next frame",
+          "keys": [
+            "."
+          ],
+          "keysRu": [
+            "."
+          ]
+        },
+        {
+          "id": "playback.frame_back",
+          "ru": "Предыдущий кадр",
+          "en": "Previous frame",
+          "keys": [
+            ","
+          ],
+          "keysRu": [
+            ","
+          ]
+        },
+        {
+          "id": "playback.speed_up",
+          "ru": "Быстрее",
+          "en": "Faster",
+          "keys": [
+            "]",
+            "Ctrl + +"
+          ],
+          "keysRu": [
+            "]",
+            "Ctrl + +"
+          ]
+        },
+        {
+          "id": "playback.speed_down",
+          "ru": "Медленнее",
+          "en": "Slower",
+          "keys": [
+            "[",
+            "Ctrl + −"
+          ],
+          "keysRu": [
+            "[",
+            "Ctrl + −"
+          ]
+        },
+        {
+          "id": "playback.speed_reset",
+          "ru": "Обычная скорость",
+          "en": "Normal speed",
+          "keys": [
+            "Backspace",
+            "Ctrl + 0"
+          ],
+          "keysRu": [
+            "Backspace",
+            "Ctrl + 0"
+          ]
+        },
+        {
+          "id": "playback.next_chapter",
+          "ru": "Следующая глава",
+          "en": "Next chapter",
+          "keys": [
+            "Shift + PgDn"
+          ],
+          "keysRu": [
+            "Shift + PgDn"
+          ]
+        },
+        {
+          "id": "playback.prev_chapter",
+          "ru": "Предыдущая глава",
+          "en": "Previous chapter",
+          "keys": [
+            "Shift + PgUp"
+          ],
+          "keysRu": [
+            "Shift + PgUp"
+          ]
+        },
+        {
+          "id": "playback.replay",
+          "ru": "Сначала",
+          "en": "Replay from start",
+          "keys": [
+            "Home"
+          ],
+          "keysRu": [
+            "Home"
+          ]
+        },
+        {
+          "id": "playback.repeat",
+          "ru": "Повтор",
+          "en": "Repeat",
+          "keys": [
+            "L"
+          ],
+          "keysRu": [
+            "L"
+          ]
+        },
+        {
+          "id": "playback.shuffle",
+          "ru": "Перемешать",
+          "en": "Shuffle",
+          "keys": [
+            "H"
+          ],
+          "keysRu": [
+            "H"
+          ]
+        },
+        {
+          "id": "playback.ab_loop",
+          "ru": "Повтор A-B",
+          "en": "A-B loop",
+          "keys": [
+            "Shift + L"
+          ],
+          "keysRu": [
+            "Shift + L"
+          ]
+        },
+        {
+          "id": "playback.seek_forward_xl",
+          "ru": "Вперёд на 5 мин",
+          "en": "Seek forward 5 min",
+          "keys": [
+            "Ctrl + Shift + →"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + →"
+          ]
+        },
+        {
+          "id": "playback.seek_backward_xl",
+          "ru": "Назад на 5 мин",
+          "en": "Seek backward 5 min",
+          "keys": [
+            "Ctrl + Shift + ←"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + ←"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "audio",
+      "ru": "Аудио",
+      "en": "Audio",
+      "actions": [
+        {
+          "id": "audio.volume_up",
+          "ru": "Громче",
+          "en": "Volume up",
+          "keys": [
+            "↑"
+          ],
+          "keysRu": [
+            "↑"
+          ]
+        },
+        {
+          "id": "audio.volume_down",
+          "ru": "Тише",
+          "en": "Volume down",
+          "keys": [
+            "↓"
+          ],
+          "keysRu": [
+            "↓"
+          ]
+        },
+        {
+          "id": "audio.mute",
+          "ru": "Без звука",
+          "en": "Mute",
+          "keys": [
+            "M"
+          ],
+          "keysRu": [
+            "M"
+          ]
+        },
+        {
+          "id": "audio.cycle",
+          "ru": "Следующая аудиодорожка",
+          "en": "Next audio track",
+          "keys": [
+            "A",
+            "B"
+          ],
+          "keysRu": [
+            "A",
+            "B"
+          ]
+        },
+        {
+          "id": "audio.delay_up",
+          "ru": "Задержка звука +50 мс",
+          "en": "Audio delay +50 ms",
+          "keys": [
+            "K"
+          ],
+          "keysRu": [
+            "K"
+          ]
+        },
+        {
+          "id": "audio.delay_down",
+          "ru": "Задержка звука −50 мс",
+          "en": "Audio delay −50 ms",
+          "keys": [
+            "J"
+          ],
+          "keysRu": [
+            "J"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitles",
+      "ru": "Субтитры",
+      "en": "Subtitles",
+      "actions": [
+        {
+          "id": "subtitles.cycle",
+          "ru": "Следующие субтитры",
+          "en": "Next subtitle track",
+          "keys": [
+            "V"
+          ],
+          "keysRu": [
+            "V"
+          ]
+        },
+        {
+          "id": "subtitles.toggle",
+          "ru": "Показать / скрыть субтитры",
+          "en": "Show / hide subtitles",
+          "keys": [
+            "Shift + V"
+          ],
+          "keysRu": [
+            "Shift + V"
+          ]
+        },
+        {
+          "id": "subtitles.delay_up",
+          "ru": "Задержка субтитров +50 мс",
+          "en": "Subtitle delay +50 ms",
+          "keys": [
+            "Shift + H"
+          ],
+          "keysRu": [
+            "Shift + H"
+          ]
+        },
+        {
+          "id": "subtitles.delay_down",
+          "ru": "Задержка субтитров −50 мс",
+          "en": "Subtitle delay −50 ms",
+          "keys": [
+            "Shift + G"
+          ],
+          "keysRu": [
+            "Shift + G"
+          ]
+        },
+        {
+          "id": "subtitles.bigger",
+          "ru": "Крупнее субтитры",
+          "en": "Bigger subtitles",
+          "keys": [
+            "Alt + +"
+          ],
+          "keysRu": [
+            "Alt + +"
+          ]
+        },
+        {
+          "id": "subtitles.smaller",
+          "ru": "Мельче субтитры",
+          "en": "Smaller subtitles",
+          "keys": [
+            "Alt + −"
+          ],
+          "keysRu": [
+            "Alt + −"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "ru": "Видео",
+      "en": "Video",
+      "actions": [
+        {
+          "id": "video.fullscreen",
+          "ru": "Полный экран",
+          "en": "Fullscreen",
+          "keys": [
+            "F",
+            "Alt + Enter",
+            "F11"
+          ],
+          "keysRu": [
+            "F",
+            "Alt + Enter",
+            "F11"
+          ]
+        },
+        {
+          "id": "video.exit_fullscreen",
+          "ru": "Выйти из полноэкранного режима",
+          "en": "Exit fullscreen",
+          "keys": [
+            "Esc"
+          ],
+          "keysRu": [
+            "Esc"
+          ]
+        },
+        {
+          "id": "video.hide_ui",
+          "ru": "Скрыть интерфейс",
+          "en": "Hide UI",
+          "keys": [
+            "Ctrl + \\"
+          ],
+          "keysRu": [
+            "Ctrl + \\"
+          ]
+        },
+        {
+          "id": "video.pip",
+          "ru": "Картинка в картинке",
+          "en": "Picture in Picture",
+          "keys": [
+            "Ctrl + Shift + P"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + P"
+          ]
+        },
+        {
+          "id": "video.snapshot",
+          "ru": "Снимок кадра",
+          "en": "Snapshot",
+          "keys": [
+            "Ctrl + Shift + S"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + S"
+          ]
+        },
+        {
+          "id": "video.record",
+          "ru": "Запись",
+          "en": "Record",
+          "keys": [
+            "Ctrl + Shift + R"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + R"
+          ]
+        },
+        {
+          "id": "video.zoom_in",
+          "ru": "Увеличить",
+          "en": "Zoom in",
+          "keys": [
+            "Z"
+          ],
+          "keysRu": [
+            "Z"
+          ]
+        },
+        {
+          "id": "video.zoom_out",
+          "ru": "Уменьшить",
+          "en": "Zoom out",
+          "keys": [
+            "Shift + Z"
+          ],
+          "keysRu": [
+            "Shift + Z"
+          ]
+        },
+        {
+          "id": "video.zoom_reset",
+          "ru": "Сбросить масштаб",
+          "en": "Reset zoom",
+          "keys": [
+            "Alt + Z"
+          ],
+          "keysRu": [
+            "Alt + Z"
+          ]
+        },
+        {
+          "id": "video.aspect",
+          "ru": "Следующее соотношение сторон",
+          "en": "Next aspect ratio",
+          "keys": [
+            "X"
+          ],
+          "keysRu": [
+            "X"
+          ]
+        },
+        {
+          "id": "video.rotate",
+          "ru": "Повернуть на 90°",
+          "en": "Rotate 90°",
+          "keys": [
+            "Ctrl + R"
+          ],
+          "keysRu": [
+            "Ctrl + R"
+          ]
+        },
+        {
+          "id": "video.deinterlace",
+          "ru": "Устранение гребёнки",
+          "en": "Deinterlace",
+          "keys": [
+            "D"
+          ],
+          "keysRu": [
+            "D"
+          ]
+        },
+        {
+          "id": "video.statistics",
+          "ru": "Статистика",
+          "en": "Statistics",
+          "keys": [
+            "Ctrl + Shift + I"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + I"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "ru": "Медиа",
+      "en": "Media",
+      "actions": [
+        {
+          "id": "media.open_file",
+          "ru": "Открыть файл",
+          "en": "Open file",
+          "keys": [
+            "Ctrl + O"
+          ],
+          "keysRu": [
+            "Ctrl + O"
+          ]
+        },
+        {
+          "id": "media.open_folder",
+          "ru": "Открыть папку",
+          "en": "Open folder",
+          "keys": [
+            "Ctrl + Shift + O"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + O"
+          ]
+        },
+        {
+          "id": "media.open_network",
+          "ru": "Открыть сетевой поток",
+          "en": "Open network stream",
+          "keys": [
+            "Ctrl + N"
+          ],
+          "keysRu": [
+            "Ctrl + N"
+          ]
+        },
+        {
+          "id": "media.open_subtitles",
+          "ru": "Добавить файл субтитров",
+          "en": "Add subtitle file",
+          "keys": [
+            "Ctrl + Shift + L"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + L"
+          ]
+        },
+        {
+          "id": "media.close",
+          "ru": "Закрыть файл",
+          "en": "Close media",
+          "keys": [
+            "Ctrl + W"
+          ],
+          "keysRu": [
+            "Ctrl + W"
+          ]
+        },
+        {
+          "id": "media.home",
+          "ru": "Медиатека",
+          "en": "Library",
+          "keys": [
+            "Alt + Home"
+          ],
+          "keysRu": [
+            "Alt + Home"
+          ]
+        },
+        {
+          "id": "media.sidebar",
+          "ru": "Боковая панель",
+          "en": "Toggle sidebar",
+          "keys": [
+            "Ctrl + B"
+          ],
+          "keysRu": [
+            "Ctrl + B"
+          ]
+        },
+        {
+          "id": "media.playlist",
+          "ru": "Очередь",
+          "en": "Queue",
+          "keys": [
+            "Ctrl + L"
+          ],
+          "keysRu": [
+            "Ctrl + L"
+          ]
+        },
+        {
+          "id": "media.search",
+          "ru": "Поиск",
+          "en": "Search",
+          "keys": [
+            "Ctrl + F"
+          ],
+          "keysRu": [
+            "Ctrl + F"
+          ]
+        },
+        {
+          "id": "media.back",
+          "ru": "Назад",
+          "en": "Back",
+          "keys": [
+            "Alt + ←",
+            "Browser Back"
+          ],
+          "keysRu": [
+            "Alt + ←",
+            "Браузер: назад"
+          ]
+        },
+        {
+          "id": "media.forward",
+          "ru": "Вперёд",
+          "en": "Forward",
+          "keys": [
+            "Alt + →",
+            "Browser Forward"
+          ],
+          "keysRu": [
+            "Alt + →",
+            "Браузер: вперёд"
+          ]
+        },
+        {
+          "id": "media.bookmark",
+          "ru": "Добавить закладку",
+          "en": "Add bookmark",
+          "keys": [
+            "Ctrl + D"
+          ],
+          "keysRu": [
+            "Ctrl + D"
+          ]
+        },
+        {
+          "id": "media.favorite",
+          "ru": "Избранное",
+          "en": "Favorite",
+          "keys": [
+            "Ctrl + Shift + F"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + F"
+          ]
+        },
+        {
+          "id": "media.info",
+          "ru": "Сведения о файле",
+          "en": "Media information",
+          "keys": [
+            "Ctrl + I"
+          ],
+          "keysRu": [
+            "Ctrl + I"
+          ]
+        },
+        {
+          "id": "media.show_in_explorer",
+          "ru": "Показать в Проводнике",
+          "en": "Show in File Explorer",
+          "keys": [],
+          "keysRu": []
+        }
+      ]
+    },
+    {
+      "id": "app",
+      "ru": "Приложение",
+      "en": "App",
+      "actions": [
+        {
+          "id": "app.settings",
+          "ru": "Настройки",
+          "en": "Settings",
+          "keys": [
+            "Ctrl + P",
+            "Ctrl + ,"
+          ],
+          "keysRu": [
+            "Ctrl + P",
+            "Ctrl + ,"
+          ]
+        },
+        {
+          "id": "app.shortcuts",
+          "ru": "Сочетания клавиш",
+          "en": "Keyboard shortcuts",
+          "keys": [
+            "F1",
+            "Ctrl + /"
+          ],
+          "keysRu": [
+            "F1",
+            "Ctrl + /"
+          ]
+        },
+        {
+          "id": "app.commands",
+          "ru": "Все команды",
+          "en": "All commands",
+          "keys": [
+            "Ctrl + K"
+          ],
+          "keysRu": [
+            "Ctrl + K"
+          ]
+        },
+        {
+          "id": "app.customize",
+          "ru": "Настроить плеер",
+          "en": "Customize player",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "app.audio_meters",
+          "ru": "Индикаторы звука",
+          "en": "Audio meters",
+          "keys": [
+            "Ctrl + Shift + M"
+          ],
+          "keysRu": [
+            "Ctrl + Shift + M"
+          ]
+        },
+        {
+          "id": "app.quit",
+          "ru": "Выход",
+          "en": "Quit",
+          "keys": [
+            "Ctrl + Q"
+          ],
+          "keysRu": [
+            "Ctrl + Q"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jump-to-position",
+      "ru": "Переход по позиции",
+      "en": "Jump to position",
+      "actions": [
+        {
+          "id": "playback.jump_0",
+          "ru": "Переход на 0%",
+          "en": "Jump to 0%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_10",
+          "ru": "Переход на 10%",
+          "en": "Jump to 10%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_20",
+          "ru": "Переход на 20%",
+          "en": "Jump to 20%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_30",
+          "ru": "Переход на 30%",
+          "en": "Jump to 30%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_40",
+          "ru": "Переход на 40%",
+          "en": "Jump to 40%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_50",
+          "ru": "Переход на 50%",
+          "en": "Jump to 50%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_60",
+          "ru": "Переход на 60%",
+          "en": "Jump to 60%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_70",
+          "ru": "Переход на 70%",
+          "en": "Jump to 70%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_80",
+          "ru": "Переход на 80%",
+          "en": "Jump to 80%",
+          "keys": [],
+          "keysRu": []
+        },
+        {
+          "id": "playback.jump_90",
+          "ru": "Переход на 90%",
+          "en": "Jump to 90%",
+          "keys": [],
+          "keysRu": []
+        }
+      ]
+    }
+  ]
+}

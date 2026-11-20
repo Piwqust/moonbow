@@ -1,0 +1,283 @@
+---
+import Base from '../layouts/Base.astro';
+import Shot from '../components/Shot.astro';
+import { stops, tones, facts, stack, download } from '../data/site';
+import { fmt, LOG_MIN, LOG_MAX, ticks } from '../motion/time';
+
+const screens = [...new Set(stops.map((s) => s.shot))];
+const pos = (t: number) => ((Math.log10(t) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * 100;
+---
+<Base>
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero__clock">
+      <p class="hero__time time" aria-hidden="true" data-clock>0:00:00.085</p>
+      <p class="label hero__note" data-clock-note>
+        <span data-clock-static>Через 0,085 секунды после запуска Moonbow уже показывает первый кадр.</span>
+        <span data-clock-live hidden>Столько вы на сайте. Moonbow за это время успел бы показать первый кадр <span class="time" data-clock-count>0</span>&nbsp;раз.</span>
+      </p>
+    </div>
+    <div class="hero__text">
+      <h1 class="display" id="hero-title" data-split="lines" data-intro>Плеер для своих фильмов, сериалов и&nbsp;музыки</h1>
+      <p class="lead" data-reveal="fade" data-intro data-delay="0.25">Moonbow для Windows 10 и 11. Открывает файл быстрее, чем вы моргнёте, и потом ничего не мигает.</p>
+      <div class="hero__cta" data-reveal="fade" data-intro data-delay="0.4">
+        <a class="btn btn--solid" href={download.url}>
+          <span class="btn__fill" aria-hidden="true"></span>
+          <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
+          Скачать для Windows
+        </a>
+        <a class="seek hero__more" href="/vozmozhnosti/">Что он умеет</a>
+      </div>
+    </div>
+    <Shot class="hero__shot" name="player-film" eager sizes="(max-width: 767px) 100vw, 64vw"
+      alt="Moonbow играет фильм «Вечер у воды»: девушка смотрит на город на закате, внизу панель управления" />
+  </section>
+
+  <section class="evening" aria-labelledby="evening-title" data-evening>
+    <div class="wrap evening__intro grid">
+      <h2 class="display" id="evening-title" data-split="lines">Один вечер с&nbsp;Moonbow, по&nbsp;секундам</h2>
+      <p class="prose" data-reveal="fade">Часы слева идут по логарифмической шкале: каждый следующий шаг в несколько раз длиннее предыдущего. От первых миллисекунд после запуска до недели спустя.</p>
+    </div>
+
+    <div class="wrap evening__body grid">
+      <div class="evening__left">
+        <div class="evening__clock">
+          <p class="evening__time time" aria-hidden="true" data-ev-time>{fmt(stops[0].t)}</p>
+          <p class="label evening__unit" aria-hidden="true" data-ev-unit>{stops[0].unit}</p>
+          <div class="ruler" aria-label="Шкала времени вечера">
+            <div class="ruler__track" aria-hidden="true">
+              {ticks.map((k) => (
+                <span class:list={['ruler__tick', { 'is-minor': k.minor }]} style={`left:${pos(k.t)}%`}><span class="time">{k.label}</span></span>
+              ))}
+              <span class="ruler__head" data-ev-head style={`left:${pos(stops[0].t)}%`}></span>
+            </div>
+            <ol class="ruler__stops">
+              {stops.map((s, i) => (
+                <li style={`left:${pos(s.t)}%`}>
+                  <a href={`#t${i}`} data-ev-jump={i} aria-label={`${s.unit}: ${s.title}`}><span></span></a>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+
+        <ol class="evening__stops">
+          {stops.map((s, i) => (
+            <li class="stop" id={`t${i}`} data-stop={i}>
+              <p class="stop__time label"><span class="time">{fmt(s.t)}</span> <span>{s.unit}</span></p>
+              <h3 class="stop__title">{s.title}</h3>
+              <p class="prose">{s.text}</p>
+              <Shot class="stop__shot" name={s.shot} alt={s.alt} dark={s.dark} sizes="100vw" />
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div class="evening__screen">
+        <div class="screen__stack">
+          {screens.map((name, i) => {
+            const s = stops.find((x) => x.shot === name && !x.dark) ?? stops[0];
+            return <div class="screen" data-screen={name} style={i ? 'opacity:0;visibility:hidden' : undefined}>
+              <Shot name={name} alt={s.alt} dark={i === 0 && stops[0].dark} sizes="58vw" />
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mono wrap" aria-labelledby="mono-title">
+    <div class="grid">
+      <h2 class="mono__statement" id="mono-title" data-split="lines">Интерфейс Moonbow серый. Цветным на&nbsp;экране бывает только ваш фильм.</h2>
+      <p class="prose mono__text" data-reveal="fade">Оранжевый акцент исходного макета заменён шкалой белого: пять тонов на выбор. Есть светлая тема, скины «Чёрный OLED», «Высокий контраст» и «Сепия», а свой скин в JSON перезагружается на лету.</p>
+    </div>
+    <ul class="tones" aria-label="Тона акцента">
+      {tones.map((t, i) => (
+        <li class="tone" style={`--tone:${t.hex};--i:${i}`} data-reveal="fade" data-delay={String(i * 0.06)}>
+          <span class="tone__name">{t.name}</span>
+          <span class="tone__hex time">{t.hex}</span>
+        </li>
+      ))}
+    </ul>
+    <div class="mono__pair grid">
+      <Shot class="mono__shot mono__shot--a" name="home-light" alt="Главная медиатеки Moonbow в светлой теме" caption="Светлая тема. Та же шкала, зеркально." sizes="(max-width: 767px) 100vw, 50vw" />
+      <Shot class="mono__shot mono__shot--b" name="settings" alt="Окно настроек Moonbow с поиском по параметрам" caption="Около 240 настроек, у каждой поиск и сброс." sizes="(max-width: 767px) 100vw, 40vw" />
+    </div>
+  </section>
+
+  <section class="facts wrap" aria-labelledby="facts-title">
+    <div class="grid">
+      <h2 class="facts__title" id="facts-title" data-split="lines">Родная программа Windows, без браузера внутри</h2>
+      <p class="prose facts__text" data-reveal="fade">Интерфейс нарисован на Direct2D и DirectComposition, видео идёт через libmpv. Поэтому окно появляется сразу, а плеер не занимает память, как ещё один Chrome.</p>
+    </div>
+    <dl class="facts__list grid">
+      {facts.map((f) => (
+        <div class="fact" data-reveal="fade">
+          <dt class="label">{f.label}</dt>
+          <dd class="fact__value time">{f.value}</dd>
+        </div>
+      ))}
+    </dl>
+    <ul class="stack label" aria-label="Технологии">
+      {stack.map((s) => <li>{s}</li>)}
+    </ul>
+  </section>
+
+  <section class="finale wrap" aria-labelledby="finale-title">
+    <h2 class="display finale__title" id="finale-title" data-split="lines">Дальше ваш вечер</h2>
+    <div class="finale__row">
+      <a class="btn" href={download.url}>
+        <span class="btn__fill" aria-hidden="true"></span>
+        <svg class="btn__icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1.2 11 6 2 10.8Z" fill="currentColor" /></svg>
+        Скачать Moonbow
+      </a>
+      <p class="label">Windows 10 и 11, 64 бит. Версия {download.version}, {download.size}. Бесплатно, GPL-3.0.</p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  /* Hero: the clock is a poster line across the grid, then text and the window. */
+  .hero {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    padding-top: calc(var(--header-h) + var(--u) * 1.5); padding-bottom: calc(var(--u) * 8);
+    align-items: start;
+  }
+  .hero__clock { grid-column: 1 / -1; }
+  .hero__time {
+    font-weight: 100; line-height: 0.88; letter-spacing: -0.02em; white-space: nowrap;
+    font-size: min(13.5rem, calc((100vw - 2 * var(--gutter)) / 6.75)); margin-left: -0.04em;
+  }
+  .hero__note { margin-top: calc(var(--u) * 1.2); max-width: 46ch; }
+  .hero__text { grid-column: 1 / span 4; padding-top: calc(var(--u) * 5); }
+  .hero__text .display { font-size: clamp(2rem, 1.2rem + 2.3vw, 3.4rem); line-height: 1.02; }
+  .hero__text .lead { margin-top: calc(var(--u) * 2); font-size: var(--t-body); color: var(--c-muted); max-width: 30ch; }
+  .hero__cta { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.75rem; margin-top: calc(var(--u) * 3.5); }
+  .hero__more { font-size: var(--t-s); color: var(--c-fg); }
+  .hero__shot { grid-column: 5 / -1; margin-top: calc(var(--u) * 5); }
+  :global(html.motion) .hero__shot :global(.shot__dark) { opacity: 1; }
+
+  /* The evening */
+  .evening { padding-top: calc(var(--u) * 10); }
+  .evening__intro { row-gap: calc(var(--u) * 2); }
+  .evening__intro .display { grid-column: 1 / span 7; }
+  .evening__intro .prose { grid-column: 9 / -1; align-self: end; }
+  .evening__body { margin-top: calc(var(--u) * 6); }
+  .evening__left { grid-column: 1 / span 5; }
+  .evening__clock {
+    position: sticky; top: 0; z-index: 2; background: var(--c-bg);
+    padding: calc(var(--header-h) + var(--u) * 1.5) 0 calc(var(--u) * 2);
+  }
+  .evening__clock::after {
+    content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 4rem;
+    background: linear-gradient(var(--c-bg), rgb(9 9 9 / 0)); pointer-events: none;
+  }
+  .evening__time {
+    font-weight: 200; white-space: nowrap; line-height: 1; letter-spacing: -0.03em;
+    font-size: min(5.4rem, calc((41.6vw - var(--gutter)) / 7));
+  }
+  .evening__unit { margin-top: 0.5rem; min-height: 1.4em; }
+
+  .ruler { position: relative; margin-top: calc(var(--u) * 2.5); height: 3.25rem; }
+  .ruler__track { position: absolute; inset: 0 0 auto; height: 3.25rem; border-top: 1px solid var(--c-line-strong); }
+  .ruler__tick { position: absolute; top: 0; height: 0.5rem; border-left: 1px solid var(--c-line-strong); }
+  .ruler__tick > span { position: absolute; top: 1.35rem; left: 0; translate: -50% 0; font-size: 0.6875rem; color: var(--c-muted); white-space: nowrap; }
+  .ruler__head {
+    position: absolute; top: -0.5rem; width: 3px; height: 1rem; margin-left: -1.5px; border-radius: 2px;
+    background: var(--c-accent); box-shadow: 0 0 0 3px var(--c-bg);
+  }
+  .ruler__stops { position: absolute; inset: -0.75rem 0 auto; height: 1.5rem; }
+  .ruler__stops li { position: absolute; top: 0; translate: -50% 0; }
+  .ruler__stops a { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; }
+  .ruler__stops a span { width: 5px; height: 5px; border-radius: 50%; background: var(--c-muted); transition: scale 0.3s var(--ease-out), background 0.3s; }
+  @media (hover: hover) { .ruler__stops a:hover span { scale: 1.8; background: var(--c-fg); } }
+  .ruler__stops a:focus-visible span { scale: 1.8; background: var(--c-fg); }
+
+  .evening__stops { padding-top: 12vh; padding-bottom: 30vh; }
+  .stop { min-height: 72vh; padding-top: 6vh; color: var(--c-muted); transition: color 0.4s; }
+  .stop.is-active { color: var(--c-fg); }
+  .stop.is-active .prose { color: var(--c-fg); }
+  .stop .prose { transition: color 0.4s; max-width: 34ch; }
+  .stop__time { display: flex; gap: 0.75rem; }
+  .stop__title { font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; margin: 0.6rem 0 1rem; max-width: 14ch; }
+  .stop__shot { display: none; margin-top: calc(var(--u) * 3); }
+
+  .evening__screen { grid-column: 6 / -1; }
+  .screen__stack { position: sticky; top: calc(50vh - 18vw + var(--header-h) / 2); display: grid; }
+  .screen { grid-area: 1 / 1; }
+
+  /* Without JS the stage cannot follow scroll: every stop shows its own window instead. */
+  html:not(.js) .evening__screen, html:not(.js) .ruler__head { display: none; }
+  html:not(.js) .stop__shot { display: block; }
+  html:not(.js) .evening__left { grid-column: 1 / span 7; }
+
+  /* Monochrome */
+  .mono { padding-top: calc(var(--u) * 10); padding-bottom: calc(var(--u) * 12); }
+  .mono__statement { grid-column: 1 / span 10; font-size: var(--t-xl); font-weight: 300; letter-spacing: -0.045em; line-height: 1.02; margin-left: -0.04em; }
+  .mono__text { grid-column: 7 / span 5; margin-top: calc(var(--u) * 4); }
+  .tones { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; margin-top: calc(var(--u) * 7); }
+  .tone {
+    position: relative; aspect-ratio: 3 / 4; background: var(--tone); color: #0e0e0e;
+    display: flex; flex-direction: column; justify-content: end; gap: 0.15rem; padding: clamp(0.5rem, 1.2vw, 1.25rem);
+    transition: translate 0.5s var(--ease-out);
+  }
+  .tone:first-child { border-radius: var(--r-window) 0 0 var(--r-window); }
+  .tone:last-child { border-radius: 0 var(--r-window) var(--r-window) 0; }
+  .tone__name { font-weight: 500; font-size: clamp(0.8125rem, 0.7rem + 0.5vw, 1.25rem); letter-spacing: -0.02em; }
+  .tone__hex { font-size: 0.75rem; }
+  .mono__pair { margin-top: calc(var(--u) * 9); align-items: end; }
+  .mono__shot--a { grid-column: 1 / span 7; }
+  .mono__shot--b { grid-column: 9 / -1; margin-bottom: calc(var(--u) * 8); }
+
+  /* Facts */
+  .facts { padding-block: calc(var(--u) * 10); border-top: 1px solid var(--c-line); }
+  .facts__title { grid-column: 1 / span 6; font-size: var(--t-l); font-weight: 300; letter-spacing: -0.035em; line-height: 1.08; }
+  .facts__text { grid-column: 8 / -1; }
+  .facts__list { margin-top: calc(var(--u) * 8); row-gap: calc(var(--u) * 4); }
+  .fact { grid-column: span 3; border-top: 1px solid var(--c-line-strong); padding-top: 1rem; display: flex; flex-direction: column-reverse; justify-content: start; gap: 0.5rem; }
+  .fact__value { font-size: clamp(2.5rem, 1.5rem + 3.4vw, 4.75rem); font-weight: 200; letter-spacing: -0.04em; line-height: 1; }
+  .stack { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: calc(var(--u) * 6); }
+
+  /* Finale */
+  .finale { padding-block: calc(var(--u) * 14) calc(var(--u) * 10); }
+  .finale__title { font-size: var(--t-mega); line-height: 0.92; letter-spacing: -0.06em; margin-left: -0.05em; }
+  .finale__row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; margin-top: calc(var(--u) * 5); }
+
+  @media (max-width: 1023px) and (min-width: 768px) {
+    .hero__text { grid-column: 1 / span 5; }
+    .hero__shot { grid-column: 6 / -1; }
+  }
+
+  @media (max-width: 767px) {
+    .hero { grid-template-columns: minmax(0, 1fr); padding-bottom: calc(var(--u) * 4); }
+    .hero__text, .hero__shot, .hero__clock { grid-column: 1 / -1; }
+    .hero__text { padding-top: calc(var(--u) * 4); }
+    .hero__shot { margin-top: calc(var(--u) * 5); }
+
+    .evening__intro .display, .evening__intro .prose { grid-column: 1 / -1; }
+    .evening__left { grid-column: 1 / -1; }
+    .evening__screen { display: none; }
+    .evening__clock { padding-top: calc(var(--header-h) + 0.25rem); }
+    .evening__time { font-size: calc((100vw - 2 * var(--gutter)) / 7.4); }
+    .ruler__tick.is-minor > span { display: none; }
+    .stop { min-height: 0; padding-top: 10vh; color: var(--c-fg); }
+    .stop .prose { color: var(--c-muted); }
+    .stop__shot { display: block; }
+    .evening__stops { padding-bottom: 6vh; }
+
+    .mono__statement, .mono__text { grid-column: 1 / -1; }
+    .tones { grid-template-columns: 1fr; gap: 2px; }
+    .tone { aspect-ratio: auto; min-height: 3.5rem; flex-direction: row; justify-content: space-between; align-items: center; }
+    .tone:first-child { border-radius: var(--r-window) var(--r-window) 0 0; }
+    .tone:last-child { border-radius: 0 0 var(--r-window) var(--r-window); }
+    .mono__shot--a, .mono__shot--b { grid-column: 1 / -1; margin-bottom: calc(var(--u) * 3); }
+
+    .facts__title, .facts__text { grid-column: 1 / -1; }
+    .facts__text { margin-top: calc(var(--u) * 2); }
+    .fact { grid-column: span 2; }
+  }
+</style>
+
+<script>
+  import { startHome } from '../motion/home';
+  startHome();
+</script>

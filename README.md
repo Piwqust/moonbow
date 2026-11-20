@@ -1,163 +1,311 @@
-# Moonbow
+<p align="center">
+  <img src="docs/images/en/banner.png" width="900" alt="Moonbow: double-click, eight frames, the film is on. A video and music player for Windows 10 and 11, shown playing an episode on a strip of film">
+</p>
 
-Минималистичный видео- и аудиоплеер для Windows 10/11 с медиатекой. Интерфейс монохромный, тёмная тема
-по умолчанию, светлая доступна в настройках. Язык интерфейса — русский или английский.
+<h1 align="center">Moonbow</h1>
 
-Стек: C++20, Win32, Direct2D/DirectWrite, DirectComposition и libmpv. Устройство кода описано в
-[ARCHITECTURE.md](ARCHITECTURE.md), дизайн-токены — в [design/DESIGN.md](design/DESIGN.md), текущее
-состояние работы — в [STATUS.md](STATUS.md).
+<p align="center">
+  A fast, quiet video and music player for Windows 10 and 11,<br>
+  with a library that remembers where you stopped.
+</p>
 
-## Сборка
+<p align="center">
+  <a href="https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D4?style=for-the-badge&logo=windows" alt="Download for Windows x64"></a>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows 10 and 11">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/engine-libmpv-555" alt="Plays through libmpv">
+</p>
 
-Нужен Visual Studio 2022 с компонентом «Разработка классических приложений на C++». CMake не нужен.
+<p align="center">
+  <a href="#download">Download</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="#keyboard">Keyboard</a> ·
+  <a href="#questions">Questions</a> ·
+  <a href="#build-from-source">Build</a> ·
+  <a href="https://moonbow.angleford.co">Website</a> ·
+  <b>English</b> ·
+  <a href="README.ru.md">Русский</a>
+</p>
 
-1. Скачайте libmpv (один раз, около 30 МБ, сборка shinchiro/mpv-winbuild-cmake):
+<br>
 
-   ```bash
-   powershell -ExecutionPolicy Bypass -File tools\fetch-libmpv.ps1
-   ```
+Double-click a video and it is playing a third of a second later. Moonbow opens files, folders, playlists and
+streams, keeps your films, series and music in one library, finds subtitles and song lyrics next to the file, and
+stays out of the way: the interface is black, white and grey, so the only colour on the screen is your film.
 
-2. Соберите:
+> [!NOTE]
+> Moonbow is in beta. Its author uses it every day, but expect rough edges, and please
+> [report what you find](#reporting-a-problem).
 
-   ```bash
-   build.bat
-   ```
+## Why it exists
 
-   Результат: `build\Moonbow.exe` и рядом `build\libmpv-2.dll`. Отладочная сборка: `build.bat debug`.
+Moonbow started as a bet: Windows has no player that is good-looking, instant and complete at the same time. You
+usually get to pick two: a pretty one that can do little, one that plays everything and looks like 2005, or a fast
+one with nothing around the video. Moonbow is the attempt to keep all three.
 
-3. Тесты ядра (настройки, медиатека, история, плейлисты):
+<table>
+  <tr>
+    <th width="33%">Instant</th>
+    <th width="33%">Calm</th>
+    <th width="33%">Complete</th>
+  </tr>
+  <tr>
+    <td valign="top"><b>328 ms</b> from a double-click to a playing film. The window shows at 60 ms and never waits for the video engine.</td>
+    <td valign="top">Black, white and grey, so the only colour on screen is your film. No ads, no account, no telemetry.</td>
+    <td valign="top"><b>236</b> settings, <b>79</b> commands, <b>84</b> file types. On screen only what you need now; the rest is one shortcut away.</td>
+  </tr>
+</table>
 
-   ```bash
-   tests\build-tests.bat
-   ```
+From the double-click to a playing film takes eight frames of cinema:
 
-## Запуск
+<p align="center">
+  <img src="docs/images/startup-frames.png" width="900" alt="Twelve frames of Moonbow starting, one per 1/24 second: an empty frame, the window at 60 ms, the player at 103 ms, the film starting at 328 ms and the picture fading in from black">
+</p>
 
-```bash
-build\Moonbow.exe "D:\Видео\фильм.mkv"
+<details>
+<summary><b>How this was measured</b></summary>
+<br>
+
+| Window on screen | Player drawn | File opened | Film playing |
+| --- | --- | --- | --- |
+| 60 ms | 103 ms | 295 ms | 328 ms |
+
+Medians of 20 launches with a 1080p file on an Intel Core i9-14900K and an NVIDIA RTX 4080, measured from the
+process start with `MOONBOW_TRACE=1` (`qa/perf/firstframe.ps1`). The window does not wait for the video engine, the
+first frames are drawn in software while the graphics driver wakes up, and the switch to the GPU happens without a
+single flickering frame. The picture then fades in from black over 200 ms, on purpose, so a bright first frame does
+not flash in a dark room. More numbers from the development log: 0 % CPU while a video is paused, about 0.7 ms to
+draw an interface frame, 28 ms to show a frame preview on the seek bar (1080p).
+
+Try it on your own computer: `set MOONBOW_TRACE=1`, start Moonbow with a file, then open `%TEMP%\moonbow-trace.txt`.
+</details>
+
+## What it does
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/en/card-player.jpg" alt="A frame preview and the chapter name over the seek bar">
+      <h3>Player</h3>
+      Frame previews and chapters on the seek bar, A-B loop, a gapless queue, bookmarks. Short panels at their
+      buttons for speed, picture, equalizer and delays; <kbd>Ctrl</kbd>+<kbd>K</kbd> for any command by name.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/en/card-video.jpg" alt="Playback statistics over the picture: hardware decoding without copies">
+      <h3>Video</h3>
+      Crop, sharpening and deinterlacing on the GPU without copying frames, scalers, NVIDIA RTX and Intel AI
+      upscaling, RTX Video HDR, HDR tone mapping, your own shaders, statistics over the picture.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <img src="docs/images/en/card-subtitles.jpg" alt="Subtitle styles chosen on a real frame">
+      <h3>Subtitles</h3>
+      Ready styles chosen on a real frame, a second track on top, subtitles in the black bars, OpenSubtitles
+      search. On pause, click a word to copy it, look it up or translate it.
+    </td>
+    <td valign="top">
+      <img src="docs/images/en/card-music.jpg" alt="The music screen: the album cover and synced lyrics, the current line lit">
+      <h3>Music</h3>
+      A music screen with the cover, visualizers and synced lyrics; the song's real waveform on the seek bar;
+      crossfade between songs; a fast tag reader of its own.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <img src="docs/images/en/card-library.jpg" alt="The library home: Continue Watching with the time left on each item">
+      <h3>Library</h3>
+      Continue Watching with the time left, series grouped by season, music by album, artist and genre,
+      playlists and history. Your files are never moved or changed.
+    </td>
+    <td valign="top">
+      <img src="docs/images/en/card-sound.jpg" alt="The audio meters window: VU meters and EBU R128 loudness">
+      <h3>Sound</h3>
+      Passthrough to a receiver (AC3, DTS, TrueHD and more), WASAPI exclusive mode, Replay Gain and loudness
+      normalization, volume up to 200 %, VU and EBU R128 meters.
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary><b>Everything else, in detail</b></summary>
+<br>
+
+- **Player.** Exact clicks on the seek bar, chapters, A-B loop, gapless playback, bookmarks, audio, video and
+  subtitle tracks, external files. "Next episode" over the credits, skip intro and credits by chapters. Mouse
+  gestures (hold for 2×, wheel over volume, speed and the seek bar, drag the video to move the window), each of
+  which can be turned off. Fullscreen with auto-hide, picture in picture, mini player. Tracks, delays and the
+  position are remembered per file.
+- **Video.** Quality presets and scalers, debanding, motion smoothing, `.glsl` shaders from a folder. Snapshots and
+  stream recording.
+- **Sound.** Passthrough of AC3, E-AC3, DTS, DTS-HD and TrueHD; WASAPI exclusive mode; Replay Gain and loudness
+  normalization together with the equalizer; a separate window of VU, EBU R128 and stereo meters
+  (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>).
+- **Subtitles.** Background box, blur, position, size, subtitles in the black bars, a second track on top,
+  OpenSubtitles search with your own key, words on pause (<kbd>W</kbd>).
+- **Music.** Visualizers (spectrum, circle, oscilloscope, wave); lyrics from a `.lrc` next to the song, from tags
+  or, if you allow it, from LRCLIB; crossfade of 1 to 12 seconds; tags read from MP3, FLAC, Ogg, Opus, M4A, WAV,
+  AIFF, APE and WavPack; cover thumbnails in File Explorer.
+- **Library.** Recent and frequent folders, next episode, network streams and radio, grid or list, sorting, search
+  in any word order, "New" and "Broken file" badges, TMDB posters if you enable them with your own key.
+- **Look.** Dark, light and system theme; skins (Black OLED, High contrast, Sepia, or your own JSON, reloaded
+  live); your own set of control-bar buttons; Windows text size; English and Russian.
+- **Windows.** Media keys and the Windows media card, taskbar thumbnail buttons, tray icon, jump list, file
+  associations only when you ask. Every action is reachable from the keyboard, and Narrator reads lists and
+  changes.
+
+</details>
+
+## Download
+
+| File | What it is |
+| --- | --- |
+| [**Moonbow-windows-x64-setup.exe**](https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64-setup.exe) | **Installer, recommended.** Installs for your account, no administrator rights needed |
+| [Moonbow-windows-x64.zip](https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64.zip) | Portable: unpack anywhere and run `Moonbow.exe` |
+
+You need Windows 10 or 11, 64-bit, and a graphics card with Direct3D 11. Every file has a `.sha256` next to it on
+the [release page](https://github.com/Piwqust/moonbow/releases/latest).
+
+### Install
+
+1. Run `Moonbow-windows-x64-setup.exe`.
+2. Press **Install**. Moonbow goes to `%LOCALAPPDATA%\Programs\Moonbow` and to the Start menu. **Open videos in
+   Moonbow by default** is on; turn it off under **Install options** if you prefer.
+3. The first start asks four things: your media folder, the theme, the language and what may go online. Then drop
+   any file into the window.
+
+> [!IMPORTANT]
+> The build is not code-signed yet, so Windows SmartScreen may show a blue "Windows protected your PC" window
+> before the first run. Press **More info**, then **Run anyway**.
+
+**Updating.** Run the newer installer: it shows what changed and keeps your settings and library. The two previous
+versions stay on the computer; **About Moonbow → Versions on this computer → Go back to it** returns to one.
+**Removing.** Windows Settings → Apps. Your settings stay unless you tick **Also delete settings, library and logs**.
+
+## Keyboard
+
+| Action | Keys |
+| --- | --- |
+| Play / pause | <kbd>Space</kbd> |
+| Seek 10 s / 3 s / 1 min | <kbd>←</kbd> <kbd>→</kbd>, with <kbd>Shift</kbd> / <kbd>Ctrl</kbd> |
+| Volume / mute | <kbd>↑</kbd> <kbd>↓</kbd> / <kbd>M</kbd> |
+| Next frame / previous frame | <kbd>.</kbd> / <kbd>,</kbd> |
+| Slower / faster / normal speed | <kbd>[</kbd> / <kbd>]</kbd> / <kbd>Backspace</kbd> |
+| Fullscreen | <kbd>F</kbd> or <kbd>F11</kbd> |
+| Next subtitles / audio track | <kbd>V</kbd> / <kbd>A</kbd> |
+| Open file | <kbd>Ctrl</kbd>+<kbd>O</kbd> |
+| Any command by name | <kbd>Ctrl</kbd>+<kbd>K</kbd> |
+| Every shortcut | <kbd>F1</kbd> |
+
+Any key can be changed in **Settings → Controls**, which also has a YouTube-style layout.
+
+## Privacy and your data
+
+Everything Moonbow keeps is in `%APPDATA%\Moonbow`: settings, the library index, history and resume positions,
+playlists, bookmarks and per-file settings. History can be turned off under **Settings → Privacy**. Online
+features stay off until you turn them on: lyrics from LRCLIB, subtitles from OpenSubtitles and posters from TMDB
+(the last two with your own key, stored encrypted for your Windows account). Links to YouTube and other sites play
+only if you put your own `yt-dlp.exe` next to Moonbow; Moonbow itself downloads nothing.
+
+## Questions
+
+<details>
+<summary><b>Is it free?</b></summary>
+<br>
+
+Yes. Moonbow is free software under the GPL-3.0: no ads, no account, no paid version.
+</details>
+
+<details>
+<summary><b>How is it different from mpv or VLC?</b></summary>
+<br>
+
+Moonbow plays through libmpv, the engine of mpv, so it opens what mpv opens. Around it there is a native Windows
+interface: a library with series and music, synced lyrics, settings with search instead of a config file, a
+startup that does not make you wait, and an interface that keeps quiet while the film plays.
+</details>
+
+<details>
+<summary><b>Why is the download 46 MB?</b></summary>
+<br>
+
+Almost all of it is `libmpv-2.dll` with FFmpeg's decoders for every format (about 121 MB unpacked). Moonbow itself
+is a 6 MB program.
+</details>
+
+<details>
+<summary><b>Will it take over my files?</b></summary>
+<br>
+
+Only videos, and only if you leave **Open videos in Moonbow by default** on in the installer. Music keeps opening in
+the app it opened in before. Later, **Settings → General → Windows integration → Open videos in Moonbow** does the
+same for videos; for music, choose Moonbow in Windows Settings → Apps → Default apps.
+</details>
+
+<details>
+<summary><b>Does it send anything anywhere?</b></summary>
+<br>
+
+No. There is no telemetry, and logs and crash reports stay on your computer until you attach them to an issue
+yourself. The online features above are off until you turn them on.
+</details>
+
+<details>
+<summary><b>Where are the portable version's settings?</b></summary>
+<br>
+
+In `%APPDATA%\Moonbow`, the same as for the installed one, so both see the same library.
+</details>
+
+<details>
+<summary><b>macOS, Linux, 32-bit Windows?</b></summary>
+<br>
+
+No. Moonbow is built on Win32, Direct2D and DirectComposition for 64-bit Windows 10 and 11.
+</details>
+
+## Reporting a problem
+
+1. Open **Settings → General → Diagnostics → Logs and crash reports**. After a crash Moonbow also offers
+   **Show report** on the next start.
+2. [Open an issue](https://github.com/Piwqust/moonbow/issues/new/choose) and attach the files from that folder,
+   with what you did, what you expected and what happened instead. For a file that plays wrong, turn on
+   **Detailed playback log** in the same place, open the file again and attach `mpv.log`.
+
+The logs hold the Windows version, the graphics card and the names of files that failed to open; crash dumps hold
+the program's state, not your media. Security problems: [SECURITY.md](SECURITY.md).
+
+## Build from source
+
+You need Visual Studio 2022 with **Desktop development with C++**; CMake is not needed.
+
+```bat
+powershell -ExecutionPolicy Bypass -File tools\fetch-libmpv.ps1 -Tag 20261017
+build.bat
+tests\build-tests.bat
 ```
 
-- Можно передать файл, папку или плейлист `.m3u`/`.m3u8`. Файлы также открываются перетаскиванием в окно
-  или через `Ctrl+O`.
-- Если Moonbow уже открыт, новый файл открывается в том же окне. В настройках можно разрешить несколько окон
-  или добавлять файлы в очередь вместо замены.
-- При первом запуске открывается короткое знакомство: папка медиатеки, тема, язык, приватность.
+This makes `build\Moonbow.exe` next to `libmpv-2.dll`. How the code is organised: [ARCHITECTURE.md](ARCHITECTURE.md).
+How to work on it without disturbing your desktop, and the rules for changes: [CONTRIBUTING.md](CONTRIBUTING.md).
+The website, [moonbow.angleford.co](https://moonbow.angleford.co), lives in [`site/`](site/README.md); the changes by
+version are in [CHANGELOG.md](CHANGELOG.md).
 
-## Возможности
+## License and credits
 
-- **Плеер:**
-  - полоса перемотки с быстрыми превью кадров и главами, отметки петли A-B;
-  - очередь, закладки, главы; воспроизведение без пауз между треками (gapless);
-  - выбор видео-, аудио- и субтитровых дорожек, подключение внешних файлов;
-  - быстрые настройки: скорость, качество изображения, эквалайзер, задержки, стиль субтитров;
-  - статистика поверх видео (`Ctrl+Shift+I`): декодер, работа без копирования кадров, пропуски, кэш;
-  - «Следующая серия» на титрах, «Пропустить заставку / титры» по главам;
-  - жесты мыши: удержание = 2×, колесо над громкостью, скоростью и полосой перемотки, правый щелчок
-    сбрасывает; тонкая полоска прогресса при скрытой панели;
-  - полноэкранный режим с автоскрытием, «картинка в картинке», мини-плеер;
-  - экран музыки с обложкой, визуализацией (спектр, круг, осциллограф, волна) и синхронными текстами
-    песен (`.lrc` рядом с треком, тег SYLT/USLT или, если включить, LRCLIB);
-  - плавный переход между песнями (1–12 с, по умолчанию только между разными альбомами);
-  - настройки для каждого файла: дорожки, задержки, по желанию скорость, поворот, петля A-B;
-  - слова в субтитрах: на паузе щелчок по слову (или `W`) — копировать, словарь, перевод.
-- **Видео:** кроп, резкость (шейдер CAS) и деинтерлейс на видеокарте без копирования кадров в RAM,
-  пресеты качества и алгоритмы увеличения, ИИ-апскейл NVIDIA RTX / Intel, RTX Video HDR, устранение полос,
-  тональная компрессия HDR, «Плавное движение», свои шейдеры (`.glsl`/`.hook` в папке `shaders`).
-- **Аудио:** передача объёмного звука на ресивер (AC3, E-AC3, DTS, DTS-HD, TrueHD), монопольный режим
-  WASAPI, Replay Gain и выравнивание громкости вместе с эквалайзером, громкость до 200 %.
-- **Субтитры:** плашка, размытие, отступ, вывод в чёрных полосах, вторые субтитры сверху, живой образец
-  в настройках, поиск в OpenSubtitles (нужен свой ключ). Ссылки на YouTube и другие сайты — если `yt-dlp.exe` лежит рядом с Moonbow (Moonbow сам
-  ничего не скачивает).
-- **Медиатека:** главная (продолжить просмотр с «осталось N», следующая серия, недавние, частые папки
-  и плейлисты), видео по папкам с группировкой сериалов по сезонам, музыка (песни, альбомы с шапкой и
-  дисками, исполнители с альбомами, жанры), сетевые потоки и радио, плейлисты, история. Сетка или список
-  с заголовками колонок, сортировка, поиск по названиям, исполнителям и альбомам, значки «Новое» и
-  «Битый файл», полоса прогресса сканирования. Теги читает собственный быстрый парсер (MP3, FLAC, Ogg,
-  Opus, M4A, WAV, AIFF, APE, WavPack). Постеры и описания фильмов из TMDB — если включить и ввести свой
-  ключ. Файлы на диске Moonbow никогда не перемещает и не изменяет.
-- **Оформление:** тёмная, светлая и системная тема; скины «Чёрный OLED», «Высокий контраст», «Сепия»
-  или свой JSON-файл с перезагрузкой на лету (формат в `design/SKINS.md`).
-- **Настройки:** около 240 параметров с поиском, значения у ползунков, редактор горячих клавиш
-  (с раскладкой «как в YouTube»), сброс к значениям по умолчанию.
-- **Меню:** длинные меню прокручиваются, набор текста фильтрует пункты, в том числе в подменю
-  (Backspace, Esc — сброс).
-- **Система:** кнопки на превью в панели задач, медиаклавиши и карточка громкости Windows (SMTC), значок
-  в области уведомлений, ассоциации файлов (только по кнопке в настройках).
+Moonbow is free software under the [GNU General Public License v3.0 or later](LICENSE). It plays media through
+[mpv](https://mpv.io) (libmpv, built by [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake))
+and FFmpeg, and sets its text in Onest and Inter. Its interface started from
+[VLC Redesign](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) by Juxtopposed (CC BY 4.0),
+reworked into a monochrome player of its own. The full list with licenses and sources is in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The films, series and albums in the screenshots are made up;
+their frames and covers are photographs from Unsplash.
 
-## Горячие клавиши
-
-Полный список — по `F1`. Любую клавишу можно переназначить в «Настройки → Управление».
-
-| Действие | Клавиши |
-|---|---|
-| Пауза / воспроизведение | `Space`, клик по видео |
-| Стоп (на 0:00; Пробел продолжает с места остановки) / закрыть файл | `S` / `Ctrl+W` |
-| Перемотка 10 с / 3 с / 1 мин / 5 мин | `←/→`, `Shift+←/→`, `Ctrl+←/→`, `Ctrl+Shift+←/→` |
-| Кадр вперёд / назад | `.` / `,` |
-| Предыдущий / следующий файл | `P` / `N`, `PageUp` / `PageDown` |
-| Предыдущая / следующая глава | `Shift+PageUp` / `Shift+PageDown` |
-| С начала | `Home` |
-| Громкость / без звука | `↑/↓`, колесо над видео / `M` |
-| Скорость медленнее / быстрее / обычная | `[` / `]` / `Backspace` |
-| Повтор / перемешать / петля A-B | `L` / `H` / `Shift+L` |
-| Следующая аудиодорожка | `A` |
-| Следующие субтитры / показать или скрыть | `V` / `Shift+V` |
-| Задержка звука ±50 мс | `K` / `J` |
-| Задержка субтитров ±50 мс | `Shift+H` / `Shift+G` |
-| Слово в субтитрах (на паузе) | `W`, стрелки, `Enter` |
-| Полный экран / выход | `F`, `F11`, `Alt+Enter`, двойной клик / `Esc` |
-| Картинка в картинке | `Ctrl+Shift+P` |
-| Снимок кадра | `Ctrl+Shift+S` |
-| Запись потока | `Ctrl+Shift+R` |
-| Открыть файл / папку / сетевой поток | `Ctrl+O` / `Ctrl+Shift+O` / `Ctrl+N` |
-| Добавить субтитры | `Ctrl+Shift+L` |
-| Информация о файле / статистика поверх видео | `Ctrl+I` / `Ctrl+Shift+I` |
-| Очередь / боковая панель / поиск | `Ctrl+L` / `Ctrl+B` / `Ctrl+F`, `Ctrl+K` |
-| Назад / вперёд в медиатеке | `Alt+←` / `Alt+→` |
-| Настройки | `Ctrl+P`, `Ctrl+,` |
-| Выход | `Ctrl+Q` |
-
-## Где хранятся данные
-
-Всё лежит в `%APPDATA%\Moonbow`:
-
-| Файл | Что внутри |
-|---|---|
-| `settings.json` | настройки и переназначенные клавиши |
-| `ui.json` | состояние интерфейса: вид страниц, раскладка панели, размер окна |
-| `library.json`, `library-cache.json` | папки медиатеки и результаты сканирования |
-| `history.json` | история и позиции просмотра (отключается в «Конфиденциальности») |
-| `playlists.json`, `bookmarks.json`, `favorites.json` | плейлисты, закладки, избранное |
-| `subtitle-pairs.json` | запомненные пары «видео — файл субтитров» |
-| `file-settings.json` | настройки отдельных файлов (дорожки, задержки и т. п.) |
-| `online\` | кэш онлайн-функций (LRCLIB, OpenSubtitles, TMDB), если они включены |
-| `watch_later\` | позиции mpv для продолжения просмотра |
-| `mpv.conf` | необязательный конфиг mpv, читается при старте |
-| `*.corrupt-<время>.json` | копия файла, который не удалось прочитать; Moonbow начинает его заново и один раз сообщает об этом |
-
-Снимки кадров по умолчанию сохраняются в `Изображения\Moonbow`, записи — в `Видео\Moonbow`. Обе папки
-можно сменить в настройках.
-
-## Разработка
-
-- **Тестовый экземпляр** не мешает основному и не трогает ваши данные:
-
-  ```bash
-  powershell -File tools\dev\launch.ps1 -DataDir %TEMP%\moonbow-test -Fresh "D:\Видео\клип.mp4"
-  ```
-
-  Скрипт запускает Moonbow с флагами `--new-instance --automation --data-dir`, стартовой громкостью 0
-  и печатает PID. С `--automation` окна невидимы: они не появляются поверх других программ, не забирают
-  фокус и не открывают системных диалогов. Увидеть такое окно можно только через `capture.ps1`.
-- **Управление без мыши:** `tools\dev\input.ps1` (клики, клавиши, текст, `-Ctrl`/`-Shift`),
-  `tools\dev\capture.ps1` (скриншот окна в фоне), `tools\dev\dump-tree.ps1` (дерево виджетов с координатами).
-- **Тестовые медиа:** `bash qa/make-media.sh <папка>` генерирует через ffmpeg файлы с главами, дорожками,
-  субтитрами, тегами и битыми файлами.
-- **Ревью:** бриф и промпты для агентов-ревьюеров лежат в [qa/](qa).
-- **Замер запуска:** при заданной переменной `MOONBOW_TRACE=1` метки времени и раз в секунду статистика
-  кадров пишутся в `%TEMP%\moonbow-trace.txt`. Окно появляется через ~50 мс, первый кадр через 70–85 мс.
-  Скрипты замеров (старт, память, CPU, большая медиатека, прокрутка) лежат в [qa/perf/](qa/perf/README.md).
-
-## Лицензия
-
-GPL-3.0-or-later (используемые сборки libmpv распространяются под GPL).
+<br>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/moonbow-mark-dark.svg">
+    <img src="docs/images/moonbow-mark-light.svg" width="42" alt="">
+  </picture>
+</p>

@@ -1,0 +1,4294 @@
+{
+  "count": 253,
+  "valueCount": 236,
+  "hiddenCount": 58,
+  "pages": [
+    {
+      "id": "general",
+      "ru": "Общие",
+      "en": "General",
+      "group": "app",
+      "sections": [
+        {
+          "id": "language",
+          "ru": "Язык",
+          "en": "Language",
+          "settings": [
+            {
+              "key": "general.language",
+              "kind": "choice",
+              "ru": "Язык интерфейса",
+              "en": "Interface language",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Русский",
+                  "en": "Русский"
+                },
+                {
+                  "ru": "English",
+                  "en": "English"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "windows",
+          "ru": "Интеграция с Windows",
+          "en": "Windows integration",
+          "settings": [
+            {
+              "key": "general.fileAssociations",
+              "kind": "button",
+              "ru": "Открывать видео в Moonbow",
+              "en": "Open videos in Moonbow",
+              "descRu": "Видео будут открываться в Moonbow, музыка останется в прежней программе. Если Windows не разрешит, откроются «Приложения по умолчанию».",
+              "descEn": "Videos open in Moonbow; music stays with your music app. If Windows doesn't allow it, its Default apps page opens.",
+              "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "diagnostics",
+          "ru": "Диагностика",
+          "en": "Diagnostics",
+          "settings": [
+            {
+              "key": "general.developerMode",
+              "kind": "toggle",
+              "ru": "Статистика воспроизведения",
+              "en": "Playback statistics",
+              "descRu": "Показывать технические подробности поверх видео: декодер, работа без копирования, пропуски кадров, битрейт, кэш и синхронизацию (Ctrl+Shift+I).",
+              "descEn": "Show technical details over the video: decoder, zero-copy, frame drops, bitrate, cache and A/V sync (Ctrl+Shift+I).",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "general.openLogs",
+              "kind": "button",
+              "ru": "Журналы и отчёты о сбоях",
+              "en": "Logs and crash reports",
+              "descRu": "Moonbow ведёт короткий журнал, а после сбоя сохраняет отчёт. Всё остаётся на этом компьютере и никуда не отправляется. Чтобы сообщить о проблеме, пришлите файлы из этой папки.",
+              "descEn": "Moonbow keeps a short log and, after a crash, a report on this computer. Nothing is sent. To report a problem, send the files from this folder.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "general.saveLog",
+              "kind": "toggle",
+              "ru": "Подробный журнал воспроизведения",
+              "en": "Detailed playback log",
+              "descRu": "Дополнительно записывать всё, что сообщает mpv, в mpv.log. Пригодится, если файл играет неправильно; немного нагружает процессор.",
+              "descEn": "Also write everything mpv reports to mpv.log. Useful when a file plays wrong; costs a little CPU.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "general.logFile",
+              "kind": "path",
+              "ru": "Файл журнала",
+              "en": "Log file",
+              "descRu": "Куда записывать подробный журнал. Если пусто — mpv.log в папке журналов.",
+              "descEn": "Where the detailed log is written. Leave empty to use mpv.log in the logs folder.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "general.logLevel",
+              "kind": "choice",
+              "ru": "Подробность журнала",
+              "en": "Log details",
+              "descRu": "Сколько подробностей писать в журнал. Чем больше, тем быстрее растёт файл.",
+              "descEn": "How much detail goes into the log. More detail makes the file grow faster.",
+              "options": [
+                {
+                  "ru": "Только ошибки",
+                  "en": "Errors only"
+                },
+                {
+                  "ru": "Ошибки и предупреждения",
+                  "en": "Errors and warnings"
+                },
+                {
+                  "ru": "Информация",
+                  "en": "Information"
+                },
+                {
+                  "ru": "Всё (отладка)",
+                  "en": "Everything (debug)"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "general.extraOptions",
+              "kind": "text",
+              "ru": "Дополнительные параметры mpv",
+              "en": "Additional command line options",
+              "descRu": "Дополнительные параметры mpv, например --deband=yes --sub-ass-override=force. Применяются при следующем запуске.",
+              "descEn": "Extra mpv options, for example --deband=yes --sub-ass-override=force. Applied at the next start.",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "interface",
+      "ru": "Интерфейс",
+      "en": "Interface",
+      "group": "app",
+      "sections": [
+        {
+          "id": "appearance",
+          "ru": "Оформление",
+          "en": "Appearance",
+          "settings": [
+            {
+              "key": "general.theme",
+              "kind": "segmented",
+              "ru": "Тема",
+              "en": "Theme",
+              "descRu": "Светлая, тёмная или как в Windows. Скин «Чёрный OLED» всегда тёмный.",
+              "descEn": "Light, dark or the same as Windows. The OLED black skin is always dark.",
+              "options": [
+                {
+                  "ru": "Тёмная",
+                  "en": "Dark"
+                },
+                {
+                  "ru": "Светлая",
+                  "en": "Light"
+                },
+                {
+                  "ru": "Системная",
+                  "en": "System"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "general.accent",
+              "kind": "accentPicker",
+              "ru": "Цвет акцента",
+              "en": "Accent color",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Белый",
+                  "en": "White"
+                },
+                {
+                  "ru": "Жемчуг",
+                  "en": "Pearl"
+                },
+                {
+                  "ru": "Серебро",
+                  "en": "Silver"
+                },
+                {
+                  "ru": "Сталь",
+                  "en": "Steel"
+                },
+                {
+                  "ru": "Графит",
+                  "en": "Graphite"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.skin",
+              "kind": "choice",
+              "ru": "Скин",
+              "en": "Skin",
+              "descRu": "Цвета и скругления всего приложения. Меняются сразу во всех окнах.",
+              "descEn": "Colors and corner sizes of the whole app. Applies to every window at once.",
+              "options": [
+                {
+                  "ru": "Moonbow",
+                  "en": "Moonbow"
+                },
+                {
+                  "ru": "Чёрный OLED",
+                  "en": "OLED black"
+                },
+                {
+                  "ru": "Высокий контраст",
+                  "en": "High contrast"
+                },
+                {
+                  "ru": "Сепия",
+                  "en": "Sepia"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.customSkin",
+              "kind": "toggle",
+              "ru": "Использовать свой скин",
+              "en": "Use a custom skin",
+              "descRu": "Заменить встроенное оформление цветами и размерами из файла скина.",
+              "descEn": "Replace the built-in look with colors and sizes from a skin file.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.skinFile",
+              "kind": "path",
+              "ru": "Файл скина",
+              "en": "Skin file",
+              "descRu": "Скин Moonbow (.json), переопределяющий токены оформления. Moonbow перечитывает его при каждом изменении файла.",
+              "descEn": "A Moonbow skin (.json) that overrides design tokens. Moonbow reloads it when the file changes.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "window",
+          "ru": "Окно",
+          "en": "Window",
+          "settings": [
+            {
+              "key": "interface.autoResize",
+              "kind": "choice",
+              "ru": "Подгонять окно под видео",
+              "en": "Resize window to fit video",
+              "descRu": "Менять размер окна под видео при открытии файла (не больше 80% экрана).",
+              "descEn": "Change the window size to match the video when a file opens (up to 80% of the screen).",
+              "options": [
+                {
+                  "ru": "Никогда",
+                  "en": "Never"
+                },
+                {
+                  "ru": "Только для первого видео",
+                  "en": "Only for the first video"
+                },
+                {
+                  "ru": "Всегда",
+                  "en": "Always"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.rememberWindow",
+              "kind": "toggle",
+              "ru": "Запоминать размер и положение окна",
+              "en": "Remember window size and position",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "interface.alwaysOnTop",
+              "kind": "toggle",
+              "ru": "Поверх других окон",
+              "en": "Keep window above other windows",
+              "descRu": "Плеер остаётся впереди, даже когда активно другое приложение.",
+              "descEn": "Keep the player in front even when another app is active.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "interface.decorations",
+              "kind": "toggle",
+              "ru": "Показывать рамку окна",
+              "en": "Show window decorations",
+              "descRu": "Показывать заголовок и кнопки окна. Если выключить, останутся только видео и панель.",
+              "descEn": "Show the title bar and window buttons. When off, only the video and controls remain.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.titleFileName",
+              "kind": "toggle",
+              "ru": "Имя файла в заголовке",
+              "en": "Show the file name in the title bar",
+              "descRu": "Показывать имя текущего файла в заголовке окна и на панели задач.",
+              "descEn": "Show the name of the playing file in the title bar and on the taskbar.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.fullscreenScreen",
+              "kind": "choice",
+              "ru": "Полный экран на",
+              "en": "Open fullscreen on",
+              "descRu": "Какой монитор использовать для полного экрана, если их несколько.",
+              "descEn": "Which monitor to use for fullscreen when you have several.",
+              "options": [
+                {
+                  "ru": "Текущем экране",
+                  "en": "Current screen"
+                },
+                {
+                  "ru": "Основном экране",
+                  "en": "Primary screen"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "library.singleInstance",
+              "kind": "toggle",
+              "ru": "Только одно окно Moonbow",
+              "en": "Only allow one Moonbow window",
+              "descRu": "Открывать новые файлы в уже запущенном окне.",
+              "descEn": "Open new files in the window that is already running.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "library.enqueue",
+              "kind": "toggle",
+              "ru": "Добавлять в очередь, а не заменять",
+              "en": "Add to the queue instead of replacing it",
+              "descRu": "Файлы, открытые в запущенном окне, добавляются в конец очереди.",
+              "descEn": "Files opened in a running window are appended to the queue.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "controls",
+          "ru": "Панель управления",
+          "en": "Playback controls",
+          "settings": [
+            {
+              "key": "interface.autoHide",
+              "kind": "choice",
+              "ru": "Скрывать панель управления",
+              "en": "Auto-hide the controls",
+              "descRu": "Скрывать панель и указатель мыши, когда мышь не двигается во время воспроизведения.",
+              "descEn": "Hide the control bar and the mouse pointer when the mouse stops moving during playback.",
+              "options": [
+                {
+                  "ru": "Никогда",
+                  "en": "Never"
+                },
+                {
+                  "ru": "Только в полноэкранном режиме",
+                  "en": "In fullscreen only"
+                },
+                {
+                  "ru": "Всегда",
+                  "en": "Always"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "interface.barStyle",
+              "kind": "choice",
+              "ru": "Вид панели управления",
+              "en": "Control bar style",
+              "descRu": "Плавающая — скруглённая панель над видео в полноэкранном режиме. Минимальная — пауза, время и тонкая полоса перемотки.",
+              "descEn": "Floating: a rounded bar over the video in fullscreen. Minimal: play, time and a slim seek bar.",
+              "options": [
+                {
+                  "ru": "Плавающая",
+                  "en": "Floating"
+                },
+                {
+                  "ru": "Во всю ширину",
+                  "en": "Full width"
+                },
+                {
+                  "ru": "Минимальная",
+                  "en": "Minimal"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.hideDelay",
+              "kind": "slider",
+              "ru": "Скрывать через",
+              "en": "Hide after",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.controlsInFullscreen",
+              "kind": "toggle",
+              "ru": "Панель в полноэкранном режиме",
+              "en": "Show controls in fullscreen",
+              "descRu": "Показывать панель при движении мыши в полноэкранном режиме. Если выключить — только клавиатура.",
+              "descEn": "Show the control bar when you move the mouse in fullscreen. When off, use the keyboard only.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.thinProgress",
+              "kind": "choice",
+              "ru": "Тонкая полоска прогресса",
+              "en": "Thin progress line",
+              "descRu": "Показывать тонкую полоску прогресса внизу видео, пока панель управления скрыта.",
+              "descEn": "Show a thin progress line along the bottom of the video while the controls are hidden.",
+              "options": [
+                {
+                  "ru": "Никогда",
+                  "en": "Never"
+                },
+                {
+                  "ru": "В полноэкранном режиме",
+                  "en": "In fullscreen"
+                },
+                {
+                  "ru": "Всегда",
+                  "en": "Always"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.musicWave",
+              "kind": "toggle",
+              "ru": "Волна песни на полосе перемотки",
+              "en": "Song's wave on the seek bar",
+              "descRu": "Для музыки рисовать полосу перемотки как громкость песни. Если выключить — обычная полоса, как у видео.",
+              "descEn": "For music, draw the seek bar as the song's loudness. When off, it is a plain bar, as for video.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "windows",
+          "ru": "Отдельные окна",
+          "en": "Separate windows",
+          "settings": [
+            {
+              "key": "interface.controlsWindow",
+              "kind": "toggle",
+              "ru": "Управление плеером в отдельном окне",
+              "en": "Player controls in a separate window",
+              "descRu": "Маленькое окно: что играет, полоса перемотки (для музыки — волна песни), кнопки и громкость. Его можно поставить куда угодно, хоть на другой экран.",
+              "descEn": "A small window with what plays, the seek bar (the song's wave for music), the buttons and the volume. Put it anywhere, on another screen too.",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "interface.metersWindow",
+              "kind": "toggle",
+              "ru": "Индикаторы звука в отдельном окне",
+              "en": "Audio meters in a separate window",
+              "descRu": "VU-индикаторы, громкость в LUFS (EBU R128), уровни RMS и пиков, стереокартина и спектр звука самого Moonbow. Щелчок правой кнопкой по окну — выбрать, что в нём показывать.",
+              "descEn": "VU meters, loudness in LUFS (EBU R128), RMS and peak levels, the stereo image and the spectrum of Moonbow's own sound. Right-click the window to choose what it shows.",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        },
+        {
+          "id": "notifications",
+          "ru": "Уведомления и системный трей",
+          "en": "Notifications and system tray",
+          "settings": [
+            {
+              "key": "interface.osdMessages",
+              "kind": "toggle",
+              "ru": "Сообщения поверх видео",
+              "en": "Show on-screen messages",
+              "descRu": "Ненадолго показывать громкость, скорость и смену дорожек поверх видео.",
+              "descEn": "Briefly show volume, speed and track changes over the video.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.notifyTrackChange",
+              "kind": "toggle",
+              "ru": "Уведомлять о смене трека",
+              "en": "Notify when the track changes",
+              "descRu": "Показывать уведомление Windows с названием, когда начинается следующая песня.",
+              "descEn": "Show a Windows notification with the title when the next song starts.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.trayIcon",
+              "kind": "toggle",
+              "ru": "Значок в области уведомлений",
+              "en": "Show an icon in the system tray",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.minimizeToTray",
+              "kind": "toggle",
+              "ru": "Сворачивать в область уведомлений",
+              "en": "Minimize to the system tray",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.mediaControls",
+              "kind": "toggle",
+              "ru": "Медиаклавиши и плашка Windows",
+              "en": "Use Windows media controls",
+              "descRu": "Реагировать на медиаклавиши и показывать текущий файл в плашке громкости Windows.",
+              "descEn": "Respond to media keys and show the playing item in the Windows volume flyout.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "interface.taskbarProgress",
+              "kind": "toggle",
+              "ru": "Прогресс на кнопке в панели задач",
+              "en": "Show progress on the taskbar button",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "privacy",
+      "ru": "Конфиденциальность",
+      "en": "Privacy",
+      "group": "app",
+      "sections": [
+        {
+          "id": "history",
+          "ru": "История",
+          "en": "History",
+          "settings": [
+            {
+              "key": "privacy.saveHistory",
+              "kind": "toggle",
+              "ru": "Сохранять историю",
+              "en": "Save history",
+              "descRu": "Вести список открытых файлов для разделов «История», «Продолжить просмотр» и «Слушать снова».",
+              "descEn": "Keep a list of played files for History, Continue watching and Listen again.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "privacy.excludePatterns",
+              "kind": "text",
+              "ru": "Не запоминать файлы по маске",
+              "en": "Never remember items matching",
+              "descRu": "Файлы, подходящие под эти маски, не попадают в историю. Маски разделяются «;», например *\\Private\\*;*.tmp.mkv",
+              "descEn": "Files matching these patterns stay out of the history. Separate patterns with ';', for example *\\Private\\*;*.tmp.mkv",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "privacy.clearHistory",
+              "kind": "button",
+              "ru": "Очистить историю",
+              "en": "Clear history now",
+              "descRu": "Забыть все недавние файлы, сохранённые позиции, настройки отдельных файлов и данные онлайн-сервисов (постеры, описания, тексты песен). Отменить нельзя.",
+              "descEn": "Forget all recently played items, saved positions, per-file settings and online data (posters, descriptions, lyrics). This cannot be undone.",
+              "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "online",
+          "ru": "Онлайн-сервисы",
+          "en": "Online services",
+          "settings": [
+            {
+              "key": "privacy.fetchLyrics",
+              "kind": "toggle",
+              "ru": "Искать тексты песен в интернете (LRCLIB)",
+              "en": "Search for song lyrics online (LRCLIB)",
+              "descRu": "Если у песни нет своего текста (ни файла .lrc, ни тега), её исполнитель, название, альбом и длительность отправляются на lrclib.net. Найденный текст хранится на этом компьютере, сохранить его как .lrc можно вручную.",
+              "descEn": "When a song has no lyrics of its own (no .lrc file, no lyrics tag), its artist, title, album and length are sent to lrclib.net. Found lyrics are kept on this computer; saving them as .lrc is up to you.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "privacy.onlineSubtitles",
+              "kind": "toggle",
+              "ru": "Искать субтитры в интернете (OpenSubtitles)",
+              "en": "Search for subtitles online (OpenSubtitles)",
+              "descRu": "Добавляет «Найти в интернете» в окно «Добавить субтитры» и в панель субтитров. Только когда вы ищете: хеш видео (по первым и последним 64 КБ), его имя, сезон, серия и ваши языки субтитров отправляются на opensubtitles.com.",
+              "descEn": "Adds \"Find online\" to Add Subtitles and the subtitle panel. Only when you search: the video's hash (from its first and last 64 KB), its name, season, episode and your subtitle languages are sent to opensubtitles.com.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "privacy.opensubtitlesKey",
+              "kind": "text",
+              "ru": "Ключ API OpenSubtitles",
+              "en": "OpenSubtitles API key",
+              "descRu": "Бесплатно: войдите на opensubtitles.com, откройте профиль, затем API Consumers, и создайте ключ. Ключ хранится зашифрованным для вашей учётной записи Windows.",
+              "descEn": "Free: sign in at opensubtitles.com, open your profile, then API Consumers, and create one. The key is stored encrypted for your Windows account.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "privacy.opensubtitlesUser",
+              "kind": "text",
+              "ru": "Имя пользователя OpenSubtitles",
+              "en": "OpenSubtitles user name",
+              "descRu": "С вашей учётной записью дневной лимит загрузок выше. Без неё загрузки считаются по ключу.",
+              "descEn": "With your account the daily download limit is higher. Without it, downloads count against the key.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "privacy.opensubtitlesPassword",
+              "kind": "text",
+              "ru": "Пароль OpenSubtitles",
+              "en": "OpenSubtitles password",
+              "descRu": "Передаётся только на opensubtitles.com для входа, хранится зашифрованным.",
+              "descEn": "Sent only to opensubtitles.com to sign in, stored encrypted.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "privacy.fetchMetadata",
+              "kind": "toggle",
+              "ru": "Загружать постеры и описания фильмов и сериалов (TMDB)",
+              "en": "Fetch posters and descriptions of movies and series (TMDB)",
+              "descRu": "Для видео, названных как фильм с годом или как серия (S01E02), название, год, сезон и серия отправляются на themoviedb.org, постеры загружаются с image.tmdb.org. This product uses the TMDB API but is not endorsed or certified by TMDB (Moonbow использует API TMDB, но не одобрен и не сертифицирован TMDB).",
+              "descEn": "For videos named like a movie with its year or like an episode (S01E02), the title, year, season and episode are sent to themoviedb.org; posters come from image.tmdb.org. This product uses the TMDB API but is not endorsed or certified by TMDB.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "privacy.tmdbKey",
+              "kind": "text",
+              "ru": "Ключ API TMDB",
+              "en": "TMDB API key",
+              "descRu": "Бесплатно: зарегистрируйтесь на themoviedb.org, откройте Settings, затем API, и запросите ключ. Подойдёт и API Key, и API Read Access Token. Хранится зашифрованным для вашей учётной записи Windows.",
+              "descEn": "Free: create an account at themoviedb.org, then Settings, API, and request a key. Either the API key or the API Read Access Token works. Stored encrypted for your Windows account.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "privacy.clearOnline",
+              "kind": "button",
+              "ru": "Загруженные тексты, постеры и результаты поиска",
+              "en": "Downloaded lyrics, posters and search results",
+              "descRu": "Удалить всё, что прислали онлайн-сервисы. Скачанные вами субтитры остаются. Очистка истории делает то же самое.",
+              "descEn": "Delete what the online services sent. Subtitle files you downloaded stay. Clearing the history does this too.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "controls",
+      "ru": "Управление",
+      "en": "Controls",
+      "group": "app",
+      "sections": [
+        {
+          "id": "shortcuts",
+          "ru": "Сочетания клавиш",
+          "en": "Keyboard shortcuts",
+          "settings": [
+            {
+              "key": "controls.editShortcuts",
+              "kind": "button",
+              "ru": "Список сочетаний",
+              "en": "Shortcut list",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "controls.resetShortcuts",
+              "kind": "button",
+              "ru": "Сбросить все сочетания",
+              "en": "Reset all shortcuts",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "skip",
+          "ru": "Шаг перемотки",
+          "en": "Skip amounts",
+          "settings": [
+            {
+              "key": "controls.skipVeryShort",
+              "kind": "number",
+              "ru": "Очень короткий",
+              "en": "Very short skip",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.skipShort",
+              "kind": "number",
+              "ru": "Короткий",
+              "en": "Short skip",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.skipMedium",
+              "kind": "number",
+              "ru": "Средний",
+              "en": "Medium skip",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.skipLong",
+              "kind": "number",
+              "ru": "Длинный (Ctrl+Shift+стрелки)",
+              "en": "Long skip (Ctrl+Shift+arrows)",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gestures",
+      "ru": "Жесты",
+      "en": "Gestures",
+      "group": "app",
+      "sections": [
+        {
+          "id": "mouse",
+          "ru": "Мышь над видео",
+          "en": "Mouse over the video",
+          "settings": [
+            {
+              "key": "controls.singleClick",
+              "kind": "choice",
+              "ru": "Одиночный щелчок по видео",
+              "en": "Single click on the video",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Пауза / продолжить",
+                  "en": "Play / Pause"
+                },
+                {
+                  "ru": "Показать панель",
+                  "en": "Show controls"
+                },
+                {
+                  "ru": "Ничего",
+                  "en": "Do nothing"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.doubleClick",
+              "kind": "choice",
+              "ru": "Двойной щелчок по видео",
+              "en": "Double click on the video",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Полный экран",
+                  "en": "Toggle fullscreen"
+                },
+                {
+                  "ru": "Пауза / продолжить",
+                  "en": "Play / Pause"
+                },
+                {
+                  "ru": "Ничего",
+                  "en": "Do nothing"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "controls.doubleClickEdges",
+              "kind": "toggle",
+              "ru": "Двойной щелчок у левого или правого края перематывает",
+              "en": "Double click near the left or right edge seeks",
+              "descRu": "Назад или вперёд на короткий шаг, как на YouTube; следующие щелчки там же перематывают дальше.",
+              "descEn": "Back or forward by the short skip, as on YouTube; more clicks there go on seeking.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.dragWindow",
+              "kind": "toggle",
+              "ru": "Перетаскивание видео двигает окно",
+              "en": "Drag the video to move the window",
+              "descRu": "Возьмитесь за картинку в любом месте и перетащите окно, как в Media Player Classic.",
+              "descEn": "Grab the picture anywhere and move the window, as in Media Player Classic.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.holdSpeed",
+              "kind": "toggle",
+              "ru": "Удержание — скорость 2×",
+              "en": "Press and hold for 2× speed",
+              "descRu": "Пока левая кнопка зажата на видео, оно идёт вдвое быстрее.",
+              "descEn": "Hold the left button on the video to play twice as fast until you let go.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.middleClick",
+              "kind": "toggle",
+              "ru": "Средняя кнопка — полный экран",
+              "en": "Middle click toggles fullscreen",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.sideButtons",
+              "kind": "toggle",
+              "ru": "Боковые кнопки — предыдущий или следующий файл",
+              "en": "Side buttons go to the previous or next file",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.wheel",
+              "kind": "choice",
+              "ru": "Колесо мыши",
+              "en": "Scroll wheel",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Громкость",
+                  "en": "Volume"
+                },
+                {
+                  "ru": "Перемотка",
+                  "en": "Seek"
+                },
+                {
+                  "ru": "Ничего",
+                  "en": "Do nothing"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "controls.hwheel",
+              "kind": "choice",
+              "ru": "Горизонтальная прокрутка",
+              "en": "Horizontal scroll",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Перемотка",
+                  "en": "Seek"
+                },
+                {
+                  "ru": "Громкость",
+                  "en": "Volume"
+                },
+                {
+                  "ru": "Ничего",
+                  "en": "Do nothing"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "controls.reverseScroll",
+              "kind": "toggle",
+              "ru": "Обратное направление прокрутки",
+              "en": "Reverse scroll direction",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "playback",
+      "ru": "Воспроизведение",
+      "en": "Playback",
+      "group": "media",
+      "sections": [
+        {
+          "id": "startup",
+          "ru": "Запуск",
+          "en": "Startup",
+          "settings": [
+            {
+              "key": "playback.resume",
+              "kind": "choice",
+              "ru": "Продолжать с места остановки",
+              "en": "Continue where you left off",
+              "descRu": "Продолжать файл с сохранённого места. «Спрашивать» — предложить это в сообщении.",
+              "descEn": "Resume a file from the saved position. \"Ask\" offers to resume in a message instead.",
+              "options": [
+                {
+                  "ru": "Всегда",
+                  "en": "Always"
+                },
+                {
+                  "ru": "Спрашивать",
+                  "en": "Ask"
+                },
+                {
+                  "ru": "Никогда",
+                  "en": "Never"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "privacy.rememberPosition",
+              "kind": "toggle",
+              "ru": "Сохранять место остановки",
+              "en": "Save the playback position",
+              "descRu": "Запоминать, где вы остановились в каждом файле, чтобы продолжить с этого места.",
+              "descEn": "Save where you stopped in each file, so that it can continue from there.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.autoPlay",
+              "kind": "toggle",
+              "ru": "Начинать воспроизведение сразу",
+              "en": "Start playing as soon as a file opens",
+              "descRu": "Если выключено, файл открывается на паузе на первом кадре.",
+              "descEn": "When off, files open paused on the first frame.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.speed",
+              "kind": "slider",
+              "ru": "Скорость по умолчанию",
+              "en": "Default playback speed",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "tracks",
+          "ru": "Дорожки",
+          "en": "Tracks",
+          "settings": [
+            {
+              "key": "playback.videoQuality",
+              "kind": "choice",
+              "ru": "Предпочтительное качество",
+              "en": "Preferred video quality",
+              "descRu": "Максимальное разрешение при открытии видео с сайтов.",
+              "descEn": "Highest resolution to request from online video sites.",
+              "options": [
+                {
+                  "ru": "Лучшее доступное",
+                  "en": "Best available"
+                },
+                {
+                  "ru": "До 2160p",
+                  "en": "Up to 2160p"
+                },
+                {
+                  "ru": "До 1440p",
+                  "en": "Up to 1440p"
+                },
+                {
+                  "ru": "До 1080p",
+                  "en": "Up to 1080p"
+                },
+                {
+                  "ru": "До 720p",
+                  "en": "Up to 720p"
+                },
+                {
+                  "ru": "До 480p",
+                  "en": "Up to 480p"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.audioTrack",
+              "kind": "number",
+              "ru": "Аудиодорожка по умолчанию",
+              "en": "Default audio track",
+              "descRu": "С какой дорожки начинать. 0 — выбрать автоматически по предпочтительному языку.",
+              "descEn": "Track number to start with. 0 picks automatically by the preferred language.",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "playback.subtitleTrack",
+              "kind": "number",
+              "ru": "Дорожка субтитров по умолчанию",
+              "en": "Default subtitle track",
+              "descRu": "С какой дорожки субтитров начинать. 0 — выбрать автоматически по предпочтительному языку.",
+              "descEn": "Subtitle track number to start with. 0 picks automatically by the preferred language.",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        },
+        {
+          "id": "perFile",
+          "ru": "Настройки для каждого файла",
+          "en": "Per-file settings",
+          "settings": [
+            {
+              "key": "playback.perFile",
+              "kind": "toggle",
+              "ru": "Запоминать настройки для каждого файла",
+              "en": "Remember settings for each file",
+              "descRu": "Выбранные аудиодорожка и субтитры и их задержки вернутся, когда файл откроется снова.",
+              "descEn": "The audio and subtitle tracks you pick and their delays come back the next time the file opens.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.perFileAll",
+              "kind": "toggle",
+              "ru": "Запоминать также скорость, изображение и положение субтитров",
+              "en": "Also remember speed, picture and subtitle position",
+              "descRu": "Скорость, соотношение сторон, масштаб, поворот, отражение, деинтерлейсинг, повтор A-B, положение и размер субтитров тоже запоминаются для каждого файла. Тогда каждый файл начинается со своих значений или со значений по умолчанию.",
+              "descEn": "Speed, aspect ratio, zoom, rotation, flip, deinterlacing, the A-B loop and the subtitle position and size are kept per file too. Every file then starts with its own values or the defaults.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "order",
+          "ru": "Порядок",
+          "en": "Order",
+          "settings": [
+            {
+              "key": "playback.repeat",
+              "kind": "choice",
+              "ru": "Повтор",
+              "en": "Repeat",
+              "descRu": "Повторять текущий файл или всю очередь после окончания.",
+              "descEn": "Play the current file or the whole queue again when it ends.",
+              "options": [
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                },
+                {
+                  "ru": "Текущий файл",
+                  "en": "Current item"
+                },
+                {
+                  "ru": "Все файлы",
+                  "en": "All items"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "playback.shuffle",
+              "kind": "toggle",
+              "ru": "Перемешать",
+              "en": "Shuffle",
+              "descRu": "Воспроизводить очередь в случайном порядке.",
+              "descEn": "Play the queue in random order.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "playback.folderAsPlaylist",
+              "kind": "toggle",
+              "ru": "Играть остальные файлы папки",
+              "en": "Play the folder's other files next",
+              "descRu": "Открытый файл ставит в очередь соседние файлы, а сериал сам переходит к следующей серии. Если выключено, играет только этот файл; чтобы играло больше, соберите очередь или плейлист.",
+              "descEn": "Opening one file queues the files next to it, and a series goes on to the next episode by itself. Off: only that file plays; build a queue or a playlist to play more.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "playback.folderOrder",
+              "kind": "choice",
+              "ru": "Порядок файлов папки",
+              "en": "Order of the folder's files",
+              "descRu": "Очередь открытого файла или папки. «Как в Проводнике» берёт сортировку открытого окна Проводника с этой папкой (по дате, размеру или названию), а без такого окна — по названию.",
+              "descEn": "The queue of an opened file or folder. \"As in Explorer\" takes the sorting of the open Explorer window showing that folder (date, size or name), otherwise by name.",
+              "options": [
+                {
+                  "ru": "Как в Проводнике",
+                  "en": "As in Explorer"
+                },
+                {
+                  "ru": "По названию",
+                  "en": "By name"
+                },
+                {
+                  "ru": "По названию, в обратном порядке",
+                  "en": "By name, descending"
+                },
+                {
+                  "ru": "Сначала новые",
+                  "en": "Newest first"
+                },
+                {
+                  "ru": "Сначала старые",
+                  "en": "Oldest first"
+                },
+                {
+                  "ru": "Сначала большие",
+                  "en": "Largest first"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.stopAfterEach",
+              "kind": "toggle",
+              "ru": "Останавливаться после каждого файла",
+              "en": "Stop after each item",
+              "descRu": "Ставить на паузу в конце каждого файла, а не переходить к следующему.",
+              "descEn": "Pause at the end of every file instead of moving to the next one.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.whenFinished",
+              "kind": "choice",
+              "ru": "По окончании воспроизведения",
+              "en": "When playback finishes",
+              "descRu": "Что делать после последнего файла очереди.",
+              "descEn": "What to do after the last item of the queue.",
+              "options": [
+                {
+                  "ru": "Остановить",
+                  "en": "Stop"
+                },
+                {
+                  "ru": "Следующий файл в папке",
+                  "en": "Play the next file in the folder"
+                },
+                {
+                  "ru": "Закрыть плеер",
+                  "en": "Close the player"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "seeking",
+          "ru": "Перемотка",
+          "en": "Seeking",
+          "settings": [
+            {
+              "key": "playback.seekPrecise",
+              "kind": "toggle",
+              "ru": "Точная перемотка",
+              "en": "Seek precisely",
+              "descRu": "Переходить точно на нужный кадр. Без этого быстрее, но переход идёт к ближайшему ключевому кадру.",
+              "descEn": "Jump to the exact frame. Off is faster but lands on the nearest keyframe.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "playback.seekPreview",
+              "kind": "toggle",
+              "ru": "Превью кадра над полосой перемотки",
+              "en": "Show a preview over the seek bar",
+              "descRu": "Показывать маленький кадр при наведении на полосу перемотки.",
+              "descEn": "Show a small frame preview while hovering the seek bar.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "ru": "Видео",
+      "en": "Video",
+      "group": "media",
+      "sections": [
+        {
+          "id": "output",
+          "ru": "Вывод",
+          "en": "Output",
+          "settings": [
+            {
+              "key": "video.enabled",
+              "kind": "toggle",
+              "ru": "Показывать видео",
+              "en": "Enable video",
+              "descRu": "Выключите, чтобы у видеофайлов играл только звук.",
+              "descEn": "Turn off to play only the sound of video files.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.startFullscreen",
+              "kind": "toggle",
+              "ru": "Открывать видео на весь экран",
+              "en": "Start videos in fullscreen",
+              "descRu": "Переходить в полноэкранный режим при запуске видео.",
+              "descEn": "Switch to fullscreen as soon as a video starts.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "video.stopScreensaver",
+              "kind": "toggle",
+              "ru": "Отключать заставку при просмотре",
+              "en": "Stop the screensaver during playback",
+              "descRu": "Не давать экрану гаснуть, пока идёт видео.",
+              "descEn": "Keep the screen on while a video is playing.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.hdr",
+              "kind": "choice",
+              "ru": "Вывод HDR",
+              "en": "HDR output",
+              "descRu": "«Авто» передаёт HDR на дисплей, если в Windows включён HDR, иначе приводит картинку к SDR.",
+              "descEn": "Auto sends HDR to the display when Windows HDR is on and tone-maps to SDR otherwise.",
+              "options": [
+                {
+                  "ru": "Авто",
+                  "en": "Auto"
+                },
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                },
+                {
+                  "ru": "HDR10",
+                  "en": "HDR10"
+                },
+                {
+                  "ru": "HDR10+",
+                  "en": "HDR10+"
+                },
+                {
+                  "ru": "Dolby Vision",
+                  "en": "Dolby Vision"
+                },
+                {
+                  "ru": "HLG",
+                  "en": "HLG"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "quality",
+          "ru": "Качество изображения",
+          "en": "Image quality",
+          "settings": [
+            {
+              "key": "video.quality",
+              "kind": "choice",
+              "ru": "Пресет",
+              "en": "Preset",
+              "descRu": "Пресет качества изображения: как видеокарта масштабирует и обрабатывает картинку. «Быстро» подходит слабым ноутбукам и работе от батареи; для «Максимума» в 4K нужна дискретная видеокарта.",
+              "descEn": "Image quality preset: how the picture is scaled and processed on the graphics card. Fast suits weak or battery-powered laptops; High quality needs a dedicated graphics card for 4K.",
+              "options": [
+                {
+                  "ru": "Быстро",
+                  "en": "Fast"
+                },
+                {
+                  "ru": "Сбалансированно",
+                  "en": "Balanced"
+                },
+                {
+                  "ru": "Максимум",
+                  "en": "High quality"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "video.upscaler",
+              "kind": "choice",
+              "ru": "Способ увеличения",
+              "en": "Upscaling method",
+              "descRu": "Фильтр, которым увеличиваются видео меньше окна.",
+              "descEn": "Filter used to enlarge videos smaller than the window.",
+              "options": [
+                {
+                  "ru": "По настройке качества",
+                  "en": "From the quality setting"
+                },
+                {
+                  "ru": "Билинейный (самый быстрый)",
+                  "en": "Bilinear (fastest)"
+                },
+                {
+                  "ru": "Spline36",
+                  "en": "Spline36"
+                },
+                {
+                  "ru": "Lanczos",
+                  "en": "Lanczos"
+                },
+                {
+                  "ru": "EWA Lanczos",
+                  "en": "EWA Lanczos"
+                },
+                {
+                  "ru": "EWA Lanczos Sharp (лучший)",
+                  "en": "EWA Lanczos Sharp (best)"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.superResolution",
+              "kind": "toggle",
+              "ru": "Увеличение с помощью ИИ (NVIDIA RTX / Intel)",
+              "en": "AI upscaling (NVIDIA RTX / Intel)",
+              "descRu": "Увеличивать видео низкого разрешения через Video Super Resolution видеокарты. Нужна NVIDIA RTX или Intel Arc / Core Ultra и аппаратное декодирование Direct3D 11.",
+              "descEn": "Enlarge low-resolution video with the graphics card's Video Super Resolution. Needs an NVIDIA RTX or Intel Arc / Core Ultra GPU and Direct3D 11 hardware decoding.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "video.trueHdr",
+              "kind": "toggle",
+              "ru": "HDR из SDR (NVIDIA RTX Video HDR)",
+              "en": "NVIDIA RTX Video HDR",
+              "descRu": "Превращать SDR-видео в HDR на видеокартах NVIDIA RTX. Нужны включённый HDR в Windows и аппаратное декодирование Direct3D 11.",
+              "descEn": "Turn SDR video into HDR on NVIDIA RTX cards. Needs Windows HDR on and Direct3D 11 hardware decoding.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.deband",
+              "kind": "toggle",
+              "ru": "Сглаживать градиенты (дебандинг)",
+              "en": "Smooth gradients (debanding)",
+              "descRu": "Сглаживает ступеньки в градиентах (небо, тёмные сцены).",
+              "descEn": "Smooth out color banding in gradients (skies, dark scenes).",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.debandRange",
+              "kind": "slider",
+              "ru": "Радиус сглаживания",
+              "en": "Smoothing radius",
+              "descRu": "Как далеко искать ступеньки. Для большинства видео подходит 16.",
+              "descEn": "How far debanding looks for steps. 16 suits most videos.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.filmGrain",
+              "kind": "slider",
+              "ru": "Маскирующее зерно",
+              "en": "Masking grain",
+              "descRu": "Зерно, которое добавляется после сглаживания, чтобы скрыть остатки ступенек.",
+              "descEn": "Grain added after smoothing to hide the remaining steps.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "tonemapping",
+          "ru": "Яркость и цвета HDR",
+          "en": "HDR brightness and color",
+          "settings": [
+            {
+              "key": "video.toneMapping",
+              "kind": "choice",
+              "ru": "Подгонка яркости (тональная компрессия)",
+              "en": "Brightness fitting (tone mapping)",
+              "descRu": "Как яркость HDR укладывается в возможности экрана.",
+              "descEn": "How HDR brightness is fitted to a screen that can't show all of it.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "BT.2390",
+                  "en": "BT.2390"
+                },
+                {
+                  "ru": "BT.2446a",
+                  "en": "BT.2446a"
+                },
+                {
+                  "ru": "Spline",
+                  "en": "Spline"
+                },
+                {
+                  "ru": "ST 2094-40 (HDR10+)",
+                  "en": "ST 2094-40 (HDR10+)"
+                },
+                {
+                  "ru": "Hable (кинематографичная)",
+                  "en": "Hable (filmic)"
+                },
+                {
+                  "ru": "Mobius",
+                  "en": "Mobius"
+                },
+                {
+                  "ru": "Reinhard",
+                  "en": "Reinhard"
+                },
+                {
+                  "ru": "Обрезка",
+                  "en": "Clip"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.gamutMapping",
+              "kind": "choice",
+              "ru": "Подгонка цветов (цветовой охват)",
+              "en": "Color fitting (gamut mapping)",
+              "descRu": "Как широкий цветовой охват укладывается в экран.",
+              "descEn": "How wide-gamut colors are fitted to the screen.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Перцептивное",
+                  "en": "Perceptual"
+                },
+                {
+                  "ru": "Относительное колориметрическое",
+                  "en": "Relative colorimetric"
+                },
+                {
+                  "ru": "Насыщенность",
+                  "en": "Saturation"
+                },
+                {
+                  "ru": "Обесцвечивание",
+                  "en": "Desaturate"
+                },
+                {
+                  "ru": "Обрезка",
+                  "en": "Clip"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.hdrComputePeak",
+              "kind": "choice",
+              "ru": "Измерять яркость сцены",
+              "en": "Measure scene brightness",
+              "descRu": "Анализировать яркость каждого кадра, чтобы точнее подгонять яркость. Немного нагружает видеокарту.",
+              "descEn": "Analyze each frame's brightness to fit it more accurately. Costs some GPU time.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Вкл.",
+                  "en": "On"
+                },
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.targetPeak",
+              "kind": "number",
+              "ru": "Пиковая яркость экрана",
+              "en": "Display peak brightness",
+              "descRu": "Самый яркий белый, который может показать экран. 0 — определить автоматически.",
+              "descEn": "Brightest white your screen can show. 0 detects it automatically.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "motion",
+          "ru": "Движение",
+          "en": "Motion",
+          "settings": [
+            {
+              "key": "video.smoothMotion",
+              "kind": "toggle",
+              "ru": "Плавное движение",
+              "en": "Smooth motion",
+              "descRu": "Подстраивать видео под частоту экрана и смешивать кадры, чтобы фильмы 24 кадр/с без рывков шли на экранах 60 Гц.",
+              "descEn": "Sync video to the display and blend frames, so 24 fps films pan without judder on 60 Hz screens.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.motionBlend",
+              "kind": "choice",
+              "ru": "Смешивание кадров",
+              "en": "Frame blending",
+              "descRu": "«Чёткое» сохраняет резкость и смешивает кадры только на стыках; «Мягкое» смешивает сильнее и выглядит плавнее.",
+              "descEn": "Sharp keeps frames crisp and blends only at their edges; Soft blends more and looks smoother.",
+              "options": [
+                {
+                  "ru": "Чёткое",
+                  "en": "Sharp"
+                },
+                {
+                  "ru": "Мягкое",
+                  "en": "Soft"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "shaders",
+          "ru": "Шейдеры",
+          "en": "Shaders",
+          "settings": [
+            {
+              "key": "video.shaders",
+              "kind": "text",
+              "ru": "Свои шейдеры",
+              "en": "Custom shaders",
+              "descRu": "Файлы шейдеров (.glsl, .hook) из папки shaders в %APPDATA%\\Moonbow. Положите файлы туда и включайте их здесь или в быстрых настройках плеера.",
+              "descEn": "Shader files (.glsl, .hook) from the shaders folder in %APPDATA%\\Moonbow. Put files there and turn them on here or in the player's quick settings.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "picture",
+          "ru": "Изображение",
+          "en": "Picture",
+          "settings": [
+            {
+              "key": "video.hue",
+              "kind": "slider",
+              "ru": "Оттенок",
+              "en": "Hue",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.brightness",
+              "kind": "slider",
+              "ru": "Яркость",
+              "en": "Brightness",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.contrast",
+              "kind": "slider",
+              "ru": "Контраст",
+              "en": "Contrast",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.saturation",
+              "kind": "slider",
+              "ru": "Насыщенность",
+              "en": "Saturation",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.gamma",
+              "kind": "slider",
+              "ru": "Гамма",
+              "en": "Gamma",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.sharpen",
+              "kind": "slider",
+              "ru": "Резкость",
+              "en": "Sharpen",
+              "descRu": "Адаптивное повышение резкости на видеокарте. 0 — выключено.",
+              "descEn": "Contrast-adaptive sharpening on the graphics card. 0 turns it off.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.resetPicture",
+              "kind": "button",
+              "ru": "Сбросить изображение",
+              "en": "Reset picture",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "deinterlacing",
+          "ru": "Чересстрочное видео",
+          "en": "Interlaced video",
+          "settings": [
+            {
+              "key": "video.deinterlace",
+              "kind": "choice",
+              "ru": "Убирать гребёнку (деинтерлейсинг)",
+              "en": "Remove comb lines (deinterlacing)",
+              "descRu": "Убирает «гребёнку» в чересстрочном видео (записи ТВ, DVD). «Автоматически» — только для чересстрочных кадров.",
+              "descEn": "Remove comb lines from interlaced video (TV recordings, DVDs). Automatic applies it only to interlaced frames.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Вкл.",
+                  "en": "On"
+                },
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.deinterlaceMethod",
+              "kind": "choice",
+              "ru": "Метод",
+              "en": "Method",
+              "descRu": "Видеокарта устраняет чересстрочность без нагрузки на процессор. Bwdif и Yadif работают на процессоре и копируют каждый кадр в память.",
+              "descEn": "The graphics card deinterlaces without extra CPU load. Bwdif and Yadif run on the processor and copy every frame to memory.",
+              "options": [
+                {
+                  "ru": "Видеокарта (рекомендуется)",
+                  "en": "Graphics card (recommended)"
+                },
+                {
+                  "ru": "Bwdif (нагружает процессор)",
+                  "en": "Bwdif (CPU-heavy)"
+                },
+                {
+                  "ru": "Yadif (нагружает процессор)",
+                  "en": "Yadif (CPU-heavy)"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "framing",
+          "ru": "Кадрирование",
+          "en": "Framing",
+          "settings": [
+            {
+              "key": "video.aspect",
+              "kind": "choice",
+              "ru": "Соотношение сторон",
+              "en": "Aspect ratio",
+              "descRu": "Принудительная форма кадра, если файл сообщает неправильную.",
+              "descEn": "Force a picture shape when a file reports the wrong one.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "16:9",
+                  "en": "16:9"
+                },
+                {
+                  "ru": "4:3",
+                  "en": "4:3"
+                },
+                {
+                  "ru": "21:9",
+                  "en": "21:9"
+                },
+                {
+                  "ru": "2.35:1",
+                  "en": "2.35:1"
+                },
+                {
+                  "ru": "16:10",
+                  "en": "16:10"
+                },
+                {
+                  "ru": "5:4",
+                  "en": "5:4"
+                },
+                {
+                  "ru": "1:1",
+                  "en": "1:1"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.crop",
+              "kind": "choice",
+              "ru": "Обрезка",
+              "en": "Crop",
+              "descRu": "Убрать чёрные полосы или обрезать кадр до нужной формы.",
+              "descEn": "Cut black bars or crop the picture to a shape.",
+              "options": [
+                {
+                  "ru": "Нет",
+                  "en": "None"
+                },
+                {
+                  "ru": "16:9",
+                  "en": "16:9"
+                },
+                {
+                  "ru": "4:3",
+                  "en": "4:3"
+                },
+                {
+                  "ru": "21:9",
+                  "en": "21:9"
+                },
+                {
+                  "ru": "2.35:1",
+                  "en": "2.35:1"
+                },
+                {
+                  "ru": "Своя",
+                  "en": "Custom"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.cropTop",
+              "kind": "number",
+              "ru": "Сверху",
+              "en": "Top",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.cropBottom",
+              "kind": "number",
+              "ru": "Снизу",
+              "en": "Bottom",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.cropLeft",
+              "kind": "number",
+              "ru": "Слева",
+              "en": "Left",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.cropRight",
+              "kind": "number",
+              "ru": "Справа",
+              "en": "Right",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.keepAspect",
+              "kind": "toggle",
+              "ru": "Сохранять пропорции при изменении окна",
+              "en": "Keep aspect ratio when resizing",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "screenshots",
+          "ru": "Скриншоты",
+          "en": "Screenshots",
+          "settings": [
+            {
+              "key": "video.screenshotDir",
+              "kind": "path",
+              "ru": "Папка для скриншотов",
+              "en": "Save screenshots to",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "video.screenshotFormat",
+              "kind": "choice",
+              "ru": "Формат скриншотов",
+              "en": "Screenshot format",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "PNG",
+                  "en": "PNG"
+                },
+                {
+                  "ru": "JPEG",
+                  "en": "JPEG"
+                },
+                {
+                  "ru": "WebP",
+                  "en": "WebP"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.screenshotQuality",
+              "kind": "slider",
+              "ru": "Качество JPEG",
+              "en": "JPEG quality",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.screenshotSubtitles",
+              "kind": "toggle",
+              "ru": "Вместе с субтитрами",
+              "en": "Include subtitles",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "video.screenshotTemplate",
+              "kind": "text",
+              "ru": "Шаблон имени файла",
+              "en": "File name template",
+              "descRu": "Шаблон mpv: %F — имя файла, %P — время с миллисекундами, %n — счётчик.",
+              "descEn": "mpv template: %F is the file name, %P the time with milliseconds, %n a counter.",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "audio",
+      "ru": "Аудио",
+      "en": "Audio",
+      "group": "media",
+      "sections": [
+        {
+          "id": "output",
+          "ru": "Вывод",
+          "en": "Output",
+          "settings": [
+            {
+              "key": "audio.enabled",
+              "kind": "toggle",
+              "ru": "Включить звук",
+              "en": "Enable audio",
+              "descRu": "Выключите, чтобы смотреть видео без звука.",
+              "descEn": "Turn off to play video without sound.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.device",
+              "kind": "choice",
+              "ru": "Устройство вывода",
+              "en": "Output device",
+              "descRu": "Колонки или наушники для воспроизведения. «Системное» следует настройке Windows.",
+              "descEn": "Speakers or headphones to play through. System default follows the Windows setting.",
+              "options": [
+                {
+                  "ru": "Системное по умолчанию",
+                  "en": "System default"
+                }
+              ],
+              "basic": true,
+              "advanced": false,
+              "dynamic": true
+            },
+            {
+              "key": "audio.channels",
+              "kind": "choice",
+              "ru": "Конфигурация колонок",
+              "en": "Speaker setup",
+              "descRu": "Количество колонок. «Автоматически» — как у устройства, иначе звук сводится или расширяется.",
+              "descEn": "Number of speakers. Automatic matches the output device; other values downmix or upmix.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Стерео",
+                  "en": "Stereo"
+                },
+                {
+                  "ru": "Объёмный 5.1",
+                  "en": "5.1 surround"
+                },
+                {
+                  "ru": "Объёмный 7.1",
+                  "en": "7.1 surround"
+                },
+                {
+                  "ru": "Моно",
+                  "en": "Mono"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.exclusive",
+              "kind": "toggle",
+              "ru": "Монопольный режим",
+              "en": "Exclusive mode",
+              "descRu": "Занимать устройство вывода только для Moonbow (монопольный WASAPI): без микшера Windows, с частотой самого файла. Другие приложения в это время не слышны.",
+              "descEn": "Use the output device for Moonbow alone (WASAPI exclusive): no Windows mixer, the file's own sample rate. Other apps are silent while Moonbow plays.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.gapless",
+              "kind": "toggle",
+              "ru": "Воспроизведение без пауз",
+              "en": "Gapless playback",
+              "descRu": "Не закрывать звуковое устройство между файлами, чтобы следующая песня начиналась без паузы и щелчка.",
+              "descEn": "Keep the sound device open between files, so the next song starts without a pause or a click.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.crossfade",
+              "kind": "toggle",
+              "ru": "Плавный переход между песнями",
+              "en": "Crossfade between songs",
+              "descRu": "Каждая песня плавно перетекает в следующую, и несколько секунд они звучат вместе. На видео не действует; монопольный режим и передача на ресивер его отключают.",
+              "descEn": "Fade each song into the next one, so they overlap for a few seconds. Videos never fade; exclusive mode and passthrough turn it off.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.crossfadeSeconds",
+              "kind": "slider",
+              "ru": "Длительность перехода",
+              "en": "Crossfade length",
+              "descRu": "Сколько секунд песни звучат вместе. Короткой песне достаётся не больше половины её длины.",
+              "descEn": "How long the two songs overlap. A short song gets at most half of its length.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.crossfadeAlbums",
+              "kind": "toggle",
+              "ru": "Только между разными альбомами",
+              "en": "Only between different albums",
+              "descRu": "Песни одного альбома идут без пауз, как задумано в альбоме, а переход звучит там, где альбом меняется. Если тегов альбома нет, альбомом считается папка.",
+              "descEn": "Songs of one album keep playing gaplessly, as the album was made; the fade happens where the album changes. Without album tags, songs in one folder count as one album.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.passthrough",
+              "kind": "toggle",
+              "ru": "Передавать объёмный звук на ресивер",
+              "en": "Send surround sound to the receiver",
+              "descRu": "Передавать дорожки Dolby и DTS по HDMI или S/PDIF без декодирования, их декодирует ресивер. Громкость, эквалайзер и эффекты к таким дорожкам не применяются.",
+              "descEn": "Pass Dolby and DTS tracks undecoded over HDMI or S/PDIF and let the receiver decode them. Volume, the equalizer and effects do not apply to these tracks.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spdifAc3",
+              "kind": "toggle",
+              "ru": "Dolby Digital (AC3)",
+              "en": "Dolby Digital (AC3)",
+              "descRu": "Включайте только форматы, которые декодирует ресивер; по S/PDIF передаются только AC3 и DTS.",
+              "descEn": "Turn on only the formats your receiver decodes; S/PDIF carries AC3 and DTS only.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spdifEac3",
+              "kind": "toggle",
+              "ru": "Dolby Digital Plus (E-AC3)",
+              "en": "Dolby Digital Plus (E-AC3)",
+              "descRu": "Включайте только форматы, которые декодирует ресивер; по S/PDIF передаются только AC3 и DTS.",
+              "descEn": "Turn on only the formats your receiver decodes; S/PDIF carries AC3 and DTS only.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spdifDts",
+              "kind": "toggle",
+              "ru": "DTS",
+              "en": "DTS",
+              "descRu": "Включайте только форматы, которые декодирует ресивер; по S/PDIF передаются только AC3 и DTS.",
+              "descEn": "Turn on only the formats your receiver decodes; S/PDIF carries AC3 and DTS only.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spdifDtsHd",
+              "kind": "toggle",
+              "ru": "DTS-HD",
+              "en": "DTS-HD",
+              "descRu": "Включайте только форматы, которые декодирует ресивер; по S/PDIF передаются только AC3 и DTS.",
+              "descEn": "Turn on only the formats your receiver decodes; S/PDIF carries AC3 and DTS only.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spdifTrueHd",
+              "kind": "toggle",
+              "ru": "Dolby TrueHD",
+              "en": "Dolby TrueHD",
+              "descRu": "Включайте только форматы, которые декодирует ресивер; по S/PDIF передаются только AC3 и DTS.",
+              "descEn": "Turn on only the formats your receiver decodes; S/PDIF carries AC3 and DTS only.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "volume",
+          "ru": "Громкость",
+          "en": "Volume",
+          "settings": [
+            {
+              "key": "audio.maxVolume",
+              "kind": "slider",
+              "ru": "Максимальная громкость",
+              "en": "Maximum volume",
+              "descRu": "Разрешить громкость выше 100% для тихих файлов. Громкие места могут искажаться.",
+              "descEn": "Allow the volume above 100% for quiet files. Loud parts may distort.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.startupVolumeMode",
+              "kind": "choice",
+              "ru": "Громкость при запуске",
+              "en": "Startup volume",
+              "descRu": "С какой громкостью запускается Moonbow.",
+              "descEn": "Volume to use when Moonbow starts.",
+              "options": [
+                {
+                  "ru": "Запоминать последнюю",
+                  "en": "Remember last volume"
+                },
+                {
+                  "ru": "Всегда начинать с:",
+                  "en": "Always starts at:"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.startupVolume",
+              "kind": "number",
+              "ru": "Всегда начинать с:",
+              "en": "Always starts at:",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.volumeStep",
+              "kind": "number",
+              "ru": "Шаг громкости",
+              "en": "Volume step",
+              "descRu": "На сколько меняют громкость колесо мыши и стрелки.",
+              "descEn": "How much the wheel and the arrow keys change the volume.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.volumeKeys",
+              "kind": "toggle",
+              "ru": "Клавиши громкости управляют Moonbow",
+              "en": "Volume keys control Moonbow",
+              "descRu": "Пока Moonbow активен, клавиши громкости на клавиатуре меняют его громкость, а не громкость Windows.",
+              "descEn": "While Moonbow is active, the keyboard's volume keys change its volume instead of the Windows volume.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "loudness",
+          "ru": "Выравнивание громкости",
+          "en": "Loudness",
+          "settings": [
+            {
+              "key": "audio.normalize",
+              "kind": "toggle",
+              "ru": "Выравнивать громкость",
+              "en": "Normalize loudness",
+              "descRu": "Держать тихие и громкие файлы на одном уровне. Работает вместе с эквалайзером.",
+              "descEn": "Keep quiet and loud files at a similar level. Works together with the equalizer.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.normalizeMode",
+              "kind": "choice",
+              "ru": "Способ выравнивания",
+              "en": "Normalization",
+              "descRu": "Стандартный приводит каждый файл к одной целевой громкости (EBU R128, как на телевидении). Динамический ещё и поднимает тихие места внутри файла, например диалоги между громкими сценами.",
+              "descEn": "Standard brings every file to one target loudness (EBU R128, as in broadcasting). Dynamic also lifts quiet passages within a file, like dialogue between loud scenes.",
+              "options": [
+                {
+                  "ru": "Стандартный (EBU R128)",
+                  "en": "Standard (EBU R128)"
+                },
+                {
+                  "ru": "Динамический",
+                  "en": "Dynamic"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.targetLevel",
+              "kind": "number",
+              "ru": "Целевой уровень",
+              "en": "Target level",
+              "descRu": "К какой громкости стремиться в стандартном способе. -23 — телевизионный стандарт, -16 — громче.",
+              "descEn": "Loudness to aim for in the Standard way. -23 is the broadcast standard, -16 is louder.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.nightMode",
+              "kind": "toggle",
+              "ru": "Ночной режим",
+              "en": "Night mode",
+              "descRu": "Делает взрывы тише, а диалоги громче, чтобы можно было смотреть на малой громкости.",
+              "descEn": "Make explosions quieter and dialogue louder, so you can watch at low volume.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.replayGain",
+              "kind": "choice",
+              "ru": "Replay Gain",
+              "en": "Replay gain",
+              "descRu": "Использовать теги громкости из музыкальных файлов. «По альбому» сохраняет разницу между песнями альбома.",
+              "descEn": "Use loudness tags stored in music files. Album keeps the volume steps between songs of an album.",
+              "options": [
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                },
+                {
+                  "ru": "По треку",
+                  "en": "Track"
+                },
+                {
+                  "ru": "По альбому",
+                  "en": "Album"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.replayGainPreamp",
+              "kind": "number",
+              "ru": "Предусиление Replay Gain",
+              "en": "Replay gain preamp",
+              "descRu": "Дополнительное усиление поверх Replay Gain.",
+              "descEn": "Extra gain added on top of replay gain.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.loudnessConflict",
+              "kind": "info",
+              "ru": "Выравнивание громкости заново меняет уровень после Replay Gain, и Replay Gain перестаёт влиять на звук. Оставьте что-то одно.",
+              "en": "Loudness normalization re-levels the sound after Replay Gain, so Replay Gain has no audible effect. Keep one of them on.",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "effects",
+          "ru": "Эффекты",
+          "en": "Effects",
+          "settings": [
+            {
+              "key": "audio.eq",
+              "kind": "toggle",
+              "ru": "Эквалайзер",
+              "en": "Equalizer",
+              "descRu": "Настройка звука 10-полосным эквалайзером.",
+              "descEn": "Adjust the sound with a 10-band equalizer.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.eqPreset",
+              "kind": "choice",
+              "ru": "Предустановка эквалайзера",
+              "en": "Equalizer preset",
+              "descRu": "Загрузить значения полос из предустановки. Дальше полосы можно двигать вручную.",
+              "descEn": "Load band values from a preset. Moving any band afterwards keeps your changes.",
+              "options": [
+                {
+                  "ru": "Нет",
+                  "en": "None"
+                },
+                {
+                  "ru": "Ровный",
+                  "en": "Flat"
+                },
+                {
+                  "ru": "Классика",
+                  "en": "Classical"
+                },
+                {
+                  "ru": "Клуб",
+                  "en": "Club"
+                },
+                {
+                  "ru": "Танцевальный",
+                  "en": "Dance"
+                },
+                {
+                  "ru": "Мощный бас",
+                  "en": "Full bass"
+                },
+                {
+                  "ru": "Бас и высокие",
+                  "en": "Full bass & treble"
+                },
+                {
+                  "ru": "Высокие частоты",
+                  "en": "Full treble"
+                },
+                {
+                  "ru": "Наушники",
+                  "en": "Headphones"
+                },
+                {
+                  "ru": "Большой зал",
+                  "en": "Large hall"
+                },
+                {
+                  "ru": "Концерт",
+                  "en": "Live"
+                },
+                {
+                  "ru": "Вечеринка",
+                  "en": "Party"
+                },
+                {
+                  "ru": "Поп",
+                  "en": "Pop"
+                },
+                {
+                  "ru": "Регги",
+                  "en": "Reggae"
+                },
+                {
+                  "ru": "Рок",
+                  "en": "Rock"
+                },
+                {
+                  "ru": "Ска",
+                  "en": "Ska"
+                },
+                {
+                  "ru": "Мягкий",
+                  "en": "Soft"
+                },
+                {
+                  "ru": "Софт-рок",
+                  "en": "Soft rock"
+                },
+                {
+                  "ru": "Техно",
+                  "en": "Techno"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.eqPreamp",
+              "kind": "slider",
+              "ru": "Предусиление",
+              "en": "Preamp",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq60",
+              "kind": "slider",
+              "ru": "60 Гц",
+              "en": "60 Hz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq170",
+              "kind": "slider",
+              "ru": "170 Гц",
+              "en": "170 Hz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq310",
+              "kind": "slider",
+              "ru": "310 Гц",
+              "en": "310 Hz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq600",
+              "kind": "slider",
+              "ru": "600 Гц",
+              "en": "600 Hz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq1k",
+              "kind": "slider",
+              "ru": "1 кГц",
+              "en": "1 kHz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq3k",
+              "kind": "slider",
+              "ru": "3 кГц",
+              "en": "3 kHz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq6k",
+              "kind": "slider",
+              "ru": "6 кГц",
+              "en": "6 kHz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq12k",
+              "kind": "slider",
+              "ru": "12 кГц",
+              "en": "12 kHz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq14k",
+              "kind": "slider",
+              "ru": "14 кГц",
+              "en": "14 kHz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eq16k",
+              "kind": "slider",
+              "ru": "16 кГц",
+              "en": "16 kHz",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.eqTwoPass",
+              "kind": "toggle",
+              "ru": "Двойной проход",
+              "en": "Two-pass",
+              "descRu": "Применять эквалайзер дважды для более сильного эффекта.",
+              "descEn": "Apply the equalizer twice for a stronger effect.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spatial",
+              "kind": "toggle",
+              "ru": "Объёмный звук",
+              "en": "Spatial audio",
+              "descRu": "Делает стереозвук шире и естественнее, особенно в наушниках.",
+              "descEn": "Make stereo sound wider and more natural, especially on headphones.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.spatialMode",
+              "kind": "choice",
+              "ru": "Режим объёмного звука",
+              "en": "Spatial audio mode",
+              "descRu": "Виртуализация смешивает каналы, как это происходит с колонками; эффект помещения добавляет отражения.",
+              "descEn": "Headphone virtualization mixes channels like speakers do; room simulation adds reflections.",
+              "options": [
+                {
+                  "ru": "Виртуализация для наушников",
+                  "en": "Headphone virtualization"
+                },
+                {
+                  "ru": "Эффект помещения",
+                  "en": "Room simulation"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.stereoWiden",
+              "kind": "toggle",
+              "ru": "Расширение стереобазы",
+              "en": "Stereo widening",
+              "descRu": "Раздвигает стереопанораму шире колонок.",
+              "descEn": "Push the stereo image beyond the speakers.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.compRmsPeak",
+              "kind": "slider",
+              "ru": "RMS / пик",
+              "en": "RMS / Peak",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.compAttack",
+              "kind": "slider",
+              "ru": "Атака",
+              "en": "Attack",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.compRelease",
+              "kind": "slider",
+              "ru": "Восстановление",
+              "en": "Release",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.compThreshold",
+              "kind": "slider",
+              "ru": "Порог",
+              "en": "Threshold",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.compRatio",
+              "kind": "slider",
+              "ru": "Степень сжатия",
+              "en": "Ratio",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.compKnee",
+              "kind": "slider",
+              "ru": "Радиус колена",
+              "en": "Knee radius",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.compMakeup",
+              "kind": "slider",
+              "ru": "Компенсация усиления",
+              "en": "Makeup gain",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.spatialSize",
+              "kind": "slider",
+              "ru": "Размер",
+              "en": "Size",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.spatialWidth",
+              "kind": "slider",
+              "ru": "Ширина",
+              "en": "Width",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.spatialWet",
+              "kind": "slider",
+              "ru": "Обработанный",
+              "en": "Wet",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.spatialDry",
+              "kind": "slider",
+              "ru": "Исходный",
+              "en": "Dry",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.spatialDamp",
+              "kind": "slider",
+              "ru": "Затухание",
+              "en": "Damp",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.widenDelay",
+              "kind": "slider",
+              "ru": "Задержка",
+              "en": "Delay time",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.widenFeedback",
+              "kind": "slider",
+              "ru": "Обратная связь",
+              "en": "Feedback gain",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.widenCrossfeed",
+              "kind": "slider",
+              "ru": "Перекрёстное смешивание",
+              "en": "Crossfeed",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.widenDryMix",
+              "kind": "slider",
+              "ru": "Доля исходного звука",
+              "en": "Dry mix",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "audio.visualizer",
+              "kind": "choice",
+              "ru": "Визуализация",
+              "en": "Visualization",
+              "descRu": "Анимация вместо обложки, пока играет музыка. Слушает только звук самого Moonbow, а не других приложений.",
+              "descEn": "Animation in place of the cover while music plays (components/Audio_Visualizer). It listens to Moonbow's own sound only, never to other apps.",
+              "options": [
+                {
+                  "ru": "Отключена",
+                  "en": "Disabled"
+                },
+                {
+                  "ru": "Спектрометр",
+                  "en": "Spectrometer"
+                },
+                {
+                  "ru": "Осциллограф",
+                  "en": "Scope"
+                },
+                {
+                  "ru": "Спектр",
+                  "en": "Spectrum"
+                },
+                {
+                  "ru": "Волна",
+                  "en": "Waveform"
+                },
+                {
+                  "ru": "Стрелочные VU-индикаторы",
+                  "en": "VU meters"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.visualizerLayout",
+              "kind": "choice",
+              "ru": "Где показывать визуализацию",
+              "en": "Visualization layout",
+              "descRu": "Где анимация стоит на экране музыки. Во всех вариантах, кроме «Вместо обложки», обложка остаётся на экране. Спектрометр всегда заменяет обложку.",
+              "descEn": "Where the animation goes in the music view. Except for \"Instead of the cover\", the cover stays on screen. The spectrometer always takes the cover's place.",
+              "options": [
+                {
+                  "ru": "Вместо обложки",
+                  "en": "Instead of the cover"
+                },
+                {
+                  "ru": "По бокам обложки",
+                  "en": "On both sides of the cover"
+                },
+                {
+                  "ru": "Слева от обложки",
+                  "en": "Left of the cover"
+                },
+                {
+                  "ru": "Под обложкой и названием",
+                  "en": "Below the cover and title"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.vuReference",
+              "kind": "choice",
+              "ru": "Калибровка VU-индикаторов",
+              "en": "VU meter calibration",
+              "descRu": "Средний (RMS) уровень музыки, при котором стрелки стоят на 0 VU. Студийные значения (−18, −20) подходят для тихих записей; на громких современных релизах стрелки с ними не выходят из красной зоны.",
+              "descEn": "The RMS level of the music that puts the needles at 0 VU. Studio references (−18, −20) suit quiet recordings; with today's loud releases they keep the needles in the red.",
+              "options": [
+                {
+                  "ru": "0 VU = −20 dBFS (SMPTE)",
+                  "en": "0 VU = −20 dBFS (SMPTE)"
+                },
+                {
+                  "ru": "0 VU = −18 dBFS (EBU)",
+                  "en": "0 VU = −18 dBFS (EBU)"
+                },
+                {
+                  "ru": "0 VU = −14 dBFS",
+                  "en": "0 VU = −14 dBFS"
+                },
+                {
+                  "ru": "0 VU = −10 dBFS (громкие современные записи)",
+                  "en": "0 VU = −10 dBFS (loud modern masters)"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.pitchCorrection",
+              "kind": "toggle",
+              "ru": "Сохранять тон при смене скорости",
+              "en": "Keep pitch when changing speed",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "lyrics",
+          "ru": "Тексты песен",
+          "en": "Lyrics",
+          "settings": [
+            {
+              "key": "audio.lyricsStyle",
+              "kind": "choice",
+              "ru": "Стиль текста",
+              "en": "Lyrics style",
+              "descRu": "Как синхронный текст идёт за песней рядом с обложкой. Настройки ниже меняют части стиля.",
+              "descEn": "How synced lyrics follow the song next to the cover. The settings below change parts of the style.",
+              "options": [
+                {
+                  "ru": "Moonbow",
+                  "en": "Moonbow"
+                },
+                {
+                  "ru": "Как в Spotify",
+                  "en": "Like Spotify"
+                },
+                {
+                  "ru": "Как в Apple Music",
+                  "en": "Like Apple Music"
+                },
+                {
+                  "ru": "Как в Яндекс Музыке",
+                  "en": "Like Yandex Music"
+                },
+                {
+                  "ru": "Караоке",
+                  "en": "Karaoke"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsFont",
+              "kind": "text",
+              "ru": "Шрифт текста",
+              "en": "Lyrics font",
+              "descRu": "Любой установленный шрифт, например «Segoe UI» или «Georgia». Если пусто — шрифт стиля.",
+              "descEn": "Any installed font, e.g. \"Segoe UI\" or \"Georgia\". Leave empty for the style's font.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsSize",
+              "kind": "choice",
+              "ru": "Размер текста",
+              "en": "Text size",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Как в стиле",
+                  "en": "As in the style"
+                },
+                {
+                  "ru": "Мелкий",
+                  "en": "Small"
+                },
+                {
+                  "ru": "Крупный",
+                  "en": "Large"
+                },
+                {
+                  "ru": "Огромный",
+                  "en": "Huge"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsPosition",
+              "kind": "choice",
+              "ru": "Где поётся строка",
+              "en": "Sung line",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Как в стиле",
+                  "en": "As in the style"
+                },
+                {
+                  "ru": "Ближе к верху",
+                  "en": "Near the top"
+                },
+                {
+                  "ru": "Посередине",
+                  "en": "In the middle"
+                },
+                {
+                  "ru": "Ближе к низу",
+                  "en": "Near the bottom"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsLines",
+              "kind": "choice",
+              "ru": "Другие строки",
+              "en": "Other lines",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Как в стиле",
+                  "en": "As in the style"
+                },
+                {
+                  "ru": "Все строки",
+                  "en": "All lines"
+                },
+                {
+                  "ru": "По две сверху и снизу",
+                  "en": "Two above and below"
+                },
+                {
+                  "ru": "Только следующая",
+                  "en": "Only the next line"
+                },
+                {
+                  "ru": "Только текущая",
+                  "en": "Only the sung line"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsAlign",
+              "kind": "choice",
+              "ru": "Выравнивание",
+              "en": "Alignment",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Как в стиле",
+                  "en": "As in the style"
+                },
+                {
+                  "ru": "По левому краю",
+                  "en": "Left"
+                },
+                {
+                  "ru": "По центру",
+                  "en": "Center"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsKaraoke",
+              "kind": "choice",
+              "ru": "Заливать строку по мере пения",
+              "en": "Fill the line as it is sung",
+              "descRu": "Караоке: текущая строка загорается слева направо.",
+              "descEn": "Karaoke: the sung line lights up from left to right.",
+              "options": [
+                {
+                  "ru": "Как в стиле",
+                  "en": "As in the style"
+                },
+                {
+                  "ru": "Да",
+                  "en": "On"
+                },
+                {
+                  "ru": "Нет",
+                  "en": "Off"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "audio.lyricsOnly",
+              "kind": "toggle",
+              "ru": "Только текст, без обложки",
+              "en": "Lyrics only, without the cover",
+              "descRu": "Текст занимает весь экран крупными буквами, для караоке на телевизоре.",
+              "descEn": "The lyrics take the whole view in larger letters, for karaoke on a TV.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "languages",
+          "ru": "Языки",
+          "en": "Languages",
+          "settings": [
+            {
+              "key": "audio.language",
+              "kind": "choice",
+              "ru": "Предпочтительный язык звука",
+              "en": "Preferred audio language",
+              "descRu": "Если в файле несколько дорожек, выбирать дорожку на этом языке.",
+              "descEn": "Pick the audio track in this language when a file has several.",
+              "options": [
+                {
+                  "ru": "Язык интерфейса",
+                  "en": "Interface language"
+                },
+                {
+                  "ru": "Язык системы",
+                  "en": "System language"
+                },
+                {
+                  "ru": "Язык оригинала",
+                  "en": "Original language"
+                },
+                {
+                  "ru": "Русский",
+                  "en": "Russian"
+                },
+                {
+                  "ru": "Английский",
+                  "en": "English"
+                },
+                {
+                  "ru": "Украинский",
+                  "en": "Ukrainian"
+                },
+                {
+                  "ru": "Казахский",
+                  "en": "Kazakh"
+                },
+                {
+                  "ru": "Немецкий",
+                  "en": "German"
+                },
+                {
+                  "ru": "Французский",
+                  "en": "French"
+                },
+                {
+                  "ru": "Испанский",
+                  "en": "Spanish"
+                },
+                {
+                  "ru": "Итальянский",
+                  "en": "Italian"
+                },
+                {
+                  "ru": "Португальский",
+                  "en": "Portuguese"
+                },
+                {
+                  "ru": "Польский",
+                  "en": "Polish"
+                },
+                {
+                  "ru": "Турецкий",
+                  "en": "Turkish"
+                },
+                {
+                  "ru": "Арабский",
+                  "en": "Arabic"
+                },
+                {
+                  "ru": "Индонезийский",
+                  "en": "Indonesian"
+                },
+                {
+                  "ru": "Японский",
+                  "en": "Japanese"
+                },
+                {
+                  "ru": "Китайский",
+                  "en": "Chinese"
+                },
+                {
+                  "ru": "Корейский",
+                  "en": "Korean"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "audio.autoLoadFiles",
+              "kind": "toggle",
+              "ru": "Подключать звуковые дорожки рядом с видео",
+              "en": "Load audio tracks found next to the video",
+              "descRu": "Добавлять звуковые файлы, имя которых начинается как у видео, например «Фильм.ru.mka» для «Фильм.mkv», как дополнительные дорожки.",
+              "descEn": "Add audio files whose name starts like the video's, e.g. \"Movie.en.mka\" for \"Movie.mkv\", as extra audio tracks.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subtitles",
+      "ru": "Субтитры",
+      "en": "Subtitles",
+      "group": "media",
+      "sections": [
+        {
+          "id": "tracks",
+          "ru": "Дорожки и языки",
+          "en": "Tracks and languages",
+          "settings": [
+            {
+              "key": "subtitles.enabled",
+              "kind": "toggle",
+              "ru": "Показывать субтитры",
+              "en": "Enable subtitles",
+              "descRu": "Показывать субтитры, если они есть. Их всегда можно включить в плеере.",
+              "descEn": "Show subtitles when a file has them. You can still turn them on from the player.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.language",
+              "kind": "choice",
+              "ru": "Предпочтительный язык",
+              "en": "Preferred language",
+              "descRu": "Если субтитров несколько, выбирать дорожку на этом языке.",
+              "descEn": "Pick the subtitle track in this language when there are several.",
+              "options": [
+                {
+                  "ru": "Язык интерфейса",
+                  "en": "Interface language"
+                },
+                {
+                  "ru": "Язык системы",
+                  "en": "System language"
+                },
+                {
+                  "ru": "Русский",
+                  "en": "Russian"
+                },
+                {
+                  "ru": "Английский",
+                  "en": "English"
+                },
+                {
+                  "ru": "Украинский",
+                  "en": "Ukrainian"
+                },
+                {
+                  "ru": "Казахский",
+                  "en": "Kazakh"
+                },
+                {
+                  "ru": "Немецкий",
+                  "en": "German"
+                },
+                {
+                  "ru": "Французский",
+                  "en": "French"
+                },
+                {
+                  "ru": "Испанский",
+                  "en": "Spanish"
+                },
+                {
+                  "ru": "Итальянский",
+                  "en": "Italian"
+                },
+                {
+                  "ru": "Португальский",
+                  "en": "Portuguese"
+                },
+                {
+                  "ru": "Польский",
+                  "en": "Polish"
+                },
+                {
+                  "ru": "Турецкий",
+                  "en": "Turkish"
+                },
+                {
+                  "ru": "Арабский",
+                  "en": "Arabic"
+                },
+                {
+                  "ru": "Индонезийский",
+                  "en": "Indonesian"
+                },
+                {
+                  "ru": "Японский",
+                  "en": "Japanese"
+                },
+                {
+                  "ru": "Китайский",
+                  "en": "Chinese"
+                },
+                {
+                  "ru": "Корейский",
+                  "en": "Korean"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.encoding",
+              "kind": "choice",
+              "ru": "Кодировка текста",
+              "en": "Text encoding",
+              "descRu": "Кодировка текстовых файлов субтитров. Смените, если вместо букв «кракозябры».",
+              "descEn": "Character set of text subtitle files. Change it if letters look garbled.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Юникод (UTF-8)",
+                  "en": "Unicode (UTF-8)"
+                },
+                {
+                  "ru": "Кириллица (Windows-1251)",
+                  "en": "Cyrillic (Windows-1251)"
+                },
+                {
+                  "ru": "Кириллица (KOI8-R)",
+                  "en": "Cyrillic (KOI8-R)"
+                },
+                {
+                  "ru": "Кириллица (DOS 866)",
+                  "en": "Cyrillic (DOS 866)"
+                },
+                {
+                  "ru": "Западноевропейская (Windows-1252)",
+                  "en": "Western (Windows-1252)"
+                },
+                {
+                  "ru": "Центральноевропейская (Windows-1250)",
+                  "en": "Central European (Windows-1250)"
+                },
+                {
+                  "ru": "Греческая (Windows-1253)",
+                  "en": "Greek (Windows-1253)"
+                },
+                {
+                  "ru": "Турецкая (Windows-1254)",
+                  "en": "Turkish (Windows-1254)"
+                },
+                {
+                  "ru": "Арабская (Windows-1256)",
+                  "en": "Arabic (Windows-1256)"
+                },
+                {
+                  "ru": "Китайская упрощённая (GBK)",
+                  "en": "Chinese Simplified (GBK)"
+                },
+                {
+                  "ru": "Китайская традиционная (Big5)",
+                  "en": "Chinese Traditional (Big5)"
+                },
+                {
+                  "ru": "Японская (Shift JIS)",
+                  "en": "Japanese (Shift JIS)"
+                },
+                {
+                  "ru": "Корейская (EUC-KR)",
+                  "en": "Korean (EUC-KR)"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "loading",
+          "ru": "Загрузка субтитров",
+          "en": "Loading subtitles",
+          "settings": [
+            {
+              "key": "subtitles.autoLoad",
+              "kind": "toggle",
+              "ru": "Подключать файлы субтитров автоматически",
+              "en": "Load subtitle files automatically",
+              "descRu": "Подключать файлы .srt, .ass и другие, лежащие рядом с видео.",
+              "descEn": "Load .srt, .ass and other subtitle files found next to the video.",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.matching",
+              "kind": "choice",
+              "ru": "Сопоставление имён",
+              "en": "File name matching",
+              "descRu": "Насколько имя файла субтитров должно совпадать с именем видео, например «Фильм.ru.srt» для «Фильм.mkv».",
+              "descEn": "How closely a subtitle file name must match the video name, e.g. \"Movie.en.srt\" for \"Movie.mkv\".",
+              "options": [
+                {
+                  "ru": "Точное совпадение",
+                  "en": "Exact title"
+                },
+                {
+                  "ru": "Название с дополнительными символами",
+                  "en": "Title with extra characters"
+                },
+                {
+                  "ru": "Любые субтитры в папке",
+                  "en": "Any subtitle in the folder"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.searchPaths",
+              "kind": "text",
+              "ru": "Искать также в папках",
+              "en": "Also look in subfolders",
+              "descRu": "Папки рядом с видео, где могут лежать субтитры, через «;».",
+              "descEn": "Folders next to the video that may hold its subtitles, separated by ';'.",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        },
+        {
+          "id": "appearance",
+          "ru": "Оформление",
+          "en": "Appearance",
+          "settings": [
+            {
+              "key": "subtitles.preview",
+              "kind": "info",
+              "ru": "Пример субтитров",
+              "en": "Subtitle example",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.font",
+              "kind": "text",
+              "ru": "Шрифт",
+              "en": "Font",
+              "descRu": "Шрифт текстовых субтитров. Если пусто — стандартный шрифт без засечек.",
+              "descEn": "Font for text subtitles. Leave empty for the default sans-serif font.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.sizeMode",
+              "kind": "segmented",
+              "ru": "Размер",
+              "en": "Size values",
+              "descRu": "Относительный размер меняется вместе с окном, в пикселях — остаётся постоянным.",
+              "descEn": "Relative sizes follow the window; pixel sizes stay the same at any window size.",
+              "options": [
+                {
+                  "ru": "Относительный",
+                  "en": "Relative"
+                },
+                {
+                  "ru": "В пикселях",
+                  "en": "Pixels"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.size",
+              "kind": "choice",
+              "ru": "Размер шрифта",
+              "en": "Font size",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Мельче",
+                  "en": "Smaller"
+                },
+                {
+                  "ru": "Мелкий",
+                  "en": "Small"
+                },
+                {
+                  "ru": "Крупный",
+                  "en": "Large"
+                },
+                {
+                  "ru": "Крупнее",
+                  "en": "Larger"
+                },
+                {
+                  "ru": "Огромный",
+                  "en": "Huge"
+                }
+              ],
+              "basic": true,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.bold",
+              "kind": "toggle",
+              "ru": "Жирный",
+              "en": "Bold",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.color",
+              "kind": "color",
+              "ru": "Цвет текста",
+              "en": "Text color",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.opacity",
+              "kind": "slider",
+              "ru": "Непрозрачность текста",
+              "en": "Text opacity",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.outline",
+              "kind": "choice",
+              "ru": "Толщина обводки",
+              "en": "Outline thickness",
+              "descRu": "",
+              "descEn": "",
+              "options": [
+                {
+                  "ru": "Нет",
+                  "en": "None"
+                },
+                {
+                  "ru": "Тонкая",
+                  "en": "Thin"
+                },
+                {
+                  "ru": "Обычная",
+                  "en": "Normal"
+                },
+                {
+                  "ru": "Толстая",
+                  "en": "Thick"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.outlineColor",
+              "kind": "color",
+              "ru": "Цвет обводки",
+              "en": "Outline color",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.shadow",
+              "kind": "toggle",
+              "ru": "Тень",
+              "en": "Shadow",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.background",
+              "kind": "choice",
+              "ru": "Подложка",
+              "en": "Background",
+              "descRu": "Рисовать текст на плашке, как телевизионные титры: так его легче читать на светлом фоне. Плашки под строками берут цвет обводки.",
+              "descEn": "Draw text on a box, like TV captions; easier to read on bright scenes. Each-line boxes use the outline color.",
+              "options": [
+                {
+                  "ru": "Нет",
+                  "en": "None"
+                },
+                {
+                  "ru": "Плашка под каждой строкой",
+                  "en": "Box behind each line"
+                },
+                {
+                  "ru": "Плашка под всем текстом",
+                  "en": "Box behind the text"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.backColor",
+              "kind": "color",
+              "ru": "Цвет плашки",
+              "en": "Box color",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.backOpacity",
+              "kind": "slider",
+              "ru": "Непрозрачность плашки",
+              "en": "Box opacity",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.blur",
+              "kind": "slider",
+              "ru": "Размытие краёв",
+              "en": "Edge softness",
+              "descRu": "Размывать края текста и обводки. 0 — чёткие края.",
+              "descEn": "Blur the edges of the text and its outline. 0 keeps them sharp.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.position",
+              "kind": "slider",
+              "ru": "Положение по вертикали",
+              "en": "Vertical position",
+              "descRu": "100% — у нижнего края, меньшие значения поднимают субтитры выше.",
+              "descEn": "100% puts subtitles at the bottom edge, lower values move them up.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.marginBottom",
+              "kind": "slider",
+              "ru": "Отступ снизу",
+              "en": "Distance from the bottom",
+              "descRu": "Расстояние от субтитров до нижнего края в пикселях кадра 720p.",
+              "descEn": "Gap between subtitles and the bottom edge, in pixels of a 720p picture.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.useBlackBars",
+              "kind": "toggle",
+              "ru": "Субтитры в чёрных полосах",
+              "en": "Show subtitles in the black bars",
+              "descRu": "Если на экране вокруг видео есть чёрные полосы, показывать субтитры в них, а не поверх картинки.",
+              "descEn": "When the video has black bars around it on screen, put subtitles there instead of over the picture.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.secondaryPosition",
+              "kind": "slider",
+              "ru": "Положение вторых субтитров",
+              "en": "Secondary subtitles position",
+              "descRu": "Где показывать вторые субтитры (выбираются в плеере). 0% — у верхнего края.",
+              "descEn": "Where the second subtitle track (chosen in the player) appears. 0% is the top edge.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "subtitles.assOverride",
+              "kind": "toggle",
+              "ru": "Применять стиль к оформленным субтитрам",
+              "en": "Apply this style to styled subtitles",
+              "descRu": "Заменять шрифты и цвета субтитров .ass. Может испортить караоке и надписи.",
+              "descEn": "Override fonts and colors of .ass subtitles. May break karaoke and signs.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "library",
+      "ru": "Медиатека",
+      "en": "Library",
+      "group": "media",
+      "sections": [
+        {
+          "id": "folders",
+          "ru": "Папки медиатеки",
+          "en": "Library folders",
+          "settings": [
+            {
+              "key": "library.folders",
+              "kind": "info",
+              "ru": "Папки",
+              "en": "Folders",
+              "descRu": "Папки, в которых Moonbow ищет видео и музыку. Если убрать папку, файлы останутся на диске.",
+              "descEn": "The folders Moonbow looks for videos and music in. Removing one leaves its files on disk.",
+              "basic": true,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "opening",
+          "ru": "Открытие файлов",
+          "en": "Opening files",
+          "settings": [
+            {
+              "key": "library.openFolder",
+              "kind": "choice",
+              "ru": "При открытии папки",
+              "en": "When opening a folder",
+              "descRu": "Какие файлы попадают в очередь, когда вы открываете или перетаскиваете папку.",
+              "descEn": "Which files go to the queue when you open or drop a folder.",
+              "options": [
+                {
+                  "ru": "Вместе с вложенными папками",
+                  "en": "Include subfolders"
+                },
+                {
+                  "ru": "Только эта папка",
+                  "en": "This folder only"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "library.showHidden",
+              "kind": "toggle",
+              "ru": "Показывать скрытые файлы",
+              "en": "Show hidden files",
+              "descRu": "Включать скрытые и системные файлы в медиатеку и в очередь открытой папки.",
+              "descEn": "Include hidden and system files in the library and in the queue of an opened folder.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "metadata",
+          "ru": "Метаданные и обложки",
+          "en": "Metadata and artwork",
+          "settings": [
+            {
+              "key": "library.metadata",
+              "kind": "choice",
+              "ru": "Названия и обложки",
+              "en": "Fetch titles and artwork",
+              "descRu": "Постеры и описания фильмов и сериалов из TMDB. Тот же переключатель, что в разделе «Конфиденциальность › Сеть», там же ключ TMDB.",
+              "descEn": "Posters and descriptions of movies and series from TMDB. The same switch as Privacy › Network, where the TMDB key goes.",
+              "options": [
+                {
+                  "ru": "Только из файла",
+                  "en": "From the file only"
+                },
+                {
+                  "ru": "Из файла и из интернета (TMDB)",
+                  "en": "From the file and the internet (TMDB)"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "library.scanOnStartup",
+              "kind": "toggle",
+              "ru": "Сканировать папки при запуске",
+              "en": "Scan library folders on startup",
+              "descRu": "",
+              "descEn": "",
+              "basic": true,
+              "advanced": true
+            },
+            {
+              "key": "library.readTags",
+              "kind": "toggle",
+              "ru": "Читать длительность и теги",
+              "en": "Read duration and tags",
+              "descRu": "Читать длительность, исполнителя и альбом из файлов. На больших сетевых папках медленнее.",
+              "descEn": "Read duration, artist and album from files. Slower on large network folders.",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "library.thumbnails",
+              "kind": "toggle",
+              "ru": "Показывать миниатюры",
+              "en": "Show thumbnails",
+              "descRu": "Брать миниатюры видео из Windows, а обложки — из музыкальных файлов.",
+              "descEn": "Use Windows thumbnails for videos and embedded covers for music.",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "network",
+      "ru": "Сеть",
+      "en": "Network",
+      "group": "system",
+      "sections": [
+        {
+          "id": "buffering",
+          "ru": "Буферизация",
+          "en": "Buffering",
+          "settings": [
+            {
+              "key": "network.buffering",
+              "kind": "choice",
+              "ru": "Предзагрузка",
+              "en": "Preload",
+              "descRu": "Сколько потока загружать заранее. Большой буфер переживает медленную сеть, но старт дольше.",
+              "descEn": "How much of a stream to load ahead. More buffering survives a slow connection but starts later.",
+              "options": [
+                {
+                  "ru": "Низкая",
+                  "en": "Low"
+                },
+                {
+                  "ru": "Обычная",
+                  "en": "Normal"
+                },
+                {
+                  "ru": "Высокая",
+                  "en": "High"
+                },
+                {
+                  "ru": "Своя",
+                  "en": "Custom"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "network.cacheLocalSecs",
+              "kind": "number",
+              "ru": "Локальные файлы",
+              "en": "Local files",
+              "descRu": "Насколько вперёд читать файлы с этого компьютера. Меньше — меньше памяти; 1 — как в mpv.",
+              "descEn": "How far ahead to read files on this computer. Less uses less memory; 1 is mpv's default.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "network.cacheNetworkSecs",
+              "kind": "number",
+              "ru": "Сетевые потоки",
+              "en": "Network streams",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "web",
+          "ru": "Видео с сайтов",
+          "en": "Web videos",
+          "settings": [
+            {
+              "key": "network.ytdl",
+              "kind": "toggle",
+              "ru": "Открывать веб-страницы через yt-dlp",
+              "en": "Open web pages with yt-dlp",
+              "descRu": "Воспроизводить ссылки YouTube и похожих сайтов. Нужен yt-dlp.exe рядом с Moonbow или в PATH.",
+              "descEn": "Play YouTube and similar links. Requires yt-dlp.exe next to Moonbow or on PATH.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "network.ytdlMissing",
+              "kind": "info",
+              "ru": "Для ссылок YouTube положите yt-dlp.exe рядом с Moonbow.exe",
+              "en": "For YouTube links, put yt-dlp.exe next to Moonbow.exe",
+              "descRu": "yt-dlp.exe не найден ни рядом с Moonbow.exe, ни в PATH. Скачайте его с сайта проекта yt-dlp, положите туда и перезапустите Moonbow.",
+              "descEn": "yt-dlp.exe was not found next to Moonbow.exe or on PATH. Download it from the yt-dlp project yourself, put it there and restart Moonbow.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "proxy",
+          "ru": "Прокси",
+          "en": "Proxy",
+          "settings": [
+            {
+              "key": "network.httpProxy",
+              "kind": "text",
+              "ru": "HTTP-прокси",
+              "en": "HTTP proxy",
+              "descRu": "Адрес вида http://user@host:8080. Если пусто — подключение напрямую.",
+              "descEn": "Address like http://user@host:8080. Leave empty to connect directly.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "network.httpProxyPassword",
+              "kind": "text",
+              "ru": "Пароль HTTP-прокси",
+              "en": "HTTP proxy password",
+              "descRu": "Пароль для имени пользователя, указанного в адресе прокси.",
+              "descEn": "Password for the user name given in the proxy address.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "security",
+          "ru": "Безопасность",
+          "en": "Security",
+          "settings": [
+            {
+              "key": "network.verifyCerts",
+              "kind": "toggle",
+              "ru": "Проверять сертификаты по хранилищу Windows",
+              "en": "Verify certificates against the system trust store",
+              "descRu": "Не открывать HTTPS-потоки с сертификатом, которому не доверяет Windows.",
+              "descEn": "Refuse HTTPS streams whose certificate Windows does not trust.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "network.cacheSize",
+              "kind": "number",
+              "ru": "Максимальный размер кэша",
+              "en": "Maximum cache size",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "network.timeout",
+              "kind": "number",
+              "ru": "Тайм-аут подключения",
+              "en": "Connection timeout",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "network.userAgent",
+              "kind": "text",
+              "ru": "User agent",
+              "en": "User agent",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "ru": "Производительность",
+      "en": "Performance",
+      "group": "system",
+      "sections": [
+        {
+          "id": "decoding",
+          "ru": "Декодирование",
+          "en": "Decoding",
+          "settings": [
+            {
+              "key": "performance.hwdec",
+              "kind": "choice",
+              "ru": "Аппаратное декодирование",
+              "en": "Hardware-accelerated decoding",
+              "descRu": "Декодировать видео видеокартой, чтобы экономить энергию. Выключите, если видите артефакты.",
+              "descEn": "Decode video on the graphics card to save power. Turn off if you see artifacts.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Direct3D 11",
+                  "en": "Direct3D 11"
+                },
+                {
+                  "ru": "Direct3D 11 (с копированием)",
+                  "en": "Direct3D 11 (copy back)"
+                },
+                {
+                  "ru": "NVIDIA NVDEC",
+                  "en": "NVIDIA NVDEC"
+                },
+                {
+                  "ru": "DXVA2 (с копированием)",
+                  "en": "DXVA2 (copy back)"
+                },
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "performance.postprocessing",
+              "kind": "choice",
+              "ru": "Постобработка видео",
+              "en": "Video post-processing",
+              "descRu": "Сглаживать блочные артефакты в видео с низким битрейтом. Нагружает процессор.",
+              "descEn": "Smooth blocky artifacts in low-bitrate video. Uses the CPU.",
+              "options": [
+                {
+                  "ru": "Выкл.",
+                  "en": "Off"
+                },
+                {
+                  "ru": "Слабая",
+                  "en": "Low"
+                },
+                {
+                  "ru": "Средняя",
+                  "en": "Medium"
+                },
+                {
+                  "ru": "Сильная",
+                  "en": "High"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "performance.skipLoopFilter",
+              "kind": "choice",
+              "ru": "Пропускать фильтр H.264",
+              "en": "Skip the H.264 loop filter",
+              "descRu": "Ускоряет программное декодирование на слабых компьютерах ценой качества картинки.",
+              "descEn": "Speeds up software decoding on slow computers at the cost of picture quality.",
+              "options": [
+                {
+                  "ru": "Никогда",
+                  "en": "Never"
+                },
+                {
+                  "ru": "Неопорные кадры",
+                  "en": "Non-reference frames"
+                },
+                {
+                  "ru": "B-кадры",
+                  "en": "B-frames"
+                },
+                {
+                  "ru": "Все, кроме ключевых",
+                  "en": "All but keyframes"
+                },
+                {
+                  "ru": "Все кадры",
+                  "en": "All frames"
+                }
+              ],
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "performance.decodeThreads",
+              "kind": "number",
+              "ru": "Потоки декодирования",
+              "en": "Decoding threads",
+              "descRu": "Потоки процессора для программного декодирования. 0 — автоматически.",
+              "descEn": "CPU threads for software decoding. 0 picks automatically.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "smooth",
+          "ru": "Плавное воспроизведение",
+          "en": "Smooth playback",
+          "settings": [
+            {
+              "key": "performance.frameDrop",
+              "kind": "toggle",
+              "ru": "Пропускать кадры при нехватке ресурсов",
+              "en": "Drop frames when the system can't keep up",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "performance.realtimePriority",
+              "kind": "toggle",
+              "ru": "Приоритет реального времени для Moonbow",
+              "en": "Give Moonbow real-time priority",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "performance.processPriority",
+              "kind": "number",
+              "ru": "Приоритет процесса",
+              "en": "Process priority",
+              "descRu": "-2 — самый низкий, 0 — обычный, 2 — самый высокий. Высокий приоритет помогает на загруженной системе.",
+              "descEn": "-2 lowest, 0 normal, 2 highest. Higher priority helps on busy systems.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "performance.rescanPlugins",
+              "kind": "button",
+              "ru": "Пересканировать плагины",
+              "en": "Rescan plugins",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        },
+        {
+          "id": "developer",
+          "ru": "Для разработчиков",
+          "en": "Developer",
+          "settings": [
+            {
+              "key": "performance.clockSync",
+              "kind": "choice",
+              "ru": "Синхронизация",
+              "en": "Clock synchronisation",
+              "descRu": "Синхронизация с дисплеем убирает подёргивания; по умолчанию видео подстраивается под звук. «Видео > Плавное движение» всегда подстраивает звук под дисплей.",
+              "descEn": "Syncing to the display removes judder; the default syncs video to the audio clock. Video > Smooth motion always resamples to the display.",
+              "options": [
+                {
+                  "ru": "По умолчанию",
+                  "en": "Default"
+                },
+                {
+                  "ru": "Подстройка звука под дисплей",
+                  "en": "Resample audio to the display"
+                },
+                {
+                  "ru": "Пропуск и повтор кадров",
+                  "en": "Drop or repeat video frames"
+                }
+              ],
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "performance.vo",
+              "kind": "choice",
+              "ru": "Вывод видео",
+              "en": "Video output",
+              "descRu": "Способ отрисовки. Применяется при следующем запуске.",
+              "descEn": "Rendering backend. Applied at the next start.",
+              "options": [
+                {
+                  "ru": "GPU (libplacebo)",
+                  "en": "GPU (libplacebo)"
+                },
+                {
+                  "ru": "GPU (старый)",
+                  "en": "GPU (legacy)"
+                }
+              ],
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "performance.gpuApi",
+              "kind": "choice",
+              "ru": "Графический API",
+              "en": "Graphics API",
+              "descRu": "Применяется при следующем запуске.",
+              "descEn": "Applied at the next start.",
+              "options": [
+                {
+                  "ru": "Автоматически",
+                  "en": "Automatic"
+                },
+                {
+                  "ru": "Direct3D 11",
+                  "en": "Direct3D 11"
+                },
+                {
+                  "ru": "Vulkan",
+                  "en": "Vulkan"
+                }
+              ],
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "recording",
+      "ru": "Запись",
+      "en": "Recording",
+      "group": "system",
+      "sections": [
+        {
+          "id": "recording",
+          "ru": "Запись",
+          "en": "Recording",
+          "settings": [
+            {
+              "key": "recording.folder",
+              "kind": "path",
+              "ru": "Папка для записей",
+              "en": "Save recordings to",
+              "descRu": "Папка для записанных потоков и фрагментов.",
+              "descEn": "Folder for recorded streams and clips.",
+              "basic": false,
+              "advanced": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "extensions",
+      "ru": "Расширения",
+      "en": "Extensions",
+      "group": "system",
+      "sections": [
+        {
+          "id": "addons",
+          "ru": "Дополнения",
+          "en": "Add-ons",
+          "settings": [
+            {
+              "key": "extensions.list",
+              "kind": "info",
+              "ru": "Дополнения",
+              "en": "Add-ons",
+              "descRu": "Скрипты mpv на Lua и JavaScript из %APPDATA%\\Moonbow\\scripts.",
+              "descEn": "Lua and JavaScript mpv scripts from %APPDATA%\\Moonbow\\scripts.",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "extensions.findMore",
+              "kind": "button",
+              "ru": "Найти расширения",
+              "en": "Find more extensions",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "extensions.add",
+              "kind": "button",
+              "ru": "Добавить",
+              "en": "Add",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "extensions.remove",
+              "kind": "button",
+              "ru": "Удалить",
+              "en": "Remove",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "extensions.loadOnStartup",
+              "kind": "toggle",
+              "ru": "Загружать дополнения при запуске",
+              "en": "Load add-ons on startup",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": false
+            },
+            {
+              "key": "extensions.scriptOpts",
+              "kind": "text",
+              "ru": "Параметры скриптов",
+              "en": "Script options",
+              "descRu": "Параметры для скриптов, например osc-visibility=always,thumbfast-network=yes",
+              "descEn": "Options passed to scripts, e.g. osc-visibility=always,thumbfast-network=yes",
+              "basic": false,
+              "advanced": true
+            },
+            {
+              "key": "extensions.openFolder",
+              "kind": "button",
+              "ru": "Папка скриптов",
+              "en": "Scripts folder",
+              "descRu": "",
+              "descEn": "",
+              "basic": false,
+              "advanced": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

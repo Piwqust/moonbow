@@ -1,0 +1,71 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Moonbow (Windows x64)
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      # The same libmpv build the releases ship (THIRD_PARTY_NOTICES.md).
+      - name: Cache libmpv
+        id: libmpv
+        uses: actions/cache@v6
+        with:
+          path: third_party/mpv
+          key: libmpv-20261017
+
+      - name: Fetch libmpv
+        if: steps.libmpv.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./tools/fetch-libmpv.ps1 -Tag 20261017
+
+      - name: Build (release, /W4)
+        shell: cmd
+        run: build.bat
+
+      - name: Core tests
+        shell: cmd
+        run: tests\build-tests.bat
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v7
+        with:
+          name: moonbow-windows-x64-${{ github.sha }}
+          path: |
+            build/Moonbow.exe
+            build/MoonbowThumbs.dll
+            build/libmpv-2.dll
+          retention-days: 14
+
+  site:
+    name: Website
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
