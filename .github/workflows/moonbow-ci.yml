@@ -19,12 +19,12 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The same libmpv build the releases ship (THIRD_PARTY_NOTICES.md).
       - name: Cache libmpv
         id: libmpv
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: third_party/mpv
           key: libmpv-20261017
@@ -43,7 +43,7 @@ jobs:
         run: tests\build-tests.bat
 
       - name: Upload the build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: moonbow-windows-x64-${{ github.sha }}
           path: |
@@ -60,8 +60,8 @@ jobs:
       run:
         working-directory: site
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

@@ -27,11 +27,18 @@ Invoke-WebRequest $asset.browser_download_url -OutFile $archive
 
 $extract = Join-Path $work "x"
 New-Item -ItemType Directory -Force $extract | Out-Null
-# Windows' own bsdtar reads .7z; a GNU tar earlier on PATH (Git for Windows, CI runners) does not.
-$tar = Join-Path $env:SystemRoot "System32	ar.exe"
-if (-not (Test-Path $tar)) { $tar = "tar" }
-& $tar -xf $archive -C $extract
-if ($LASTEXITCODE -ne 0) { throw "tar failed to extract $archive" }
+# 7-Zip if it is there (CI runners have it); else Windows' own bsdtar, which reads this .7z on
+# Windows 10 and 11 but not on Windows Server 2022 (no LZMA there). Never a GNU tar from PATH.
+$sevenZip = @((Get-Command 7z -ErrorAction SilentlyContinue).Source, (Join-Path $env:ProgramFiles "7-Zip\7z.exe")) |
+    Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+if ($sevenZip) {
+    & $sevenZip x $archive "-o$extract" -y | Out-Null
+} else {
+    $tar = Join-Path $env:SystemRoot "System32\tar.exe"
+    if (-not (Test-Path $tar)) { $tar = "tar" }
+    & $tar -xf $archive -C $extract
+}
+if ($LASTEXITCODE -ne 0) { throw "could not extract $archive" }
 
 if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
 New-Item -ItemType Directory -Force $dest | Out-Null
