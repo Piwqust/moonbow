@@ -13,6 +13,9 @@ struct Request {
     std::wstring version;              // Switch: the kept version to make current
     Target target;
     std::wstring previewPage;          // --automation --setup-page <name>: that page, nothing runs
+    // Moonbow's own "Restart to update": no question, the work starts at once, and Moonbow opens
+    // again when it is done (also after a failure: the old version is still in place then).
+    bool autoUpdate = false;
 };
 
 // The setup window, drawn with Moonbow's UI: welcome, options, update with what's new, rollback,

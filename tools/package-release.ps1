@@ -2,10 +2,15 @@
 #   dist\release\v<version>\Moonbow-windows-x64-setup.exe   Moonbow's own setup (install, update, go back, uninstall)
 #   dist\release\v<version>\Moonbow-windows-x64.zip         portable: the same files, unpack and run
 #   dist\release\v<version>\*.sha256                        "<hash>  <file>", one per file (sha256sum -c reads it)
-#   dist\symbols\<version>-<commit>\                       Moonbow.exe + .pdb, to read crash dumps of this build
+#   dist\release\v<version>\moonbow-update.json             the signed update feed installed Moonbows read
+#                                                         (app/Updater.h, tools\release\make-update-feed.ps1)
+#   dist\release\v<version>\Moonbow-windows-x64-symbols.zip  Moonbow.exe + .pdb, to read crash dumps of this build
+#   dist\symbols\<version>-<commit>\                       the same, unpacked
 # The names carry no version, so README links to releases/latest/download/<name> keep working.
-# Usage: powershell -ExecutionPolicy Bypass -File tools\package-release.ps1 [-SkipTests]
-param([switch]$SkipTests)
+# -Mirror <url>: a second download address in the feed (the release workflow passes MOONBOW_MIRROR_URL).
+# -RequireFeed: fail without the signing key instead of leaving the feed out (the release workflow).
+# Usage: powershell -ExecutionPolicy Bypass -File tools\package-release.ps1 [-SkipTests] [-Mirror <url>] [-RequireFeed]
+param([switch]$SkipTests, [string]$Mirror = "", [switch]$RequireFeed)
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path "$PSScriptRoot\..").Path
 # A crash dump is only readable with the .pdb of the exact build, so the files must match a commit.
@@ -47,9 +52,21 @@ foreach ($f in @($setupFile, $zip)) {
   [IO.File]::WriteAllText("$f.sha256", "$hash  $(Split-Path -Leaf $f)`n", (New-Object System.Text.UTF8Encoding $false))
 }
 
+# The update feed, signed: without it installed Moonbows do not see this version. A local test build
+# without the key leaves it out.
+$haveKey = $env:MOONBOW_UPDATE_KEY -or (Test-Path "$env:USERPROFILE\.moonbow-release\update-signing-key.txt")
+if ($haveKey) {
+  & "$PSScriptRoot\release\make-update-feed.ps1" -Version $version -Setup $setupFile -Out (Join-Path $out "moonbow-update.json") -Mirror $Mirror
+} elseif ($RequireFeed) {
+  throw "No update signing key: set MOONBOW_UPDATE_KEY (tools\release\new-update-key.ps1)"
+} else {
+  Write-Warning "No update signing key: no moonbow-update.json, installed Moonbows will not see this version."
+}
+
 $symbols = Join-Path $dist "symbols\$version-$commit"
 New-Item -ItemType Directory -Force $symbols | Out-Null
 Copy-Item "$build\Moonbow.exe", "$build\Moonbow.pdb", "$build\MoonbowThumbs.dll", "$build\MoonbowThumbs.pdb" $symbols
+Compress-Archive -Path "$symbols\*" -DestinationPath (Join-Path $out "Moonbow-windows-x64-symbols.zip") -Force
 
 Write-Host "Moonbow $version ($commit):"
 Get-ChildItem $out | ForEach-Object { Write-Host ("  {0,-38} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB)) }

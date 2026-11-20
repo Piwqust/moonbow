@@ -742,11 +742,24 @@ void BuildApp(Builder& b) {
         .Basic("subtitle", L"The language of menus and buttons.",
                L"На каком языке написаны меню и кнопки.");
 
+    // app/Updater.h: the signed feed on GitHub, a background download, the setup on exit or on "Restart now".
+    b.Sec("updates", L"Updates", L"Обновления");
+    b.Info("general.updateStatus", L"Moonbow version", L"Версия Moonbow", "update-status")
+        .Basic("refresh", L"Whether a new version is out.", L"Вышла ли новая версия.");
+    b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", true)
+        .Desc(L"Once a day Moonbow asks GitHub whether a new version is out. Nothing else is sent: no id, "
+              L"no settings, no list of files.",
+              L"Раз в день Moonbow спрашивает у GitHub, вышла ли новая версия. Больше ничего не отправляется: "
+              L"ни идентификатора, ни настроек, ни списка файлов.");
+    b.Toggle("general.installUpdates", L"Install updates when Moonbow closes", L"Устанавливать обновления при закрытии",
+             true)
+        .Desc(L"A new version downloads in the background and installs the next time you close Moonbow. "
+              L"The previous version stays on the computer: About Moonbow takes you back to it.",
+              L"Новая версия скачивается в фоне и устанавливается, когда вы закроете Moonbow. Прежняя версия "
+              L"остаётся на компьютере: вернуться к ней можно в окне «О программе».")
+        .When("general.checkUpdates", "true");
+
     b.Sec("windows", L"Windows integration", L"Интеграция с Windows");
-    b.Toggle("general.checkUpdates", L"Check for updates automatically", L"Проверять обновления автоматически", false)
-        .Desc(L"Look for a new version of Moonbow once a day. Nothing else is sent.",
-              L"Раз в день проверять, вышла ли новая версия Moonbow. Больше ничего не отправляется.")
-        .Hidden();  // not implemented yet
     // Short: with the longer name the full phrase no longer fit the narrowest Settings window.
     b.Button("general.fileAssociations", L"Open videos in Moonbow", L"Открывать видео в Moonbow",
              "file-associations", L"Set up", L"Настроить")

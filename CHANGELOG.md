@@ -3,6 +3,18 @@
 What changes for the person using Moonbow, newest first. The release notes on GitHub are taken from here.
 The day-by-day development journal (in Russian) is in [`changelog/`](changelog/README.md).
 
+## 0.2.0 (unreleased)
+
+### Updates
+- Moonbow updates itself. Once a day it checks GitHub for a new version, downloads it in the background and installs
+  it when you close Moonbow; **Restart now** in the notification installs it at once and opens Moonbow again.
+- **Settings → General → Updates** shows the version and what the updater knows, with **Check now**; both the daily
+  check and installing on close can be turned off. **About Moonbow** shows the same line.
+- Every update is signed: Moonbow installs a setup only when the signature of the update feed checks out and the
+  downloaded file matches it byte for byte.
+- A version you went back from (**About Moonbow → Versions on this computer**) is not installed again by itself.
+- The portable copy only says that a new version is out and opens its page.
+
 ## 0.1.0 beta (2026-11-20)
 
 The first public beta: videos and music in one fast, quiet player for Windows 10 and 11.

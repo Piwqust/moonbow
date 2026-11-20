@@ -104,7 +104,10 @@ int RunInstall(const Package& package, const std::vector<std::wstring>& args) {
     std::wstring dir = Value(args, L"--dir");
     if (dir.empty()) dir = DefaultInstallDir();
     const Target target = TargetOf(args, dir);
-    if (!Has(args, L"--silent")) return RunWindow({Op::Install, &package, {}, target, Value(args, L"--setup-page")});
+    // Moonbow's updater starts the setup and then quits: wait for it before closing it from here.
+    WaitForParent(args);
+    if (!Has(args, L"--silent"))
+        return RunWindow({Op::Install, &package, {}, target, Value(args, L"--setup-page"), Has(args, L"--update")});
     const Action action = Classify(InstalledVersion(dir), package.version);
     std::wstring error;
     if (!CloseRunningMoonbow(dir, 15000)) return Fail(L"Moonbow setup", L"Moonbow did not close");

@@ -192,6 +192,8 @@ std::unique_ptr<ui::Widget> MakeSubtitlePreview(const settings::Item& item);
 std::unique_ptr<ui::Widget> MakeShaderList(const settings::Item& item, PageHost& page);
 std::unique_ptr<ui::Widget> MakeAddonsToolbar(const std::vector<const settings::Item*>& items, PageHost& page);
 void RescanAddons();
+// Settings > General > Updates: the version, the updater's status and its button (SettingsUpdates.cpp).
+std::unique_ptr<ui::Widget> MakeUpdateStatus(const settings::Item& item);
 // Settings > Interface: the skin list with previews and the contrast check (SettingsSkins.cpp).
 std::unique_ptr<ui::Widget> MakeSkinPicker(const std::vector<const settings::Item*>& items, PageHost& page);
 // Settings > Controls: grouped list of every action with its key bindings.

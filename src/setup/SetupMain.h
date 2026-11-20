@@ -5,8 +5,11 @@
 namespace setup {
 
 // The non-player modes of Moonbow.exe; false when this launch is the player.
-//   Setup.exe [--silent] [--dir <folder>] [--no-system] [--restore-data]
+//   Setup.exe [--silent | --update] [--dir <folder>] [--no-system] [--restore-data] [--wait-pid <pid>]
 //                                         install, update, roll back or reinstall (a Moonbow.exe with a package)
+//                                         --update: Moonbow's "Restart to update" (app/Updater.h), the window
+//                                         without questions, Moonbow opens again after it; --wait-pid: first
+//                                         wait for that process (the Moonbow that started the update) to end
 //   Moonbow.exe --uninstall [--silent] [--remove-data]
 //   Moonbow.exe --switch-version <version> [--silent] [--restore-data]
 //   Moonbow.exe --make-setup <out.exe> <file>...   builds a Setup.exe from this Moonbow.exe and the files

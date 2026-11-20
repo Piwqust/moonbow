@@ -63,6 +63,20 @@ include before and after numbers in the pull request.
 
 ## Releases
 
-`tools\package-release.ps1` builds the release files from a clean commit: the installer, the portable zip, a
-`.sha256` for each, and the debug symbols kept locally for reading crash dumps. User-facing changes go into
-[CHANGELOG.md](CHANGELOG.md) and, for the installer's "What's new", into `src/setup/ReleaseNotes.h`.
+A release is one command; GitHub Actions does the rest and installed Moonbows update themselves.
+
+1. Write what changed for the person using Moonbow: a `## <version> (unreleased)` section in
+   [CHANGELOG.md](CHANGELOG.md) (it becomes the GitHub release notes; `docs/releases/v<version>.md` replaces them when
+   it exists) and a few plain lines in `src/setup/ReleaseNotes.h` ("What's new" inside Moonbow).
+2. `powershell -ExecutionPolicy Bypass -File tools\release.ps1 <version>` (`-DryRun` to check first). It sets the
+   version in `res/app.rc`, dates the changelog section, commits, tags `v<version>` and pushes.
+3. [.github/workflows/release.yml](.github/workflows/release.yml) builds and tests the tag, makes the installer, the
+   portable zip, the debug symbols and the signed update feed `moonbow-update.json`, and publishes the release.
+   Within a day every installed Moonbow downloads the new setup and installs it when it is closed.
+
+How the updates work: `src/app/Updater.h` (the client), `src/setup/UpdateFeed.h` (the signed feed),
+`tools/release/` (making and signing it). The feed is signed with ECDSA P-256; the private key is the
+`MOONBOW_UPDATE_KEY` secret of the repository and a file the maintainer keeps outside it. Losing it means installed
+Moonbows can no longer be updated, so keep a copy. `tools\package-release.ps1` still builds everything locally
+(with the key at `%USERPROFILE%\.moonbow-release\update-signing-key.txt`), and `tools\release\publish.ps1` publishes
+that by hand. To try a feed before a release, point a test instance at it: `MOONBOW_UPDATE_FEED=<url>`.
