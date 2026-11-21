@@ -19,11 +19,13 @@ inline constexpr ReleaseNote kReleaseNotes[] = {
     {L"0.3.0",
      L"Any part of the player opens in a window of its own: the cover, the seek bar, the lyrics, each audio meter.\n"
      L"Right-click in the player › Separate windows; they stay where you put them, on any screen.\n"
-     L"Redrawn VU meters that grow with the window, calibrated 3 dB lower (0 VU = −7 dBFS).\n"
+     L"Redrawn VU meters that grow with the window and read 3 dB lower.\n"
+     L"Right-click a part of the music view or a button on the control bar to hide it.\n"
      L"A double click on the music view goes fullscreen.",
      L"Любую часть плеера можно открыть в отдельном окне: обложку, полосу перемотки, текст песни, каждый индикатор.\n"
      L"Правый щелчок в плеере › Отдельные окна; окна остаются там, где вы их поставили, на любом экране.\n"
-     L"Новые VU-индикаторы растут вместе с окном и показывают на 3 дБ меньше (0 VU = −7 dBFS).\n"
+     L"Новые VU-индикаторы растут вместе с окном и показывают на 3 дБ меньше.\n"
+     L"Правый щелчок по части экрана музыки или по кнопке на панели скрывает её.\n"
      L"Двойной щелчок по экрану музыки включает полный экран."},
     {L"0.2.0",
      L"Moonbow updates itself: a new version downloads in the background and installs when you close Moonbow.\n"
