@@ -1,0 +1,26 @@
+{
+    "moonbow":  {
+                    "start":  "window=77.6 first=394.4 full=487.3 moving=415.1 frame0=0 period=22.9 worst=35.0 size=1618x984",
+                    "window":  "MoonbowHost 1600x960 at 1111,558",
+                    "playing":  "cpu=8.0 private=243.1 ws=192.7 private_peak=246.1 gpu_mem=192.9 threads=153 handles=1334 gpu_3D=0.6 gpu_VideoDecode=3.5",
+                    "smooth":  "frames=193 seen=193 rate=1.006 longest=61.7 captures_per_s=55.5",
+                    "paused":  "cpu=0.5 private=252.7 ws=193.2 private_peak=252.7 gpu_mem=203.0 threads=152 handles=1298",
+                    "pausedFrames":  "1010 1010"
+                },
+    "vlc":  {
+                "start":  "window=1138.4 first=1645.7 full=1645.7 moving=1691.3 frame0=0 period=24.1 worst=98.8 size=1938x1205",
+                "window":  "Qt5QWindowIcon 1600x960 at 1611,802",
+                "playing":  "cpu=3.4 private=163.8 ws=174.9 private_peak=193.4 gpu_mem=125.3 threads=86 handles=897 gpu_VideoDecode=3.4 gpu_3D=0.1",
+                "smooth":  "frames=193 seen=193 rate=1.006 longest=54.4 captures_per_s=102.5",
+                "paused":  "cpu=0.5 private=161.0 ws=172.2 private_peak=161.1 gpu_mem=125.3 threads=84 handles=900",
+                "pausedFrames":  "790 790"
+            },
+    "mpc":  {
+                "start":  "window=1477.8 first=2131.9 full=2131.9 moving=2166.2 frame0=1 period=15.2 worst=111.2 size=1938x1259",
+                "window":  "MediaPlayerClassicW 1600x960 at 951,421",
+                "playing":  "cpu=2.1 private=233.6 ws=147.9 private_peak=238.6 gpu_mem=114.3 threads=96 handles=961 gpu_3D=0.2 gpu_VideoDecode=3.4",
+                "smooth":  "frames=192 seen=192 rate=1.000 longest=54.0 captures_per_s=78.6",
+                "paused":  "cpu=0.4 private=233.9 ws=148.3 private_peak=234.1 gpu_mem=114.3 threads=95 handles=958",
+                "pausedFrames":  "792 792"
+            }
+}

@@ -1,0 +1,152 @@
+{
+    "moonbow":  [
+                    {
+                        "ms":  102.1,
+                        "from":  39,
+                        "first":  279,
+                        "settled":  279
+                    },
+                    {
+                        "ms":  79.8,
+                        "from":  279,
+                        "first":  519,
+                        "settled":  519
+                    },
+                    {
+                        "ms":  159.1,
+                        "from":  519,
+                        "first":  759,
+                        "settled":  759
+                    },
+                    {
+                        "ms":  100.6,
+                        "from":  759,
+                        "first":  999,
+                        "settled":  999
+                    },
+                    {
+                        "ms":  50.2,
+                        "from":  999,
+                        "first":  1239,
+                        "settled":  1239
+                    },
+                    {
+                        "ms":  125.6,
+                        "from":  1239,
+                        "first":  1479,
+                        "settled":  1479
+                    },
+                    {
+                        "ms":  71.2,
+                        "from":  1479,
+                        "first":  1719,
+                        "settled":  1719
+                    },
+                    {
+                        "ms":  137.8,
+                        "from":  1719,
+                        "first":  1959,
+                        "settled":  1959
+                    }
+                ],
+    "moonbow-auto":  [
+                         {
+                             "ms":  128.1,
+                             "from":  39,
+                             "first":  279,
+                             "settled":  279
+                         },
+                         {
+                             "ms":  71.2,
+                             "from":  279,
+                             "first":  519,
+                             "settled":  519
+                         },
+                         {
+                             "ms":  157.8,
+                             "from":  519,
+                             "first":  759,
+                             "settled":  759
+                         },
+                         {
+                             "ms":  112.4,
+                             "from":  759,
+                             "first":  999,
+                             "settled":  999
+                         },
+                         {
+                             "ms":  50.3,
+                             "from":  999,
+                             "first":  1239,
+                             "settled":  1239
+                         },
+                         {
+                             "ms":  112.6,
+                             "from":  1239,
+                             "first":  1479,
+                             "settled":  1479
+                         },
+                         {
+                             "ms":  70.9,
+                             "from":  1479,
+                             "first":  1719,
+                             "settled":  1719
+                         },
+                         {
+                             "ms":  138.1,
+                             "from":  1719,
+                             "first":  1959,
+                             "settled":  1959
+                         }
+                     ],
+    "mpc":  [
+                {
+                    "ms":  24.9,
+                    "from":  36,
+                    "first":  165,
+                    "settled":  165
+                },
+                {
+                    "ms":  37.2,
+                    "from":  165,
+                    "first":  306,
+                    "settled":  306
+                },
+                {
+                    "ms":  220.5,
+                    "from":  306,
+                    "first":  426,
+                    "settled":  426
+                },
+                {
+                    "ms":  133.4,
+                    "from":  426,
+                    "first":  546,
+                    "settled":  546
+                },
+                {
+                    "ms":  121.4,
+                    "from":  546,
+                    "first":  666,
+                    "settled":  666
+                },
+                {
+                    "ms":  49.2,
+                    "from":  666,
+                    "first":  759,
+                    "settled":  759
+                },
+                {
+                    "ms":  40.7,
+                    "from":  759,
+                    "first":  905,
+                    "settled":  905
+                },
+                {
+                    "ms":  220.6,
+                    "from":  905,
+                    "first":  1025,
+                    "settled":  1025
+                }
+            ]
+}
