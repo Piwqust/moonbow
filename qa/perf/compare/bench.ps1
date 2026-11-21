@@ -13,7 +13,7 @@
 param([string]$Mode = "probe", [int]$Runs = 10, [string[]]$Only = @(), [switch]$Keep,
       [string]$Players = "$env:TEMP\moonbow-qa\players", [string]$Media = "$env:TEMP\moonbow-qa\compare-media",
       [string]$Work = "$env:TEMP\moonbow-qa\compare", [string]$Moonbow = "$env:LOCALAPPDATA\Programs\Moonbow\Moonbow.exe",
-      [string]$Out = "", [string]$MoveTo = "")
+      [string]$Out = "", [string]$MoveTo = "", [string]$MoonbowSettings = "")
 $ErrorActionPreference = "Stop"
 Add-Type -Path (Join-Path $PSScriptRoot "CmpBench.cs") -ReferencedAssemblies System.Drawing, System.Core
 [CmpBench]::Init()
@@ -29,17 +29,24 @@ function Reset-Dir([string]$dir) {
   if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
   New-Item -ItemType Directory -Force $dir | Out-Null
 }
+# Moonbow's data folder: no first-run questions, and -MoonbowSettings as its settings.json values,
+# e.g. -MoonbowSettings '{"playback.seekPrecise":false}'.
+function Reset-Moonbow([string]$dir) {
+  Reset-Dir $dir
+  [IO.File]::WriteAllText("$dir\ui.json", '{"onboarded":"1"}', $enc)
+  if ($MoonbowSettings) { [IO.File]::WriteAllText("$dir\settings.json", '{"version":1,"values":' + $MoonbowSettings + '}', $enc) }
+}
 # Every run starts from first-run defaults: no history, no remembered position, no saved window.
 $defs = [ordered]@{
   "moonbow" = @{
     Name = "Moonbow 0.2.0"
-    Prep = { Reset-Dir "$Work\moonbow"; [IO.File]::WriteAllText("$Work\moonbow\ui.json", '{"onboarded":"1"}', $enc) }
+    Prep = { Reset-Moonbow "$Work\moonbow" }
     Cmd  = { param($file, $rc) "`"$Moonbow`" --new-instance --data-dir `"$Work\moonbow`"" + $(if ($file) { " `"$file`"" }) }
     Dir  = (Split-Path $Moonbow)
   }
   "moonbow-auto" = @{
     Name = "Moonbow 0.2.0 (--automation)"
-    Prep = { Reset-Dir "$Work\moonbow-auto"; [IO.File]::WriteAllText("$Work\moonbow-auto\ui.json", '{"onboarded":"1"}', $enc) }
+    Prep = { Reset-Moonbow "$Work\moonbow-auto" }
     Cmd  = { param($file, $rc) "`"$Moonbow`" --new-instance --automation --data-dir `"$Work\moonbow-auto`"" + $(if ($file) { " `"$file`"" }) }
     Dir  = (Split-Path $Moonbow)
   }
