@@ -47,6 +47,10 @@ What stands behind them:
 - Windows Defender real-time protection and Windhawk (with three mods) were running. Both load into all
   three players. How much of VLC's and MPC-HC's first second is theirs was not separated, so on another
   PC the gap can be smaller.
+- Which Moonbow: the build installed on the PC that day, version 0.2.0 plus the development changes made
+  since the release. The published 0.2.0 was then started side by side with it, 12 hidden starts each,
+  timed by the player's own log: playback began after 388 ms in the release and 399 ms in the installed
+  build, with the same number of threads and the same memory.
 - Warm starts: the players and the clips were already in the disk cache. Starts after a reboot were not measured.
 - VLC ran from the archive with the plugin cache its installer builds (`vlc-cache-gen`); MPC-HC with the
   bundled LAV Filters and MPC Video Renderer, its first-run question about updates answered beforehand.
@@ -80,4 +84,5 @@ powershell -File qa\perf\compare\bench.ps1 -Mode colors -MoveTo "3860,200,1300,8
 ```
 
 `-Keep` keeps each player's settings between runs (an everyday start); without it every run is a first
-run. `-Only vlc,mpc` picks players, `-Out file.json` saves the series.
+run. `-Only vlc,mpc` picks players, `-Out file.json` saves the series, `-Moonbow path` takes another
+Moonbow.exe and `-MoonbowSettings '{"playback.seekPrecise":false}'` gives it settings for the run.
