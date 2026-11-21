@@ -13,7 +13,11 @@ namespace {
 ComPtr<ID3D11Device> CreateDevice(D3D_DRIVER_TYPE type) {
     const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
                                         D3D_FEATURE_LEVEL_10_0};
-    const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    // No worker threads inside the driver: the UI draws a frame in under a millisecond, and with
+    // them one NVIDIA device holds about 50 threads (87 -> 35 in an idle player, 151 -> 99 while a
+    // video plays, working set about 6 MB smaller; frame times and startup unchanged). mpv's own
+    // device is not ours to flag.
+    const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
     ComPtr<ID3D11Device> device;
     HRESULT hr = D3D11CreateDevice(nullptr, type, nullptr, flags, levels, static_cast<UINT>(std::size(levels)),
                                    D3D11_SDK_VERSION, &device, nullptr, nullptr);

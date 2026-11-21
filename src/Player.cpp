@@ -771,7 +771,9 @@ void Player::SeekRelative(double seconds) {
     holdResume_ = false;
     CancelCrossfade();
     std::string delta = std::to_string(seconds);
-    Cmd({"seek", delta.c_str(), "relative+exact"});
+    // No "+exact": the precision is the "Seek precisely" setting (hr-seek). With it off a step
+    // lands on a keyframe, about twice as fast; forcing "exact" here made the setting do nothing.
+    Cmd({"seek", delta.c_str(), "relative"});
 }
 
 void Player::SeekChapter(int delta) {
