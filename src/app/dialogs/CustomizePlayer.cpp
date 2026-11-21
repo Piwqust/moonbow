@@ -384,14 +384,19 @@ private:
         body->pad = Insets::All(34);
         body->gap = 24;
         // In the body, not the one-line toolbar: the Russian hint needs two lines.
-        auto* desc = body->Add<Label>(
-            std::wstring(overlay_
-                             ? Tr(L"Drag items into the control bar below to add them, along it to reorder them, and back "
-                                  L"here to remove them from the player.")
-                             : Tr(L"Drag items into the preview below to add them, along it to reorder them, and back here "
-                                  L"to remove them from the player.")) +
-                L" " + Tr(L"With the keyboard: Enter adds an item, Delete removes it, the arrow keys move it."),
-            TextStyle::Body, Tone::Tertiary);
+        std::wstring hint =
+            overlay_ ? Tr(L"Drag items into the control bar below to add them, along it to reorder them, and back "
+                          L"here to remove them from the player.")
+                     : Tr(L"Drag items into the preview below to add them, along it to reorder them, and back here "
+                          L"to remove them from the player.");
+        // The keyboard sentence is a third line in a narrow window. In the smallest one (440 high)
+        // it pushed Cancel, Reset and Save half under the window's edge, so it needs a taller window.
+        const Host* host = GetHost() ? GetHost() : window_;
+        if (!host || host->ClientSize().h >= 500) {
+            hint += L" ";
+            hint += Tr(L"With the keyboard: Enter adds an item, Delete removes it, the arrow keys move it.");
+        }
+        auto* desc = body->Add<Label>(hint, TextStyle::Body, Tone::Tertiary);
         desc->width = Length::Grow();
         desc->wrap = true;
         scroll_ = body->Add<ScrollView>();
