@@ -90,7 +90,8 @@ bool PipOverlayShown(const ui::Widget* overlay);
 void ShowPipContextMenu(ui::Host* host, ui::Point at);
 // The player's right-click menu; for music it has the lyrics and pinned-queue items instead of
 // the video and subtitle ones.
-void ShowPlayerContextMenu(ui::Host* host, ui::Point at);
+void ShowPlayerContextMenu(ui::Host* host, ui::Point at, std::vector<ui::MenuItem> head = {},
+                           std::vector<ui::MenuItem> tail = {});
 // The queue pinned beside the music view: "left", "right" or "" (ui.json player.queueDock).
 std::string QueueDockSide();
 void SetQueueDockSide(const std::string& side);
@@ -102,6 +103,8 @@ bool MusicCoverReady();
 ui::Rect MusicToastSlot();
 // audio.lyricsStyle as radio items (MusicView.cpp).
 std::vector<ui::MenuItem> LyricsStyleItems();
+// Rows that bring back what the user hid in the music view (empty: nothing is hidden).
+std::vector<ui::MenuItem> MusicHiddenItems();
 // The playing song's lyrics as the music view holds them, and the line sung now (`line`, -1: none
 // or unsynced). The reference stays valid until the next file loads.
 struct Lyrics;
@@ -113,6 +116,8 @@ public:
     explicit MiniPlayer(MainWindow* window);
     ~MiniPlayer() override;
     ui::Rect VideoRect() const;
+    // The one-row card of a small window (set by the last Measure).
+    bool Compact() const { return compact_; }
     ui::Size MeasureContent(float availW, float availH) override;
     void Paint(ui::Painter& p) override;
     void OnLayout() override;

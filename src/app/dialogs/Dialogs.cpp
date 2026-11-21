@@ -955,7 +955,7 @@ void ShowNetworkStreamDialog() {
 
     // Buffering applies to every stream, so it is a setting, not a choice in this dialog.
     auto* buffering = body->Add<LinkButton>(Tr(L"Buffering settings…"), TextStyle::Small);
-    buffering->onClick = [] { TheApp().OpenSettings("network"); };
+    buffering->onClick = [] { TheApp().OpenSettings("network", "buffering"); };
 
     f->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [f] { f->Close(); };
     f->Footer()->Add<Spacer>();

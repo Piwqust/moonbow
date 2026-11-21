@@ -18,8 +18,9 @@ namespace app::panel {
 class Popover;
 
 // Queue / Bookmarks / Chapters. `compact` is the mini player variant (queue only).
-// covers: the queue pinned beside the music view (cover art, two-line rows, an unpin button).
-std::unique_ptr<ui::Widget> BuildQueueTab(bool compact, bool covers = false);
+// covers: the queue pinned beside the music view (cover art, two-line rows, an unpin button);
+// docked = false in a window of its own, where there is nothing to unpin.
+std::unique_ptr<ui::Widget> BuildQueueTab(bool compact, bool covers = false, bool docked = true);
 std::unique_ptr<ui::Widget> BuildBookmarksTab();
 std::unique_ptr<ui::Widget> BuildChaptersTab();
 // The Repeat button that tells One from All (a small "1"), at the control bar's size.

@@ -354,7 +354,7 @@ std::unique_ptr<Widget> AudioPanel(int id) {
             bands->onClick = [] {
                 Later([] {
                     ClosePlayerPanels();
-                    TheApp().OpenSettings("audio");
+                    TheApp().OpenSettings("audio", "effects");
                 });
             };
             break;
@@ -864,10 +864,19 @@ std::unique_ptr<Widget> PlaybackPanel(int id) {
             NavRow(page, "speed", L"Speed", [] { return SpeedText(PS().speed); }, kPlaySpeed);
             NavRow(page, "repeat_right", L"Repeat", [] { return LabelOf(RepeatOpts(), RepeatValue()); }, kPlayRepeat);
             Widget* s = AddSection(page);
-            AddToggle(page, s, Tr(L"Shuffle"), [] { return TheApp().queue().Shuffle(); },
-                      [](bool v) { Cfg().SetBool("playback.shuffle", v); }, 44);
-            AddToggle(page, s, Tr(L"Stop after this item"), [] { return Live().stopAfter; },
-                      [](bool v) { Live().SetStopAfter(v); }, 44);
+            // The columns of the rows around them: an icon, then the label 32 DIP after it. Without
+            // the icon the two labels started in the icon column, left of every other label.
+            auto withIcon = [](Toggle* t, const char* icon) {
+                Widget* row = t->Parent();
+                row->gap = 12;
+                row->AddChild(std::make_unique<IconView>(icon, 20), 0);
+            };
+            withIcon(AddToggle(page, s, Tr(L"Shuffle"), [] { return TheApp().queue().Shuffle(); },
+                               [](bool v) { Cfg().SetBool("playback.shuffle", v); }, 44),
+                     "shuffle_right");
+            withIcon(AddToggle(page, s, Tr(L"Stop after this item"), [] { return Live().stopAfter; },
+                               [](bool v) { Live().SetStopAfter(v); }, 44),
+                     "stop");
             NavRow(page, "sleep", L"Sleep Timer", [] { return LabelOf(SleepOpts(), std::to_string(Live().sleepMinutes)); },
                    kPlaySleep);
             NavRow(page, "replay", L"A-B Loop", LoopText, kPlayLoop);
@@ -987,7 +996,7 @@ public:
         open->onClick = [category] {
             Later([category] {
                 ClosePlayerPanels();
-                TheApp().OpenSettings(category);
+                TheApp().OpenSettings(category, "*");  // "All audio settings": every row, also in Basic mode
             });
         };
     }

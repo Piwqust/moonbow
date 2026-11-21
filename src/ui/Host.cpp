@@ -1049,6 +1049,17 @@ Widget* Host::InteractiveAt(float x, float y) const {
 void Host::UpdateHot(float x, float y) {
     if (ncHover_) return;  // outside the client area; WM_NCMOUSEMOVE keeps hot_
     Widget* hot = mouseInside_ ? InteractiveAt(x, y) : nullptr;
+    // Under an open menu nothing in the window hovers, as in Windows: no highlight, no tooltip and
+    // no seek preview beside the menu. A panel (clickThrough) leaves the bar's buttons alive.
+    if (hot && !capture_) {
+        bool menuOpen = false, inPopup = false;
+        for (const Popup& p : popups_) {
+            if (p.options.passthrough) continue;
+            if (p.content.get() == hot || p.content->IsAncestorOf(hot)) inPopup = true;
+            if (p.options.dismissOnOutside && !p.options.clickThrough) menuOpen = true;
+        }
+        if (menuOpen && !inPopup) hot = nullptr;
+    }
     if (capture_) hot = capture_->rect.Contains(x, y) ? capture_ : nullptr;
     if (hot == hot_) return;
     Widget* old = hot_;
@@ -1318,10 +1329,11 @@ bool Host::OnKey(UINT vk, bool down, bool repeat) {
         return true;
     }
 
-    // The focus can stay on a hidden widget (the library's grid behind the player): it opens no
-    // menu, the window's own does (the video's).
+    // The focus can stay on a hidden widget (the library's grid behind the player, a button of
+    // the error card after the next file opened): it takes no keys and opens no menu, the window's
+    // own shortcuts and menu work instead (Space pauses, the Menu key opens the video's menu).
     bool hiddenFocus = false;
-    for (Widget* w = vk == VK_APPS ? focus_ : nullptr; w && !hiddenFocus; w = w->Parent()) hiddenFocus = !w->visible;
+    for (Widget* w = focus_; w && !hiddenFocus; w = w->Parent()) hiddenFocus = !w->visible;
     for (Widget* w = hiddenFocus ? nullptr : focus_; w; w = w->Parent())
         if (w->IsEnabled() && w->OnKeyDown(e)) {
             RequestRender();
@@ -1342,8 +1354,8 @@ bool Host::OnKey(UINT vk, bool down, bool repeat) {
     if (vk == VK_APPS && !hiddenFocus && OpenContextMenu()) return true;
     // Space/Enter press the focused control only when it was reached with the
     // keyboard: after a mouse click Space stays the window's shortcut (play/pause).
-    if ((vk == VK_RETURN || vk == VK_SPACE) && !e.mods.alt && focusVisible_ && focus_ && focus_->interactive &&
-        focus_->IsEnabled() && !focus_->WantsTextInput()) {
+    if ((vk == VK_RETURN || vk == VK_SPACE) && !e.mods.alt && focusVisible_ && focus_ && !hiddenFocus &&
+        focus_->interactive && focus_->IsEnabled() && !focus_->WantsTextInput()) {
         focus_->OnClick();
         RequestRender();
         return true;

@@ -56,6 +56,14 @@ bool PlayerPanelOpen(PanelKind kind);
 // The open popover comes back on the same tab, built again (a language switch, App.cpp).
 void ReopenPlayerPanels();
 
+// The control bar's right-click menu. On the button `on`: remove it; on the seek bar: the song's
+// wave (music); then add a button that is not there, the bar's style, Customize player.
+std::vector<ui::MenuItem> ControlBarItems(ControlId on = ControlId::Count, bool seekBar = false);
+// A menu row for a Toggle setting (its Settings label, ticked when on; a click flips it), and one
+// with a submenu of a Pick setting's choices as radio items (the current one on the right).
+ui::MenuItem SettingToggleItem(const char* key);
+ui::MenuItem SettingChoiceItem(const char* key, const char* icon = "");
+
 // Creates the widget for one control item.
 std::unique_ptr<ui::Widget> CreateControl(ControlId id);
 
@@ -113,6 +121,8 @@ public:
 
 private:
     void ReadStyle();
+    void AddItem(ControlId cid);
+    SeekBar* AddSeekBar();
     ScopedConnection layoutConn_, langConn_;
     Config::Token configToken_ = 0;
     bool minimal_ = false, classic_ = false;

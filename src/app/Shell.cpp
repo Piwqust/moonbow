@@ -98,12 +98,23 @@ public:
         const float ix = owner_->Collapsed() ? rect.Cx() - 12 : rect.x + 12;
         p.Icon("add", {ix, rect.Cy() - 12, 24, 24}, fg);
         if (!owner_->Collapsed())
-            p.Text(Tr(L"Add Item"), {rect.x + 48, rect.y, rect.w - 56, rect.h}, TextStyle::Body, fg);
+            p.Text(Tr(L"Add"), {rect.x + 48, rect.y, rect.w - 56, rect.h}, TextStyle::Body, fg);
     }
 
 private:
     NavSidebar* owner_;
     AnimFloat hover_;
+};
+
+// The folder of what plays, in the player's title bar: a link to it in the library. A Tab stop
+// like the buttons beside it (it was reachable with the mouse only).
+class TitleCrumb : public Widget {
+public:
+    TitleCrumb() {
+        interactive = true;
+        focusable = true;
+    }
+    void PaintOver(Painter& p) override { PaintFocusRing(p, rect, 4); }
 };
 
 // Window button in the title bar (46×40 as in Windows 11, close turns red on hover). Dimmed while
@@ -172,13 +183,12 @@ TitleBar::TitleBar(MainWindow* window) : window_(window) {
     sep->height = Length::Px(18);
     sep->pad = {6, 0, 6, 0};
 
-    crumb_ = Add<Widget>();
+    crumb_ = Add<TitleCrumb>();
     crumb_->dir = Dir::Row;
     crumb_->align = Align::Center;
     crumb_->gap = 6;
     crumb_->pad = {6, 0, 8, 0};
     crumb_->height = Length::Px(28);
-    crumb_->interactive = true;
     crumb_->tooltip = Tr(L"Show in library");
     crumb_->onClick = [] {
         const QueueItem* item = TheApp().queue().CurrentItem();
@@ -342,7 +352,7 @@ void NavSidebar::SetCollapsed(bool collapsed) {
     // Icons-only rail: the labels move into tooltips.
     for (auto& c : Children()) {
         if (auto* item = dynamic_cast<NavItem*>(c.get())) item->tooltip = collapsed ? Tr(item->Name()) : L"";
-        else c->tooltip = collapsed ? Tr(L"Add Item") : L"";
+        else c->tooltip = collapsed ? Tr(L"Add") : L"";
         c->tooltipBeside = collapsed;
     }
     InvalidateLayout();

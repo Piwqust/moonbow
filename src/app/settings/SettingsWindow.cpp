@@ -49,6 +49,17 @@ bool CategoryShown(const Category& c) {
     return !BasicMode() || HasBasicItems(c);
 }
 
+// Whether Basic mode leaves out rows a link promised: the page's `section` ("*" = any of them).
+bool BasicHides(const Category& c, const std::string& section) {
+    if (!BasicMode()) return false;
+    if (!HasBasicItems(c)) return true;
+    for (const settings::Section& s : c.sections)
+        if (section == "*" || s.id == section)
+            for (const Item& it : s.items)
+                if (!it.hidden && !it.basic) return true;
+    return false;
+}
+
 Widget* FindById(Widget* w, const std::string& id) {
     if (!w) return nullptr;
     if (w->id == id) return w;
@@ -167,7 +178,7 @@ public:
 
 class SettingsWindow : public Host {
 public:
-    bool Open(const std::string& category) {
+    bool Open(const std::string& category, const std::string& section = {}) {
         HostOptions o;
         o.title = std::wstring(Tr(L"Settings")) + L" — Moonbow";
         MainWindow* main = TheApp().main();
@@ -180,6 +191,8 @@ public:
         if (!Create(o)) return false;
 
         category_ = settings::FindCategory(category) ? category : std::string("general");
+        Link(section);
+        if (const Category* c = settings::FindCategory(category_); c && !Shown(*c)) category_ = "general";
         page_.host = this;
         page_.state = &state_;
         page_.relayout = [this] { RequestLayout(); };
@@ -234,6 +247,13 @@ public:
             content_->ScrollTo(std::min(pendingScroll_, content_->MaxOffset()), false);
             pendingScroll_ = -1;
         }
+        // The section a link asked for, at the top of the page.
+        if (reveal_ && page && reveal_->rect.h > 0) {
+            const float y = reveal_->rect.y - page->rect.y - 12;
+            reveal_ = nullptr;
+            revealSection_.clear();  // once: a later rebuild (language, mode) keeps its place
+            if (content_->MaxOffset() > 0) content_->ScrollTo(std::clamp(y, 0.0f, content_->MaxOffset()), false);
+        }
     }
     static constexpr float kMaxPageW = 880;
 
@@ -250,10 +270,19 @@ public:
         if (search_) search_->SetText(q, true);
     }
 
-    void ShowCategory(const std::string& id) {
+    // `section`: a link from the app to that part of the page ("*" = the whole page), see Link().
+    void ShowCategory(const std::string& id, const std::string& section = {}, bool link = false) {
         const Category* cat = settings::FindCategory(id);
         if (!cat) return;
-        category_ = CategoryShown(*cat) ? id : std::string("general");
+        category_ = id;
+        if (link) {
+            Link(section);
+        } else {
+            whole_.clear();
+            revealSection_.clear();
+        }
+        reveal_ = nullptr;
+        if (!Shown(*cat)) category_ = "general";
         if (search_ && !search_->Text().empty()) search_->SetText(L"");
         query_.clear();
         RefreshNav();
@@ -268,7 +297,7 @@ public:
         const int last = static_cast<int>(cats.size()) - 1;
         const int step = delta < 0 ? -1 : 1;
         for (int left = std::abs(delta), k = i + step; left > 0 && k >= 0 && k <= last; k += step)
-            if (CategoryShown(cats[static_cast<size_t>(k)])) {
+            if (Shown(cats[static_cast<size_t>(k)])) {
                 i = k;
                 --left;
             }
@@ -387,14 +416,31 @@ private:
     void SetBasicMode(bool basic) {
         Cfg().SetString("interface.settingsMode", basic ? "basic" : "all");
         if (auto* mode = dynamic_cast<Segmented*>(FindById(Root(), "settings-mode"))) mode->SetSelected(basic ? 0 : 1);
-        if (const Category* c = settings::FindCategory(category_); c && !CategoryShown(*c)) category_ = "general";
+        whole_.clear();
+        revealSection_.clear();
+        reveal_ = nullptr;
+        if (const Category* c = settings::FindCategory(category_); c && !Shown(*c)) category_ = "general";
         RefreshNav();
         BuildPage();
     }
 
+    // A link from the app ("Buffering settings…", "Lyrics settings…", "All audio settings") opens
+    // the page it names even when Basic mode has no such page or leaves those rows out: the page
+    // shows every row for this visit, and the saved mode stays. `section`: what to scroll to.
+    void Link(const std::string& section) {
+        whole_.clear();
+        revealSection_.clear();
+        reveal_ = nullptr;
+        const Category* cat = settings::FindCategory(category_);
+        if (!cat) return;
+        if (section.empty() ? !CategoryShown(*cat) : BasicHides(*cat, section)) whole_ = category_;
+        if (section != "*") revealSection_ = section;
+    }
+    bool Shown(const Category& c) const { return CategoryShown(c) || c.id == whole_; }
+
     void RefreshNav() {
         const bool searching = !query_.empty();
-        for (NavItem* n : navItems_) n->visible = CategoryShown(n->Cat());
+        for (NavItem* n : navItems_) n->visible = Shown(n->Cat());
         for (auto& [label, group] : navGroups_) {
             label->visible = false;
             for (NavItem* n : navItems_)
@@ -417,6 +463,7 @@ private:
     void BuildPage() {
         if (!content_) return;
         CloseAllPopups();  // menus of the old rows point at widgets about to go
+        reveal_ = nullptr;  // points into the page being replaced
         auto* page = content_->SetContent<Widget>();
         page->dir = Dir::Column;
         page->width = Length::Grow();
@@ -457,7 +504,7 @@ private:
 
     void BuildCategory(Widget* page, const Category& cat) {
         const settings::Lang lang = Lang();
-        const bool basic = BasicMode();
+        const bool basic = BasicMode() && cat.id != whole_;  // a link's page shows every row
         bool anyAdvanced = false;
         for (const settings::Section& s : cat.sections) {
             std::vector<const Item*> normal;
@@ -468,6 +515,7 @@ private:
             }
             if (normal.empty()) continue;
             Widget* sec = AddSection(page, s.Title(lang));
+            if (!revealSection_.empty() && s.id == revealSection_) reveal_ = sec;
             AddItems(sec, normal);
             if (cat.id == "controls" && s.id == "shortcuts") {
                 auto editor = MakeShortcutEditor(page_);
@@ -514,7 +562,7 @@ private:
         footer->width = Length::Grow();
         footer->align = Align::Center;
         footer->pad = {0, 8, 0, 0};
-        if (basic) {
+        if (BasicMode()) {
             auto* more = footer->Add<LinkButton>(Tr(L"Show all settings"));
             more->id = "show-all";
             more->trailingIcon = "chevron_right";
@@ -643,6 +691,9 @@ private:
     SearchField* search_ = nullptr;
     Widget* titleGap_ = nullptr;
     float pendingScroll_ = -1;
+    std::string whole_;          // the category shown with every row although the mode is Basic
+    std::string revealSection_;  // the section a link scrolls to...
+    Widget* reveal_ = nullptr;   // ...and its widget on the page just built
     Label* title_ = nullptr;
     ScrollView* content_ = nullptr;
     std::vector<NavItem*> navItems_;
@@ -671,9 +722,9 @@ SettingsWindow* g_window = nullptr;
 
 }  // namespace
 
-void ShowSettingsWindow(const std::string& category, const std::wstring& query) {
+void ShowSettingsWindow(const std::string& category, const std::wstring& query, const std::string& section) {
     if (g_window && g_window->Hwnd()) {
-        if (!category.empty()) g_window->ShowCategory(category);
+        if (!category.empty()) g_window->ShowCategory(category, section, true);
         if (!query.empty()) g_window->Search(query);
         HWND h = g_window->Hwnd();
         ui::Host::Activate(h);
@@ -690,7 +741,7 @@ void ShowSettingsWindow(const std::string& category, const std::wstring& query) 
     };
     g_window = w;
     w->SetQuery(query);
-    if (!w->Open(category)) {
+    if (!w->Open(category, section)) {
         g_window = nullptr;
         delete w;
     }

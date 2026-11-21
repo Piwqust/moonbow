@@ -6,7 +6,6 @@
 {L"Playlists", L"Плейлисты"},
 {L"History", L"История"},
 {L"Recent", L"Недавние"},  // recent links in "Open network stream"
-{L"Add Item", L"Добавить"},
 {L"Add folder to library", L"Добавить папку в медиатеку"},
 {L"Open file", L"Открыть файл"},
 {L"Open folder", L"Открыть папку"},

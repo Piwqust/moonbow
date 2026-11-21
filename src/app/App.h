@@ -145,7 +145,8 @@ public:
     const std::wstring& FailedError() const { return failedError_; }
 
     // --- windows --------------------------------------------------------------------
-    void OpenSettings(const std::string& category = {});
+    // `section`: see ShowSettingsWindow (Dialogs.h).
+    void OpenSettings(const std::string& category = {}, const std::string& section = {});
     void ShowOnboarding();
     void Quit();
     // Set once the main window starts closing (mpv shuts down on another thread): from then on

@@ -955,6 +955,26 @@ void BuildApp(Builder& b) {
         .Desc(L"For music, draw the seek bar as the song's loudness. When off, it is a plain bar, as for video.",
               L"Для музыки рисовать полосу перемотки как громкость песни. Если выключить — обычная полоса, как у видео.");
 
+    // Read by app/player/MusicView.cpp; a right click on each part hides it, the player menu's
+    // "Bring back hidden" shows it again.
+    b.Sec("musicView", L"Music view", L"Экран музыки");
+    b.Toggle("interface.musicBackdrop", L"Blurred cover in the background", L"Размытая обложка на фоне", true)
+        .Desc(L"Fill the view behind the cover with a blurred copy of it. When off, the background is plain black.",
+              L"Заполнять экран за обложкой её размытой копией. Если выключить — фон просто чёрный.");
+    b.Toggle("interface.musicTitle", L"Title and artist", L"Название и исполнитель", true);
+    b.Toggle("interface.musicButtons", L"Lyrics and Queue buttons", L"Кнопки «Текст» и «Очередь»", true)
+        .Desc(L"The two buttons under the title. Lyrics and the queue are also in the right-click menu.",
+              L"Две кнопки под названием. Текст и очередь есть и в меню правого щелчка.");
+    b.Toggle("interface.musicLyricsSource", L"The \"LRCLIB · Save .lrc\" line", L"Строка «LRCLIB · Сохранить .lrc»", true)
+        .Desc(L"Under lyrics found online: where they came from, and a button that saves them next to the song.",
+              L"Под текстом, найденным в интернете: откуда он взят, и кнопка, которая сохраняет его рядом с песней.");
+    b.Toggle("interface.musicVuScale", L"Numbers on the VU meters", L"Цифры на VU-индикаторах", true);
+    b.Toggle("interface.musicVuCaption", L"Channel and reading under the VU meters",
+             L"Канал и показание под VU-индикаторами", true)
+        .Desc(L"\"L\", \"R\" and the level in VU under the ends of each scale.",
+              L"«L», «R» и уровень в VU под концами каждой шкалы.");
+    b.Toggle("interface.musicVuPeak", L"Held peak on the VU meters", L"Удержанный пик на VU-индикаторах", true);
+
     // Read by app/player/DetachedWindows.cpp; closing a window with X turns its row off.
     b.Sec("windows", L"Separate windows", L"Отдельные окна");
     b.advanced = true;
@@ -1929,18 +1949,22 @@ void BuildMedia(Builder& b) {
         .Basic("grid", L"Next to the cover or instead of it.", L"Рядом с обложкой или вместо неё.")
         .When("audio.visualizer", "disabled", true);
     if (!audio::ProcessLoopbackSupported()) vizLayout.Hidden();
-    // Read by the music view's VU meters: the RMS level that reads 0 VU.
+    // Read by the music view's VU meters (audio::VuTarget): the sine level that reads 0 VU. Until
+    // the AES17 fix the same needles took 3 dB less: "-4" now is the old "-7", "-7" the old "-10".
     ItemRef vuRef = b.Pick("audio.vuReference", L"VU meter calibration", L"Калибровка VU-индикаторов",
            {{"-20", L"0 VU = −20 dBFS (SMPTE)", L"0 VU = −20 dBFS (SMPTE)"},
             {"-18", L"0 VU = −18 dBFS (EBU)", L"0 VU = −18 dBFS (EBU)"},
             {"-14", L"0 VU = −14 dBFS", L"0 VU = −14 dBFS"},
             {"-10", L"0 VU = −10 dBFS", L"0 VU = −10 dBFS"},
-            {"-7", L"0 VU = −7 dBFS (loud modern masters)", L"0 VU = −7 dBFS (громкие современные записи)"}},
-           "-7")
-        .Desc(L"The RMS level of the music that puts the needles at 0 VU. Studio references (−18, −20) suit quiet "
-              L"recordings; with today's loud releases they keep the needles in the red.",
-              L"Средний (RMS) уровень музыки, при котором стрелки стоят на 0 VU. Студийные значения (−18, −20) "
-              L"подходят для тихих записей; на громких современных релизах стрелки с ними не выходят из красной зоны.")
+            {"-7", L"0 VU = −7 dBFS", L"0 VU = −7 dBFS"},
+            {"-4", L"0 VU = −4 dBFS (loud modern masters)", L"0 VU = −4 dBFS (громкие современные записи)"}},
+           "-4")
+        .Desc(L"The level of a test tone (a sine) that puts the needles at 0 VU, as on a studio meter. Studio "
+              L"references (−18, −20) suit quiet recordings; with today's loud releases they keep the needles in "
+              L"the red.",
+              L"Уровень тестового тона (синусоиды), при котором стрелки стоят на 0 VU, как на студийном индикаторе. "
+              L"Студийные значения (−18, −20) подходят для тихих записей; на громких современных релизах стрелки с "
+              L"ними не выходят из красной зоны.")
         .When("audio.visualizer", "vu");
     if (!audio::ProcessLoopbackSupported()) vuRef.Hidden();
     b.Toggle("audio.pitchCorrection", L"Keep pitch when changing speed", L"Сохранять тон при смене скорости", true)

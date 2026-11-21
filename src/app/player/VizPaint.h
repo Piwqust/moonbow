@@ -16,7 +16,9 @@ namespace app {
 class VizPaint {
 public:
     static constexpr float kVuAspect = 1.6f;
-    bool vuPeak = true;  // VU meters draw the held peak mark
+    bool vuPeak = true;     // VU meters draw the held peak mark
+    bool vuScale = true;    // ... the numbers along the scale
+    bool vuCaption = true;  // ... the channel and the reading under the scale
 
     // Moves the VU needles toward the frame's levels (`live` false: back to the stop). True while
     // a needle is off the stop, so the caller keeps painting.

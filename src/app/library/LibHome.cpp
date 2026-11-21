@@ -145,6 +145,8 @@ private:
 
 class HomePage : public LibraryView {
 public:
+    // No search field over an empty library, as on the other pages (the header kept one here).
+    bool IsEmpty() const override { return empty_ && empty_->visible; }
     explicit HomePage(bool compact) : compact_(compact) {
         dir = Dir::Stack;
         align = Align::Stretch;

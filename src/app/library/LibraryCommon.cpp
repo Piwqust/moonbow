@@ -143,6 +143,10 @@ std::wstring CountEpisodes(long long n) {
     return CountWith(n, L"episode", L"episodes", L"выпуск", L"выпуска", L"выпусков");
 }
 
+std::wstring CountShowEpisodes(long long n) {
+    return CountWith(n, L"episode", L"episodes", L"серия", L"серии", L"серий");
+}
+
 std::wstring CountArtists(long long n) {
     return CountWith(n, L"artist", L"artists", L"исполнитель", L"исполнителя", L"исполнителей");
 }

@@ -48,16 +48,21 @@ public:
         mini_->visible = !playerShown && !pending && s.fileLoaded;
         // The mini player goes first: the library's scroll views keep their last rows reachable above it.
         Rect card;
+        if (!playerShown) nav_->FitWindow(rect.w);
         if (mini_->visible) {
             const Size m = mini_->Measure(rect.w, rect.h);
             card = {rect.Right() - m.w - 24, rect.Bottom() - m.h - 24, m.w, m.h};
+            // A narrow window: a strip along the bottom of the page, from the sidebar to the right
+            // edge. As a card in the corner it covered the right half of three list rows there,
+            // their length included; a strip is the list's bottom edge and covers no row halfway.
+            if (mini_->Compact() && rect.w < 1000) {
+                const float left = rect.x + (nav_->Collapsed() ? 56.0f : 200.0f) + 16;
+                card = {left, rect.Bottom() - m.h - 16, rect.Right() - 16 - left, m.h};
+            }
         }
         if (Host* h = GetHost()) h->floatingCard = card;
         if (playerShown || pending) player_->Arrange(rect);
-        if (!playerShown) {
-            nav_->FitWindow(rect.w);
-            library_->Arrange(rect);
-        }
+        if (!playerShown) library_->Arrange(rect);
         if (mini_->visible) mini_->Arrange(card);
     }
 

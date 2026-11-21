@@ -76,9 +76,11 @@ struct VuNeedle {
     float pos = 0, vel = 0;
 };
 // Where a steady level of `rms` (full scale 1) points when `referenceDb` dBFS reads 0 VU. The
-// needle's swing is linear in voltage, so 0 VU sits at 10^(-3/20) of the way to +3.
+// dBFS are a sine's, as studio meters and alignment tones count them (AES17): a sine whose peaks
+// reach −18 dBFS reads 0 VU at "−18", so the RMS is taken √2 up to its sine's peak. The needle's
+// swing is linear in voltage, so 0 VU sits at 10^(-3/20) of the way to +3.
 inline float VuTarget(float rms, float referenceDb) {
-    return rms / std::pow(10.0f, (referenceDb + 3.0f) / 20.0f);
+    return rms * 1.41421356f / std::pow(10.0f, (referenceDb + 3.0f) / 20.0f);
 }
 inline void UpdateVu(VuNeedle& n, float target, float dt) {
     target = std::clamp(target, 0.0f, 1.2f);

@@ -895,7 +895,7 @@ void ClearQueue() {
 // Column: header + scrolling list. Keeps the header text in sync.
 class QueueTab : public Widget {
 public:
-    QueueTab(bool compact, bool covers) {
+    QueueTab(bool compact, bool covers, bool docked) {
         dir = Dir::Column;
         width = Length::Grow();
         height = Length::Grow();
@@ -925,7 +925,8 @@ public:
             ShowMenu(GetHost(), more_->rect, std::move(items), Place::Below, 240);
         });
         // Music: the queue can stay beside the cover (PlayerView's dock) instead of this popover.
-        if (covers) HeaderButton(header_, "close", L"Unpin the queue", [] { SetQueueDockSide(""); });
+        // Not in a window of its own: the button would unpin the main window's queue from there.
+        if (covers && docked) HeaderButton(header_, "close", L"Unpin the queue", [] { SetQueueDockSide(""); });
         auto* sv = Add<ScrollView>();
         sv->width = Length::Grow();
         sv->height = Length::Grow();
@@ -1341,8 +1342,8 @@ private:
 
 }  // namespace
 
-std::unique_ptr<Widget> BuildQueueTab(bool compact, bool covers) {
-    return std::make_unique<QueueTab>(compact, covers);
+std::unique_ptr<Widget> BuildQueueTab(bool compact, bool covers, bool docked) {
+    return std::make_unique<QueueTab>(compact, covers, docked);
 }
 
 std::unique_ptr<IconButton> MakeRepeatButton() {

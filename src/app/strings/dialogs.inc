@@ -83,6 +83,8 @@
  L"here to remove them from the player.",
  L"Перетащите элементы на панель управления внизу, чтобы добавить их, двигайте по панели, чтобы изменить порядок, "
  L"и верните сюда, чтобы убрать."},
+{L"With the keyboard: Enter adds an item, Delete removes it, the arrow keys move it.",
+ L"С клавиатуры: Enter добавляет элемент, Delete убирает, стрелки двигают."},
 {L"Drag items into the preview below to add them, along it to reorder them, and back here "
  L"to remove them from the player.",
  L"Перетащите элементы на панель внизу, чтобы добавить их, двигайте по панели, чтобы изменить порядок, "

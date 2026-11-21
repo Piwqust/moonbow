@@ -29,7 +29,8 @@ std::wstring CountPlays(long long n);
 std::wstring CountFiles(long long n);  // "12 files" / "12 файлов"
 std::wstring CountAlbums(long long n);
 std::wstring CountStations(long long n);  // "5 станций"
-std::wstring CountEpisodes(long long n);  // "1 выпуск"
+std::wstring CountEpisodes(long long n);  // "1 выпуск": a podcast's
+std::wstring CountShowEpisodes(long long n);  // "1 серия": a show's, as "Next episode" says it
 // The header counts with the page's noun (UX-19): "3 альбома", "2 сериала", "5 плейлистов".
 std::wstring CountArtists(long long n);
 std::wstring CountGenres(long long n);

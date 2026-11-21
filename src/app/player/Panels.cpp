@@ -155,9 +155,15 @@ std::unique_ptr<Popover> MakePopover(Group g, int tab) {
             };
             // As tall as the list, like the settings panels (a long queue scrolls), but never shorter
             // while open: the tabs stay under the pointer when they switch or a row goes.
+            // Beside the music the cover and the lyrics move over to leave it the right side (the
+            // music view's Place, in a window wide enough for both): there it takes that whole
+            // column, not a box at the bottom of an empty one.
             pop->place = [raw, tallest = 300.0f]() mutable {
                 tallest = std::max(tallest, raw->NaturalHeight());
-                return PlaceAboveBar(tallest);
+                const PlayerState& ps = TheApp().player().State();
+                const MainWindow* w = TheApp().main();
+                const bool column = ps.fileLoaded && !ps.hasVideo && w && w->ClientSize().w - (kPanelW + kGap) >= 352;
+                return PlaceAboveBar(column ? 100000.0f : tallest);
             };
             break;
         case Group::Mini:

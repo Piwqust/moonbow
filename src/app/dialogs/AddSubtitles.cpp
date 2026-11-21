@@ -779,7 +779,7 @@ private:
             b->minWidth = 160;
             b->onClick = [this] {
                 frame_->Close();
-                if (MainWindow* w = TheApp().main()) w->Post([] { TheApp().OpenSettings("privacy"); });
+                if (MainWindow* w = TheApp().main()) w->Post([] { TheApp().OpenSettings("privacy", "online"); });
             };
         }
     }

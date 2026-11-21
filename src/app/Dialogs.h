@@ -46,7 +46,9 @@ void ShowOnboarding(std::function<void()> done);
 
 // Separate settings window; `category` is a schema category id ("general", "video"...).
 // `query` opens it on a search for those words (the command palette's settings).
-void ShowSettingsWindow(const std::string& category, const std::wstring& query = {});
+// `section`: the part of the page a link in the app points at ("*" = the whole page). The page then
+// shows every row for this visit even in Basic mode, scrolled to that section.
+void ShowSettingsWindow(const std::string& category, const std::wstring& query = {}, const std::string& section = {});
 void CloseSettingsWindow();
 
 }  // namespace app

@@ -1189,8 +1189,8 @@ void App::ShowPlayer(bool show) {
     if (held) ReleaseHeldOsd(show);
 }
 
-void App::OpenSettings(const std::string& category) {
-    ShowSettingsWindow(category);
+void App::OpenSettings(const std::string& category, const std::string& section) {
+    ShowSettingsWindow(category, {}, section);
 }
 
 void App::ShowOnboarding() {

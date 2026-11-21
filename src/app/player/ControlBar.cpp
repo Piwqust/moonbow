@@ -11,9 +11,12 @@
 #include "app/App.h"
 #include "app/I18n.h"
 #include "app/MainWindow.h"
+#include "core/SettingsSchema.h"
 #include "gfx/Text.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <sstream>
 
 namespace app {
@@ -725,6 +728,126 @@ Signal<>& ControlLayoutChanged() {
     return LayoutSignal();
 }
 
+// --- right-click menu ------------------------------------------------------------------
+
+namespace {
+
+settings::Lang SchemaLangNow() {
+    return CurrentLanguage() == Language::Russian ? settings::Lang::Ru : settings::Lang::En;
+}
+
+// Where a button goes back in: among the default layout's items in their order, the others (the
+// extra buttons) at the start of the right group, next to the seek bar.
+void InsertControl(ControlLayout& l, ControlId id) {
+    const ControlLayout def = ControlLayout::Default();
+    auto put = [id](std::vector<ControlId>& now, const std::vector<ControlId>& order) {
+        const auto me = std::find(order.begin(), order.end(), id);
+        for (auto it = now.begin(); it != now.end(); ++it) {
+            const auto other = std::find(order.begin(), order.end(), *it);
+            if (other != order.end() && other > me) {
+                now.insert(it, id);
+                return;
+            }
+        }
+        now.push_back(id);
+    };
+    if (std::find(def.left.begin(), def.left.end(), id) != def.left.end()) put(l.left, def.left);
+    else if (std::find(def.right.begin(), def.right.end(), id) != def.right.end()) put(l.right, def.right);
+    else l.right.insert(l.right.begin(), id);
+}
+
+}  // namespace
+
+MenuItem SettingToggleItem(const char* key) {
+    const settings::Item* item = settings::FindItem(key);
+    MenuItem m;
+    m.label = item ? item->Label(SchemaLangNow()) : std::wstring(key, key + strlen(key));
+    m.checked = TheApp().config().GetBool(key);
+    const std::string k = key;
+    m.action = [k] { TheApp().config().SetBool(k, !TheApp().config().GetBool(k)); };
+    return m;
+}
+
+MenuItem SettingChoiceItem(const char* key, const char* icon) {
+    const settings::Item* item = settings::FindItem(key);
+    MenuItem m;
+    m.icon = icon;
+    if (!item) return m;
+    const settings::Lang lang = SchemaLangNow();
+    m.label = item->Label(lang);
+    const std::string cur = TheApp().config().GetString(key);
+    for (const settings::Choice& c : item->choices) {
+        MenuItem r{c.Label(lang)};
+        r.radio = true;
+        r.checked = cur == c.value;
+        if (r.checked) m.shortcut = c.Label(lang);  // the value on the right, as the panel rows show it
+        r.action = [k = std::string(key), v = c.value] { TheApp().config().SetString(k, v); };
+        m.submenu.push_back(std::move(r));
+    }
+    return m;
+}
+
+std::vector<MenuItem> ControlBarItems(ControlId on, bool seekBar) {
+    std::vector<MenuItem> items;
+    const bool minimal = TheApp().config().GetString("interface.barStyle") == "minimal";
+    const ControlLayout& now = CurrentControlLayout();
+    auto has = [&now](ControlId id) {
+        return std::find(now.left.begin(), now.left.end(), id) != now.left.end() ||
+               std::find(now.right.begin(), now.right.end(), id) != now.right.end();
+    };
+    auto set = [](ControlId id, bool shown) {
+        ControlLayout l = CurrentControlLayout();
+        const auto drop = [id](std::vector<ControlId>& v) { v.erase(std::remove(v.begin(), v.end(), id), v.end()); };
+        drop(l.left);
+        drop(l.right);
+        if (shown) InsertControl(l, id);
+        SetControlLayout(l);
+    };
+    // The part under the pointer first: the seek bar's wave for music, or the button to remove.
+    if (seekBar) {
+        const PlayerState& s = TheApp().player().State();
+        if (s.fileLoaded && !s.hasVideo) items.push_back(SettingToggleItem("interface.musicWave"));
+    } else if (on != ControlId::Count && !minimal && ControlInfoFor(on).removable && has(on)) {
+        MenuItem remove{Fmt(Tr(L"Remove “{0}” from the bar"), {Tr(ControlInfoFor(on).label)})};
+        remove.action = [set, on] {
+            const ControlLayout before = CurrentControlLayout();
+            set(on, false);
+            ShowToast(TheApp().main(), Fmt(Tr(L"Removed from the bar: {0}"), {Tr(ControlInfoFor(on).label)}), "view", 8000,
+                      Tr(L"Bring back"), [before] { SetControlLayout(before); });
+        };
+        items.push_back(std::move(remove));
+    }
+    if (!minimal) {
+        // The buttons people add most that are not on the bar now; the rest in Customize player.
+        static const ControlId kOffered[] = {
+            ControlId::Previous, ControlId::Next,     ControlId::Stop,      ControlId::Backward10,
+            ControlId::Forward10, ControlId::Speed,   ControlId::Repeat,    ControlId::Shuffle,
+            ControlId::Time,     ControlId::Duration, ControlId::Volume,    ControlId::Snapshot,
+            ControlId::Audio,    ControlId::Subtitles, ControlId::Video,    ControlId::Settings,
+            ControlId::Playlist, ControlId::PictureInPicture,
+        };
+        MenuItem add{Tr(L"Add a button"), L"", "add"};
+        for (ControlId id : kOffered) {
+            if (has(id)) continue;
+            MenuItem m{Tr(ControlInfoFor(id).label), L"", ControlInfoFor(id).icon};
+            m.action = [set, id] { set(id, true); };
+            add.submenu.push_back(std::move(m));
+        }
+        if (!add.submenu.empty()) items.push_back(std::move(add));
+    }
+    if (!items.empty()) items.push_back(MenuItem::Separator());
+    items.push_back(SettingChoiceItem("interface.barStyle", "view"));
+    if (!minimal && now.Serialize() != ControlLayout::Default().Serialize()) {
+        MenuItem reset{Tr(L"Restore default buttons"), L"", "refresh"};
+        reset.action = [] { SetControlLayout(ControlLayout::Default()); };
+        items.push_back(std::move(reset));
+    }
+    MenuItem more{Tr(L"Customize player"), L"", "edit"};  // as in the Moonbow menu
+    more.action = [] { Run(Action::CustomizePlayer); };
+    items.push_back(std::move(more));
+    return items;
+}
+
 std::unique_ptr<Widget> CreateControl(ControlId id) {
     App& app = TheApp();
     auto button = [](const char* icon, const wchar_t* tip, Action a) { return std::make_unique<ActionButton>(icon, tip, a); };
@@ -1008,7 +1131,9 @@ void SeekBar::Paint(Painter& p) {
         else if (compact)
             p.Fill({cx, t.y, 1, t.h}, overVideo ? Color::Hex(0x000000, 0.6f) : P().bgPanel);  // a gap, like slim
         else
-            p.Fill({cx, t.y + 6, 1, t.h - 12}, P().lineStrong);
+            // A dark notch in the played part, a grey tick ahead of it: lineStrong on the dark
+            // track was about 1.3:1 and the chapters could not be told apart.
+            p.Fill({cx, t.y + 6, 1, t.h - 12}, cx < t.x + t.w * k ? P().bgChrome : P().textTertiary);
     }
     const float x = std::clamp(t.x + t.w * k, t.x + 2, t.Right() - 2);
     if (slim)
@@ -1058,6 +1183,11 @@ ControlBar::ControlBar() {
     pad = {20, 0, 20, 0};
     gap = 6;
     interactive = true;  // swallow clicks between items (don't pause the video)
+    // A right click between the buttons: add one, the bar's style, Customize player. The buttons
+    // and the seek bar have their own (Rebuild).
+    onContextMenu = [this](const MouseEvent& e) {
+        if (Host* h = GetHost()) ShowContextMenu(h, {e.x, e.y}, ControlBarItems());
+    };
     layoutConn_ = Connect(ControlLayoutChanged(), [this] { Rebuild(); });
     // Some items take their tooltip when built.
     langConn_ = Connect(TheApp().languageChanged, [this] { Rebuild(); });
@@ -1084,26 +1214,48 @@ void ControlBar::ReadStyle() {
     pad = minimal_ ? Insets{14, 0, 14, 0} : Insets{20, 0, 20, 0};
 }
 
+// A right click on a bar item: remove it, then the bar's menu. Not on the volume and speed
+// buttons: their right click mutes and resets the speed.
+void ControlBar::AddItem(ControlId cid) {
+    std::unique_ptr<Widget> w = CreateControl(cid);
+    if (cid != ControlId::Volume && cid != ControlId::Speed && !w->onContextMenu) {
+        Widget* raw = w.get();
+        w->onContextMenu = [raw, cid](const MouseEvent& e) {
+            if (Host* h = raw->GetHost()) ShowContextMenu(h, {e.x, e.y}, ControlBarItems(cid));
+        };
+    }
+    AddChild(std::move(w));
+}
+
+SeekBar* ControlBar::AddSeekBar() {
+    auto* seek = Add<SeekBar>();
+    // Its own menu: a right click used to seek like a left one.
+    seek->onContextMenu = [seek](const MouseEvent& e) {
+        if (Host* h = seek->GetHost()) ShowContextMenu(h, {e.x, e.y}, ControlBarItems(ControlId::Count, true));
+    };
+    return seek;
+}
+
 void ControlBar::Rebuild() {
     ClearChildren();
     ReadStyle();
     if (minimal_) {
         // Play, the time and a slim seek bar; volume and the queue stay one click away.
-        AddChild(CreateControl(ControlId::PlayPause));
-        AddChild(CreateControl(ControlId::Time));
-        auto* seek = Add<SeekBar>();
+        AddItem(ControlId::PlayPause);
+        AddItem(ControlId::Time);
+        auto* seek = AddSeekBar();
         seek->slim = true;
         seek->pad = {10, 0, 10, 0};
-        for (ControlId cid : {ControlId::Duration, ControlId::Volume, ControlId::Playlist}) AddChild(CreateControl(cid));
+        for (ControlId cid : {ControlId::Duration, ControlId::Volume, ControlId::Playlist}) AddItem(cid);
         Add<FullscreenButton>();
         InvalidateLayout();
         return;
     }
     const ControlLayout& l = CurrentControlLayout();
-    for (ControlId cid : l.left) AddChild(CreateControl(cid));
-    auto* seek = Add<SeekBar>();
+    for (ControlId cid : l.left) AddItem(cid);
+    auto* seek = AddSeekBar();
     seek->pad = {10, 0, 10, 0};
-    for (ControlId cid : l.right) AddChild(CreateControl(cid));
+    for (ControlId cid : l.right) AddItem(cid);
     // Not in the customizable layout: it stays last, like the seek bar stays in the middle.
     Add<FullscreenButton>();
     InvalidateLayout();

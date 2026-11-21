@@ -248,7 +248,7 @@ void VizPaint::VuMeter(Painter& p, const Rect& m, int ch, bool rest, Color ink) 
     const float zero = VuPos(0);
     const float pos = rest ? 0.0f : needles_[ch].pos;
     const float labelSize = std::clamp(7.0f + u * 0.022f, 9.0f, 28.0f);
-    const bool labels = u >= 70, allLabels = u >= 150, row = u >= 56;
+    const bool labels = vuScale && u >= 70, allLabels = u >= 150, row = vuCaption && u >= 56;
     auto line = [&](float alpha) { return LineBrush(ctx, ink, alpha * o); };
 
     // The track in one piece, then the part past 0 VU over it, where a desk meter turns red: its
@@ -283,10 +283,12 @@ void VizPaint::VuMeter(Painter& p, const Rect& m, int ch, bool rest, Color ink) 
     }
 
     // The held peak: a bright bar across the track that stays a moment, as on a desk.
-    if (vuPeak && !rest && holds_[ch].pos > zero * 0.15f)
+    // On the track, never past its end: the needle may rest on the pin beyond +3, the mark stays at +3.
+    const float held = std::min(holds_[ch].pos, 1.0f);
+    if (vuPeak && !rest && held > zero * 0.15f)
         if (ID2D1SolidColorBrush* b = line(1.0f)) {
             const float over = std::max(2.0f, u * 0.006f);
-            ctx->DrawLine(g.At(holds_[ch].pos, g.R - track / 2 - over), g.At(holds_[ch].pos, g.R + track / 2 + over), b,
+            ctx->DrawLine(g.At(held, g.R - track / 2 - over), g.At(held, g.R + track / 2 + over), b,
                           std::max(2.0f, u * 0.005f), flat);
         }
 
@@ -320,7 +322,9 @@ void VizPaint::VuMeter(Painter& p, const Rect& m, int ch, bool rest, Color ink) 
     const float left = g.At(0, g.R).x - track / 2, right = g.At(1, g.R).x + track / 2;
     SizedText(p, ch == 0 ? L"L" : L"R", {left, rowY}, HAlign::Leading, TextStyle::SmallMedium, rowSize, ink.Fade(0.6f));
     std::wstring value = L"—";
-    if (!rest && pos > 0.01f) {
+    if (!rest && pos > 1.0f) {
+        value = L">+3";  // past the scale (the swing over it, or on the pin): the level is not known
+    } else if (!rest && pos > 0.01f) {
         wchar_t t[32];
         swprintf_s(t, L"%+.1f", 20 * std::log10(pos) + 3);
         value = t[0] == L'-' ? L"−" + std::wstring(t + 1) : t;

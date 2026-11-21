@@ -224,7 +224,8 @@ public:
         interactive = true;
         // The view covers the video area: without this a right click on it opened nothing (the
         // lyrics keep their own menu).
-        onContextMenu = [this](const MouseEvent& e) { ShowPlayerContextMenu(GetHost(), {e.x, e.y}); };
+        // What is under the pointer comes first: a way to hide it (or change it), then the player's menu.
+        onContextMenu = [this](const MouseEvent& e) { ContextMenu(e.x, e.y); };
         conn_ = Connect(TheApp().playerChanged, [this](unsigned m) {
             if (m & (kChangeFile | kChangeMeta)) RefreshLyrics();
             if (m & kChangeTime) FollowTime();
@@ -241,6 +242,12 @@ public:
             fit_ = 1;
             format_.Reset();
             layoutW_ = -1;
+            Invalidate();
+        });
+        // What the view shows (Settings > Interface > Music view, the right-click menu > Show).
+        ReadParts();
+        partsToken_ = TheApp().config().Subscribe("interface.music", [this](const std::string&) {
+            ReadParts();
             Invalidate();
         });
         imagesConn_ = Connect(TheApp().images().ready, [this] { Invalidate(); });
@@ -265,6 +272,7 @@ public:
         if (g_musicView == this) g_musicView = nullptr;
         TheApp().config().Unsubscribe(vizToken_);
         TheApp().config().Unsubscribe(lyricsToken_);
+        TheApp().config().Unsubscribe(partsToken_);
         AudioFeed::Get().Detach(this);
         *alive_ = false;
         net::Cancel(onlineReq_);
@@ -276,6 +284,27 @@ public:
         lyricsOn_ = true;
         noLyricsCardPending_ = true;
         Invalidate();
+    }
+    // What the user hid here, as menu rows that bring it back (the player menu's "Bring back hidden").
+    std::vector<MenuItem> HiddenItems() {
+        std::vector<MenuItem> items;
+        if (!lyrics_.Empty() && !lyricsOn_) {
+            MenuItem m{Tr(L"Lyrics")};
+            m.action = [this, alive = alive_] {
+                if (!*alive) return;
+                lyricsOn_ = true;
+                Invalidate();
+            };
+            items.push_back(std::move(m));
+        }
+        for (const char* key : {"interface.musicTitle", "interface.musicButtons", "interface.musicLyricsSource",
+                                "interface.musicBackdrop"}) {
+            if (TheApp().config().GetBool(key)) continue;
+            MenuItem m = SettingToggleItem(key);
+            m.checked = false;
+            items.push_back(std::move(m));
+        }
+        return items;
     }
 
     void DebugInfo(std::string& out) const override {
@@ -327,17 +356,29 @@ public:
             g.full = true;
             g.wide = g.oneLine = false;
         }
-        const float extra = (g.oneLine ? 32.0f * ts : 0.0f) + kPillsH;
+        // The title block under the cover (70 DIP gap, title, artist), or a 24 DIP gap above the
+        // one-line lyrics and the pills when the title is hidden; nothing at all without them.
+        const float extra = (g.oneLine ? 32.0f * ts : 0.0f) + (showButtons_ ? kPillsH : 0.0f);
+        float textH = showTitle_ ? (88 + 30) * ts : extra > 0 ? 24 * ts : 0.0f;
+        float titleGap = showTitle_ ? 70 * ts : 24 * ts;
+        // A short view (the smallest window, above its two-row bar): the gap between the cover and
+        // the title gives way first, down to 24 DIP. Without that the cover's 96 DIP floor pushed
+        // the pills half under the control bar.
+        if (const float need = 96 + 62 + textH + extra; showTitle_ && rect.h < need) {
+            const float cut = std::min(need - rect.h, titleGap - 24 * ts);
+            titleGap -= cut;
+            textH -= cut;
+        }
         g.area = area;
         g.left = area;
         if (g.wide) g.left.w = std::floor(area.w * 0.5f);
         // Layout: cover centered, text 88 DIP under it (1920×1080: 738 cover, 73 top margin).
         const float side =
-            std::floor(std::max(96.0f, std::min({g.left.w - 96, rect.h - 62 - (88 + 30) * ts - extra, g.wide ? 620.0f : 738.0f})));
-        const float block = side + (88 + 30) * ts + extra;
+            std::floor(std::max(96.0f, std::min({g.left.w - 96, rect.h - 62 - textH - extra, g.wide ? 620.0f : 738.0f})));
+        const float block = side + textH + extra;
         const float top = rect.y + std::max(24.0f, (rect.h - block) / 2);
         g.cover = {std::round(g.left.Cx() - side / 2), std::round(top), side, side};
-        g.title = {g.left.x + 48, g.cover.Bottom() + 70 * ts, g.left.w - 96, 36 * ts};
+        g.title = {g.left.x + 48, g.cover.Bottom() + titleGap, g.left.w - 96, 36 * ts};
         const VizLayout layout =
             g.shown || style_ == VizStyle::Off || style_ == VizStyle::Spectrometer ? VizLayout::Replace : layout_;
         if (layout == VizLayout::Replace && style_ == VizStyle::Vu) {
@@ -346,15 +387,15 @@ public:
             // The title goes right under them and the whole block is centred, so a squarish
             // window leaves no hole between the needles and the title. The cover (on a pause)
             // sits in the middle of the same box, no taller than it.
-            const float room = rect.h - 62 - (88 + 30) * ts - extra;  // 180 at ts 1, as the cover's
+            const float room = rect.h - 62 - textH - extra;  // 180 at ts 1, as the cover's
             const Rect box = VizPaint::VuPairBox({0, 0, g.left.w - 96, std::max(96.0f, room)});
             if (!box.Empty()) {
                 const float bh = std::max(box.h, 96.0f);
-                const float t = rect.y + std::max(24.0f, (rect.h - (bh + (88 + 30) * ts + extra)) / 2);
+                const float t = rect.y + std::max(24.0f, (rect.h - (bh + textH + extra)) / 2);
                 g.vu = {std::round(g.left.Cx() - box.w / 2), std::round(t), box.w, bh};
                 const float cs = std::floor(std::min(side, bh));
                 g.cover = {std::round(g.left.Cx() - cs / 2), std::round(t + (bh - cs) / 2), cs, cs};
-                g.title = {g.left.x + 48, g.vu.Bottom() + 70 * ts, g.left.w - 96, 36 * ts};
+                g.title = {g.left.x + 48, g.vu.Bottom() + titleGap, g.left.w - 96, 36 * ts};
             }
         } else if (layout == VizLayout::Wings) {
             // Mirrored bars grow out of the cover's sides, the low notes next to it.
@@ -367,13 +408,13 @@ public:
         } else if (layout == VizLayout::Side) {
             // The cover and its text take the right 40 %, the visualizer the rest at the cover's height.
             const float colW = std::floor(area.w * 0.4f);
-            const float s2 = std::floor(std::max(96.0f, std::min({colW - 96, rect.h - 62 - (88 + 30) * ts - extra, 560.0f})));
+            const float s2 = std::floor(std::max(96.0f, std::min({colW - 96, rect.h - 62 - textH - extra, 560.0f})));
             if (area.w - colW >= 320) {
                 g.beside = true;
                 g.left = {area.Right() - colW, area.y, colW, area.h};
-                const float t2 = rect.y + std::max(24.0f, (rect.h - (s2 + (88 + 30) * ts + extra)) / 2);
+                const float t2 = rect.y + std::max(24.0f, (rect.h - (s2 + textH + extra)) / 2);
                 g.cover = {std::round(g.left.Cx() - s2 / 2), std::round(t2), s2, s2};
-                g.title = {g.left.x + 24, g.cover.Bottom() + 70 * ts, g.left.w - 48, 36 * ts};
+                g.title = {g.left.x + 24, g.cover.Bottom() + titleGap, g.left.w - 48, 36 * ts};
                 g.viz = {area.x + 64, g.cover.y, g.left.x - area.x - 96, s2};
             }
         } else if (layout == VizLayout::Below) {
@@ -385,8 +426,8 @@ public:
                 g.beside = g.textLeft = true;
                 g.ts = 1;  // beside a small cover
                 g.cover = {x, y, s2, s2};
-                const float textH = 36 + 22 + kPillsH;
-                g.title = {x + s2 + 32, std::round(y + (s2 - textH) / 2), area.Right() - 64 - (x + s2 + 32), 36};
+                const float besideH = (showTitle_ ? 36 + 22 : 0) + (showButtons_ ? kPillsH : 0);
+                g.title = {x + s2 + 32, std::round(y + (s2 - besideH) / 2), area.Right() - 64 - (x + s2 + 32), 36};
                 g.viz = viz;
             }
         }
@@ -444,12 +485,16 @@ public:
 
         p.PushClip(rect);
         p.PushOpacity(appear);
-        if (bmp) PaintBackdrop(p, bmp, cover);
-        else if (!loading) PaintGlow(p, cover);
+        if (!showBackdrop_) {
+        } else if (bmp) {
+            PaintBackdrop(p, bmp, cover);
+        } else if (!loading) {
+            PaintGlow(p, cover);
+        }
         p.PopOpacity();
         p.PopClip();
 
-        lyricsBtn_->visible = queueBtn_->visible = !g.full;
+        lyricsBtn_->visible = queueBtn_->visible = !g.full && showButtons_;
         if (g.full) {
             PaintLyricsOnly(p, g);
             return;
@@ -515,10 +560,12 @@ public:
                    textAlign);
             p.Ctx()->SetTransform(old);
         };
-        scaled(title, titleBox, TextStyle::Title, white.Fade(0.8f));
-        if (!second.empty()) scaled(second, secondBox, TextStyle::Body, white.Fade(0.55f));
-        const bool cut = p.Measure(title, TextStyle::Title).width * ts > titleBox.w ||
-                         (!second.empty() && p.Measure(second, TextStyle::Body).width * ts > secondBox.w);
+        if (showTitle_) {
+            scaled(title, titleBox, TextStyle::Title, white.Fade(0.8f));
+            if (!second.empty()) scaled(second, secondBox, TextStyle::Body, white.Fade(0.55f));
+        }
+        const bool cut = showTitle_ && (p.Measure(title, TextStyle::Title).width * ts > titleBox.w ||
+                                        (!second.empty() && p.Measure(second, TextStyle::Body).width * ts > secondBox.w));
         titleTip_->visible = cut;
         if (cut) {
             titleTip_->rect = {titleBox.x, titleBox.y, titleBox.w, second.empty() ? titleBox.h : secondBox.Bottom() - titleBox.y};
@@ -526,8 +573,10 @@ public:
         }
 
         // The pills: under the artist, or under the sung line when it shows there.
+        // Without the title, the one-line lyrics and then the pills start at its place.
         const float textEnd =
-            titleBox.y + ((oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f) - 70) * ts;
+            !showTitle_ ? titleBox.y + (oneLine ? 32.0f * ts : 0.0f) - 16
+                        : titleBox.y + ((oneLine ? (second.empty() ? 130.0f : 162.0f) : second.empty() ? 106.0f : 128.0f) - 70) * ts;
         lyricsBtn_->active = shown;
         lyricsBtn_->dim = lyrics_.Empty() && !pending_ && !onlineReq_;
         queueBtn_->active = PlayerPanelOpen(PanelKind::Queue);
@@ -546,7 +595,7 @@ public:
         if (wide) {
             const float x = left.Right() + 16;
             box_ = {x, rect.y + 48, std::min(area.Right() - 48 - x, 640.0f), rect.h - 96};
-            if (online_) {
+            if (online_ && showSource_) {
                 // The column gives its last 40 DIP to the source line.
                 box_.h -= 40;
                 source_->visible = true;
@@ -558,7 +607,7 @@ public:
             std::fill(lineRects_.begin(), lineRects_.end(), Rect{});
             if (oneLine && current_ >= 0)
                 scaled(lyrics_.lines[static_cast<size_t>(current_)].text,
-                       {left.x + 48, g.title.y + (second.empty() ? 36.0f : 68.0f) * ts, left.w - 96, 24 * ts},
+                       {left.x + 48, g.title.y + (!showTitle_ ? 0.0f : second.empty() ? 36.0f : 68.0f) * ts, left.w - 96, 24 * ts},
                        TextStyle::Large, white.Fade(0.9f));
         }
     }
@@ -597,6 +646,124 @@ public:
         layoutW_ = -1;
     }
 
+    // The right click (and the Menu key): the lyrics have their own menu; on the title, the pills,
+    // the source line, the cover or visualization, or the background, the player's menu starts
+    // with what can be done to that part.
+    void ContextMenu(float x, float y) {
+        Host* h = GetHost();
+        if (!h) return;
+        const bool onSource = source_->visible && source_->rect.Contains(x, y);
+        if (!onSource && box_.w > 0 && box_.Contains(x, y)) {
+            LyricsMenu(x, y);
+            return;
+        }
+        // Hiding says so and can be taken back at once: the part is gone from the screen, and the
+        // way back ("Bring back hidden") is a menu the person may not think of.
+        auto hide = [](const wchar_t* label, const char* key, const wchar_t* done) {
+            MenuItem m{Tr(label)};
+            m.action = [k = std::string(key), done] {
+                TheApp().config().SetBool(k, false);
+                ShowToast(TheApp().main(), Tr(done), "view", 8000, Tr(L"Bring back"),
+                          [k] { TheApp().config().SetBool(k, true); });
+            };
+            return m;
+        };
+        std::vector<MenuItem> head, tail;
+        const Geometry g = Place();
+        const float ts = g.ts;
+        const Rect titleArea{g.title.x, g.title.y, g.title.w, (36 + 22) * ts};
+        const bool onPills = (lyricsBtn_->visible && lyricsBtn_->rect.Contains(x, y)) ||
+                             (queueBtn_->visible && queueBtn_->rect.Contains(x, y));
+        if (onSource) {
+            tail.push_back(hide(L"Hide this line", "interface.musicLyricsSource", L"The line is hidden"));
+        } else if (onPills) {
+            tail.push_back(hide(L"Hide these buttons", "interface.musicButtons", L"The buttons are hidden"));
+        } else if (!g.full && showTitle_ && titleArea.Contains(x, y)) {
+            tail.push_back(hide(L"Hide title and artist", "interface.musicTitle", L"The title and artist are hidden"));
+        } else if (!g.full && OnPicture(g, x, y)) {
+            // The cover or what plays in its place: the visualization and where it goes.
+            if (audio::ProcessLoopbackSupported()) {
+                head.push_back(SettingChoiceItem("audio.visualizer", "spectrum_twotone"));
+                if (style_ != VizStyle::Off && style_ != VizStyle::Spectrometer)
+                    head.push_back(SettingChoiceItem("audio.visualizerLayout", "grid"));
+            }
+        } else {
+            MenuItem bg{Tr(showBackdrop_ ? L"Hide blurred background" : L"Show blurred background")};
+            bg.action = [on = !showBackdrop_] { TheApp().config().SetBool("interface.musicBackdrop", on); };
+            tail.push_back(std::move(bg));
+        }
+        ShowPlayerContextMenu(h, {x, y}, std::move(head), std::move(tail));
+    }
+
+    // Right click on the lyrics: hide them, their style, the timing, the save command for lyrics
+    // from the internet.
+    void LyricsMenu(float x, float y) {
+        std::vector<MenuItem> items;
+        MenuItem hideLyrics{Tr(L"Hide lyrics")};
+        hideLyrics.action = [this, alive = alive_] {
+            if (!*alive) return;
+            lyricsOn_ = false;
+            Invalidate();
+        };
+        items.push_back(std::move(hideLyrics));
+        items.push_back(MenuItem::Separator());
+        // The style as one row with its value, like the player menu's: five radio rows here made
+        // the menu long.
+        MenuItem style = SettingChoiceItem("audio.lyricsStyle", "music");
+        style.label = Tr(L"Lyrics style");
+        items.push_back(std::move(style));
+        items.push_back(MenuItem::Separator());
+        if (lyrics_.synced) {
+            // For an .lrc that runs ahead of the song or behind it; remembered for the file.
+            const double d = Live().LyricsDelay();
+            MenuItem earlier;
+            earlier.label = Tr(L"Show lyrics 0.5 s earlier");
+            earlier.icon = "arrow_up";
+            earlier.action = [this, d] { ShiftLyrics(d - 0.5); };
+            items.push_back(std::move(earlier));
+            MenuItem later;
+            later.label = Tr(L"Show lyrics 0.5 s later");
+            later.icon = "arrow_down";
+            later.action = [this, d] { ShiftLyrics(d + 0.5); };
+            items.push_back(std::move(later));
+            if (std::abs(d) >= 0.0005) {
+                MenuItem reset;
+                reset.label = Fmt(Tr(L"Reset lyrics timing ({0})"), {ShiftText(d)});
+                reset.icon = "refresh";
+                reset.action = [this] { ShiftLyrics(0); };
+                items.push_back(std::move(reset));
+            }
+            items.push_back(MenuItem::Separator());
+        }
+        MenuItem only;
+        only.label = Tr(L"Lyrics only, without the cover");
+        only.checked = look_.only;
+        only.action = [on = !look_.only] { TheApp().config().SetBool("audio.lyricsOnly", on); };
+        items.push_back(std::move(only));
+        MenuItem more;
+        more.label = Tr(L"Lyrics settings…");
+        more.icon = "settings";
+        more.action = [] { TheApp().OpenSettings("audio", "lyrics"); };
+        items.push_back(std::move(more));
+        if (online_) {
+            MenuItem save;
+            save.label = Tr(L"Save lyrics as .lrc next to the song");
+            save.icon = "save";
+            save.action = [this] { SaveOnlineLyrics(); };
+            items.push_back(std::move(save));
+        }
+        ShowContextMenu(GetHost(), {x, y}, std::move(items));
+    }
+
+    // The cover, the VU pair or the band that takes its place, the bars beside it.
+    bool OnPicture(const Geometry& g, float x, float y) const {
+        const float w = std::floor(std::min(g.left.w - 96, g.cover.w * 1.5f));
+        const Rect band{std::round(g.left.Cx() - w / 2), g.cover.y, w, g.cover.h};
+        for (const Rect& r : {g.cover, g.vu, g.viz, g.viz2, band})
+            if (!r.Empty() && r.Contains(x, y)) return true;
+        return false;
+    }
+
     bool OnMouseMove(const MouseEvent& e) override {
         if (MainWindow* w = TheApp().main(); w && w->BarOverlays()) w->PointerMoved(e.x, e.y);
         const int hit = LineAt(e.x, e.y);
@@ -614,57 +781,6 @@ public:
         Invalidate();
     }
     bool OnMouseDown(const MouseEvent& e) override {
-        // Right click on the lyrics: their style (and the save command for lyrics from the
-        // internet); elsewhere the player's menu.
-        if (e.button == MouseButton::Right && box_.w > 0 && box_.Contains(e.x, e.y) && GetHost()) {
-            std::vector<MenuItem> items = LyricsStyleItems();
-            items.push_back(MenuItem::Separator());
-            if (lyrics_.synced) {
-                // For an .lrc that runs ahead of the song or behind it; remembered for the file.
-                const double d = Live().LyricsDelay();
-                MenuItem earlier;
-                earlier.label = Tr(L"Show lyrics 0.5 s earlier");
-                earlier.icon = "arrow_up";
-                earlier.action = [this, d] { ShiftLyrics(d - 0.5); };
-                items.push_back(std::move(earlier));
-                MenuItem later;
-                later.label = Tr(L"Show lyrics 0.5 s later");
-                later.icon = "arrow_down";
-                later.action = [this, d] { ShiftLyrics(d + 0.5); };
-                items.push_back(std::move(later));
-                if (std::abs(d) >= 0.0005) {
-                    MenuItem reset;
-                    reset.label = Fmt(Tr(L"Reset lyrics timing ({0})"), {ShiftText(d)});
-                    reset.icon = "refresh";
-                    reset.action = [this] { ShiftLyrics(0); };
-                    items.push_back(std::move(reset));
-                }
-                items.push_back(MenuItem::Separator());
-            }
-            MenuItem only;
-            only.label = Tr(L"Lyrics only, without the cover");
-            only.checked = look_.only;
-            only.action = [on = !look_.only] { TheApp().config().SetBool("audio.lyricsOnly", on); };
-            items.push_back(std::move(only));
-            MenuItem more;
-            more.label = Tr(L"Lyrics settings…");
-            more.icon = "settings";
-            more.action = [] { TheApp().OpenSettings("audio"); };
-            items.push_back(std::move(more));
-            if (online_) {
-                MenuItem save;
-                save.label = Tr(L"Save lyrics as .lrc next to the song");
-                save.icon = "save";
-                save.action = [this] { SaveOnlineLyrics(); };
-                items.push_back(std::move(save));
-            }
-            ShowContextMenu(GetHost(), {e.x, e.y}, std::move(items));
-            return true;
-        }
-        if (e.button == MouseButton::Right && GetHost()) {
-            ShowPlayerContextMenu(GetHost(), {e.x, e.y});
-            return true;
-        }
         if (e.button != MouseButton::Left) return false;
         const int hit = LineAt(e.x, e.y);
         if (hit < 0) return false;
@@ -702,6 +818,17 @@ private:
             AudioFeed::Get().Detach(this);
             vizShow_.Set(0);
         }
+    }
+
+    void ReadParts() {
+        const Config& c = TheApp().config();
+        showBackdrop_ = c.GetBool("interface.musicBackdrop");
+        showTitle_ = c.GetBool("interface.musicTitle");
+        showButtons_ = c.GetBool("interface.musicButtons");
+        showSource_ = c.GetBool("interface.musicLyricsSource");
+        viz_.vuScale = c.GetBool("interface.musicVuScale");
+        viz_.vuCaption = c.GetBool("interface.musicVuCaption");
+        viz_.vuPeak = c.GetBool("interface.musicVuPeak");
     }
 
     // Runs the capture while the song plays and this view is drawn; returns how far the cover
@@ -917,7 +1044,11 @@ private:
         add.icon = "add";
         add.action = [this] { AddLrcFile(); };
         items.push_back(std::move(add));
-        ShowMenu(GetHost(), lyricsBtn_->rect, std::move(items), Place::Below, 240);
+        // Under the pill, or under the title's place when the pills are hidden.
+        const Rect at = lyricsBtn_->visible && !lyricsBtn_->rect.Empty()
+                            ? lyricsBtn_->rect
+                            : Rect{std::round(Place().title.Cx() - 1), Place().title.y, 2, 2};
+        ShowMenu(GetHost(), at, std::move(items), Place::Below, 240);
     }
 
     // LRCLIB is off until the user allows it (privacy.fetchLyrics): the first search asks. "Find now"
@@ -1456,6 +1587,9 @@ private:
     float fit_ = 1;
     gfx::ComPtr<IDWriteTextFormat> format_;  // the look's font; reset when it changes
     Config::Token lyricsToken_ = 0;
+    Config::Token partsToken_ = 0;
+    // The parts the user can hide (ReadParts).
+    bool showBackdrop_ = true, showTitle_ = true, showButtons_ = true, showSource_ = true;
     double clock_ = 0, clockAt_ = 0;  // SmoothTime's clock and when it last ran
     gfx::ComPtr<ID2D1LinearGradientBrush> fill_;  // FillBrush
     uint32_t fillGen_ = 0;
@@ -1494,6 +1628,10 @@ const Lyrics& MusicLyrics(int* line) {
         return kNone;
     }
     return g_musicView->LyricsNow(line);
+}
+
+std::vector<MenuItem> MusicHiddenItems() {
+    return g_musicView ? g_musicView->HiddenItems() : std::vector<MenuItem>{};
 }
 
 bool MusicCoverReady() {

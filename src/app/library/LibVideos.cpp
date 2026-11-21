@@ -61,7 +61,7 @@ public:
     }
 
     std::wstring CountText(long long n) const override {
-        return tab_ == L"movies" ? CountMovies(n) : tab_ == L"shows" ? CountShows(n) : CountEpisodes(n);
+        return tab_ == L"movies" ? CountMovies(n) : tab_ == L"shows" ? CountShows(n) : CountShowEpisodes(n);
     }
 
     std::vector<MenuItem> SortMenu() override {

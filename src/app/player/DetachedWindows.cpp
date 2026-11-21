@@ -368,7 +368,7 @@ private:
         } else if (id == "lyrics") {
             AddLyricsPanel(body);
         } else if (id == "queue") {
-            body->AddChild(panel::BuildQueueTab(false, true));
+            body->AddChild(panel::BuildQueueTab(false, true, false));
         } else if (id == "viz") {
             AddVizPanel(body);
         } else if (id == "meters") {

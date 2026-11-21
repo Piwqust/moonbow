@@ -435,7 +435,7 @@ private:
 
     void BuildWelcome(AbsPage* pg) {
         pg->Centered<IconView>(84, 104, 104, "moonbow", 104, Tone::Accent);
-        pg->Centered<Label>(214, 700, 39, Tr(L"Welcome to Moonbow!"), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<Label>(214, 700, 39, Tr(L"Welcome to Moonbow"), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         auto* d = pg->At<Label>(Rect{248, 276, 595, 72},
                                 Tr(L"Moonbow is a fast, quiet player for your videos and music. It opens almost any file, "
@@ -491,7 +491,7 @@ private:
     }
 
     void BuildAppearance(AbsPage* pg) {
-        pg->Centered<Label>(72, 700, 39, Tr(L"Choose a theme."), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<Label>(72, 700, 39, Tr(L"Choose a theme"), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         pg->Centered<PreviewWindow>(124, 480, 270);
         const std::string theme = Cfg().GetString("general.theme");
@@ -516,7 +516,7 @@ private:
     }
 
     void BuildSummary(AbsPage* pg) {
-        pg->Centered<Label>(72, 700, 39, Tr(L"You're all set."), TextStyle::Display, Tone::Primary)->halign =
+        pg->Centered<Label>(72, 700, 39, Tr(L"You're all set"), TextStyle::Display, Tone::Primary)->halign =
             HAlign::Center;
         pg->Centered<Label>(132, 700, 22, Tr(L"Here is how Moonbow is set up. Everything can be changed later in Settings."),
                             TextStyle::Large, Tone::Tertiary)

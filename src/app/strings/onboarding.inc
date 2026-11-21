@@ -1,6 +1,5 @@
 // Russian translations for the onboarding area: {L"English", L"Русский"},
 {L"Moonbow Setup", L"Настройка Moonbow"},
-{L"Welcome to Moonbow!", L"Добро пожаловать в Moonbow!"},
 {L"Moonbow is a fast, quiet player for your videos and music. It opens almost any file, "
  L"folder or network stream, remembers where you stopped and keeps your library in "
  L"order.",
@@ -22,7 +21,7 @@
 {L"Continue", L"Далее"},
 {L"Finish", L"Готово"},
 // appearance
-{L"Choose a theme.", L"Выберите тему."},
+{L"Choose a theme", L"Выберите тему"},
 {L"Light", L"Светлая"},
 {L"Dark", L"Тёмная"},
 {L"System", L"Системная"},
@@ -32,7 +31,7 @@
 {L"Steel", L"Сталь"},
 {L"Graphite", L"Графит"},
 // summary
-{L"You're all set.", L"Всё готово."},
+{L"You're all set", L"Всё готово"},
 {L"Here is how Moonbow is set up. Everything can be changed later in Settings.",
  L"Так настроен Moonbow. Всё это можно изменить позже в настройках."},
 {L"Media folder", L"Папка с медиа"},

@@ -3144,7 +3144,8 @@ void TestSpectrum() {
     // VU needle: a steady level at the reference reads 0 VU; a step gets there in about 300 ms
     // with a small overshoot (IEC 60268-17), and a level past +3 VU rests on the pin.
     const float vuZero = std::pow(10.0f, -3.0f / 20.0f);
-    CHECK(std::fabs(VuTarget(std::pow(10.0f, -18.0f / 20.0f), -18) - vuZero) < 1e-4f);
+    // A sine peaking at the reference (its RMS 3 dB lower) is the alignment tone: 0 VU.
+    CHECK(std::fabs(VuTarget(std::pow(10.0f, -18.0f / 20.0f) / std::sqrt(2.0f), -18) - vuZero) < 1e-4f);
     VuNeedle needle;
     float top = 0, at99 = -1;
     for (int i = 1; i <= 100; ++i) {

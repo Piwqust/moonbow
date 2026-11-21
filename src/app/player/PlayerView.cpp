@@ -147,10 +147,13 @@ MenuItem PanelRow(const wchar_t* label, const char* icon, PanelKind kind, std::w
 // Short, as in design/explorations/2026-11-19-interface.html (04): the four commands people use
 // most as big icons on top, what plays with its value on the right (a row opens the same panel
 // as its bar button), a few tools, and everything else behind "All commands" (Ctrl+K).
-void ShowVideoContextMenu(Host* host, Point at) {
+// `head`: rows for the part under the pointer (the visualization...), on top. `tail`: rows that hide
+// that part, at the end: right under the pointer a click one row off would hide the title.
+void ShowVideoContextMenu(Host* host, Point at, std::vector<MenuItem> head, std::vector<MenuItem> tail = {}) {
     const PlayerState& s = PS();
     const bool music = s.fileLoaded && !s.hasVideo;
-    std::vector<MenuItem> items;
+    std::vector<MenuItem> items = std::move(head);
+    if (!items.empty()) items.push_back(MenuItem::Separator());
     if (!s.fileLoaded) {
         items.push_back(Item(L"Open file", Action::OpenFile, "file"));
         items.push_back(Item(L"Open folder", Action::OpenFolder, "folder"));
@@ -184,11 +187,34 @@ void ShowVideoContextMenu(Host* host, Point at) {
             }
             items.push_back(std::move(dock));
         }
+        // Only when something in the music view was hidden: the way back to it.
+        if (music) {
+            std::vector<MenuItem> hidden = MusicHiddenItems();
+            if (!hidden.empty()) {
+                MenuItem back{Tr(L"Bring back hidden"), L"", "view"};
+                if (hidden.size() > 1) {
+                    std::vector<std::function<void()>> all;
+                    for (const MenuItem& m : hidden) all.push_back(m.action);
+                    MenuItem every{Tr(L"Bring back all")};
+                    every.action = [all] {
+                        for (const auto& f : all) f();
+                    };
+                    hidden.push_back(MenuItem::Separator());
+                    hidden.push_back(std::move(every));
+                }
+                back.submenu = std::move(hidden);
+                items.push_back(std::move(back));
+            }
+        }
         // Any part of the player in a window of its own: the cover, the seek bar, the meters...
         MenuItem windows{Tr(L"Separate windows"), L"", "window"};
         windows.submenu = PanelWindowItems();
         items.push_back(std::move(windows));
         if (Enabled(Action::ShowInExplorer)) items.push_back(Item(L"Show in File Explorer", Action::ShowInExplorer, "folder"));
+    }
+    if (!tail.empty()) {
+        items.push_back(MenuItem::Separator());
+        for (MenuItem& m : tail) items.push_back(std::move(m));
     }
     items.push_back(MenuItem::Separator());
     items.push_back(Item(L"All commands…", Action::CommandPalette, "search"));
@@ -228,8 +254,8 @@ void ShowShortcutHint(MainWindow* w, UINT delay, bool afterToast) {
 
 }  // namespace
 
-void ShowPlayerContextMenu(Host* host, Point at) {
-    ShowVideoContextMenu(host, at);
+void ShowPlayerContextMenu(Host* host, Point at, std::vector<MenuItem> head, std::vector<MenuItem> tail) {
+    ShowVideoContextMenu(host, at, std::move(head), std::move(tail));
 }
 
 std::string QueueDockSide() {
@@ -273,7 +299,7 @@ class PlayerView::VideoArea : public Widget {
 public:
     VideoArea(MainWindow* window, PlayerView* owner) : window_(window), owner_(owner) {
         interactive = true;
-        onContextMenu = [this](const MouseEvent& e) { ShowVideoContextMenu(GetHost(), {e.x, e.y}); };
+        onContextMenu = [this](const MouseEvent& e) { ShowVideoContextMenu(GetHost(), {e.x, e.y}, {}); };
     }
     ~VideoArea() override {
         window_->CancelTimer(holdTimer_);
@@ -744,6 +770,10 @@ void PlayerView::OnLayout() {
     const bool errorWas = error_->visible;
     error_->visible = !s.fileLoaded && !TheApp().FailedPath().empty() && s.idle && !pip;
     if (error_->visible && !errorWas) error_->OnShown();
+    // The card's button must not keep the keyboard once the card is gone (the next file opened
+    // from Explorer): Space would press it instead of pausing.
+    if (!error_->visible && errorWas)
+        if (Host* h = GetHost(); h && error_->IsAncestorOf(h->Focus())) h->SetFocus(nullptr, false);
     if (error_->visible) {
         const Rect v = video_->Inner(immersive);
         const Size sz = error_->Measure(std::min(440.0f, v.w - 32), v.h);
