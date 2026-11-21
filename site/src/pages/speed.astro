@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import { trace, measured, fadeMs } from '../data/site';
+import { trace, measured, fadeMs, versus } from '../data/site';
 
 const FRAME = 1000 / 24;
 const SPAN = 550; // ms shown on the ruler
@@ -14,6 +14,11 @@ const spread: Record<string, [number, number]> = {
 };
 const fadeEnd = 328 + fadeMs;
 const cells = Array.from({ length: Math.floor(SPAN / FRAME) }, (_, i) => i); // 13 frames = 0.542 s
+// Next to VLC and MPC-HC: one cell per frame of cinema, 60 cells = 2.5 s.
+const VS_CELLS = 60;
+const vsCells = Array.from({ length: VS_CELLS }, (_, i) => i + 1);
+const sec2 = (ms: number) => (ms / 1000).toFixed(2).replace('.', ',');
+const vsSummary = versus.players.map((p) => `${p.name}: окно через ${sec2(p.window)} с, первый кадр фильма через ${sec2(p.first)} с`).join('; ');
 
 const decisions = [
   { t: 'Окно раньше движка', p: 'Очередь строится при запуске, видеодвижок никто не ждёт. Поэтому в самом первом кадре окна уже есть плеер: заголовок с именем файла, панель управления, чёрное поле под картинку.' },
@@ -82,6 +87,56 @@ const other = [
     <p class="tl__method edge">Как мерили: {measured.date}, {measured.machine}. Фоновые тестовые экземпляры (--automation), каждый раз с чистой папкой данных, по очереди со стартом медиатеки. Время берётся из журнала MOONBOW_TRACE и считается от старта процесса, без времени на сам двойной щелчок и Проводник. Сценарий: qa/perf/firstframe.ps1 в исходном коде.</p>
   </section>
 
+  <section class="vs wrap" aria-labelledby="vs-h">
+    <h2 id="vs-h" class="t-l">Рядом с VLC и MPC-HC</h2>
+    <p class="soft vs__lead">Те же ролики на том же компьютере. Время снимал один измеритель снаружи: он запускает плеер и смотрит в его окно, пока там не появится первый кадр фильма. Одна ячейка: один кадр кино, 1/24 секунды.</p>
+
+    <div class="vs__chart" role="img" aria-label={`От запуска до первого кадра фильма 1080p. ${vsSummary}.`}>
+      {versus.players.map((p) => {
+        const w = frameOf(p.window), f = frameOf(p.first);
+        return (
+          <div class:list={['vs__row', p.id === 'moonbow' && 'is-me']} title={`${p.name} ${p.version}: окно через ${sec2(p.window)} с, первый кадр через ${sec2(p.first)} с`}>
+            <p class="vs__name">{p.name} <span class="edge">{p.version}</span></p>
+            <div class="vs__strip">
+              {vsCells.map((n) => <span class:list={['vs__cell', n >= w && n < f && 'is-wait', n === f && 'is-go', n > f && 'is-after']}></span>)}
+            </div>
+            <p class="edge vs__val"><b>{sec2(p.first)} с</b><span>кадр {String(f).padStart(2, '0')}</span></p>
+          </div>
+        );
+      })}
+      <div class="vs__row vs__row--axis" aria-hidden="true">
+        <span></span>
+        <div class="vs__axis edge"><span>0</span><span>0,5 с</span><span>1 с</span><span>1,5 с</span><span>2 с</span><span>2,5 с</span></div>
+        <span></span>
+      </div>
+    </div>
+    <ul class="vs__legend edge">
+      <li><span class="vs__cell"></span>окна ещё нет</li>
+      <li><span class="vs__cell is-wait"></span>окно есть, фильма нет</li>
+      <li><span class="vs__cell is-go"></span>первый кадр фильма</li>
+    </ul>
+
+    <div class="table-wrap">
+      <table class="vtable">
+        <caption class="sr-only">Moonbow, VLC и MPC-HC: запуск, память, процессор, перемотка, точность</caption>
+        <thead><tr><th scope="col">Замер</th>{versus.players.map((p) => <th scope="col">{p.name} <span class="edge">{p.version}</span></th>)}</tr></thead>
+        <tbody>
+          {versus.rows.map((r) => (
+            <tr>
+              <th scope="row">{r.label}</th>
+              {r.v.map((v, i) => <td class:list={['edge', 'num', r.best === i && 'is-best']}>{v}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <div class="vs__notes">
+      <p class="soft">Запуск: Moonbow показывает окно раньше, чем готов видеодвижок, поэтому фильм идёт, когда у остальных ещё нет окна. В покое и на 1080p он тяжелее: движок mpv загружен с самого старта, а кадр рисуют его собственные шейдеры, тогда как VLC и MPC-HC отдают кадр видеопроцессору видеокарты. На 4K разницы в нагрузке нет.</p>
+      <p class="soft">Перемотка у MPC-HC самая быстрая, потому что он прыгает к ближайшему ключевому кадру. Moonbow и VLC доходят до нужного кадра.</p>
+    </div>
+    <p class="tl__method edge">Как мерили: {versus.date}, {versus.machine}. Настройки у всех по умолчанию, VLC и MPC-HC из официальных архивов. Измеритель снимает окно плеера около 50 раз в секунду и читает метки, нарисованные в каждом кадре тестового ролика, поэтому каждое время здесь верхняя граница с шагом около 20 мс. Это время до пикселя на экране; журнал выше считает до события внутри плеера и потому короче. Медианы 15 запусков для 1080p и 8 для 4K, файлы уже в кэше диска. На компьютере работали Защитник Windows и Windhawk, оба загружаются во все три плеера. Это один компьютер: на другом числа будут другими. Сценарий и сырые результаты: <a class="link" href={versus.source}>qa/perf/compare</a> в исходном коде.</p>
+  </section>
+
   <section class="dec wrap" aria-labelledby="dec-h">
     <h2 id="dec-h" class="t-l">Что для этого сделано</h2>
     <ol class="dec__list">
@@ -145,6 +200,35 @@ notepad %TEMP%\moonbow-trace.txt</code></pre>
   .table tr.is-go td { color: var(--c-fg); font-weight: 500; }
   .tl__method { margin-top: 1.5rem; max-width: 52rem; line-height: 1.6; }
 
+  .vs { padding-top: clamp(5rem, 11vw, 9rem); }
+  .vs__lead { margin-top: 0.75rem; max-width: 42rem; }
+  .vs__chart { margin-top: 3rem; display: grid; row-gap: 1.1rem; }
+  .vs__row { display: grid; grid-template-columns: 9rem minmax(0, 1fr) 7.5rem; column-gap: var(--gutter); align-items: center; }
+  .vs__name { font-weight: 500; white-space: nowrap; }
+  .vs__name .edge { margin-left: 0.35em; font-weight: 400; }
+  .vs__row:not(.is-me) .vs__name { color: var(--c-soft); }
+  .vs__strip { display: grid; grid-template-columns: repeat(60, minmax(0, 1fr)); gap: 2px; }
+  .vs__cell { display: block; height: 2.25rem; border: 1px solid var(--c-line-strong); }
+  .vs__cell.is-wait { background: var(--c-line-strong); }
+  .vs__cell.is-go { background: var(--c-fg); border-color: var(--c-fg); }
+  .vs__cell.is-after { border-color: var(--c-line); }
+  .vs__val { display: grid; row-gap: 0.1rem; }
+  .vs__val b { font-weight: 500; font-size: var(--t-s); color: var(--c-soft); }
+  .vs__row.is-me .vs__val b { color: var(--c-fg); }
+  .vs__row--axis { margin-top: -0.6rem; }
+  .vs__axis { display: flex; justify-content: space-between; margin-right: -2ch; }
+  .vs__legend { margin-top: 1.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; list-style: none; padding: 0; }
+  .vs__legend li { display: flex; align-items: center; gap: 0.6rem; }
+  .vs__legend .vs__cell { width: 0.7rem; height: 1rem; flex: none; }
+  .vtable { width: 100%; border-collapse: collapse; font-size: var(--t-s); }
+  .vtable thead th { text-align: left; font-weight: 500; color: var(--c-fg); padding: 0.6rem 1rem 0.6rem 0; border-bottom: 1px solid var(--c-line-strong); white-space: nowrap; }
+  .vtable thead th:first-child { color: var(--c-muted); }
+  .vtable thead .edge { margin-left: 0.3em; font-weight: 400; }
+  .vtable tbody th { text-align: left; font-weight: 400; color: var(--c-soft); padding: 0.75rem 1rem 0.75rem 0; border-bottom: 1px solid var(--c-line); }
+  .vtable td { padding: 0.75rem 1rem 0.75rem 0; border-bottom: 1px solid var(--c-line); vertical-align: top; }
+  .vtable td.is-best { color: var(--c-fg); font-weight: 600; }
+  .vs__notes { margin-top: 2rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem var(--gutter); max-width: 68rem; font-size: var(--t-s); line-height: 1.6; }
+
   .dec { padding-top: clamp(5rem, 11vw, 9rem); }
   .dec__list { margin-top: 2.5rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(2rem, 4vw, 3.5rem) var(--gutter); }
   .dec__item { border-top: 1px solid var(--c-line); padding-top: 1rem; }
@@ -163,6 +247,16 @@ notepad %TEMP%\moonbow-trace.txt</code></pre>
   .try__lead { margin-top: 0.75rem; max-width: 40rem; }
   .code { margin-top: 1.5rem; padding: 1.25rem 1.5rem; background: var(--c-raised); border: 1px solid var(--c-line); border-radius: 6px; overflow-x: auto; font: 0.875rem/1.7 var(--f-mono); color: var(--c-fg); max-width: 52rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
+  @media (max-width: 760px) {
+    .vs__row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0.4rem; }
+    .vs__strip { grid-column: 1 / -1; grid-row: 2; gap: 1px; }
+    .vs__cell { height: 1.75rem; }
+    .vs__val { grid-auto-flow: column; column-gap: 0.75rem; align-items: baseline; }
+    .vs__row--axis > span { display: none; }
+    .vs__row--axis .vs__axis { grid-column: 1 / -1; grid-row: 1; margin-right: 0; }
+    .vs__notes { grid-template-columns: 1fr; }
+    .vtable { min-width: 34rem; }
+  }
   @media (max-width: 900px) {
     .phead__lead { grid-column: 1 / -1; }
     .phead__h { font-size: clamp(2.6rem, 13.5vw, 4rem); }

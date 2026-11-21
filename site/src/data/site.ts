@@ -84,6 +84,35 @@ export const frames: Frame[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------
+// Next to VLC and MPC-HC. One PC, one outside-in tool that watches each player's window
+// (qa/perf/compare, raw results in qa/perf/compare/results-2026-11-21). Medians; `window` and
+// `first` are milliseconds from the process start to the window and to the first frame of the film.
+export const versus = {
+  date: '21.11.2026',
+  machine: 'Intel Core i9-14900K, NVIDIA GeForce RTX 4080, Windows 11, монитор 3840×2160 на 240 Гц с HDR',
+  source: 'https://github.com/Piwqust/moonbow/tree/main/qa/perf/compare',
+  players: [
+    { id: 'moonbow', name: 'Moonbow', version: '0.2.0', window: 70, first: 420 },
+    { id: 'vlc', name: 'VLC', version: '3.0.24', window: 1094, first: 1583 },
+    { id: 'mpc', name: 'MPC-HC', version: '2.8.5', window: 1518, first: 2398 },
+  ],
+  // `best` is the column that wins the row, -1 when it is a tie or a trade-off.
+  rows: [
+    { label: 'Окно на экране', v: ['0,07 с', '1,09 с', '1,52 с'], best: 0 },
+    { label: 'Первый кадр, 1080p H.264', v: ['0,42 с', '1,58 с', '2,40 с'], best: 0 },
+    { label: 'Первый кадр, 4K 60 к/с HEVC 10 бит', v: ['0,43 с', '1,62 с', '2,35 с'], best: 0 },
+    { label: 'Память без файла', v: ['105 МБ', '15 МБ', '11 МБ'], best: 2 },
+    { label: 'Процессор на 1080p, одно ядро', v: ['8,0 %', '3,4 %', '2,1 %'], best: 2 },
+    { label: 'Процессор на 4K 60 к/с', v: ['7,6 %', '7,9 %', '7,8 %'], best: -1 },
+    { label: 'Память на 1080p', v: ['243 МБ', '164 МБ', '234 МБ'], best: 1 },
+    { label: 'Перемотка во время фильма', v: ['0,10 с, точно в кадр', '0,15 с, точно в кадр', '0,04 с, мимо до 0,6 с'], best: -1 },
+    { label: 'Потерянные кадры на 1080p', v: ['нет', 'нет', 'нет'], best: -1 },
+    { label: 'Ошибка цвета, из 255', v: ['0,5', '1', '1'], best: -1 },
+    { label: 'Закрытие', v: ['0,24 с', '0,23 с', '0,58 с'], best: -1 },
+  ],
+};
+
+// ---------------------------------------------------------------------------------------------
 // Measured numbers. Only these appear as big figures on the site.
 export const facts = [
   { value: '0 %', label: 'процессора на паузе', note: 'Видео на паузе: 0 мс процессорного времени за 10 секунд.' },

@@ -46,6 +46,9 @@
   списки расширений). После изменений в плеере запустите и пересоберите сайт.
 - **Замер запуска:** `src/data/measurements/startup-2026-11-20.txt`, сырые строки 20 запусков с файлом
   и 20 с медиатекой (`qa/perf/firstframe.ps1 -Runs 40`). Медианы перенесены в `trace` в `site.ts`.
+- **Сравнение с VLC и MPC-HC:** `versus` в `site.ts`, медианы из `../qa/perf/compare/results-2026-11-21`
+  (как мерили и как повторить: `../qa/perf/compare/README.md`). Картинки для README рисует
+  `node tools/compare-chart.mjs`.
 - **Снимки экрана:** `src/assets/shots/`, кадры для «Восьми кадров»: `src/assets/frames/`. Всё снято с
   настоящего `build\Moonbow.exe` в скрытых тестовых окнах, ничего не появляется на экране:
 

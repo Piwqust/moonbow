@@ -82,6 +82,38 @@ draw an interface frame, 28 ms to show a frame preview on the seek bar (1080p).
 Try it on your own computer: `set MOONBOW_TRACE=1`, start Moonbow with a file, then open `%TEMP%\moonbow-trace.txt`.
 </details>
 
+### Next to VLC and MPC-HC
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.svg">
+    <img src="docs/images/compare-light.svg" width="900" alt="From launch to the first frame of a 1080p film, one cell per 1/24 second: Moonbow 0.42 s, VLC 1.58 s, MPC-HC 2.40 s">
+  </picture>
+</p>
+
+The same files on the same PC, timed from outside by one tool that watches each player's window. Moonbow 0.2.0,
+VLC 3.0.24 and MPC-HC 2.8.5, medians:
+
+| | Moonbow | VLC | MPC-HC |
+| --- | --- | --- | --- |
+| Window on screen | **0.07 s** | 1.09 s | 1.52 s |
+| First frame, 1080p H.264 | **0.42 s** | 1.58 s | 2.40 s |
+| First frame, 4K 60 fps HEVC | **0.43 s** | 1.62 s | 2.35 s |
+| Memory with no file open | 105 MB | 15 MB | **11 MB** |
+| CPU while playing 1080p, one core | 8.0 % | 3.4 % | **2.1 %** |
+| CPU while playing 4K 60 fps, one core | 7.6 % | 7.9 % | 7.8 % |
+| Seek during playback | 0.10 s, frame-exact | 0.15 s, frame-exact | **0.04 s**, up to 0.6 s off |
+| Dropped frames, 1080p | none | none | none |
+| Colour error, of 255 | 0.5 | 1 | 1 |
+
+Moonbow starts four to six times sooner. It is also the heaviest of the three at rest and on 1080p: mpv is loaded
+from the start and draws every frame with its own shaders. On 4K the load is the same.
+
+> [!NOTE]
+> One PC (Core i9-14900K, RTX 4080, HDR display), warm starts, with Windows Defender and Windhawk running: another
+> PC will give other numbers. The 0.42 s here is the first pixel seen from outside; the 328 ms above comes from the
+> player's own log. Method, scripts and raw results: [`qa/perf/compare`](qa/perf/compare).
+
 ## What it does
 
 <table>
