@@ -179,6 +179,9 @@ public:
     // general.theme / accent to the palette and every window; also when Windows switches
     // light/dark (WM_SETTINGCHANGE) under the System theme.
     void ApplyTheme();
+    // Laptops on battery: the Fast picture preset (video.batteryQuality). At start and on
+    // WM_POWERBROADCAST; re-applies the preset's mpv options when the answer changes.
+    void UpdatePowerSaving();
 
 private:
     App();
@@ -245,6 +248,7 @@ private:
     bool engineReady_ = false;
     bool fitPending_ = false;
     bool fittedOnce_ = false;
+    bool powerSaving_ = false;
     bool quitting_ = false;
     int queuedIndex_ = -1;      // queue index of the file handed to Player::QueueNext
     uint64_t infoSerial_ = 0;   // PlayerState::loadSerial whose title/duration the queue item has

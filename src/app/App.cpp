@@ -246,7 +246,28 @@ void App::ApplyTheme() {
     for (ui::Host* h : ui::Host::All()) h->OnThemeChanged();
 }
 
+void App::UpdatePowerSaving() {
+    const std::string mode = config_.GetString("video.batteryQuality");
+    bool on = false;
+    SYSTEM_POWER_STATUS ps{};
+    const bool known = GetSystemPowerStatus(&ps) != FALSE;
+    // --automation runs pretend: MOONBOW_TEST_POWER=battery or saver (a desktop has no battery).
+    if (wchar_t test[16]; ui::Host::Automation() && GetEnvironmentVariableW(L"MOONBOW_TEST_POWER", test, 16)) {
+        ps.ACLineStatus = 0;
+        ps.SystemStatusFlag = wcscmp(test, L"saver") == 0 ? 1 : 0;
+    } else if (!known) {
+        ps.ACLineStatus = 255;
+    }
+    if (mode != "same" && ps.ACLineStatus == 0) on = mode == "fast" || ps.SystemStatusFlag == 1;  // 1: energy saver
+    if (on == powerSaving_) return;
+    powerSaving_ = on;
+    settings::SetPowerSaving(on);
+    Log(on ? "power: on battery, the Fast picture preset" : "power: the picture preset as chosen");
+    for (const auto& [name, value] : MpvOptionFor(config_, "video.quality")) player_.ApplySetting(name, value);
+}
+
 void App::OnConfigChanged(const std::string& key) {
+    if (key == "video.batteryQuality") UpdatePowerSaving();
     if (key == "general.theme" || key == "general.accent") {
         ApplyTheme();
         return;
@@ -503,6 +524,13 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     // The GPU device started in wWinMain; libmpv starts after the window is up.
     gfx::Gpu::Get().NotifyWhenReady(main_->Hwnd(), ui::Host::kDeviceReadyMessage);
     // MpvOptions already expands general.extraOptions (quotes, --no-x) and puts it last.
+    UpdatePowerSaving();  // before the options: they read it
+    // AC/battery and energy saver changes reach the main window as WM_POWERBROADCAST (for the
+    // process's life: the handles are not kept).
+    static const GUID kAcDcPowerSource = {0x5d3e9a59, 0xe9d5, 0x4b00, {0xa6, 0xbd, 0xff, 0x34, 0xff, 0x51, 0x65, 0x48}};
+    static const GUID kPowerSavingStatus = {0xe00958c0, 0xc213, 0x4ace, {0xac, 0x77, 0xfe, 0xcc, 0xed, 0x2e, 0xee, 0xa5}};
+    RegisterPowerSettingNotification(main_->Hwnd(), &kAcDcPowerSource, DEVICE_NOTIFY_WINDOW_HANDLE);
+    RegisterPowerSettingNotification(main_->Hwnd(), &kPowerSavingStatus, DEVICE_NOTIFY_WINDOW_HANDLE);
     player_.SetStartOptions(MpvOptions(config_));
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     player_.onTrackChoice = OnTrackChoice;

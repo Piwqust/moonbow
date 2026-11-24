@@ -10,6 +10,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <initializer_list>
@@ -312,8 +313,10 @@ std::optional<std::string> BuildDebandRange(const Config& c) {
 // profiles, written as single options so that switching back restores each one (the `reset`
 // values below are mpv 0.41's defaults).
 
+std::atomic<bool> g_powerSaving{false};
+
 bool QualityIs(const Config& c, const char* preset) {
-    return c.GetString("video.quality") == preset;
+    return (g_powerSaving ? std::string("fast") : c.GetString("video.quality")) == preset;
 }
 
 std::optional<std::string> BuildScale(const Config& c) {
@@ -1441,6 +1444,17 @@ void BuildMedia(Builder& b) {
             .MpvBuild("hdr-contrast-recovery", BuildContrastRecovery, "0")
             .MpvBuild("hdr-compute-peak", BuildComputePeak, "auto");
     }
+    // App::UpdatePowerSaving: the preset above reads "fast" while this applies.
+    b.Pick("video.batteryQuality", L"On battery", L"От батареи",
+           {{"saver", L"Fast with energy saver on", L"«Быстро» при экономии заряда"},
+            {"fast", L"Always Fast", L"Всегда «Быстро»"},
+            {"same", L"Same as plugged in", L"Как от сети"}},
+           "saver")
+        .Desc(L"Laptops: on battery, draw the picture with the Fast preset to save power. It keeps the graphics card "
+              L"freer and takes about 50 MB less memory, 115 MB with 4K video. An upscaling method picked below stays.",
+              L"Для ноутбуков: от батареи рисовать картинку с пресетом «Быстро», чтобы беречь заряд. Видеокарта "
+              L"загружена меньше, памяти нужно примерно на 50 МБ меньше, с видео 4K — на 115 МБ. Выбранный ниже "
+              L"способ увеличения остаётся.");
     b.Pick("video.upscaler", L"Upscaling method", L"Способ увеличения",
            {{"auto", L"From the quality setting", L"По настройке качества"},
             {"bilinear", L"Bilinear (fastest)", L"Билинейный (самый быстрый)"},
@@ -2758,6 +2772,14 @@ const KeyAction* FindKeyAction(std::string_view id) {
 
 std::string LanguageTags(const Config& c, const char* key) {
     return LanguageList(c, key).value_or(std::string());
+}
+
+void SetPowerSaving(bool on) {
+    g_powerSaving = on;
+}
+
+bool PowerSaving() {
+    return g_powerSaving;
 }
 
 int AutoDecodeThreads() {

@@ -613,6 +613,10 @@ bool MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT* result) 
             Post([this] { SetPictureInPicture(false); });
             *result = 0;
             return true;
+        case WM_POWERBROADCAST:
+            // On battery or back on power, energy saver on or off: the picture preset may change.
+            if (wp == PBT_APMPOWERSTATUSCHANGE || wp == PBT_POWERSETTINGCHANGE) TheApp().UpdatePowerSaving();
+            return false;
         case WM_SETTINGCHANGE:
             // Windows switched apps between light and dark: the System theme follows it.
             if (lp && lstrcmpW(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0 &&

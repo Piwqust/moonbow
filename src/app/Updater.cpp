@@ -1,5 +1,6 @@
 #include "app/Updater.h"
 
+#include "Trace.h"
 #include "Util.h"
 #include "app/App.h"
 #include "app/I18n.h"
@@ -232,7 +233,11 @@ void Updater::TryFeed(size_t index, bool user, bool sawAnswer) {
     r.maxBytes = 64 * 1024;
     r.user = user;
     r.allowLoopbackHttp = ui::Host::Automation();
+    // Two first starts out of 28 took 1.5 s instead of 0.4 (BENCH-2026-11-21): the trace marks
+    // the update check and the first settings write, the suspects, for the next time.
+    Trace("update check: request");
     request_ = net::Send(std::move(r), [this, index, user, sawAnswer](const net::Response& resp) {
+        Trace("update check: answer");
         request_ = 0;
         setup::UpdateInfo info;
         std::string why;

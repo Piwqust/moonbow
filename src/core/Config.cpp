@@ -1,6 +1,7 @@
 #include "Config.h"
 
 #include "Paths.h"
+#include "../Trace.h"
 #include "../net/Secret.h"
 
 #include <windows.h>
@@ -226,6 +227,7 @@ bool Config::Save() {
 bool Config::SaveTo(const std::wstring& path) {
     if (path.empty()) return false;
     if (!json::WriteFileAtomic(path, json::Serialize(ToJson(), true))) return false;
+    Trace("settings saved");
     dirty_ = false;
     return true;
 }

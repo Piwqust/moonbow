@@ -19,6 +19,9 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
 - Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back (**Settings → Playback →
   Continue long audio**: longer than 20 minutes by default; audiobooks in .m4b always). Songs still start from the
   beginning.
+- Laptops on battery draw the picture with the **Fast** preset while Windows energy saver is on: the graphics card
+  works less and Moonbow takes about 50 MB less memory, 115 MB less with 4K video. **Settings → Video → On battery**
+  makes it always on battery, or never.
 - **HDR output** no longer lists "HDR10+" and "Dolby Vision": they only ever sent HDR10. Such videos still go to an
   HDR display as HDR10, with their brightness data used for tone mapping. A saved choice of either becomes HDR10.
 
