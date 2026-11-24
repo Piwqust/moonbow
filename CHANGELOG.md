@@ -27,6 +27,8 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
 - **DVD and Blu-ray**: open an `.iso` image or a disc folder (one with `VIDEO_TS` or `BDMV`, also by dropping it on
   the window) and Moonbow plays the disc. Its menus answer the arrow keys, <kbd>Enter</kbd>, <kbd>Backspace</kbd>
   (back) and clicks.
+- On AMD Radeon graphics, **Settings → Video → Double the frame rate on AMD Radeon** (AMD Fluid Motion Video): the
+  card computes a frame between each two, so motion looks smoother.
 - Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back (**Settings → Playback →
   Continue long audio**: longer than 20 minutes by default; audiobooks in .m4b always). Songs still start from the
   beginning.

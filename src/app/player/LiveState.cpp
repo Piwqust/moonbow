@@ -43,19 +43,25 @@ Config& Cfg() {
     return TheApp().config();
 }
 
-// Video Super Resolution flavour of the graphics card Moonbow (and mpv, on the default adapter)
-// renders with: "nvidia", "intel" or "" when it has none. Asked once the device exists.
-const char* SuperResVendor() {
+// PCI vendor of the graphics card Moonbow (and mpv, on the default adapter) renders with:
+// 0x10DE NVIDIA, 0x8086 Intel, 0x1002 AMD; 0 until the device exists. Asked once.
+int GpuVendorId() {
     static int vendor = -1;
     if (vendor < 0) {
         IDXGIDevice* dev = gfx::Gpu::Get().DxgiDevice();
-        if (!dev) return "";
+        if (!dev) return 0;
         vendor = 0;
         gfx::ComPtr<IDXGIAdapter> adapter;
         DXGI_ADAPTER_DESC desc{};
         if (SUCCEEDED(dev->GetAdapter(&adapter)) && SUCCEEDED(adapter->GetDesc(&desc)))
             vendor = static_cast<int>(desc.VendorId);
     }
+    return vendor;
+}
+
+// Video Super Resolution flavour of that card: "nvidia", "intel" or "" when it has none.
+const char* SuperResVendor() {
+    const int vendor = GpuVendorId();
     if (vendor == 0x10DE) return "nvidia";
     if (vendor == 0x8086) return "intel";
     return "";
@@ -221,7 +227,7 @@ LiveState::LiveState() {
             ApplyCrop();
             Notify();
         }
-        if (key == "video.superResolution" || key == "video.trueHdr") {
+        if (key == "video.superResolution" || key == "video.trueHdr" || key == "video.amdFrameRate") {
             ApplyUpscaler();
             Notify();
         }
@@ -529,10 +535,22 @@ void LiveState::ApplyUpscaler() {
             args += std::string(args.empty() ? "" : ":") + "nvidia-true-hdr";
         if (!args.empty()) want = "@lsr:d3d11vpp=" + args;
     }
-    if (want == srFilter_) return;
-    if (!srFilter_.empty()) Mpv().Command({"vf", "remove", "@lsr"});
-    if (!want.empty()) Mpv().Command({"vf", "add", want});
-    srFilter_ = want;
+    if (want != srFilter_) {
+        if (!srFilter_.empty()) Mpv().Command({"vf", "remove", "@lsr"});
+        if (!want.empty()) Mpv().Command({"vf", "add", want});
+        srFilter_ = want;
+    }
+    // AMD Fluid Motion Video: AMF computes a frame between each two on Radeon graphics (mpv's
+    // amf_frc filter). Like d3d11vpp it takes D3D11 frames only.
+    std::string frc;
+    if (c.GetBool("video.amdFrameRate") && s.fileLoaded && s.hasVideo && s.hwdec == L"d3d11va" && !CpuFilters() &&
+        GpuVendorId() == 0x1002)
+        frc = "@lfrc:amf_frc";
+    if (frc != frcFilter_) {
+        if (!frcFilter_.empty()) Mpv().Command({"vf", "remove", "@lfrc"});
+        if (!frc.empty()) Mpv().Command({"vf", "add", frc});
+        frcFilter_ = frc;
+    }
 }
 
 std::wstring LiveState::UpscalerStatus() const {

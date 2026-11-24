@@ -1563,6 +1563,14 @@ void BuildMedia(Builder& b) {
               L"выглядит плавнее.")
         .When("video.smoothMotion", "true")
         .MpvBuild("tscale", BuildTscale, "oversample");
+    // app/player/LiveState.cpp, ApplyUpscaler: mpv's amf_frc filter.
+    b.Toggle("video.amdFrameRate", L"Double the frame rate on AMD Radeon", L"Удваивать частоту кадров на AMD Radeon",
+             false)
+        .Desc(L"AMD Fluid Motion Video: the graphics card computes a frame between each two, so motion looks "
+              L"smoother. Needs an AMD Radeon card and Direct3D 11 hardware decoding; with other cards it does nothing.",
+              L"AMD Fluid Motion Video: видеокарта досчитывает кадр между каждыми двумя, и движение выглядит "
+              L"плавнее. Нужны видеокарта AMD Radeon и аппаратное декодирование Direct3D 11; с другими видеокартами "
+              L"ничего не делает.");
     // Enabled user shaders ("a.glsl|b.hook" in <data>\shaders); toggled in the player's quick settings.
     b.Sec("shaders", L"Shaders", L"Шейдеры");
     b.Text("video.shaders", L"Custom shaders", L"Свои шейдеры")

@@ -150,6 +150,7 @@ private:
     uint64_t configToken_ = 0;
     int64_t srcW_ = 0, srcH_ = 0;  // decoded frame size (video-params/w, h): crop coordinates
     std::string srFilter_;         // the @lsr filter in mpv's chain, empty when none
+    std::string frcFilter_;        // the @lfrc filter (AMD frame rate conversion), empty when none
     int64_t outW_ = 0, outH_ = 0;  // after the filters (video-out-params): video-crop's frame
     std::string appliedCrop_;      // last video-crop sent to mpv
     int64_t areaW_ = 0, areaH_ = 0;  // video area (osd-dimensions), the upscaler's target
