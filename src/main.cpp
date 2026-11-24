@@ -1,4 +1,5 @@
 #include "Trace.h"
+#include "Util.h"
 #include "app/App.h"
 #include "app/CrashReport.h"
 #include "app/FileAssociations.h"
@@ -119,6 +120,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (args[i] == L"--automation") ui::Host::SetAutomation(true);
         if (args[i] == L"--data-dir" && i + 1 < args.size()) SetDataDirForTests(args[i + 1]);
     }
+    // A portable copy: "portable.txt" next to Moonbow.exe (the release zip has one) keeps the
+    // settings, the library and the history in a "Data" folder beside it. --data-dir still wins.
+    if (!DataDirOverridden())
+        if (const std::wstring exe = ExeDir();
+            !exe.empty() && GetFileAttributesW((exe + L"portable.txt").c_str()) != INVALID_FILE_ATTRIBUTES)
+            SetDataDirForTests(exe + L"Data");
     app::InstallCrashHandler(net::AppVersion());
     // Setup.exe (this exe with a package appended), uninstall and version switches: no player.
     if (int code = 0; setup::RunSetupMode(args, &code)) return code;

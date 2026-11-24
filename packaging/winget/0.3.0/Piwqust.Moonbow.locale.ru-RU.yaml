@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.9.0.schema.json
+PackageIdentifier: Piwqust.Moonbow
+PackageVersion: 0.3.0
+PackageLocale: ru-RU
+Publisher: Piwqust
+PackageName: Moonbow
+License: GPL-3.0-or-later
+ShortDescription: Р‘С‹СЃС‚СЂС‹Р№ Рё С‚РёС…РёР№ РІРёРґРµРѕ- Рё РјСѓР·С‹РєР°Р»СЊРЅС‹Р№ РїР»РµРµСЂ РґР»СЏ Windows РЅР° РѕСЃРЅРѕРІРµ mpv.
+ManifestType: locale
+ManifestVersion: 1.9.0

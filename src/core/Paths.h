@@ -18,7 +18,7 @@ bool CopyOldDataDir(const std::wstring& from, const std::wstring& to);
 std::wstring DataFilePath(std::wstring_view name);
 
 // Redirects DataDir() (created if missing). Pass an empty string to go back to %APPDATA%\Moonbow.
-// Meant for tests, so they never touch the real profile.
+// For tests (so they never touch the real profile), --data-dir and portable copies (main.cpp).
 void SetDataDirForTests(const std::wstring& dir);
 
 // True when --data-dir (or a test) moved the data folder away from %APPDATA%\Moonbow.

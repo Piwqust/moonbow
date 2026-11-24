@@ -15,6 +15,7 @@
 #include "app/library/LibraryCommon.h"
 #include "core/Json.h"
 #include "core/Paths.h"
+#include "core/SettingsSchema.h"
 #include "gfx/Text.h"
 #include "library/MediaTypes.h"
 #include "net/Online.h"
@@ -376,7 +377,7 @@ public:
 
         frame_->Footer()->Add<DButton>(Tr(L"Cancel"), BtnStyle::Neutral)->onClick = [this] { frame_->Close(); };
         // OpenSubtitles for the playing file (off and explained in the next dialog until the
-        // user turns it on with their key).
+        // user turns it on there).
         if (!model_->current.empty()) {
             auto* online = frame_->Footer()->Add<DButton>(Tr(L"Find Online"), BtnStyle::Neutral);
             online->id = "subs-online";
@@ -667,6 +668,123 @@ private:
     std::function<void(const net::SubtitleResult&)> pick_;
 };
 
+// Loads the downloaded file at once and remembers it for the video (a copy in the data
+// folder is not found by name next time).
+void AttachDownloaded(const std::wstring& video, const net::online::SubtitleFetch& f) {
+    const PlayerState& s = TheApp().player().State();
+    if (s.fileLoaded && library::PathKey(s.path) == library::PathKey(video)) TheApp().player().AddSubtitle(f.path);
+    auto& entry = Store().pairs[library::PathKey(video)];
+    entry.first = video;
+    if (std::find(entry.second.begin(), entry.second.end(), f.path) == entry.second.end()) entry.second.push_back(f.path);
+    Store().Save();
+    if (MainWindow* w = TheApp().main()) {
+        std::wstring msg = Fmt(Tr(L"Subtitles downloaded: {0}"), {library::FileNameOf(f.path)});
+        if (f.inDataDir) msg = Fmt(Tr(L"Subtitles saved to Moonbow's data folder: {0}"), {library::FileNameOf(f.path)});
+        if (const int left = net::online::LastSubtitleQuota(); left >= 0)
+            msg += L". " + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(left)});
+        ShowToast(w, msg, "subtitles", 3000);
+    }
+}
+
+
+// --- subtitles.autoDownload --------------------------------------------------------------------
+// A video that opens without subtitles in the user's language gets them from OpenSubtitles: one
+// made for this exact file ("exact"), or else the most downloaded one for its name, season and
+// episode ("best"). Once per file and session, quietly when nothing fits; a toast says what was
+// added, or once that the day's downloads are used up.
+
+struct AutoState {
+    std::wstring tried;  // PathKey of the last file looked up
+    bool limitSaid = false;
+};
+
+AutoState& Auto() {
+    static AutoState a;
+    return a;
+}
+
+std::string LowerAscii(std::string s) {
+    for (char& c : s)
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return s;
+}
+
+// mpv's track languages are tags like "ru", "rus" or "ru-RU"; `tags` is the setting's list ("ru,rus").
+bool LanguageIn(const std::wstring& trackLang, const std::string& tags) {
+    if (trackLang.empty() || tags.empty()) return false;
+    std::string lang = LowerAscii(WideToUtf8(trackLang));
+    lang = lang.substr(0, lang.find('-'));
+    size_t from = 0;
+    while (from <= tags.size()) {
+        const size_t comma = tags.find(',', from);
+        const std::string tag = LowerAscii(tags.substr(from, comma == std::string::npos ? std::string::npos : comma - from));
+        if (!tag.empty() && tag == lang) return true;
+        if (comma == std::string::npos) break;
+        from = comma + 1;
+    }
+    return false;
+}
+
+void AutoDownloadSubtitles() {
+    Config& c = TheApp().config();
+    const std::string mode = c.GetString("subtitles.autoDownload");
+    if (mode != "exact" && mode != "best") return;
+    if (!net::online::SubtitlesUnavailable().empty() || !c.GetBool("subtitles.enabled")) return;
+    Player& p = TheApp().player();
+    const PlayerState& s = p.State();
+    if (!p.FileSettled() || (p.confirmTracks && !p.TracksConfirmed()) || !s.hasVideo || s.path.empty() ||
+        lib::IsUrl(s.path) || s.duration < 120)  // clips and samples: not worth a download
+        return;
+    const std::wstring key = library::PathKey(s.path);
+    if (Auto().tried == key) return;
+    // In the user's language only: "app" and "system" read as one language, "original" as none.
+    const std::vector<std::string> langs = net::online::PreferredSubtitleLanguages();
+    const std::string tags = settings::LanguageTags(c, "subtitles.language");
+    if (langs.empty() || tags.empty()) return;
+    Auto().tried = key;
+    for (const Track& t : s.tracks)
+        if (t.type == L"sub" && LanguageIn(t.lang, tags)) return;
+    if (Store().pairs.count(key)) return;  // subtitles the user paired with it (they may be untagged)
+
+    const std::wstring video = s.path;
+    const net::VideoGuess g = net::online::Guess(video);
+    net::online::SubtitleSearch q;
+    q.videoPath = video;
+    q.query = g.title.empty() ? library::StemOf(video) : g.title;
+    if (g.kind == net::VideoGuess::Episode) {
+        q.season = g.season;
+        q.episode = g.episode;
+    }
+    q.languages = {OsLanguageCode(langs.front())};
+    const bool best = mode == "best";
+    net::online::SearchSubtitles(q, [video, best](const net::online::SubtitleSearchResult& r) {
+        if (!r.ok || r.items.empty()) return;
+        const PlayerState& now = TheApp().player().State();
+        if (library::PathKey(now.path) != library::PathKey(video)) return;  // moved on meanwhile
+        const net::SubtitleResult* pick = nullptr;
+        for (const net::SubtitleResult& it : r.items)
+            if (it.hashMatch && !it.machine && !it.ai) {
+                pick = &it;
+                break;
+            }
+        if (!pick && best)
+            for (const net::SubtitleResult& it : r.items)
+                if (!it.machine && !it.ai && !it.foreignOnly && (!pick || it.downloads > pick->downloads)) pick = &it;
+        if (!pick) return;
+        net::online::DownloadSubtitle(*pick, video, [video](const net::online::SubtitleFetch& f) {
+            if (f.ok) {
+                AttachDownloaded(video, f);
+                return;
+            }
+            // Only the used-up limit is worth a word; other failures stay quiet in the background.
+            if (net::online::LastSubtitleQuota() == 0 && !Auto().limitSaid) {
+                Auto().limitSaid = true;
+                if (MainWindow* w = TheApp().main()) ShowToast(w, f.error, "subtitles", 6000);
+            }
+        });
+    });
+}
+
 class OnlineSubsDialog : public std::enable_shared_from_this<OnlineSubsDialog> {
 public:
     OnlineSubsDialog(MainWindow* w, std::wstring video) : window_(w), video_(std::move(video)) {}
@@ -761,7 +879,7 @@ private:
         return content;
     }
 
-    void Message(const std::wstring& title, const std::wstring& text, bool settingsButton = false) {
+    Widget* Message(const std::wstring& title, const std::wstring& text) {
         Widget* content = Content();
         content->align = Align::Center;
         content->pad = {40, 70, 40, 30};
@@ -774,24 +892,29 @@ private:
             l->halign = HAlign::Center;
             l->maxW = 560;
         }
-        if (settingsButton) {
-            auto* b = content->Add<DButton>(Tr(L"Open Settings"), BtnStyle::Neutral);
-            b->minWidth = 160;
-            b->onClick = [this] {
-                frame_->Close();
-                if (MainWindow* w = TheApp().main()) w->Post([] { TheApp().OpenSettings("privacy", "online"); });
-            };
-        }
+        return content;
     }
 
     void ShowOff() {
         for (Widget* w : std::initializer_list<Widget*>{query_, season_, episode_, lang_, search_}) w->enabled = false;
-        Message(Tr(L"Subtitle search is off"),
-                Tr(L"Turn on \"Search for subtitles online\" in Settings › Privacy › Online services and paste your own OpenSubtitles "
-                   L"API key there. The key is free: sign in at opensubtitles.com, open your profile, then API "
-                   L"Consumers, and create one."),
-                true);
         status_->SetText({});
+        if (net::online::SubtitlesOn()) {  // on, but this build has no key
+            Message(Tr(L"Subtitle search is unavailable"), net::online::SubtitlesUnavailable());
+            return;
+        }
+        // Off by default: say what goes where, and turn it on right here.
+        Widget* content =
+            Message(Tr(L"Subtitle search is off"),
+                    Tr(L"Moonbow asks opensubtitles.com only when you search: it sends the video's hash (from its first "
+                       L"and last 64 KB), its name, season, episode and your subtitle languages. Without an account you "
+                       L"can download 5 subtitles a day."));
+        auto* on = content->Add<DButton>(Tr(L"Turn On and Search"), BtnStyle::Accent);
+        on->minWidth = 180;
+        on->onClick = [this] {
+            TheApp().config().SetBool("privacy.onlineSubtitles", true);
+            for (Widget* w : std::initializer_list<Widget*>{query_, season_, episode_, lang_, search_}) w->enabled = true;
+            Start();
+        };
     }
 
     // The footer line: what the search found, the downloads left and a login note.
@@ -871,7 +994,7 @@ private:
         auto self = weak_from_this();
         const std::wstring video = video_;
         net::online::DownloadSubtitle(item, video, [self, video](const net::online::SubtitleFetch& f) {
-            if (f.ok) Attach(video, f);
+            if (f.ok) AttachDownloaded(video, f);
             auto d = self.lock();
             if (!d || d->closed_) return;
             d->busy_ = false;
@@ -884,24 +1007,6 @@ private:
             d->status_->SetText(f.error);
             d->status_->InvalidateLayout();
         });
-    }
-
-    // Loads the downloaded file at once and remembers it for the video (a copy in the data
-    // folder is not found by name next time).
-    static void Attach(const std::wstring& video, const net::online::SubtitleFetch& f) {
-        const PlayerState& s = TheApp().player().State();
-        if (s.fileLoaded && library::PathKey(s.path) == library::PathKey(video)) TheApp().player().AddSubtitle(f.path);
-        auto& entry = Store().pairs[library::PathKey(video)];
-        entry.first = video;
-        if (std::find(entry.second.begin(), entry.second.end(), f.path) == entry.second.end()) entry.second.push_back(f.path);
-        Store().Save();
-        if (MainWindow* w = TheApp().main()) {
-            std::wstring msg = Fmt(Tr(L"Subtitles downloaded: {0}"), {library::FileNameOf(f.path)});
-            if (f.inDataDir) msg = Fmt(Tr(L"Subtitles saved to Moonbow's data folder: {0}"), {library::FileNameOf(f.path)});
-            if (const int left = net::online::LastSubtitleQuota(); left >= 0)
-                msg += L". " + Fmt(Tr(L"Downloads left today: {0}"), {std::to_wstring(left)});
-            ShowToast(w, msg, "subtitles", 3000);
-        }
     }
 
     MainWindow* window_;
@@ -946,6 +1051,7 @@ void dlg::InstallSubtitleMemory() {
     // The file-loaded event reports file and state changes together.
     conn = Connect(TheApp().playerChanged, [](unsigned mask) {
         if ((mask & kChangeFile) && (mask & kChangeState)) AttachRemembered();
+        if (mask & (kChangeTracks | kChangeFile)) AutoDownloadSubtitles();
     });
 }
 

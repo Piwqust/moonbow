@@ -14,7 +14,8 @@ Install
    press "More info", then "Run anyway".
 2. Press "Install". Moonbow goes to %LOCALAPPDATA%\Programs\Moonbow and to the Start menu.
    Videos open in Moonbow by default; turn that off under "Install options".
-Portable: unpack Moonbow-windows-x64.zip into any folder and run Moonbow.exe.
+Portable: unpack Moonbow-windows-x64.zip into any folder and run Moonbow.exe. Its settings
+and library stay in the Data folder next to it (delete portable.txt to use %APPDATA%\Moonbow).
 
 Update and go back
 - The installed Moonbow updates itself: once a day it checks GitHub for a new version,
@@ -44,6 +45,8 @@ License: GNU GPL v3 or later (LICENSE.txt). Third-party parts: THIRD_PARTY_NOTIC
 2. Нажмите «Установить». Moonbow встанет в %LOCALAPPDATA%\Programs\Moonbow и в меню «Пуск».
    Видео будут открываться в Moonbow; выключить это можно в «Параметрах установки».
 Без установки: распакуйте Moonbow-windows-x64.zip в любую папку и запустите Moonbow.exe.
+Настройки и медиатека этой копии лежат в папке Data рядом с ней (удалите portable.txt,
+чтобы хранить их в %APPDATA%\Moonbow).
 
 Обновление и возврат
 - Установленный Moonbow обновляется сам: раз в день проверяет на GitHub, вышла ли новая

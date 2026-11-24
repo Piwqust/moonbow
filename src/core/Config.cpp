@@ -157,6 +157,15 @@ bool Config::ApplyDocument(const json::Value& doc) {
         }
         if (!item->HasValue()) continue;
         json::Value value = m.value;
+        // Choices merged into another one: the old value keeps what it did.
+        static const struct {
+            const char *key, *from, *to;
+        } kMergedChoices[] = {
+            {"video.hdr", "hdr10plus", "hdr10"},  // both only ever sent HDR10 (PQ, BT.2020)
+            {"video.hdr", "dolbyvision", "hdr10"},
+        };
+        for (const auto& c : kMergedChoices)
+            if (m.key == c.key && value.IsString() && value.AsString() == c.from) value = json::Value(c.to);
         // Secrets are stored DPAPI-protected (ToJson); one that no longer decrypts (another
         // account or PC) reads as empty rather than as the blob.
         if (item->secret && value.IsString()) {

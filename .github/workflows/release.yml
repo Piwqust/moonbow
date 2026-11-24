@@ -6,6 +6,9 @@ name: Release
 #
 # Secrets and variables (Settings > Secrets and variables > Actions):
 #   MOONBOW_UPDATE_KEY   secret, required: the feed's signing key (tools/release/new-update-key.ps1)
+#   MOONBOW_KEY_OPENSUBTITLES, MOONBOW_KEY_TMDB, MOONBOW_KEY_LASTFM, MOONBOW_KEY_LASTFM_SECRET,
+#   MOONBOW_KEY_DISCORD  secrets, optional: the online services' keys built into the release
+#                        (tools/gen-service-keys.ps1). Without one, that feature says the build has no key.
 #   MOONBOW_MIRROR_URL   variable, optional: the mirror, e.g. https://moonbow.angleford.co/update.
 #                        When set, the setup and the feed are also copied there over SSH before the
 #                        release is published, with the secrets MIRROR_SSH_KEY (private key),
@@ -64,6 +67,11 @@ jobs:
         shell: pwsh
         env:
           MOONBOW_UPDATE_KEY: ${{ secrets.MOONBOW_UPDATE_KEY }}
+          MOONBOW_KEY_OPENSUBTITLES: ${{ secrets.MOONBOW_KEY_OPENSUBTITLES }}
+          MOONBOW_KEY_TMDB: ${{ secrets.MOONBOW_KEY_TMDB }}
+          MOONBOW_KEY_LASTFM: ${{ secrets.MOONBOW_KEY_LASTFM }}
+          MOONBOW_KEY_LASTFM_SECRET: ${{ secrets.MOONBOW_KEY_LASTFM_SECRET }}
+          MOONBOW_KEY_DISCORD: ${{ secrets.MOONBOW_KEY_DISCORD }}
           MIRROR: ${{ vars.MOONBOW_MIRROR_URL }}
         run: ./tools/package-release.ps1 -RequireFeed -Mirror "$env:MIRROR"
 

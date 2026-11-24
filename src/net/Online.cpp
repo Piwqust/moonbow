@@ -8,6 +8,7 @@
 #include "library/MediaTypes.h"
 #include "net/Cache.h"
 #include "net/Http.h"
+#include "net/ServiceKeys.h"
 #include "ui/Controls.h"
 #include "ui/Host.h"
 
@@ -36,6 +37,19 @@ std::string Trimmed(std::string s) {
     size_t i = 0;
     while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
     return s.substr(i);
+}
+
+// The key a service gets: the one built into Moonbow (net/ServiceKeys.h), unless the hidden setting
+// holds another (builds made without keys, test runs).
+bool OwnKey(const char* setting) {
+    return !Trimmed(Cfg().GetString(setting)).empty();
+}
+std::string OsKey() {
+    return OwnKey("privacy.opensubtitlesKey") ? Trimmed(Cfg().GetString("privacy.opensubtitlesKey"))
+                                               : keys::OpenSubtitles();
+}
+std::string TmdbKey() {
+    return OwnKey("privacy.tmdbKey") ? Trimmed(Cfg().GetString("privacy.tmdbKey")) : keys::Tmdb();
 }
 
 // Test servers: the hidden privacy.*Server settings point a service at a local mock, and only in
@@ -112,8 +126,12 @@ std::wstring Failure(const Response& r, const wchar_t* service) {
         default:
             break;
     }
-    if (r.status == 401 || r.status == 403)
-        return app::Fmt(Tr(L"{0} rejected the API key. Check it in Settings › Privacy › Online services."), {service});
+    if (r.status == 401 || r.status == 403) {
+        const bool own = std::wstring_view(service) == L"TMDB" ? OwnKey("privacy.tmdbKey")
+                                                                : OwnKey("privacy.opensubtitlesKey");
+        return own ? app::Fmt(Tr(L"{0} rejected the API key. Check it in Settings › Privacy › Online services."), {service})
+                   : app::Fmt(Tr(L"{0} refused Moonbow's key. Try again later or update Moonbow."), {service});
+    }
     if (r.status == 429) {
         std::string wait = r.Header("retry-after");
         if (wait.empty()) wait = r.Header("ratelimit-reset");
@@ -136,7 +154,13 @@ bool SubtitlesOn() {
 }
 
 bool SubtitlesKeySet() {
-    return !Trimmed(Cfg().GetString("privacy.opensubtitlesKey")).empty();
+    return !OsKey().empty();
+}
+
+std::wstring SubtitlesUnavailable() {
+    if (!SubtitlesOn()) return Tr(L"Turn on subtitle search in Settings › Privacy › Online services.");
+    if (!SubtitlesKeySet()) return Tr(L"This copy of Moonbow was built without an OpenSubtitles key.");
+    return {};
 }
 
 bool MetadataToggle() {
@@ -149,12 +173,16 @@ uint64_t g_metaStamp = 1;       // bumped by everything that can change what Met
 }
 
 bool MetadataKeyRejected() {
-    const std::string key = Trimmed(Cfg().GetString("privacy.tmdbKey"));
+    const std::string key = TmdbKey();
     return !key.empty() && key == g_rejectedTmdbKey;
 }
 
+bool MetadataKeySet() {
+    return !TmdbKey().empty();
+}
+
 bool MetadataOn() {
-    return MetadataToggle() && !Trimmed(Cfg().GetString("privacy.tmdbKey")).empty() && !MetadataKeyRejected();
+    return MetadataToggle() && MetadataKeySet() && !MetadataKeyRejected();
 }
 
 app::Signal<>& Changed() {
@@ -274,7 +302,7 @@ Request OsRequest(const std::wstring& url) {
     Request r = Base(url);
     r.user = true;
     r.userAgent = OsUserAgent();
-    r.headers.push_back({L"Api-Key", json::ToWide(Trimmed(Cfg().GetString("privacy.opensubtitlesKey")))});
+    r.headers.push_back({L"Api-Key", json::ToWide(OsKey())});
     r.headers.push_back({L"Accept", L"application/json"});
     return r;
 }
@@ -363,9 +391,9 @@ int LastSubtitleQuota() {
 }
 
 void SearchSubtitles(const SubtitleSearch& search, std::function<void(const SubtitleSearchResult&)> done) {
-    if (!SubtitlesOn() || !SubtitlesKeySet()) {
+    if (const std::wstring why = SubtitlesUnavailable(); !why.empty()) {
         SubtitleSearchResult r;
-        r.error = Tr(L"Turn on subtitle search and paste your OpenSubtitles API key in Settings › Privacy › Online services.");
+        r.error = why;
         done(r);
         return;
     }
@@ -434,9 +462,9 @@ void SubtitleQuota(std::function<void(int, const std::wstring&)> done) {
 
 void DownloadSubtitle(const SubtitleResult& item, const std::wstring& videoPath,
                       std::function<void(const SubtitleFetch&)> done) {
-    if (!SubtitlesOn() || !SubtitlesKeySet()) {
+    if (const std::wstring why = SubtitlesUnavailable(); !why.empty()) {
         SubtitleFetch f;
-        f.error = Tr(L"Turn on subtitle search and paste your OpenSubtitles API key in Settings › Privacy › Online services.");
+        f.error = why;
         done(f);
         return;
     }
@@ -463,6 +491,10 @@ void DownloadSubtitle(const SubtitleResult& item, const std::wstring& videoPath,
                                 : app::Fmt(Tr(L"The OpenSubtitles download limit for today is used up. It resets in {0}."),
                                            {app::Fmt(Tr(L"{0} h {1} min"), {std::to_wstring(left / 3600),
                                                                              std::to_wstring(left % 3600 / 60)})});
+                // Without an account the limit is 5 a day per address; a free account gets 20.
+                if (Os().token.empty())
+                    out.error += L" " + std::wstring(Tr(L"Sign in with a free OpenSubtitles account in Settings › "
+                                                        L"Privacy › Online services to download more."));
                 Os().quota = 0;
                 done(out);
                 return;
@@ -752,7 +784,7 @@ std::wstring TmdbLanguage() {
 }
 
 Request TmdbRequest(const std::wstring& pathAndQuery) {
-    const std::string key = Trimmed(Cfg().GetString("privacy.tmdbKey"));
+    const std::string key = TmdbKey();
     std::wstring url = TmdbBase() + pathAndQuery;
     url += (url.find(L'?') == std::wstring::npos ? L"?" : L"&") + std::wstring(L"language=") + TmdbLanguage();
     const std::string cacheKey = "tmdb:" + json::ToUtf8(url);  // without the key
@@ -766,7 +798,7 @@ Request TmdbRequest(const std::wstring& pathAndQuery) {
 
 void NoteTmdbAnswer(const Response& r) {
     if (r.error == Error::None && r.status == 401) {
-        g_rejectedTmdbKey = Trimmed(Cfg().GetString("privacy.tmdbKey"));
+        g_rejectedTmdbKey = TmdbKey();
         ++g_metaStamp;
         ChangedSignal().Emit();
     }
@@ -1024,8 +1056,12 @@ std::wstring MetaSummary(const MediaMeta& m) {
 
 void SearchMetadata(const std::wstring& query, int year, bool tv,
                     std::function<void(const std::vector<MetaMatch>&, const std::wstring&)> done) {
-    if (!MetadataToggle() || Trimmed(Cfg().GetString("privacy.tmdbKey")).empty()) {
-        done({}, Tr(L"Turn on posters and descriptions and paste your TMDB API key in Settings › Privacy › Online services."));
+    if (!MetadataToggle()) {
+        done({}, Tr(L"Turn on posters and descriptions in Settings › Privacy › Online services."));
+        return;
+    }
+    if (!MetadataKeySet()) {
+        done({}, Tr(L"This copy of Moonbow was built without a TMDB key."));
         return;
     }
     std::wstring q = L"/search/" + std::wstring(tv ? L"tv" : L"movie") + L"?query=" + UrlEncode(query);
@@ -1149,6 +1185,16 @@ void Init() {
     };
     Cfg().Subscribe("privacy.fetchMetadata", sync);
     Cfg().Subscribe("library.metadata", sync);
+    // Downloading missing subtitles is subtitle search: choosing it turns the search on, and turning
+    // the search off stops it.
+    Cfg().Subscribe("subtitles.autoDownload", [](const std::string&) {
+        if (Cfg().GetString("subtitles.autoDownload") != "off" && !Cfg().GetBool("privacy.onlineSubtitles"))
+            Cfg().SetBool("privacy.onlineSubtitles", true);
+    });
+    Cfg().Subscribe("privacy.onlineSubtitles", [](const std::string&) {
+        if (!Cfg().GetBool("privacy.onlineSubtitles") && Cfg().GetString("subtitles.autoDownload") != "off")
+            Cfg().SetString("subtitles.autoDownload", "off");
+    });
     Cfg().Subscribe("privacy.tmdbKey", [](const std::string&) {
         ++g_metaStamp;
         ChangedSignal().Emit();

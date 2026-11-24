@@ -1,0 +1,7 @@
+This file makes Moonbow portable: the settings, the library, the history and the playlists
+stay in the "Data" folder next to Moonbow.exe instead of %APPDATA%\Moonbow.
+Delete this file to keep them in %APPDATA%\Moonbow, like the installed Moonbow.
+
+Этот файл делает Moonbow портативным: настройки, медиатека, история и плейлисты лежат
+в папке «Data» рядом с Moonbow.exe, а не в %APPDATA%\Moonbow. Удалите этот файл, чтобы
+хранить их в %APPDATA%\Moonbow, как у установленного Moonbow.

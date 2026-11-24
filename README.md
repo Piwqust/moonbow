@@ -136,7 +136,7 @@ from the start and draws every frame with its own shaders. On 4K the load is the
       <img src="docs/images/en/card-subtitles.jpg" alt="Subtitle styles chosen on a real frame">
       <h3>Subtitles</h3>
       Ready styles chosen on a real frame, a second track on top, subtitles in the black bars, OpenSubtitles
-      search. On pause, click a word to copy it, look it up or translate it.
+      search right after installing, without an account.
     </td>
     <td valign="top">
       <img src="docs/images/en/card-music.jpg" alt="The music screen: the album cover and synced lyrics, the current line lit">
@@ -176,12 +176,12 @@ from the start and draws every frame with its own shaders. On 4K the load is the
   normalization together with the equalizer; a separate window of VU, EBU R128 and stereo meters
   (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>).
 - **Subtitles.** Background box, blur, position, size, subtitles in the black bars, a second track on top,
-  OpenSubtitles search with your own key, words on pause (<kbd>W</kbd>).
+  OpenSubtitles search without an account, and missing subtitles downloaded by themselves if you wish.
 - **Music.** Visualizers (spectrum, circle, oscilloscope, wave); lyrics from a `.lrc` next to the song, from tags
   or, if you allow it, from LRCLIB; crossfade of 1 to 12 seconds; tags read from MP3, FLAC, Ogg, Opus, M4A, WAV,
   AIFF, APE and WavPack; cover thumbnails in File Explorer.
 - **Library.** Recent and frequent folders, next episode, network streams and radio, grid or list, sorting, search
-  in any word order, "New" and "Broken file" badges, TMDB posters if you enable them with your own key.
+  in any word order, "New" and "Broken file" badges, TMDB posters and descriptions if you turn them on.
 - **Look.** Dark, light and system theme; skins (Black OLED, High contrast, Sepia, or your own JSON, reloaded
   live); your own set of control-bar buttons; Windows text size; English and Russian.
 - **Windows.** Media keys and the Windows media card, taskbar thumbnail buttons, tray icon, jump list, file
@@ -195,7 +195,9 @@ from the start and draws every frame with its own shaders. On 4K the load is the
 | File | What it is |
 | --- | --- |
 | [**Moonbow-windows-x64-setup.exe**](https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64-setup.exe) | **Installer, recommended.** Installs for your account, no administrator rights needed |
-| [Moonbow-windows-x64.zip](https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64.zip) | Portable: unpack anywhere and run `Moonbow.exe` |
+| [Moonbow-windows-x64.zip](https://github.com/Piwqust/moonbow/releases/latest/download/Moonbow-windows-x64.zip) | Portable: unpack anywhere and run `Moonbow.exe`; its data stays in `Data` beside it |
+
+With [Scoop](https://scoop.sh): `scoop bucket add moonbow https://github.com/Piwqust/moonbow`, then `scoop install moonbow`.
 
 You need Windows 10 or 11, 64-bit, and a graphics card with Direct3D 11. Every file has a `.sha256` next to it on
 the [release page](https://github.com/Piwqust/moonbow/releases/latest).
@@ -241,7 +243,7 @@ Any key can be changed in **Settings → Controls**, which also has a YouTube-st
 Everything Moonbow keeps is in `%APPDATA%\Moonbow`: settings, the library index, history and resume positions,
 playlists, bookmarks and per-file settings. History can be turned off under **Settings → Privacy**. Online
 features stay off until you turn them on: lyrics from LRCLIB, subtitles from OpenSubtitles and posters from TMDB
-(the last two with your own key, stored encrypted for your Windows account). Links to YouTube and other sites play
+(an OpenSubtitles password, if you sign in, is stored encrypted for your Windows account). Links to YouTube and other sites play
 only if you put your own `yt-dlp.exe` next to Moonbow; Moonbow itself downloads nothing.
 
 ## Questions
@@ -293,7 +295,8 @@ yourself. The online features above are off until you turn them on.
 <summary><b>Where are the portable version's settings?</b></summary>
 <br>
 
-In `%APPDATA%\Moonbow`, the same as for the installed one, so both see the same library.
+In the `Data` folder next to `Moonbow.exe`: the `portable.txt` there keeps them in place. Delete it, and the
+portable copy uses `%APPDATA%\Moonbow` like the installed one, so both see the same library.
 </details>
 
 <details>

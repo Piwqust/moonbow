@@ -179,6 +179,10 @@ inline constexpr const char* kEqPreampKey = "audio.eqPreamp";
 inline constexpr const char* kAutoHwdec = "d3d11va,d3d11va-copy";
 int AutoDecodeThreads();
 
+// The track languages mpv matches for a language setting ("audio.language", "subtitles.language"),
+// e.g. "ru,rus"; empty for "original" (the file's own pick).
+std::string LanguageTags(const Config& c, const char* key);
+
 struct EqPreset {
     std::string id;  // same as the audio.eqPreset choice value
     double preamp = 0;

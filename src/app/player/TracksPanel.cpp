@@ -298,6 +298,7 @@ void AddTracksSection(Widget* page, const wchar_t* type) {
     if (video) return;
     if (subs) {
         auto* find = page->Add<ListRow>("search", Tr(L"Find subtitles online"), nullptr, false);
+        find->id = "subs-find-online";
         find->onClick = [] {
             if (!PS().fileLoaded) return;
             // The dialog replaces the popover; close it after the click returns.

@@ -752,8 +752,8 @@ private:
         visible = true;
         if (!net::online::MetadataOn()) {
             auto* l = Add<Label>(net::online::MetadataKeyRejected()
-                                     ? Tr(L"TMDB rejected the API key. Check it in Settings › Privacy › Online services.")
-                                     : Tr(L"Paste your TMDB API key in Settings › Privacy › Online services to see posters and descriptions."),
+                                     ? Tr(L"TMDB refused Moonbow's key. Try again later or update Moonbow.")
+                                     : Tr(L"This copy of Moonbow was built without a TMDB key."),
                                  TextStyle::Body, Tone::Tertiary);
             l->wrap = true;
             l->width = Length::Grow();

@@ -388,6 +388,21 @@ void App::SaveHistoryPosition() {
     history_.UpdatePosition(item->path, s.position, s.duration);
 }
 
+// Long audio goes on where it was left: files longer than playback.resumeAudio minutes, and
+// audiobooks (.m4b) of any length. A few seconds back, so the sentence that was cut comes again.
+double App::AudioResumePoint(const std::wstring& path) const {
+    const std::string after = config_.GetString("playback.resumeAudio");
+    if (after == "off" || config_.GetString("playback.resume") != "always" ||
+        !config_.GetBool("privacy.rememberPosition") || !config_.GetBool("privacy.saveHistory"))
+        return 0;
+    const library::HistoryEntry* e = history_.Find(path);
+    if (!e || e->duration <= 0) return 0;
+    const bool book = _wcsicmp(PathFindExtensionW(path.c_str()), L".m4b") == 0;
+    if (!book && e->duration < std::atof(after.c_str()) * 60) return 0;
+    if (e->position < 30 || e->position >= e->duration - std::max(5.0, e->duration * 0.05)) return 0;
+    return std::max(0.0, e->position - 5);
+}
+
 void App::StopAtStart() {
     SaveHistoryPosition();
     player_.StopAtStart();
@@ -491,6 +506,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     player_.SetStartOptions(MpvOptions(config_));
     player_.rememberPosition = config_.GetBool("privacy.rememberPosition");
     player_.onTrackChoice = OnTrackChoice;
+    player_.audioResumeAt = [this](const std::wstring& path) { return AudioResumePoint(path); };
     player_.StartAsync(main_->Hwnd(), main_->VideoHwnd());
 
     // Stores and the library scan load after the window is up.

@@ -661,8 +661,14 @@ void Player::Open(const std::wstring& path) {
 
 std::string Player::LoadfileOptions(const std::wstring& path) const {
     std::string opts = fileOptions && !path.empty() ? fileOptions(path) : std::string();
-    // Songs always start from the top, also when an older Moonbow saved a position for them.
-    if (IsMusic(path)) opts += opts.empty() ? "resume-playback=no" : ",resume-playback=no";
+    // Songs always start from the top, also when an older Moonbow saved a position for them. Long
+    // audio starts where the history left it (mpv's watch-later can't tell a song from a podcast
+    // before the file is open).
+    if (IsMusic(path)) {
+        opts += opts.empty() ? "resume-playback=no" : ",resume-playback=no";
+        const double at = audioResumeAt ? audioResumeAt(path) : 0;
+        if (at >= 1) opts += ",start=" + std::to_string(static_cast<long long>(at));
+    }
     return opts;
 }
 

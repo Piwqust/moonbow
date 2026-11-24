@@ -124,6 +124,9 @@ public:
     // ("aid=2,sub-delay=0.5", empty = none): Open and QueueNext pass them to loadfile, so mpv
     // applies them before the file starts and drops them when it ends (file-local options).
     std::function<std::string(const std::wstring& path)> fileOptions;
+    // Where an audio file starts, in seconds: 0 from the top (songs). Long audio (podcasts,
+    // audiobooks, mixes) goes on where it was left (App, playback.resumeAudio).
+    std::function<double(const std::wstring& path)> audioResumeAt;
     // Runs on the UI thread at the start of Open and Stop, while the old file is still loaded.
     std::function<void()> beforeLeave;
     // Read the track list once more after each file loads (TracksConfirmed).

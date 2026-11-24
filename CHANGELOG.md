@@ -3,6 +3,31 @@
 What changes for the person using Moonbow, newest first. The release notes on GitHub are taken from here.
 The day-by-day development journal (in Russian) is in [`changelog/`](changelog/README.md).
 
+## 0.3.1 (unreleased)
+
+### Online services without your own keys
+- Subtitle search on OpenSubtitles works right after you turn it on, without making an API key: Moonbow has its own.
+  Without an account you can download 5 subtitles a day; sign in with a free OpenSubtitles account in
+  **Settings → Privacy → Online services** for 20. OpenSubtitles does not allow apps to ask for each user's own key.
+- The subtitle search window turns the search on in place (**Turn On and Search**) and says what is sent.
+- Posters and descriptions from TMDB no longer need your own key either.
+- **Settings → Subtitles → Download missing subtitles**: when a video has no subtitles in your language, Moonbow
+  finds them on OpenSubtitles, saves them next to the video and turns them on. "Only ones made for this file" takes
+  subtitles timed for exactly this release; "Also the best match by name" takes the most downloaded ones otherwise.
+
+### Playback
+- Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back (**Settings → Playback →
+  Continue long audio**: longer than 20 minutes by default; audiobooks in .m4b always). Songs still start from the
+  beginning.
+- **HDR output** no longer lists "HDR10+" and "Dolby Vision": they only ever sent HDR10. Such videos still go to an
+  HDR display as HDR10, with their brightness data used for tone mapping. A saved choice of either becomes HDR10.
+
+### Install
+- The zip is now truly portable: its settings, library and history stay in a `Data` folder next to Moonbow.exe
+  (the `portable.txt` beside it does this; delete it to use `%APPDATA%\Moonbow`).
+- Moonbow can be installed with Scoop: `scoop bucket add moonbow https://github.com/Piwqust/moonbow`, then
+  `scoop install moonbow`.
+
 ## 0.3.0 (2026-11-21)
 
 ### Separate windows
@@ -112,7 +137,7 @@ The first public beta: videos and music in one fast, quiet player for Windows 10
 
 ### Subtitles and music
 - Subtitles in the player's own font with ready styles, chosen on a real frame; a soft shadow by default; second
-  subtitles on top; OpenSubtitles search with your own key; click a word on pause to copy, look up or translate it.
+  subtitles on top; OpenSubtitles search with your own key.
 - Music screen with cover, visualizers and synced lyrics (`.lrc`, tags, or LRCLIB if you allow it); the song's
   waveform on the seek bar (can be turned off); crossfade between songs.
 

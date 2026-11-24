@@ -38,6 +38,9 @@ New-Item -ItemType Directory $stage | Out-Null
 Copy-Item "$build\Moonbow.exe", "$build\libmpv-2.dll", "$build\MoonbowThumbs.dll", "$PSScriptRoot\release\README.txt", "$root\THIRD_PARTY_NOTICES.md" $stage
 Copy-Item "$root\LICENSE" (Join-Path $stage "LICENSE.txt")
 
+# The zip is the portable copy: portable.txt keeps its data in "Data" beside it (src/main.cpp).
+# The setup below takes its files by name and leaves portable.txt out.
+Copy-Item "$PSScriptRoot\release\portable.txt" $stage
 $zip = Join-Path $out "Moonbow-windows-x64.zip"
 Compress-Archive -Path "$stage\*" -DestinationPath $zip -Force
 # The setup: this Moonbow.exe with the other files appended. A GUI exe: wait for it, hidden.

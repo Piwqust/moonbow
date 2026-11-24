@@ -187,6 +187,7 @@ private:
     void RememberFolderOrder();
     void OnConfigChanged(const std::string& key);
     void SaveHistoryPosition();
+    double AudioResumePoint(const std::wstring& path) const;
     void SaveWindowPlacement();
     void RestoreWindowPlacement();
     void OnPlaybackEnded();

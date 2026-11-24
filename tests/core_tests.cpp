@@ -930,6 +930,19 @@ std::string FindOption(const std::vector<MpvOption>& opts, const char* name, boo
     return {};
 }
 
+// Choices merged into another one keep what they did: HDR10+ and Dolby Vision output were HDR10.
+void TestConfigMergedChoices() {
+    std::wstring dir = FreshDataDir(L"config-merged");
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    for (const char* old : {"dolbyvision", "hdr10plus"}) {
+        std::string text = std::string("{\"version\":2,\"values\":{\"video.hdr\":\"") + old + "\"}}";
+        CHECK(json::WriteFileAtomic(dir + L"\\settings.json", text));
+        Config c;
+        CHECK(c.Load());
+        CHECK(c.GetString("video.hdr") == "hdr10");
+    }
+}
+
 void TestConfigMpv() {
     FreshDataDir(L"config-mpv");
     Config c;
@@ -4180,6 +4193,7 @@ const TestCase kTests[] = {
     {"config_values", TestConfigValues},
     {"config_subscribe", TestConfigSubscribe},
     {"config_persistence", TestConfigPersistence},
+    {"config_merged_choices", TestConfigMergedChoices},
     {"config_mpv", TestConfigMpv},
     {"audio_subtitle_options", TestAudioSubtitleOptions},
     {"copy_old_data_dir", TestCopyOldDataDir},

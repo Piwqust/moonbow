@@ -419,7 +419,7 @@ std::optional<std::string> BuildHdrHint(const Config& c) {
 
 std::optional<std::string> BuildHdrTrc(const Config& c) {
     std::string m = c.GetString("video.hdr");
-    if (m == "hdr10" || m == "hdr10plus" || m == "dolbyvision") return "pq";
+    if (m == "hdr10") return "pq";
     if (m == "hlg") return "hlg";
     return std::nullopt;
 }
@@ -1095,18 +1095,15 @@ void BuildApp(Builder& b) {
               L"Добавляет «Найти в интернете» в окно «Добавить субтитры» и в панель субтитров. Только когда вы ищете: "
               L"хеш видео (по первым и последним 64 КБ), его имя, сезон, серия и ваши языки субтитров отправляются на "
               L"opensubtitles.com.");
-    b.Text("privacy.opensubtitlesKey", L"OpenSubtitles API key", L"Ключ API OpenSubtitles")
-        .Hint(L"Paste your key", L"Вставьте свой ключ")
-        .Desc(L"Free: sign in at opensubtitles.com, open your profile, then API Consumers, and create one. The key is "
-              L"stored encrypted for your Windows account.",
-              L"Бесплатно: войдите на opensubtitles.com, откройте профиль, затем API Consumers, и создайте ключ. Ключ "
-              L"хранится зашифрованным для вашей учётной записи Windows.")
-        .Secret()
-        .When("privacy.onlineSubtitles", "true");
+    // Moonbow's own key is built in (net/ServiceKeys.h): OpenSubtitles bans apps that ask users for
+    // theirs. This hidden field only serves builds made without a key, and test runs.
+    b.Text("privacy.opensubtitlesKey", L"OpenSubtitles API key", L"Ключ API OpenSubtitles").Secret().Hidden();
     b.Text("privacy.opensubtitlesUser", L"OpenSubtitles user name", L"Имя пользователя OpenSubtitles")
         .Hint(L"Optional", L"Необязательно")
-        .Desc(L"With your account the daily download limit is higher. Without it, downloads count against the key.",
-              L"С вашей учётной записью дневной лимит загрузок выше. Без неё загрузки считаются по ключу.")
+        .Desc(L"Without an account OpenSubtitles allows 5 downloads a day, with a free account 20, with VIP 1000. "
+              L"An account is made at opensubtitles.com.",
+              L"Без учётной записи OpenSubtitles даёт 5 загрузок в день, с бесплатной — 20, с VIP — 1000. "
+              L"Учётная запись заводится на opensubtitles.com.")
         .When("privacy.onlineSubtitles", "true");
     b.Text("privacy.opensubtitlesPassword", L"OpenSubtitles password", L"Пароль OpenSubtitles")
         .Desc(L"Sent only to opensubtitles.com to sign in, stored encrypted.",
@@ -1124,14 +1121,9 @@ void BuildApp(Builder& b) {
               L"сертифицирован TMDB).")
         .Basic("tv", L"Posters and descriptions of films in the library.",
                L"Постеры и описания фильмов в медиатеке.");
-    b.Text("privacy.tmdbKey", L"TMDB API key", L"Ключ API TMDB")
-        .Hint(L"Paste your key", L"Вставьте свой ключ")
-        .Desc(L"Free: create an account at themoviedb.org, then Settings, API, and request a key. Either the API key or "
-              L"the API Read Access Token works. Stored encrypted for your Windows account.",
-              L"Бесплатно: зарегистрируйтесь на themoviedb.org, откройте Settings, затем API, и запросите ключ. "
-              L"Подойдёт и API Key, и API Read Access Token. Хранится зашифрованным для вашей учётной записи Windows.")
-        .Secret()
-        .When("privacy.fetchMetadata", "true");
+    // Moonbow's own key is built in (net/ServiceKeys.h); a key here (API key or Read Access Token)
+    // replaces it: builds made without one, test runs.
+    b.Text("privacy.tmdbKey", L"TMDB API key", L"Ключ API TMDB").Secret().Hidden();
     b.Button("privacy.clearOnline", L"Downloaded lyrics, posters and search results", L"Загруженные тексты, постеры и "
              L"результаты поиска", "clear-online-data", L"Clear", L"Очистить")
         .Desc(L"Delete what the online services sent. Subtitle files you downloaded stay. Clearing the history does "
@@ -1254,6 +1246,18 @@ void BuildMedia(Builder& b) {
         .Mpv("resume-playback")
         .Basic("replay", L"A film or song goes on from where you stopped.",
                L"Фильм или песня продолжится с того места, где вы остановились.");
+    // App::AudioResumePoint: songs always start from the top, long audio goes on.
+    b.Pick("playback.resumeAudio", L"Continue long audio", L"Продолжать длинное аудио",
+           {{"off", L"Never", L"Никогда"},
+            {"10", L"Longer than 10 minutes", L"Дольше 10 минут"},
+            {"20", L"Longer than 20 minutes", L"Дольше 20 минут"},
+            {"45", L"Longer than 45 minutes", L"Дольше 45 минут"}},
+           "20")
+        .Desc(L"Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back. Songs start from "
+              L"the beginning. Audiobooks (.m4b) of any length go on. Needs the history.",
+              L"Подкасты, аудиокниги и длинные миксы продолжаются с места остановки, на несколько секунд раньше. "
+              L"Песни начинаются сначала. Аудиокниги (.m4b) продолжаются при любой длине. Нужна история.")
+        .When("playback.resume", "always");
     // One concept, one place: the key stays in privacy (saved values, App.cpp), the row sits under resume.
     b.Toggle("privacy.rememberPosition", L"Save the playback position", L"Сохранять место остановки", true)
         .Desc(L"Save where you stopped in each file, so that it can continue from there.",
@@ -1399,12 +1403,13 @@ void BuildMedia(Builder& b) {
            {{"auto", L"Auto", L"Авто"},
             {"off", L"Off", L"Выкл."},
             {"hdr10", L"HDR10", L"HDR10"},
-            {"hdr10plus", L"HDR10+", L"HDR10+"},
-            {"dolbyvision", L"Dolby Vision", L"Dolby Vision"},
             {"hlg", L"HLG", L"HLG"}},
            "auto")
-        .Desc(L"Auto sends HDR to the display when Windows HDR is on and tone-maps to SDR otherwise.",
-              L"«Авто» передаёт HDR на дисплей, если в Windows включён HDR, иначе приводит картинку к SDR.")
+        .Desc(L"Auto sends HDR to the display when Windows HDR is on and tone-maps to SDR otherwise. HDR10+ and "
+              L"Dolby Vision videos reach the display as HDR10, with their brightness data used for tone mapping.",
+              L"«Авто» передаёт HDR на дисплей, если в Windows включён HDR, иначе приводит картинку к SDR. Видео в "
+              L"HDR10+ и Dolby Vision идут на дисплей как HDR10, их данные о яркости учитываются при тональной "
+              L"компрессии.")
         .MpvBuild("target-colorspace-hint", BuildHdrHint, "yes")
         .MpvBuild("target-trc", BuildHdrTrc, "auto")
         .MpvBuild("target-prim", BuildHdrPrim, "auto");
@@ -2085,6 +2090,22 @@ void BuildMedia(Builder& b) {
               L"Насколько имя файла субтитров должно совпадать с именем видео, например «Фильм.ru.srt» для «Фильм.mkv».")
         .When("subtitles.autoLoad", "true")
         .MpvBuild("sub-auto", BuildSubAuto, "exact");
+    // app/dialogs/AddSubtitles.cpp, AutoDownloadSubtitles.
+    b.Pick("subtitles.autoDownload", L"Download missing subtitles", L"Загружать недостающие субтитры",
+           {{"off", L"Off", L"Выкл."},
+            {"exact", L"Only ones made for this file", L"Только сделанные для этого файла"},
+            {"best", L"Also the best match by name", L"Также лучшие по названию"}},
+           "off")
+        .Desc(L"When a video has no subtitles in your language, find them on OpenSubtitles, save them next to the "
+              L"video and turn them on. Subtitles made for this exact file always fit; ones matched by name may be "
+              L"for another release and run early or late. Each one counts toward the day's download limit. Turns on "
+              L"subtitle search in Privacy.",
+              L"Если у видео нет субтитров на вашем языке, найти их на OpenSubtitles, сохранить рядом с видео и "
+              L"включить. Сделанные для этого самого файла подходят всегда; найденные по названию могут быть от "
+              L"другого релиза и спешить или отставать. Каждая загрузка идёт в дневной лимит. Включает поиск "
+              L"субтитров в разделе «Конфиденциальность».")
+        .Basic("search", L"Subtitles in your language from OpenSubtitles, when a video has none.",
+               L"Субтитры на вашем языке из OpenSubtitles, если у видео их нет.");
     b.inferred = true;
     b.advanced = true;
     b.Text("subtitles.searchPaths", L"Also look in subfolders", L"Искать также в папках", "subs;subtitles;Subs")
@@ -2733,6 +2754,10 @@ const KeyAction* FindKeyAction(std::string_view id) {
     for (const KeyAction& a : KeyActions())
         if (a.id == id) return &a;
     return nullptr;
+}
+
+std::string LanguageTags(const Config& c, const char* key) {
+    return LanguageList(c, key).value_or(std::string());
 }
 
 int AutoDecodeThreads() {
