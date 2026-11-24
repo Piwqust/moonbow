@@ -1101,15 +1101,21 @@ void BuildApp(Builder& b) {
               L"Добавляет «Найти в интернете» в окно «Добавить субтитры» и в панель субтитров. Только когда вы ищете: "
               L"хеш видео (по первым и последним 64 КБ), его имя, сезон, серия и ваши языки субтитров отправляются на "
               L"opensubtitles.com.");
-    // Moonbow's own key is built in (net/ServiceKeys.h): OpenSubtitles bans apps that ask users for
-    // theirs. This hidden field only serves builds made without a key, and test runs.
-    b.Text("privacy.opensubtitlesKey", L"OpenSubtitles API key", L"Ключ API OpenSubtitles").Secret().Hidden();
+    b.Text("privacy.opensubtitlesKey", L"OpenSubtitles API key", L"Ключ API OpenSubtitles")
+        .Hint(L"Paste your key", L"Вставьте свой ключ")
+        .Desc(L"Free: sign in at opensubtitles.com, open your profile, then API Consumers, and create one. Tick \"Allow "
+              L"anonymous downloads\" there, or sign in below. The key is stored encrypted for your Windows account.",
+              L"Бесплатно: войдите на opensubtitles.com, откройте профиль, затем API Consumers, и создайте ключ. "
+              L"Отметьте там «Allow anonymous downloads» или войдите ниже. Ключ хранится зашифрованным для вашей "
+              L"учётной записи Windows.")
+        .Secret()
+        .When("privacy.onlineSubtitles", "true");
     b.Text("privacy.opensubtitlesUser", L"OpenSubtitles user name", L"Имя пользователя OpenSubtitles")
         .Hint(L"Optional", L"Необязательно")
-        .Desc(L"Without an account OpenSubtitles allows 5 downloads a day, with a free account 20, with VIP 1000. "
-              L"An account is made at opensubtitles.com.",
-              L"Без учётной записи OpenSubtitles даёт 5 загрузок в день, с бесплатной — 20, с VIP — 1000. "
-              L"Учётная запись заводится на opensubtitles.com.")
+        .Desc(L"With your account the daily download limit is higher: 20 with a free one, 1000 with VIP. Without it, "
+              L"downloads count against the key (5 a day when it allows anonymous downloads).",
+              L"С вашей учётной записью дневной лимит загрузок выше: 20 с бесплатной, 1000 с VIP. Без неё загрузки "
+              L"считаются по ключу (5 в день, если он разрешает анонимные загрузки).")
         .When("privacy.onlineSubtitles", "true");
     b.Text("privacy.opensubtitlesPassword", L"OpenSubtitles password", L"Пароль OpenSubtitles")
         .Desc(L"Sent only to opensubtitles.com to sign in, stored encrypted.",
@@ -1127,9 +1133,14 @@ void BuildApp(Builder& b) {
               L"сертифицирован TMDB).")
         .Basic("tv", L"Posters and descriptions of films in the library.",
                L"Постеры и описания фильмов в медиатеке.");
-    // Moonbow's own key is built in (net/ServiceKeys.h); a key here (API key or Read Access Token)
-    // replaces it: builds made without one, test runs.
-    b.Text("privacy.tmdbKey", L"TMDB API key", L"Ключ API TMDB").Secret().Hidden();
+    b.Text("privacy.tmdbKey", L"TMDB API key", L"Ключ API TMDB")
+        .Hint(L"Paste your key", L"Вставьте свой ключ")
+        .Desc(L"Free: create an account at themoviedb.org, then Settings, API, and request a key. Either the API key or "
+              L"the API Read Access Token works. Stored encrypted for your Windows account.",
+              L"Бесплатно: зарегистрируйтесь на themoviedb.org, откройте Settings, затем API, и запросите ключ. "
+              L"Подойдёт и API Key, и API Read Access Token. Хранится зашифрованным для вашей учётной записи Windows.")
+        .Secret()
+        .When("privacy.fetchMetadata", "true");
     // app/Scrobbler.cpp.
     b.Toggle("privacy.lastfmSubmit", L"Scrobble songs to Last.fm", L"Скробблить песни в Last.fm", false)
         .Desc(L"After half a song or 4 minutes, its artist, title, album and length are sent to last.fm under your "
@@ -1137,6 +1148,18 @@ void BuildApp(Builder& b) {
               L"После половины песни или 4 минут её исполнитель, название, альбом и длительность отправляются на "
               L"last.fm в вашу учётную запись, а начатая песня видна там как играющая. Прослушанное без сети "
               L"отправляется позже.");
+    b.Text("privacy.lastfmApiKey", L"Last.fm API key", L"Ключ API Last.fm")
+        .Hint(L"Paste your key", L"Вставьте свой ключ")
+        .Desc(L"Free: at last.fm/api/account/create make an API account (any name, such as Moonbow) and paste its API "
+              L"key here and its shared secret below. Both are stored encrypted for your Windows account.",
+              L"Бесплатно: на last.fm/api/account/create заведите API-аккаунт (любое имя, например Moonbow) и вставьте "
+              L"сюда его API key, а ниже shared secret. Оба хранятся зашифрованными для вашей учётной записи Windows.")
+        .Secret()
+        .When("privacy.lastfmSubmit", "true");
+    b.Text("privacy.lastfmApiSecret", L"Last.fm shared secret", L"Shared secret Last.fm")
+        .Hint(L"Paste the secret", L"Вставьте секрет")
+        .Secret()
+        .When("privacy.lastfmSubmit", "true");
     b.Text("privacy.lastfmUser", L"Last.fm user name", L"Имя пользователя Last.fm")
         .When("privacy.lastfmSubmit", "true");
     b.Text("privacy.lastfmPassword", L"Last.fm password", L"Пароль Last.fm")
@@ -1165,6 +1188,15 @@ void BuildApp(Builder& b) {
               L"В вашем профиле Discord видно песню или видео, которые играют в Moonbow, пока на этом компьютере "
               L"запущен Discord. Moonbow сообщает это только приложению Discord, а оно показывает тем, кто видит ваш "
               L"профиль.");
+    b.Text("privacy.discordAppId", L"Discord application ID", L"ID приложения Discord")
+        .Hint(L"Paste the ID", L"Вставьте ID")
+        .Desc(L"Free: at discord.com/developers/applications make an application named as the status should read "
+              L"(\"Listening to Moonbow\"), and paste its Application ID here. An image named \"moonbow\" under its Rich "
+              L"Presence art assets shows next to the status.",
+              L"Бесплатно: на discord.com/developers/applications создайте приложение с тем именем, которое должно быть "
+              L"в статусе («Слушает Moonbow»), и вставьте сюда его Application ID. Картинка с именем «moonbow» в его "
+              L"Rich Presence art assets появится рядом со статусом.")
+        .When("privacy.discordStatus", "off", true);
     b.Button("privacy.clearOnline", L"Downloaded lyrics, posters and search results", L"Загруженные тексты, постеры и "
              L"результаты поиска", "clear-online-data", L"Clear", L"Очистить")
         .Desc(L"Delete what the online services sent. Subtitle files you downloaded stay. Clearing the history does "

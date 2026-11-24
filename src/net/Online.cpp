@@ -8,7 +8,6 @@
 #include "library/MediaTypes.h"
 #include "net/Cache.h"
 #include "net/Http.h"
-#include "net/ServiceKeys.h"
 #include "ui/Controls.h"
 #include "ui/Host.h"
 
@@ -39,17 +38,12 @@ std::string Trimmed(std::string s) {
     return s.substr(i);
 }
 
-// The key a service gets: the one built into Moonbow (net/ServiceKeys.h), unless the hidden setting
-// holds another (builds made without keys, test runs).
-bool OwnKey(const char* setting) {
-    return !Trimmed(Cfg().GetString(setting)).empty();
-}
+// The user's own API keys (Settings › Privacy › Online services).
 std::string OsKey() {
-    return OwnKey("privacy.opensubtitlesKey") ? Trimmed(Cfg().GetString("privacy.opensubtitlesKey"))
-                                               : keys::OpenSubtitles();
+    return Trimmed(Cfg().GetString("privacy.opensubtitlesKey"));
 }
 std::string TmdbKey() {
-    return OwnKey("privacy.tmdbKey") ? Trimmed(Cfg().GetString("privacy.tmdbKey")) : keys::Tmdb();
+    return Trimmed(Cfg().GetString("privacy.tmdbKey"));
 }
 
 // Test servers: the hidden privacy.*Server settings point a service at a local mock, and only in
@@ -126,12 +120,8 @@ std::wstring Failure(const Response& r, const wchar_t* service) {
         default:
             break;
     }
-    if (r.status == 401 || r.status == 403) {
-        const bool own = std::wstring_view(service) == L"TMDB" ? OwnKey("privacy.tmdbKey")
-                                                                : OwnKey("privacy.opensubtitlesKey");
-        return own ? app::Fmt(Tr(L"{0} rejected the API key. Check it in Settings › Privacy › Online services."), {service})
-                   : app::Fmt(Tr(L"{0} refused Moonbow's key. Try again later or update Moonbow."), {service});
-    }
+    if (r.status == 401 || r.status == 403)
+        return app::Fmt(Tr(L"{0} rejected the API key. Check it in Settings › Privacy › Online services."), {service});
     if (r.status == 429) {
         std::string wait = r.Header("retry-after");
         if (wait.empty()) wait = r.Header("ratelimit-reset");
@@ -158,8 +148,8 @@ bool SubtitlesKeySet() {
 }
 
 std::wstring SubtitlesUnavailable() {
-    if (!SubtitlesOn()) return Tr(L"Turn on subtitle search in Settings › Privacy › Online services.");
-    if (!SubtitlesKeySet()) return Tr(L"This copy of Moonbow was built without an OpenSubtitles key.");
+    if (!SubtitlesOn() || !SubtitlesKeySet())
+        return Tr(L"Turn on subtitle search and paste your OpenSubtitles API key in Settings › Privacy › Online services.");
     return {};
 }
 
@@ -1059,12 +1049,8 @@ std::wstring MetaSummary(const MediaMeta& m) {
 
 void SearchMetadata(const std::wstring& query, int year, bool tv,
                     std::function<void(const std::vector<MetaMatch>&, const std::wstring&)> done) {
-    if (!MetadataToggle()) {
-        done({}, Tr(L"Turn on posters and descriptions in Settings › Privacy › Online services."));
-        return;
-    }
-    if (!MetadataKeySet()) {
-        done({}, Tr(L"This copy of Moonbow was built without a TMDB key."));
+    if (!MetadataToggle() || !MetadataKeySet()) {
+        done({}, Tr(L"Turn on posters and descriptions and paste your TMDB API key in Settings › Privacy › Online services."));
         return;
     }
     std::wstring q = L"/search/" + std::wstring(tv ? L"tv" : L"movie") + L"?query=" + UrlEncode(query);

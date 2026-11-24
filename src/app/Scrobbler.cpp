@@ -12,7 +12,6 @@
 #include "library/MediaTypes.h"
 #include "net/Http.h"
 #include "net/OnlineData.h"
-#include "net/ServiceKeys.h"
 #include "ui/Controls.h"
 #include "ui/Host.h"
 
@@ -140,8 +139,15 @@ bool LastfmOn() {
     return Cfg().GetBool("privacy.lastfmSubmit");
 }
 
+// The user's own Last.fm API account (Settings › Privacy › Online services).
+std::string LastfmApiKey() {
+    return Trimmed(Cfg().GetString("privacy.lastfmApiKey"));
+}
+std::string LastfmApiSecret() {
+    return Trimmed(Cfg().GetString("privacy.lastfmApiSecret"));
+}
 bool LastfmKeys() {
-    return !net::keys::LastfmKey().empty() && !net::keys::LastfmSecret().empty();
+    return !LastfmApiKey().empty() && !LastfmApiSecret().empty();
 }
 
 std::string LastfmSession() {
@@ -153,7 +159,7 @@ net::Request LastfmPost(std::map<std::string, std::string> params) {
     r.method = "POST";
     r.url = Endpoint("privacy.lastfmServer", kLastfmApi);
     r.allowLoopbackHttp = ui::Host::Automation();
-    r.body = net::LastfmForm(std::move(params), net::keys::LastfmKey(), net::keys::LastfmSecret());
+    r.body = net::LastfmForm(std::move(params), LastfmApiKey(), LastfmApiSecret());
     r.headers.push_back({L"Content-Type", L"application/x-www-form-urlencoded"});
     r.timeoutMs = 20000;
     return r;
@@ -170,7 +176,7 @@ void LastfmSignIn() {
     const std::string pass = Cfg().GetString("privacy.lastfmPassword");
     if (user.empty() || pass.empty()) return;
     if (!LastfmKeys()) {
-        Toast(Tr(L"This copy of Moonbow was built without a Last.fm key."));
+        Toast(Tr(L"Paste your Last.fm API key and shared secret in Settings › Privacy › Online services."));
         return;
     }
     g_signingIn = true;

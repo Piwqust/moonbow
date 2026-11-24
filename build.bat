@@ -59,11 +59,8 @@ if /i "%CONFIG%"=="debug" (
 rem uiautomationcore.lib comes before windowsapp.lib, whose API-set imports of it would load at startup.
 set "LIBS=user32.lib gdi32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib oleaut32.lib uuid.lib dwmapi.lib imm32.lib windowscodecs.lib propsys.lib d3d11.lib dxgi.lib d2d1.lib dwrite.lib dcomp.lib uiautomationcore.lib windowsapp.lib winhttp.lib crypt32.lib bcrypt.lib dbghelp.lib delayimp.lib"
 
-rem The online services' keys this build carries (none in the repository): tools\gen-service-keys.ps1.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%tools\gen-service-keys.ps1" -Out "%OBJ%\gen\ServiceKeys.gen.h" || exit /b 1
-
 rc /nologo /i "%ROOT%res" /fo "%OBJ%\app.res" "%ROOT%res\app.rc" || exit /b 1
-cl %CFLAGS% /I"%OBJ%\gen" /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Moonbow.exe" /link %LFLAGS% %LIBS% || exit /b 1
+cl %CFLAGS% /Fo"%OBJ%\\" /Fd"%OBJ%\\" @"%RSP%" "%OBJ%\app.res" /Fe"%OUT%\Moonbow.exe" /link %LFLAGS% %LIBS% || exit /b 1
 
 rem Explorer's thumbnail provider for audio (src\thumbs); it reuses the exe's tag reader objects.
 if not exist "%OBJ%\thumbs" mkdir "%OBJ%\thumbs"

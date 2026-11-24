@@ -898,19 +898,24 @@ private:
     void ShowOff() {
         for (Widget* w : std::initializer_list<Widget*>{query_, season_, episode_, lang_, search_}) w->enabled = false;
         status_->SetText({});
-        if (net::online::SubtitlesOn()) {  // on, but this build has no key
-            Message(Tr(L"Subtitle search is unavailable"), net::online::SubtitlesUnavailable());
-            return;
-        }
-        // Off by default: say what goes where, and turn it on right here.
+        // Off by default, and the key is the user's own: say what goes where and where the key
+        // comes from. With a key already pasted the search turns on right here.
+        const bool key = net::online::SubtitlesKeySet();
         Widget* content =
-            Message(Tr(L"Subtitle search is off"),
-                    Tr(L"Moonbow asks opensubtitles.com only when you search: it sends the video's hash (from its first "
-                       L"and last 64 KB), its name, season, episode and your subtitle languages. Without an account you "
-                       L"can download 5 subtitles a day."));
-        auto* on = content->Add<DButton>(Tr(L"Turn On and Search"), BtnStyle::Accent);
-        on->minWidth = 180;
-        on->onClick = [this] {
+            Message(net::online::SubtitlesOn() ? Tr(L"Subtitle search needs your API key") : Tr(L"Subtitle search is off"),
+                    std::wstring(Tr(L"Moonbow asks opensubtitles.com only when you search: it sends the video's hash (from "
+                                    L"its first and last 64 KB), its name, season, episode and your subtitle languages.")) +
+                        (key ? L"" : L" " + std::wstring(Tr(L"It needs your own OpenSubtitles API key: sign in at "
+                                                            L"opensubtitles.com, open your profile, then API Consumers, "
+                                                            L"and create one. The key is free."))));
+        auto* go = content->Add<DButton>(Tr(key ? L"Turn On and Search" : L"Open Settings"), BtnStyle::Accent);
+        go->minWidth = 180;
+        go->onClick = [this, key] {
+            if (!key) {
+                frame_->Close();
+                if (MainWindow* w = TheApp().main()) w->Post([] { TheApp().OpenSettings("privacy", "online"); });
+                return;
+            }
             TheApp().config().SetBool("privacy.onlineSubtitles", true);
             for (Widget* w : std::initializer_list<Widget*>{query_, season_, episode_, lang_, search_}) w->enabled = true;
             Start();

@@ -136,7 +136,7 @@ from the start and draws every frame with its own shaders. On 4K the load is the
       <img src="docs/images/en/card-subtitles.jpg" alt="Subtitle styles chosen on a real frame">
       <h3>Subtitles</h3>
       Ready styles chosen on a real frame, a second track on top, subtitles in the black bars, OpenSubtitles
-      search right after installing, without an account.
+      search with your own free key.
     </td>
     <td valign="top">
       <img src="docs/images/en/card-music.jpg" alt="The music screen: the album cover and synced lyrics, the current line lit">
@@ -178,7 +178,7 @@ from the start and draws every frame with its own shaders. On 4K the load is the
   normalization together with the equalizer; a separate window of VU, EBU R128 and stereo meters
   (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>).
 - **Subtitles.** Background box, blur, position, size, subtitles in the black bars, a second track on top,
-  OpenSubtitles search without an account, and missing subtitles downloaded by themselves if you wish.
+  OpenSubtitles search with your own free key, and missing subtitles downloaded by themselves if you wish.
 - **Music.** Visualizers (spectrum, circle, oscilloscope, wave); lyrics from a `.lrc` next to the song, from tags
   or, if you allow it, from LRCLIB; crossfade of 1 to 12 seconds; tags read from MP3, FLAC, Ogg, Opus, M4A, WAV,
   AIFF, APE and WavPack; cover thumbnails in File Explorer. Scrobbling to Last.fm and ListenBrainz, what plays on
@@ -186,7 +186,7 @@ from the start and draws every frame with its own shaders. On 4K the load is the
   the last).
 - **Library.** Recent and frequent folders, next episode, series by season (also anime releases numbered without
   a season), network streams and radio, grid or list, sorting, search
-  in any word order, "New" and "Broken file" badges, TMDB posters and descriptions if you turn them on.
+  in any word order, "New" and "Broken file" badges, TMDB posters and descriptions with your own free key.
 - **Look.** Dark, light and system theme; skins (Black OLED, High contrast, Sepia, or your own JSON, reloaded
   live); your own set of control-bar buttons; Windows text size; English and Russian, other languages from
   translation files ([i18n](i18n/README.md)).
@@ -249,10 +249,10 @@ Any key can be changed in **Settings → Controls**, which also has a YouTube-st
 Everything Moonbow keeps is in `%APPDATA%\Moonbow`: settings, the library index, history and resume positions,
 playlists, bookmarks and per-file settings. History can be turned off under **Settings → Privacy**. Online
 features stay off until you turn them on: lyrics from LRCLIB, subtitles from OpenSubtitles, posters from TMDB,
-scrobbling to Last.fm and ListenBrainz, the status in Discord (passwords, tokens and sessions are stored encrypted
-for your Windows account). Intros are found by sound on your computer and nothing about them leaves it. Links to
-YouTube and other sites play only if you put your own `yt-dlp.exe` next to Moonbow; Moonbow itself downloads
-nothing.
+scrobbling to Last.fm and ListenBrainz, the status in Discord. All but LRCLIB need your own free key or account; the
+keys, passwords, tokens and sessions you enter are stored encrypted for your Windows account. Intros are found by
+sound on your computer, and nothing about them leaves it. Links to YouTube and other sites play only if you put your
+own `yt-dlp.exe` next to Moonbow; Moonbow itself downloads nothing.
 
 ## Questions
 

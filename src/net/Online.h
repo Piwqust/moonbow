@@ -1,11 +1,12 @@
 #pragma once
 // Moonbow's online features on top of net/Http.h, each off by default and opt-in in
-// Settings › Privacy › Network. Services that need an API key get Moonbow's own (net/ServiceKeys.h):
+// Settings › Privacy › Network, with the user's own API key where the service needs one:
 //
 // - LRCLIB (lrclib.net, no key): synced lyrics for songs that have none of their own.
 // - OpenSubtitles (api.opensubtitles.com, key + optional login): subtitle search by moviehash,
 //   name, season/episode and language; downloads saved next to the video. Without an account
-//   5 downloads a day per address, with a free one 20.
+//   the key's own allowance applies (5 a day per address when its consumer allows anonymous
+//   downloads), with a free account 20.
 // - TMDB (api.themoviedb.org / image.tmdb.org, key): posters, backdrops, overview, year and rating
 //   for videos named like a movie ("Title 2010") or an episode ("Show S01E02").
 //
@@ -30,7 +31,7 @@ void Init();
 // --- settings -----------------------------------------------------------------------------------
 bool LyricsOn();
 bool SubtitlesOn();      // the toggle (the key may still be missing)
-bool SubtitlesKeySet();  // this build has a key (or the hidden setting holds one)
+bool SubtitlesKeySet();  // the user pasted an OpenSubtitles key
 // Why subtitle search can't run (translated), or empty when it can.
 std::wstring SubtitlesUnavailable();
 bool MetadataKeySet();

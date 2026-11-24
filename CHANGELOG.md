@@ -3,59 +3,65 @@
 What changes for the person using Moonbow, newest first. The release notes on GitHub are taken from here.
 The day-by-day development journal (in Russian) is in [`changelog/`](changelog/README.md).
 
-## 0.3.1 (unreleased)
+## 0.4.0 (unreleased)
 
-### Online services without your own keys
-- Subtitle search on OpenSubtitles works right after you turn it on, without making an API key: Moonbow has its own.
-  Without an account you can download 5 subtitles a day; sign in with a free OpenSubtitles account in
-  **Settings → Privacy → Online services** for 20. OpenSubtitles does not allow apps to ask for each user's own key.
-- The subtitle search window turns the search on in place (**Turn On and Search**) and says what is sent.
-- Posters and descriptions from TMDB no longer need your own key either.
+### Skip intro without chapters
+- **Skip intro** now works for episodes that have no chapters. Moonbow compares the first minutes of an episode with
+  the next one's in the background, on this computer, and finds the opening song they share. The button appears over
+  it; the next time either episode plays, it is there from the start. Nothing is sent anywhere.
+  **Settings → Playback → Find intros by sound** turns it off.
+
+### Series
+- Series numbered without a season are recognized: anime releases such as `[Group] Show - 05 (1080p)` and
+  `Show - 12v2 [BD]`, a `Show - 05` file in the show's own folder, `Show.E05` and `Show Ep 05`. They group under
+  their show as season 1. `Apollo - 13 (1995)` stays a film.
+- **Next episode** and the series' audio and subtitle languages also work for these, and for numbered files in
+  season folders (`Season 2\03 Title.mkv`). TMDB looks their posters up as episodes.
+- **Series Settings…** in a library video's menu says what its folder is when the names don't: a series with its
+  name and season (the episode numbers come from the names), or not a series at all. **Read From Names** forgets it.
+
+### Subtitles
 - **Settings → Subtitles → Download missing subtitles**: when a video has no subtitles in your language, Moonbow
   finds them on OpenSubtitles, saves them next to the video and turns them on. "Only ones made for this file" takes
   subtitles timed for exactly this release; "Also the best match by name" takes the most downloaded ones otherwise.
+  It uses your OpenSubtitles key and turns subtitle search on.
+- The subtitle search window says what is sent to OpenSubtitles and where your free API key comes from, with a
+  button to Settings; once the key is there, **Turn On and Search** starts the search in place.
+- When the day's downloads are used up, Moonbow says when they reset and that a free OpenSubtitles account gives
+  more.
 
 ### Music
-- **Scrobbling**: songs you listen to can go to Last.fm and ListenBrainz under your account (**Settings → Privacy →
-  Online services**, off by default). A song counts after half its length or 4 minutes; the one you start shows as
-  playing. Songs heard offline are sent later, up to 14 days. Last.fm asks for your password once: Moonbow keeps the
-  session Last.fm gives, not the password.
-- **Show what plays in Discord**: your Discord profile can show the song (or the video too) with its time, while
-  the Discord app runs on this computer. Off by default; a pause and a seek update it.
+- **Scrobbling** to Last.fm and ListenBrainz under your account (**Settings → Privacy → Online services**, off by
+  default). A song counts after half its length or 4 minutes; the one you start shows as playing. Songs heard
+  offline are sent later, up to 14 days. Last.fm needs your own free API account (its API key and shared secret, from
+  last.fm/api/account/create) and your password once: Moonbow keeps the session Last.fm gives, not the password.
+  ListenBrainz needs your user token.
+- **Show what plays in Discord**: your Discord profile shows the song, or the video too, with its time, while the
+  Discord app runs on this computer. It needs an application of your own at discord.com/developers (its Application
+  ID goes into Settings). Off by default; a pause and a seek update it, quitting clears it.
+- Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back (**Settings → Playback → Continue
+  long audio**: longer than 20 minutes by default; audiobooks in `.m4b` always). Songs still start from the
+  beginning.
 
-### Playback
-- **DVD and Blu-ray**: open an `.iso` image or a disc folder (one with `VIDEO_TS` or `BDMV`, also by dropping it on
+### Video
+- **DVD and Blu-ray**: open an `.iso` image or a disc folder (one with `VIDEO_TS` or `BDMV`; also by dropping it on
   the window) and Moonbow plays the disc. Its menus answer the arrow keys, <kbd>Enter</kbd>, <kbd>Backspace</kbd>
   (back) and clicks.
 - On AMD Radeon graphics, **Settings → Video → Double the frame rate on AMD Radeon** (AMD Fluid Motion Video): the
   card computes a frame between each two, so motion looks smoother.
-- Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back (**Settings → Playback →
-  Continue long audio**: longer than 20 minutes by default; audiobooks in .m4b always). Songs still start from the
-  beginning.
 - Laptops on battery draw the picture with the **Fast** preset while Windows energy saver is on: the graphics card
-  works less and Moonbow takes about 50 MB less memory, 115 MB less with 4K video. **Settings → Video → On battery**
-  makes it always on battery, or never.
-- **HDR output** no longer lists "HDR10+" and "Dolby Vision": they only ever sent HDR10. Such videos still go to an
+  works less and Moonbow takes about 75 MB less memory with 1080p video, 115 MB less with 4K. **Settings → Video →
+  On battery** makes it always on battery, or never. An upscaling method you picked stays.
+- **HDR output** no longer lists "HDR10+" and "Dolby Vision": they only ever sent HDR10. Such videos still reach an
   HDR display as HDR10, with their brightness data used for tone mapping. A saved choice of either becomes HDR10.
 
-### Library
-- **Skip intro** works for episodes without chapters too: Moonbow compares the first minutes of an episode with the
-  next one's (on this computer, in the background) and finds the opening song they share. The next time either plays,
-  the button is there from the start. **Settings → Playback → Find intros by sound** turns it off.
-- Series numbered without a season are recognized: anime releases such as `[Group] Show - 05 (1080p)` and
-  `Show - 12v2 [BD]`, a `Show - 05` file in the show's own folder, `Show.E05` and `Show Ep 05`. They group under
-  their show as season 1, get **Next episode**, and look up their posters as episodes. `Apollo - 13 (1995)` stays a
-  film.
-- **Series Settings…** in a video's menu says what its folder is when the names don't: a series with its name and
-  season (episode numbers from the names), or not a series at all. **Read From Names** forgets it again.
-
-### Translations
-- Moonbow can show other languages from translation files: put `<code>.json` into `%APPDATA%\Moonbow\i18n\` and pick
-  the language in **Settings → General**. `i18n/en.json` in the repository holds every English string as the source
-  for translators (Weblate and Crowdin read the format); see `i18n/README.md`.
+### Languages
+- Moonbow can show other languages from translation files: put `<code>.json` into `%APPDATA%\Moonbow\i18n\` and
+  pick the language in **Settings → General**. `i18n/en.json` in the repository holds every English string of the
+  interface as the source for translators (Weblate and Crowdin read the format); see `i18n/README.md`.
 
 ### Install
-- The zip is now truly portable: its settings, library and history stay in a `Data` folder next to Moonbow.exe
+- The zip is truly portable now: its settings, library and history stay in a `Data` folder next to `Moonbow.exe`
   (the `portable.txt` beside it does this; delete it to use `%APPDATA%\Moonbow`).
 - Moonbow can be installed with Scoop: `scoop bucket add moonbow https://github.com/Piwqust/moonbow`, then
   `scoop install moonbow`.

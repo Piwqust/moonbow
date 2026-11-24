@@ -39,24 +39,19 @@
 // --- subtitles
 {L"OpenSubtitles did not accept the user name or password; downloading without an account.",
  L"OpenSubtitles не принял имя или пароль, загрузка идёт без учётной записи."},
-{L"Turn on subtitle search in Settings › Privacy › Online services.",
- L"Включите поиск субтитров в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
-{L"This copy of Moonbow was built without an OpenSubtitles key.",
- L"Эта копия Moonbow собрана без ключа OpenSubtitles."},
+{L"Turn on subtitle search and paste your OpenSubtitles API key in Settings › Privacy › Online services.",
+ L"Включите поиск субтитров и вставьте свой ключ API OpenSubtitles в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 {L"Sign in with a free OpenSubtitles account in Settings › Privacy › Online services to download more.",
  L"Чтобы загружать больше, войдите в бесплатную учётную запись OpenSubtitles в «Настройки › Конфиденциальность › "
  L"Онлайн-сервисы»."},
-{L"{0} refused Moonbow's key. Try again later or update Moonbow.",
- L"{0} не принял ключ Moonbow. Попробуйте позже или обновите Moonbow."},
 {L"OpenSubtitles sent an answer Moonbow couldn't read.", L"OpenSubtitles прислал ответ, который Moonbow не смог прочитать."},
 {L"The OpenSubtitles download limit for today is used up.", L"Дневной лимит загрузок OpenSubtitles исчерпан."},
 {L"{0} h {1} min", L"{0} ч {1} мин"},
 {L"The OpenSubtitles download limit for today is used up. It resets in {0}.",
  L"Дневной лимит загрузок OpenSubtitles исчерпан. Он обновится через {0}."},
 // --- metadata
-{L"Turn on posters and descriptions in Settings › Privacy › Online services.",
- L"Включите постеры и описания в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
-{L"This copy of Moonbow was built without a TMDB key.", L"Эта копия Moonbow собрана без ключа TMDB."},
+{L"Turn on posters and descriptions and paste your TMDB API key in Settings › Privacy › Online services.",
+ L"Включите постеры и описания и вставьте свой ключ API TMDB в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 // --- settings actions
 {L"Online data cleared", L"Данные онлайн-сервисов удалены"},
 // --- subtitle search dialog
@@ -75,11 +70,16 @@
 {L"Find", L"Найти"},
 {L"Subtitle search is off", L"Поиск субтитров выключен"},
 {L"Moonbow asks opensubtitles.com only when you search: it sends the video's hash (from its first and last 64 KB), its "
- L"name, season, episode and your subtitle languages. Without an account you can download 5 subtitles a day.",
+ L"name, season, episode and your subtitle languages.",
  L"Moonbow обращается к opensubtitles.com, только когда вы ищете: отправляет хеш видео (по первым и последним 64 КБ), "
- L"его имя, сезон, серию и ваши языки субтитров. Без учётной записи можно загрузить 5 субтитров в день."},
+ L"его имя, сезон, серию и ваши языки субтитров."},
+{L"It needs your own OpenSubtitles API key: sign in at opensubtitles.com, open your profile, then API Consumers, and "
+ L"create one. The key is free.",
+ L"Нужен ваш собственный ключ API OpenSubtitles: войдите на opensubtitles.com, откройте профиль, затем API Consumers, "
+ L"и создайте ключ. Он бесплатный."},
 {L"Turn On and Search", L"Включить и найти"},
-{L"Subtitle search is unavailable", L"Поиск субтитров недоступен"},
+{L"Open Settings", L"Открыть настройки"},
+{L"Subtitle search needs your API key", L"Для поиска субтитров нужен ваш ключ API"},
 {L"Downloads left today: {0}", L"Осталось загрузок сегодня: {0}"},
 {L"Searching…", L"Поиск…"},
 {L"Couldn't search", L"Не удалось выполнить поиск"},
@@ -100,8 +100,10 @@
 {L"Find another match", L"Найти другое совпадение"},
 {L"Find a match", L"Найти совпадение"},
 {L"Forget this match and show the file's own thumbnail", L"Забыть это совпадение и показывать миниатюру файла"},
-{L"TMDB refused Moonbow's key. Try again later or update Moonbow.",
- L"TMDB не принял ключ Moonbow. Попробуйте позже или обновите Moonbow."},
+{L"TMDB rejected the API key. Check it in Settings › Privacy › Online services.",
+ L"TMDB не принял ключ API. Проверьте его в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
+{L"Paste your TMDB API key in Settings › Privacy › Online services to see posters and descriptions.",
+ L"Вставьте свой ключ API TMDB в «Настройки › Конфиденциальность › Онлайн-сервисы», чтобы видеть постеры и описания."},
 {L"Looking this video up on TMDB…", L"Поиск видео в TMDB…"},
 {L"TMDB couldn't be reached. Moonbow tries again next time.", L"TMDB недоступен. Moonbow попробует снова в следующий раз."},
 {L"TMDB has nothing for this file name.", L"В TMDB ничего не нашлось по имени файла."},
@@ -125,7 +127,8 @@
 {L"Subtitles: OpenSubtitles.com", L"Субтитры: OpenSubtitles.com"},
 {L"Posters and descriptions: TMDB", L"Постеры и описания: TMDB"},
 // --- scrobbling (app/Scrobbler.cpp)
-{L"This copy of Moonbow was built without a Last.fm key.", L"Эта копия Moonbow собрана без ключа Last.fm."},
+{L"Paste your Last.fm API key and shared secret in Settings › Privacy › Online services.",
+ L"Вставьте свои API key и shared secret Last.fm в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
 {L"Signed in to Last.fm as {0}", L"Вход в Last.fm выполнен: {0}"},
 {L"Last.fm did not accept the user name or password.", L"Last.fm не принял имя пользователя или пароль."},
 {L"No connection to Last.fm. Moonbow tries to sign in again at the next start.",

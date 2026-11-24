@@ -9,7 +9,6 @@
 #include "core/Json.h"
 #include "core/Log.h"
 #include "library/MediaTypes.h"
-#include "net/ServiceKeys.h"
 
 #include <windows.h>
 
@@ -28,6 +27,16 @@ namespace app {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+// The Discord application the status is shown as: the user's own (privacy.discordAppId). Read on
+// the UI thread into g_appId, which the worker reads under its lock.
+std::mutex g_appIdMutex;
+std::string g_appId;
+
+std::string AppId() {
+    std::lock_guard lock(g_appIdMutex);
+    return g_appId;
+}
 
 // --- the pipe, on its own thread --------------------------------------------------------------
 
@@ -86,6 +95,10 @@ private:
             pending_ = false;
             lock.unlock();
             bool ok = true;
+            if (pipe_ != INVALID_HANDLE_VALUE && connectedId_ != AppId()) {  // another application id now
+                Send(Frame, Command(std::nullopt));
+                Disconnect();
+            }
             if (pipe_ == INVALID_HANDLE_VALUE && activity) ok = Connect();
             if (ok && pipe_ != INVALID_HANDLE_VALUE) {
                 ok = Send(Frame, Command(activity));
@@ -113,8 +126,9 @@ private:
     }
 
     bool Connect() {
-        const std::string id = net::keys::DiscordApp();
+        const std::string id = AppId();
         if (id.empty()) return false;
+        connectedId_ = id;
         for (int i = 0; i < 10; ++i) {
             const std::wstring name = L"\\\\.\\pipe\\discord-ipc-" + std::to_wstring(i);
             HANDLE h = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
@@ -233,6 +247,7 @@ private:
     HANDLE pipe_ = INVALID_HANDLE_VALUE;  // the worker's only, as is event_
     HANDLE event_ = nullptr;
     uint64_t nonce_ = 0;
+    std::string connectedId_;  // the application id of the handshake
 };
 
 Pipe& ThePipe() {
@@ -264,7 +279,7 @@ void Update() {
     const std::string mode = c.GetString("privacy.discordStatus");
     const PlayerState& s = TheApp().player().State();
     const bool music = library::KindOf(s.path) == library::MediaKind::Audio;
-    const bool show = mode != "off" && !net::keys::DiscordApp().empty() && s.fileLoaded && !s.path.empty() &&
+    const bool show = mode != "off" && !AppId().empty() && s.fileLoaded && !s.path.empty() &&
                       (music || mode == "all");
     Shown& last = Last();
     if (!show) {
@@ -317,6 +332,18 @@ void Update() {
 }  // namespace
 
 void InitDiscordPresence() {
+    auto readId = [] {
+        std::string id = TheApp().config().GetString("privacy.discordAppId");
+        std::erase_if(id, [](char c) { return c == ' ' || c == '\t'; });
+        std::lock_guard lock(g_appIdMutex);
+        g_appId = id;
+    };
+    readId();
+    TheApp().config().Subscribe("privacy.discordAppId", [readId](const std::string&) {
+        readId();
+        Last() = Shown{};  // send the status again, under the new application
+        Update();
+    });
     TheApp().playerChanged.Connect([](unsigned changes) {
         if (changes & (kChangeFile | kChangeState | kChangeMeta | kChangeTime | kChangeEnd)) Update();
     });
