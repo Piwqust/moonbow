@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: Piwqust.Moonbow
+PackageVersion: 0.4.0
+PackageLocale: en-US
+Publisher: Piwqust
+PublisherUrl: https://github.com/Piwqust
+PublisherSupportUrl: https://github.com/Piwqust/moonbow/issues
+PackageName: Moonbow
+PackageUrl: https://moonbow.angleford.co
+License: GPL-3.0-or-later
+LicenseUrl: https://github.com/Piwqust/moonbow/blob/main/LICENSE
+ShortDescription: A fast, quiet video and music player for Windows, built on mpv.
+Description: >-
+  Moonbow plays video and music with mpv's picture quality and opens a film in about a third of a second.
+  It keeps a library with Continue Watching and series by season without a server, shows synced lyrics,
+  and has every setting in a searchable window instead of a config file.
+Moniker: moonbow
+Tags:
+- media-player
+- music-player
+- video-player
+- mpv
+- subtitles
+ReleaseNotesUrl: https://github.com/Piwqust/moonbow/releases/tag/v0.4.0
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

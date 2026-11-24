@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
+PackageIdentifier: Piwqust.Moonbow
+PackageVersion: 0.4.0
+MinimumOSVersion: 10.0.18362.0
+InstallerType: exe
+Scope: user
+InstallModes:
+- interactive
+- silent
+- silentWithProgress
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+UpgradeBehavior: install
+ProductCode: Moonbow
+ReleaseDate: 2026-11-24
+AppsAndFeaturesEntries:
+- DisplayName: Moonbow
+  Publisher: Moonbow
+  ProductCode: Moonbow
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/Piwqust/moonbow/releases/download/v0.4.0/Moonbow-windows-x64-setup.exe
+  InstallerSha256: DE543282B1A626261C0F2D79BE9E62AB2309F7F045FA973307029C9D1B46127B
+ManifestType: installer
+ManifestVersion: 1.9.0

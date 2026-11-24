@@ -1,12 +1,12 @@
 {
-    "version":  "0.3.0",
+    "version":  "0.4.0",
     "description":  "A fast, quiet video and music player for Windows, built on mpv.",
     "homepage":  "https://moonbow.angleford.co",
     "license":  "GPL-3.0-or-later",
     "architecture":  {
                          "64bit":  {
-                                       "url":  "https://github.com/Piwqust/moonbow/releases/download/v0.3.0/Moonbow-windows-x64.zip",
-                                       "hash":  "7c6501b3f314c66f7faf28298ae9a1d1028582c4c0949f962f0d2df044a1853a"
+                                       "url":  "https://github.com/Piwqust/moonbow/releases/download/v0.4.0/Moonbow-windows-x64.zip",
+                                       "hash":  "ba4098cf96d8c1eef37de8c996a40169720dbd95a1a1487ce0e8f7aca7c74f70"
                                    }
                      },
     "pre_install":  [
