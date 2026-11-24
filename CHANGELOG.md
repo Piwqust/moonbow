@@ -38,6 +38,12 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
 - **HDR output** no longer lists "HDR10+" and "Dolby Vision": they only ever sent HDR10. Such videos still go to an
   HDR display as HDR10, with their brightness data used for tone mapping. A saved choice of either becomes HDR10.
 
+### Library
+- Series numbered without a season are recognized: anime releases such as `[Group] Show - 05 (1080p)` and
+  `Show - 12v2 [BD]`, a `Show - 05` file in the show's own folder, `Show.E05` and `Show Ep 05`. They group under
+  their show as season 1, get **Next episode**, and look up their posters as episodes. `Apollo - 13 (1995)` stays a
+  film.
+
 ### Install
 - The zip is now truly portable: its settings, library and history stay in a `Data` folder next to Moonbow.exe
   (the `portable.txt` beside it does this; delete it to use `%APPDATA%\Moonbow`).

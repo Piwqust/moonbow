@@ -350,6 +350,85 @@ int NumberWord(std::wstring_view w, size_t maxDigits) {
 size_t Begin(std::wstring_view s, std::wstring_view w) { return static_cast<size_t>(w.data() - s.data()); }
 size_t End(std::wstring_view s, std::wstring_view w) { return Begin(s, w) + w.size(); }
 
+// Letters and digits only, folded: "Frieren: Beyond" and "Frieren - Beyond" compare equal.
+std::wstring Squashed(std::wstring_view s) {
+    std::wstring out;
+    for (wchar_t c : SearchFold(s))
+        if (std::iswalnum(c)) out.push_back(c);
+    return out;
+}
+
+// Episodes numbered without a season, as anime and many shows are released:
+//   "[Group] Show Name - 05 [1080p] [ABCD1234]", "Show Name - 12v2 (BD 1080p)" (in the show's folder or
+//   followed by release tags), "Show.Name.E05.1080p", "Show Name Ep 05".
+// They read as season 1. A plain "Title - 13" elsewhere stays a film ("Apollo - 13").
+bool ParseAbsoluteEpisode(std::wstring_view stem, std::wstring_view folderName, EpisodeInfo* out) {
+    std::wstring_view s = stem;
+    bool group = false;
+    while (!s.empty() && s.front() == L'[') {  // fansub groups and tags in front
+        const size_t close = s.find(L']');
+        if (close == std::wstring_view::npos) break;
+        s.remove_prefix(close + 1);
+        while (!s.empty() && (s.front() == L' ' || s.front() == L'.' || s.front() == L'_')) s.remove_prefix(1);
+        group = true;
+    }
+    // Release tags in brackets right after the number ("[1080p WEB-DL]", "(BD 1080p)"), not a year
+    // ("Apollo - 13 (1995)").
+    auto taggedTail = [](std::wstring_view rest) {
+        while (!rest.empty() && (rest.front() == L' ' || rest.front() == L'.' || rest.front() == L'_')) rest.remove_prefix(1);
+        if (rest.empty() || (rest.front() != L'[' && rest.front() != L'(')) return false;
+        const size_t close = rest.find(rest.front() == L'[' ? L']' : L')');
+        const std::wstring_view inside = rest.substr(1, close == std::wstring_view::npos ? std::wstring_view::npos : close - 1);
+        const int year = NumberWord(inside, 4);
+        return !(inside.size() == 4 && year >= 1900 && year <= 2100);
+    };
+    // "Show - 05": a dash between spaces, then the number (a "v2" revision may follow).
+    for (size_t at = s.find(L" - "); at != std::wstring_view::npos; at = s.find(L" - ", at + 1)) {
+        size_t i = at + 3, j = i;
+        int number = 0;
+        if (!ReadNumber(s, j, 4, &number) || number <= 0 || (j - i == 4 && number >= 1900 && number <= 2100)) continue;
+        if (j + 1 < s.size() && (s[j] == L'v' || s[j] == L'V') && IsDigit(s[j + 1])) j += 2;
+        if (j < s.size() && s[j] != L' ' && s[j] != L'[' && s[j] != L'(' && s[j] != L'.' && s[j] != L'_') continue;
+        const std::wstring show = ShowName(s.substr(0, at));
+        if (show.empty()) continue;
+        const std::wstring_view rest = s.substr(j);
+        if (!group && Squashed(show) != Squashed(folderName) && !taggedTail(rest)) continue;
+        if (out) {
+            out->show = show;
+            out->season = 1;
+            out->episode = number;
+            out->title = EpisodeTitle(rest);
+        }
+        return true;
+    }
+    // "E05", "Ep05", "Ep 05" after the show's name.
+    const auto words = Words(s);
+    for (size_t k = 1; k < words.size(); ++k) {
+        const std::wstring_view w = words[k];
+        int number = -1;
+        size_t last = k;
+        if (w.size() >= 3 && (w[0] == L'E' || w[0] == L'e') && IsDigit(w[1])) {  // "E05", not the weaker "E5"
+            number = NumberWord(w.substr(1), 3);
+        } else if (w.size() >= 3 && (w[0] == L'E' || w[0] == L'e') && (w[1] == L'P' || w[1] == L'p') && IsDigit(w[2])) {
+            number = NumberWord(w.substr(2), 3);
+        } else if (WordIs(w, {L"ep"}) && k + 1 < words.size()) {
+            number = NumberWord(words[k + 1], 3);
+            last = k + 1;
+        }
+        if (number <= 0) continue;
+        const std::wstring show = ShowName(s.substr(0, Begin(s, words[k])));
+        if (show.empty()) continue;
+        if (out) {
+            out->show = show;
+            out->season = 1;
+            out->episode = number;
+            out->title = EpisodeTitle(s.substr(End(s, words[last])));
+        }
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 int ParseSeasonFolder(std::wstring_view name, std::wstring* show) {
@@ -385,7 +464,11 @@ bool ParseEpisodePath(std::wstring_view path, EpisodeInfo* out) {
     const int season = ParseSeasonFolder(FileNameOf(folder), &folderShow);
     EpisodeInfo ep;
     if (!ParseEpisode(stem, &ep)) {
-        if (season < 0) return false;
+        if (season < 0) {
+            if (!ParseAbsoluteEpisode(stem, FileNameOf(folder), &ep)) return false;
+            if (out) *out = std::move(ep);
+            return true;
+        }
         // A numbered file in a season folder: "03 Title", "E03", "Ep03", "Episode 3", "Серия 3", "3 серия".
         const std::wstring_view s = stem;
         const auto words = Words(s);

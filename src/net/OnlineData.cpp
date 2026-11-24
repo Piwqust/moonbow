@@ -145,7 +145,8 @@ VideoGuess GuessVideo(const std::wstring& path) {
     const std::wstring stem = library::StemOf(path);
     if (stem.empty()) return g;
     library::EpisodeInfo ep;
-    if (library::ParseEpisode(stem, &ep)) {
+    // As the library groups it: S01E02 and 1x02, numbered files in season folders, anime releases.
+    if (library::ParseEpisode(stem, &ep) || library::ParseEpisodePath(path, &ep)) {
         g.kind = VideoGuess::Episode;
         g.season = ep.season;
         g.episode = ep.episode;

@@ -1744,6 +1744,31 @@ void TestEpisodesAndOrder() {
 }
 
 // Videos › Shows: season folders, numbered files in them, grouping and "Next: S01E03".
+// Episodes numbered without a season (anime releases, "E05"), and names that must stay films.
+void TestAbsoluteEpisodes() {
+    library::EpisodeInfo ep;
+    CHECK(library::ParseEpisodePath(L"D:\\Anime\\Frieren\\[SubsPlease] Sousou no Frieren - 05 (1080p) [A1B2C3D4].mkv", &ep) &&
+          ep.show == L"Sousou no Frieren" && ep.season == 1 && ep.episode == 5);
+    CHECK(library::ParseEpisodePath(L"D:\\Anime\\[Group] Show Name - 12v2 [BD 1080p].mkv", &ep) && ep.show == L"Show Name" &&
+          ep.episode == 12);
+    CHECK(library::ParseEpisodePath(L"D:\\Anime\\One Piece\\One Piece - 1071.mkv", &ep) && ep.show == L"One Piece" &&
+          ep.episode == 1071);  // the show's own folder
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Show Name - 07 [1080p WEB-DL].mkv", &ep) && ep.episode == 7);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Some.Show.E05.1080p.WEB.mkv", &ep) && ep.show == L"Some Show" && ep.episode == 5);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Some Show Ep 11 - Finale.mkv", &ep) && ep.episode == 11 && ep.title == L"Finale");
+    // Films: a dash and a number outside a show's folder, without release tags, or a year.
+    CHECK(!library::ParseEpisodePath(L"D:\\Movies\\Apollo - 13.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Movies\\Apollo - 13 (1995).mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Movies\\Blade Runner - 2049 [1080p].mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Movies\\Ocean's Eleven.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Movies\\Star Wars Episode 4.mkv", nullptr));
+    CHECK(!library::ParseEpisodePath(L"D:\\Movies\\Movie E5.mkv", nullptr));
+    // The player's next episode follows the same reading.
+    CHECK(app::episodes::IsNext(L"D:\\Anime\\Frieren\\[SubsPlease] Sousou no Frieren - 05 (1080p).mkv",
+                                L"D:\\Anime\\Frieren\\[SubsPlease] Sousou no Frieren - 06 (1080p).mkv"));
+    CHECK(app::episodes::IsNext(L"D:\\TV\\Show\\Season 1\\09 Title.mkv", L"D:\\TV\\Show\\Season 1\\10 Other.mkv"));
+}
+
 void TestShows() {
     std::wstring show;
     CHECK(library::ParseSeasonFolder(L"Season 2", &show) == 2 && show.empty());
@@ -4270,6 +4295,7 @@ const TestCase kTests[] = {
     {"disc_entry", TestDiscEntry},
     {"episodes_order", TestEpisodesAndOrder},
     {"shows", TestShows},
+    {"absolute_episodes", TestAbsoluteEpisodes},
     {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},

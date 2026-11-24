@@ -19,11 +19,12 @@ struct Episode {
     bool Valid() const { return season >= 0 && number >= 0; }
 };
 
-// The library's S01E02 / 1x02 reading of the file name; the show as lowercase letters and digits.
+// The library's reading of the path (S01E02, 1x02, a numbered file in a season folder, an anime
+// release "Show - 05"); the show as lowercase letters and digits.
 inline Episode Parse(const std::wstring& path) {
     Episode e;
     library::EpisodeInfo info;
-    if (!library::ParseEpisode(library::StemOf(path), &info)) return e;
+    if (!library::ParseEpisodePath(path, &info)) return e;
     e.season = info.season;
     e.number = info.episode;
     for (wchar_t c : info.show)
