@@ -80,6 +80,18 @@ int ParseSeasonFolder(std::wstring_view name, std::wstring* show);
 // folder, or the file's folder.
 bool ParseEpisodePath(std::wstring_view path, EpisodeInfo* out);
 
+// The user's word about a folder (the library's "Series settings"), which ParseEpisodePath follows
+// before reading names: its videos are episodes of `show`, season `season` (the episode number
+// from the name, else the first number in it), or with `notSeries` films. Thread-safe.
+struct SeriesOverride {
+    std::wstring show;
+    int season = 1;
+    bool notSeries = false;
+};
+void SetSeriesOverride(const std::wstring& folder, const SeriesOverride* o);  // null removes it
+bool SeriesOverrideFor(std::wstring_view folder, SeriesOverride* out);
+std::vector<std::pair<std::wstring, SeriesOverride>> SeriesOverrides();  // folder paths as given
+
 // How well a subtitle file name fits a video (letters and digits only, case-insensitive): 100 same
 // name, 90 the subtitle adds a suffix ("Show_E01_English"), 70 the video adds one, 60 same
 // SxxEyy / NxNN episode, 0 no match. "lecture1" never matches "lecture10".

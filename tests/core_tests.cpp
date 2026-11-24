@@ -1826,6 +1826,28 @@ void TestAbsoluteEpisodes() {
     CHECK(app::episodes::IsNext(L"D:\\TV\\Show\\Season 1\\09 Title.mkv", L"D:\\TV\\Show\\Season 1\\10 Other.mkv"));
 }
 
+// The user's word about a folder wins over its names (the library's Series Settings).
+void TestSeriesOverrides() {
+    library::EpisodeInfo ep;
+    const std::wstring folder = L"D:\\Videos\\Lectures";
+    CHECK(!library::ParseEpisodePath(folder + L"\\Lecture three.mkv", nullptr));
+    library::SeriesOverride o{L"Physics", 2, false};
+    library::SetSeriesOverride(folder, &o);
+    CHECK(library::ParseEpisodePath(folder + L"\\Lecture 03 - Optics.mkv", &ep) && ep.show == L"Physics" && ep.season == 2 &&
+          ep.episode == 3);
+    CHECK(library::ParseEpisodePath(folder + L"\\Physics S05E07.mkv", &ep) && ep.season == 2 && ep.episode == 7);
+    CHECK(!library::ParseEpisodePath(folder + L"\\Lecture three.mkv", nullptr));  // no number at all
+    CHECK(library::ParseEpisodePath(L"d:\\videos\\LECTURES\\12.mkv", &ep) && ep.episode == 12);  // any case
+    library::SeriesOverride films{{}, 1, true};
+    library::SetSeriesOverride(L"D:\\TV\\Not a show", &films);
+    CHECK(!library::ParseEpisodePath(L"D:\\TV\\Not a show\\Clip S01E02.mkv", nullptr));
+    CHECK(library::SeriesOverrides().size() == 2);
+    library::SetSeriesOverride(folder, nullptr);
+    library::SetSeriesOverride(L"D:\\TV\\Not a show", nullptr);
+    CHECK(library::ParseEpisodePath(L"D:\\TV\\Not a show\\Clip S01E02.mkv", nullptr));
+    CHECK(library::SeriesOverrides().empty());
+}
+
 void TestShows() {
     std::wstring show;
     CHECK(library::ParseSeasonFolder(L"Season 2", &show) == 2 && show.empty());
@@ -4353,6 +4375,7 @@ const TestCase kTests[] = {
     {"episodes_order", TestEpisodesAndOrder},
     {"shows", TestShows},
     {"absolute_episodes", TestAbsoluteEpisodes},
+    {"series_overrides", TestSeriesOverrides},
     {"intro_print", TestIntroPrint},
     {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},

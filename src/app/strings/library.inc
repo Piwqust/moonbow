@@ -278,3 +278,14 @@
 // Files the scanner can't play; files found since the library was last opened
 {L"Damaged file", L"Битый файл"},
 {L"New", L"Новое"},
+// --- Series Settings (app/dialogs/SeriesDialog.cpp)
+{L"Series Settings…", L"Настройки сериала…"},
+{L"Series Settings", L"Настройки сериала"},
+{L"The videos in this folder are episodes of a series", L"Видео в этой папке — серии одного сериала"},
+{L"Series name", L"Название сериала"},
+{L"Episodes of the same name in other folders join it.", L"Серии с тем же названием из других папок присоединятся к нему."},
+{L"e.g., The Office", L"например, «Офис»"},
+{L"Episode numbers come from the file names.", L"Номера серий берутся из имён файлов."},
+{L"Read From Names", L"По именам файлов"},
+{L"Forget these settings: the file names say again what the folder is",
+ L"Забыть эти настройки: что лежит в папке, снова решают имена файлов"},

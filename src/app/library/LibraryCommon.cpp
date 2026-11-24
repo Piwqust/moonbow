@@ -633,6 +633,8 @@ std::vector<MenuItem> MediaMenu(const std::wstring& path, SharedQueue queue, int
                 TheApp().libraryChanged.Emit();
             }));
         }
+        if (!IsUrl(path))
+            m.push_back(Item(L"Series Settings…", "tv", [path] { ShowSeriesDialog(path); }));
         // TMDB posters (Settings › Privacy): fix a wrong match or go back to the file's thumbnail.
         const library::MediaItem* item = TheApp().library().Current()->FindItem(path);
         if (net::online::MetadataToggle() && !IsUrl(path) && !(item && item->damaged)) {  // a damaged file is no film

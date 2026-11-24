@@ -46,6 +46,8 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
   `Show - 12v2 [BD]`, a `Show - 05` file in the show's own folder, `Show.E05` and `Show Ep 05`. They group under
   their show as season 1, get **Next episode**, and look up their posters as episodes. `Apollo - 13 (1995)` stays a
   film.
+- **Series Settings…** in a video's menu says what its folder is when the names don't: a series with its name and
+  season (episode numbers from the names), or not a series at all. **Read From Names** forgets it again.
 
 ### Translations
 - Moonbow can show other languages from translation files: put `<code>.json` into `%APPDATA%\Moonbow\i18n\` and pick

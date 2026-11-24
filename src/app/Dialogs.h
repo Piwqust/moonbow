@@ -34,6 +34,10 @@ void ShowAddSubtitlesDialog(const std::wstring& folderOrPlaylist = {});
 void ShowOnlineSubtitlesDialog(const std::wstring& videoPath = {});
 // TMDB: pick another movie or series for a library video ("Find another match").
 void ShowMetadataMatchDialog(const std::wstring& videoPath);
+// "Series Settings…": what the folder of `videoPath` is, when its names don't say it
+// (library::SeriesOverride). LoadSeriesOverrides reads them at startup, before the library groups.
+void ShowSeriesDialog(const std::wstring& videoPath);
+void LoadSeriesOverrides();
 void ShowMediaInfoDialog();
 // Version, libmpv/FFmpeg versions and licences; over `host` (Settings) or the main window.
 void ShowAboutDialog(ui::Host* host = nullptr);

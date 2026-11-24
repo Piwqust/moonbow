@@ -465,6 +465,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     if (UiValue("onboarded") != "1" && config_.IsDefault("general.language"))
         config_.SetString("general.language", PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? "ru" : "en");
     LoadKeyBindings();
+    LoadSeriesOverrides();  // before the library groups its shows
     ApplyLanguage();
     ApplyTheme();
     Skins::Get().Start(config_);

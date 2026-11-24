@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <initializer_list>
+#include <mutex>
 #include <vector>
 
 namespace library {
@@ -457,9 +458,64 @@ int ParseSeasonFolder(std::wstring_view name, std::wstring* show) {
     return -1;
 }
 
+namespace {
+
+std::mutex g_overridesMutex;
+std::vector<std::pair<std::wstring, SeriesOverride>> g_overrides;  // folder as given, by PathKey below
+std::vector<std::wstring> g_overrideKeys;
+
+}  // namespace
+
+void SetSeriesOverride(const std::wstring& folder, const SeriesOverride* o) {
+    const std::wstring key = PathKey(folder);
+    std::lock_guard lock(g_overridesMutex);
+    for (size_t i = 0; i < g_overrideKeys.size(); ++i)
+        if (g_overrideKeys[i] == key) {
+            g_overrideKeys.erase(g_overrideKeys.begin() + static_cast<std::ptrdiff_t>(i));
+            g_overrides.erase(g_overrides.begin() + static_cast<std::ptrdiff_t>(i));
+            break;
+        }
+    if (!o) return;
+    g_overrideKeys.push_back(key);
+    g_overrides.push_back({folder, *o});
+}
+
+bool SeriesOverrideFor(std::wstring_view folder, SeriesOverride* out) {
+    std::lock_guard lock(g_overridesMutex);
+    if (g_overrideKeys.empty()) return false;
+    const std::wstring key = PathKey(folder);
+    for (size_t i = 0; i < g_overrideKeys.size(); ++i)
+        if (g_overrideKeys[i] == key) {
+            if (out) *out = g_overrides[i].second;
+            return true;
+        }
+    return false;
+}
+
+std::vector<std::pair<std::wstring, SeriesOverride>> SeriesOverrides() {
+    std::lock_guard lock(g_overridesMutex);
+    return g_overrides;
+}
+
 bool ParseEpisodePath(std::wstring_view path, EpisodeInfo* out) {
     const std::wstring stem = StemOf(path);
     const std::wstring folder = ParentFolder(path);
+    if (SeriesOverride o; SeriesOverrideFor(folder, &o)) {
+        if (o.notSeries) return false;
+        // The name's own number (S01E05, "- 05", E05, "05 Title"), else its first number.
+        EpisodeInfo ep;
+        if (!ParseEpisode(stem, &ep) && !ParseAbsoluteEpisode(stem, o.show, &ep)) {
+            int number = -1;
+            for (const std::wstring_view w : Words(stem))
+                if ((number = NumberWord(w, 4)) > 0) break;
+            if (number <= 0) return false;
+            ep.episode = number;
+        }
+        ep.show = o.show.empty() ? ShowName(FileNameOf(folder)) : o.show;
+        ep.season = o.season;
+        if (out) *out = std::move(ep);
+        return true;
+    }
     std::wstring folderShow;
     const int season = ParseSeasonFolder(FileNameOf(folder), &folderShow);
     EpisodeInfo ep;
