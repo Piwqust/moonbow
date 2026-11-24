@@ -166,12 +166,14 @@ from the start and draws every frame with its own shaders. On 4K the load is the
 <br>
 
 - **Player.** Exact clicks on the seek bar, chapters, A-B loop, gapless playback, bookmarks, audio, video and
-  subtitle tracks, external files. "Next episode" over the credits, skip intro and credits by chapters. Mouse
+  subtitle tracks, external files. "Next episode" over the credits, skip intro and credits by chapters, and skip
+  intro by sound for episodes without chapters (found on your computer by comparing neighbouring episodes). Mouse
   gestures (hold for 2×, wheel over volume, speed and the seek bar, drag the video to move the window), each of
   which can be turned off. Fullscreen with auto-hide, picture in picture, mini player. Tracks, delays and the
   position are remembered per file.
-- **Video.** Quality presets and scalers, debanding, motion smoothing, `.glsl` shaders from a folder. Snapshots and
-  stream recording.
+- **Video.** Quality presets and scalers, debanding, motion smoothing, frame doubling on AMD Radeon, `.glsl`
+  shaders from a folder, the Fast preset on battery. DVD and Blu-ray from `.iso` images and disc folders, with their
+  menus. Snapshots and stream recording.
 - **Sound.** Passthrough of AC3, E-AC3, DTS, DTS-HD and TrueHD; WASAPI exclusive mode; Replay Gain and loudness
   normalization together with the equalizer; a separate window of VU, EBU R128 and stereo meters
   (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>).
@@ -179,11 +181,15 @@ from the start and draws every frame with its own shaders. On 4K the load is the
   OpenSubtitles search without an account, and missing subtitles downloaded by themselves if you wish.
 - **Music.** Visualizers (spectrum, circle, oscilloscope, wave); lyrics from a `.lrc` next to the song, from tags
   or, if you allow it, from LRCLIB; crossfade of 1 to 12 seconds; tags read from MP3, FLAC, Ogg, Opus, M4A, WAV,
-  AIFF, APE and WavPack; cover thumbnails in File Explorer.
-- **Library.** Recent and frequent folders, next episode, network streams and radio, grid or list, sorting, search
+  AIFF, APE and WavPack; cover thumbnails in File Explorer. Scrobbling to Last.fm and ListenBrainz, what plays on
+  your Discord profile, podcasts and audiobooks that go on where you stopped (all off until you turn them on, except
+  the last).
+- **Library.** Recent and frequent folders, next episode, series by season (also anime releases numbered without
+  a season), network streams and radio, grid or list, sorting, search
   in any word order, "New" and "Broken file" badges, TMDB posters and descriptions if you turn them on.
 - **Look.** Dark, light and system theme; skins (Black OLED, High contrast, Sepia, or your own JSON, reloaded
-  live); your own set of control-bar buttons; Windows text size; English and Russian.
+  live); your own set of control-bar buttons; Windows text size; English and Russian, other languages from
+  translation files ([i18n](i18n/README.md)).
 - **Windows.** Media keys and the Windows media card, taskbar thumbnail buttons, tray icon, jump list, file
   associations only when you ask. Every action is reachable from the keyboard, and Narrator reads lists and
   changes.
@@ -242,9 +248,11 @@ Any key can be changed in **Settings → Controls**, which also has a YouTube-st
 
 Everything Moonbow keeps is in `%APPDATA%\Moonbow`: settings, the library index, history and resume positions,
 playlists, bookmarks and per-file settings. History can be turned off under **Settings → Privacy**. Online
-features stay off until you turn them on: lyrics from LRCLIB, subtitles from OpenSubtitles and posters from TMDB
-(an OpenSubtitles password, if you sign in, is stored encrypted for your Windows account). Links to YouTube and other sites play
-only if you put your own `yt-dlp.exe` next to Moonbow; Moonbow itself downloads nothing.
+features stay off until you turn them on: lyrics from LRCLIB, subtitles from OpenSubtitles, posters from TMDB,
+scrobbling to Last.fm and ListenBrainz, the status in Discord (passwords, tokens and sessions are stored encrypted
+for your Windows account). Intros are found by sound on your computer and nothing about them leaves it. Links to
+YouTube and other sites play only if you put your own `yt-dlp.exe` next to Moonbow; Moonbow itself downloads
+nothing.
 
 ## Questions
 
