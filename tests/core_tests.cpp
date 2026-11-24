@@ -26,6 +26,7 @@
 #include "../src/audio/LoopbackSupport.h"
 #include "../src/audio/Spectrum.h"
 #include "../src/audio/Loudness.h"
+#include "../src/audio/IntroPrint.h"
 #include "../src/audio/TrackWave.h"
 #include "../src/net/Cache.h"
 #include "../src/net/Http.h"
@@ -1744,6 +1745,62 @@ void TestEpisodesAndOrder() {
 }
 
 // Videos › Shows: season folders, numbered files in them, grouping and "Next: S01E03".
+// Synthetic "audio" for the intro finder: every 0.25 s three tones from a seeded generator.
+std::vector<int16_t> Tones(uint32_t seed, double seconds, double gain = 0.3) {
+    const int rate = audio::intro::kRate;
+    std::vector<int16_t> out(static_cast<size_t>(seconds * rate));
+    uint32_t s = seed;
+    auto next = [&s] { return (s = s * 1664525u + 1013904223u) >> 8; };
+    double f[3] = {}, a[3] = {};
+    const int step = rate / 4;
+    for (size_t i = 0; i < out.size(); ++i) {
+        if (i % step == 0)
+            for (int k = 0; k < 3; ++k) {
+                f[k] = 250 + next() % 1700;
+                a[k] = 0.2 + (next() % 100) / 125.0;
+            }
+        double v = 0;
+        for (int k = 0; k < 3; ++k) v += a[k] * std::sin(2 * 3.14159265358979 * f[k] * static_cast<double>(i) / rate);
+        out[i] = static_cast<int16_t>(std::clamp(v / 3 * gain * 32767, -32767.0, 32767.0));
+    }
+    return out;
+}
+
+void TestIntroPrint() {
+    using namespace audio::intro;
+    auto join = [](std::initializer_list<std::vector<int16_t>> parts) {
+        std::vector<int16_t> out;
+        for (const auto& p : parts) out.insert(out.end(), p.begin(), p.end());
+        return out;
+    };
+    const std::vector<int16_t> song = Tones(42, 40);
+    // Episode A: 30 s of its own, the song, 60 s more. Episode B: 50 s, the song quieter and with
+    // a little noise, 30 s.
+    const std::vector<int16_t> a = join({Tones(1, 30), song, Tones(2, 60)});
+    std::vector<int16_t> songB = song;
+    uint32_t n = 7;
+    for (int16_t& v : songB) {
+        n = n * 1103515245u + 12345u;
+        v = static_cast<int16_t>(v * 0.6 + static_cast<int>((n >> 16) % 600) - 300);
+    }
+    const std::vector<int16_t> b = join({Tones(3, 50), songB, Tones(4, 30)});
+    const Print pa = Fingerprint(a.data(), a.size()), pb = Fingerprint(b.data(), b.size());
+    CHECK(pa.words.size() > 1200);
+    const Shared s = FindShared(pa, pb);
+    CHECK_MSG(std::abs(s.startA - 30) < 1.0 && std::abs(s.endA - 70) < 1.5,
+              ("A " + std::to_string(s.startA) + ".." + std::to_string(s.endA)).c_str());
+    CHECK_MSG(std::abs(s.startB - 50) < 1.0 && std::abs(s.endB - 90) < 1.5,
+              ("B " + std::to_string(s.startB) + ".." + std::to_string(s.endB)).c_str());
+    // Nothing in common, or only silence in common: no intro.
+    const std::vector<int16_t> c = join({Tones(5, 60), std::vector<int16_t>(audio::intro::kRate * 30), Tones(6, 30)});
+    const std::vector<int16_t> d = join({Tones(7, 40), std::vector<int16_t>(audio::intro::kRate * 30), Tones(8, 50)});
+    CHECK(FindShared(Fingerprint(c.data(), c.size()), Fingerprint(d.data(), d.size())).Length() == 0);
+    // Shared but too short to be an intro (a 5 s logo).
+    const std::vector<int16_t> logo = Tones(9, 5);
+    const std::vector<int16_t> e = join({logo, Tones(10, 60)}), f = join({logo, Tones(11, 60)});
+    CHECK(FindShared(Fingerprint(e.data(), e.size()), Fingerprint(f.data(), f.size())).Length() == 0);
+}
+
 // Episodes numbered without a season (anime releases, "E05"), and names that must stay films.
 void TestAbsoluteEpisodes() {
     library::EpisodeInfo ep;
@@ -4296,6 +4353,7 @@ const TestCase kTests[] = {
     {"episodes_order", TestEpisodesAndOrder},
     {"shows", TestShows},
     {"absolute_episodes", TestAbsoluteEpisodes},
+    {"intro_print", TestIntroPrint},
     {"player_episodes", TestPlayerEpisodes},
     {"library_scan", TestLibraryScan},
     {"library_metadata", TestLibraryMetadata},

@@ -1367,6 +1367,12 @@ void BuildMedia(Builder& b) {
               L"выключено, играет только этот файл; чтобы играло больше, соберите очередь или плейлист.")
         .Basic("folder", L"After one episode, the next one starts by itself.",
                L"После одной серии сама включится следующая.");
+    // app/player/IntroFinder.cpp: Skip intro for episodes without an intro chapter.
+    b.Toggle("playback.findIntros", L"Find intros by sound", L"Находить заставки по звуку", true)
+        .Desc(L"For an episode without chapters, Moonbow compares its first minutes with the next episode's on this "
+              L"computer and offers Skip intro over the song they share. Nothing is sent anywhere.",
+              L"Для серии без глав Moonbow сравнивает её первые минуты со следующей серией на этом компьютере и "
+              L"предлагает пропустить общую для них песню. Ничего никуда не отправляется.");
     b.Pick("playback.folderOrder", L"Order of the folder's files", L"Порядок файлов папки",
            {{"explorer", L"As in Explorer", L"Как в Проводнике"},
             {"name", L"By name", L"По названию"},

@@ -22,6 +22,7 @@
 #include "app/Skins.h"
 #include "app/SettingsActions.h"
 #include "app/DiscordPresence.h"
+#include "app/player/IntroFinder.h"
 #include "app/Scrobbler.h"
 #include "app/Updater.h"
 #include "app/player/PlayerView.h"
@@ -556,6 +557,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     InitDialogs();
     InitScrobbler();
     InitDiscordPresence();
+    intros::Init();
     // Data files that could not be parsed were kept as *.corrupt-<time>.json (core/Paths.h).
     if (std::vector<std::wstring> bad = TakeCorruptFileNotices(); !bad.empty()) {
         static const std::pair<const wchar_t*, const wchar_t*> kWhat[] = {
@@ -603,6 +605,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     }
     Trace("close: message loop ended");
     ShutdownDiscordPresence();
+    intros::Shutdown();
     Updater::Get().OnExit();  // a downloaded update installs now, once this process has ended
     FlushStores();
     Trace("close: stores saved");

@@ -39,6 +39,9 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
   HDR display as HDR10, with their brightness data used for tone mapping. A saved choice of either becomes HDR10.
 
 ### Library
+- **Skip intro** works for episodes without chapters too: Moonbow compares the first minutes of an episode with the
+  next one's (on this computer, in the background) and finds the opening song they share. The next time either plays,
+  the button is there from the start. **Settings → Playback → Find intros by sound** turns it off.
 - Series numbered without a season are recognized: anime releases such as `[Group] Show - 05 (1080p)` and
   `Show - 12v2 [BD]`, a `Show - 05` file in the show's own folder, `Show.E05` and `Show Ep 05`. They group under
   their show as season 1, get **Next episode**, and look up their posters as episodes. `Apollo - 13 (1995)` stays a

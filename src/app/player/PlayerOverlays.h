@@ -90,7 +90,8 @@ private:
 };
 
 // "Skip intro" / "Skip credits" while inside a chapter named Opening, Intro, OP, Credits, ED,
-// «Заставка» or «Титры».
+// «Заставка» or «Титры»; for an episode without an intro chapter, inside the intro found by sound
+// (IntroFinder.h).
 class SkipChapterButton : public ui::Button {
 public:
     explicit SkipChapterButton(NextEpisodeCard* card);
@@ -100,6 +101,7 @@ private:
     void Update();
     NextEpisodeCard* card_;
     int kind_ = 0;  // episodes::ChapterKind
+    double skipTo_ = -1;  // the end of an intro found by sound; -1: skip by chapters
     bool wanted_ = false;
     ScopedConnection playerConn_, langConn_;
 };

@@ -7,6 +7,7 @@
 #include "app/MainWindow.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/Episodes.h"
+#include "app/player/IntroFinder.h"
 #include "app/player/LiveState.h"
 #include "app/player/PanelKit.h"
 #include "gfx/Text.h"
@@ -725,6 +726,10 @@ SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", Button
     visible = false;
     id = "skip-chapter";
     onClick = [this] {
+        if (skipTo_ >= 0) {  // an intro found by sound
+            TheApp().player().SeekAbsolute(skipTo_, true);
+            return;
+        }
         const PlayerState& s = PS();
         if (s.chapter < 0 || s.chapter >= static_cast<int64_t>(s.chapters.size())) return;
         const size_t next = static_cast<size_t>(s.chapter) + 1;
@@ -747,8 +752,21 @@ SkipChapterButton::SkipChapterButton(NextEpisodeCard* card) : Button(L"", Button
 void SkipChapterButton::Update() {
     const PlayerState& s = PS();
     int k = 0;
+    skipTo_ = -1;
     if (s.fileLoaded && !s.eof && s.chapter >= 0 && s.chapter < static_cast<int64_t>(s.chapters.size()))
         k = static_cast<int>(episodes::KindOf(s.chapters[static_cast<size_t>(s.chapter)].title));
+    // An episode without an intro chapter: the intro found by sound (IntroFinder.h), until 3 s
+    // before it ends.
+    if (k == 0 && s.fileLoaded && !s.eof && s.hasVideo) {
+        bool introChapter = false;
+        for (const Chapter& c : s.chapters) introChapter |= episodes::KindOf(c.title) == episodes::ChapterKind::Intro;
+        if (!introChapter)
+            if (const std::optional<intros::Range> r = intros::Find(s.path);
+                r && s.position >= r->start - 0.5 && s.position < r->end - 3) {
+                k = static_cast<int>(episodes::ChapterKind::Intro);
+                skipTo_ = r->end;
+            }
+    }
     const bool want = k != 0 && !(card_ && card_->Wanted());
     if (k != kind_) {
         kind_ = k;
