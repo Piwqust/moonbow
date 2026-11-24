@@ -2043,8 +2043,9 @@ void BuildMedia(Builder& b) {
             {"-14", L"0 VU = −14 dBFS", L"0 VU = −14 dBFS"},
             {"-10", L"0 VU = −10 dBFS", L"0 VU = −10 dBFS"},
             {"-7", L"0 VU = −7 dBFS", L"0 VU = −7 dBFS"},
-            {"-4", L"0 VU = −4 dBFS (loud modern masters)", L"0 VU = −4 dBFS (громкие современные записи)"}},
-           "-4")
+            {"-4", L"0 VU = −4 dBFS", L"0 VU = −4 dBFS"},
+            {"-1", L"0 VU = −1 dBFS (loud modern masters)", L"0 VU = −1 dBFS (громкие современные записи)"}},
+           "-1")
         .Desc(L"The level of a test tone (a sine) that puts the needles at 0 VU, as on a studio meter. Studio "
               L"references (−18, −20) suit quiet recordings; with today's loud releases they keep the needles in "
               L"the red.",

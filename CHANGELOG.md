@@ -66,6 +66,11 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
 - Moonbow can be installed with Scoop: `scoop bucket add moonbow https://github.com/Piwqust/moonbow`, then
   `scoop install moonbow`.
 
+### Music view
+- The VU meters read 3 dB lower by default ("0 VU = −1 dBFS"): a loud modern song now tops out around 0 VU and only
+  the very loudest go a little into the red. Before, such songs sat in the red and often held the needles at +3.
+  A calibration you picked yourself stays as it is.
+
 ## 0.3.0 (2026-11-21)
 
 ### Separate windows
