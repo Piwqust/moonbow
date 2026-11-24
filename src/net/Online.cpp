@@ -370,7 +370,10 @@ std::wstring DownloadBase() {
 std::vector<std::string> PreferredSubtitleLanguages() {
     std::string id = Cfg().GetString("subtitles.language");
     std::vector<std::string> out;
-    if (id == "app") id = Cfg().GetString("general.language") == "en" ? "en" : "ru";
+    if (id == "app") {
+        id = Cfg().GetString("general.language");
+        id = id.substr(0, id.find('-'));
+    }
     if (id == "system" || id.empty()) {
         wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
         if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT), name, LOCALE_NAME_MAX_LENGTH, 0) > 0) {

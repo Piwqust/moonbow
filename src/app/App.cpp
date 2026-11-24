@@ -249,6 +249,13 @@ void App::ApplyTheme() {
     for (ui::Host* h : ui::Host::All()) h->OnThemeChanged();
 }
 
+// Russian, English, or a translation file's language on top of English (app/I18n.h).
+void App::ApplyLanguage() {
+    const std::string code = config_.GetString("general.language");
+    SetTranslation(code == "ru" || code == "en" ? std::string() : code);
+    SetLanguage(code == "ru" ? Language::Russian : Language::English);
+}
+
 void App::UpdatePowerSaving() {
     const std::string mode = config_.GetString("video.batteryQuality");
     bool on = false;
@@ -276,7 +283,7 @@ void App::OnConfigChanged(const std::string& key) {
         return;
     }
     if (key == "general.language") {
-        SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
+        ApplyLanguage();
         system_.LanguageChanged();
         ReopenPlayerPanels();  // before the rebuilt library pane closes every popup
         languageChanged.Emit();
@@ -447,6 +454,10 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         if (!a.empty() && a[0] != L'-') pendingOpen_.push_back(a);
     if (!pendingOpen_.empty()) launchAt_ = ui::AnimFloat::Now();
 
+    // Languages of translation files (<exe>\i18n, <data>\i18n) join the list before the settings
+    // load, so a saved choice of one stays; the schema's English texts go through the translation.
+    for (const Translation& t : Translations()) settings::AddLanguageChoice(t.code, t.name);
+    settings::SetTextHook(&TrText);
     config_.Load();
     LoadUiState();
     // First run: the language of Windows (Russian or English) before any window is built, so the
@@ -454,7 +465,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     if (UiValue("onboarded") != "1" && config_.IsDefault("general.language"))
         config_.SetString("general.language", PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? "ru" : "en");
     LoadKeyBindings();
-    SetLanguage(config_.GetString("general.language") == "en" ? Language::English : Language::Russian);
+    ApplyLanguage();
     ApplyTheme();
     Skins::Get().Start(config_);
     {

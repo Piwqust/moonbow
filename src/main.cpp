@@ -126,6 +126,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (const std::wstring exe = ExeDir();
             !exe.empty() && GetFileAttributesW((exe + L"portable.txt").c_str()) != INVALID_FILE_ATTRIBUTES)
             SetDataDirForTests(exe + L"Data");
+    // For translators: every English string of the interface (and the built-in Russian) as JSON.
+    if (args.size() >= 2 && args[0] == L"--export-strings") return app::ExportStrings(args[1]) ? 0 : 1;
     app::InstallCrashHandler(net::AppVersion());
     // Setup.exe (this exe with a package appended), uninstall and version switches: no player.
     if (int code = 0; setup::RunSetupMode(args, &code)) return code;

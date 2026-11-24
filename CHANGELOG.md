@@ -47,6 +47,11 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
   their show as season 1, get **Next episode**, and look up their posters as episodes. `Apollo - 13 (1995)` stays a
   film.
 
+### Translations
+- Moonbow can show other languages from translation files: put `<code>.json` into `%APPDATA%\Moonbow\i18n\` and pick
+  the language in **Settings → General**. `i18n/en.json` in the repository holds every English string as the source
+  for translators (Weblate and Crowdin read the format); see `i18n/README.md`.
+
 ### Install
 - The zip is now truly portable: its settings, library and history stay in a `Data` folder next to Moonbow.exe
   (the `portable.txt` beside it does this; delete it to use `%APPDATA%\Moonbow`).

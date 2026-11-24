@@ -25,6 +25,15 @@ namespace settings {
 
 enum class Lang { En, Ru };
 
+// A translation on top of English (app/I18n.h, SetTranslation): the English texts of the schema
+// pass through it while one is on. Set once at startup; null = none.
+using TextHook = const std::wstring& (*)(const std::wstring& english);
+void SetTextHook(TextHook hook);
+const std::wstring& Localized(const std::wstring& english);
+// Adds a language of a translation file to general.language. Call before the settings load, so a
+// saved choice of it stays valid.
+void AddLanguageChoice(const std::string& code, const std::wstring& name);
+
 enum class ItemType {
     Toggle,        // bool
     Choice,        // dropdown; string value from `choices`
@@ -70,7 +79,7 @@ struct Choice {
     std::string mpv;       // mpv value for MpvConv::Choice
     std::string extra;     // swatch color ("#EDEDED") or icon name ("eq_eq-rock")
 
-    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
+    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : Localized(label); }
 };
 
 // The item is enabled (not greyed out) when the value of `key` equals `value` (or, with
@@ -120,12 +129,12 @@ struct Item {
         return type == ItemType::Choice || type == ItemType::Segmented || type == ItemType::AccentPicker;
     }
     const Choice* FindChoice(std::string_view value) const;
-    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
-    const std::wstring& Description(Lang lang) const { return lang == Lang::Ru ? descriptionRu : description; }
-    const std::wstring& Unit(Lang lang) const { return lang == Lang::Ru ? unitRu : unit; }
-    const std::wstring& Placeholder(Lang lang) const { return lang == Lang::Ru ? placeholderRu : placeholder; }
-    const std::wstring& ActionLabel(Lang lang) const { return lang == Lang::Ru ? actionLabelRu : actionLabel; }
-    const std::wstring& Summary(Lang lang) const { return lang == Lang::Ru ? summaryRu : summary; }
+    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : Localized(label); }
+    const std::wstring& Description(Lang lang) const { return lang == Lang::Ru ? descriptionRu : Localized(description); }
+    const std::wstring& Unit(Lang lang) const { return lang == Lang::Ru ? unitRu : Localized(unit); }
+    const std::wstring& Placeholder(Lang lang) const { return lang == Lang::Ru ? placeholderRu : Localized(placeholder); }
+    const std::wstring& ActionLabel(Lang lang) const { return lang == Lang::Ru ? actionLabelRu : Localized(actionLabel); }
+    const std::wstring& Summary(Lang lang) const { return lang == Lang::Ru ? summaryRu : Localized(summary); }
 };
 
 struct Section {
@@ -133,7 +142,7 @@ struct Section {
     std::wstring title, titleRu;
     std::vector<Item> items;
 
-    const std::wstring& Title(Lang lang) const { return lang == Lang::Ru ? titleRu : title; }
+    const std::wstring& Title(Lang lang) const { return lang == Lang::Ru ? titleRu : Localized(title); }
 };
 
 struct Category {
@@ -143,14 +152,14 @@ struct Category {
     std::wstring label, labelRu;  // sidebar entry and page title: one name, so the page is where the click led
     std::vector<Section> sections;
 
-    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
+    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : Localized(label); }
 };
 
 struct Group {
     std::string id;
     std::wstring label, labelRu;
 
-    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
+    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : Localized(label); }
 };
 
 const std::vector<Group>& Groups();
@@ -209,14 +218,14 @@ struct KeyAction {
     std::wstring label, labelRu;
     std::wstring defaultKey;  // "F", "Space", "Ctrl+Right"; empty = unassigned
 
-    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
+    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : Localized(label); }
 };
 
 struct KeyActionGroup {
     std::string id;
     std::wstring label, labelRu;
 
-    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : label; }
+    const std::wstring& Label(Lang lang) const { return lang == Lang::Ru ? labelRu : Localized(label); }
 };
 
 const std::vector<KeyActionGroup>& KeyActionGroups();

@@ -82,7 +82,10 @@ const char* LangMpv(std::string_view id) {
 // the Windows UI language; "original" -> nothing (mpv picks the default track).
 std::optional<std::string> LanguageList(const Config& c, const char* key) {
     std::string id = c.GetString(key);
-    if (id == "app") id = c.GetString("general.language") == "en" ? "en" : "ru";
+    if (id == "app") {  // the interface's language, also one from a translation file ("uk", "pt-BR")
+        id = c.GetString("general.language");
+        id = id.substr(0, id.find('-'));
+    }
     if (id == "original" || id.empty()) return std::nullopt;
     if (id != "system") {
         const char* mpv = LangMpv(id);
@@ -2707,7 +2710,28 @@ std::vector<const Item*> Search(std::wstring_view query) {
 
 const std::wstring& AdvancedOptionsLabel(Lang lang) {
     static const std::wstring en = L"Advanced options", ru = L"Дополнительные параметры";
-    return lang == Lang::Ru ? ru : en;
+    return lang == Lang::Ru ? ru : Localized(en);
+}
+
+namespace {
+std::atomic<TextHook> g_textHook{nullptr};
+}
+
+void SetTextHook(TextHook hook) {
+    g_textHook = hook;
+}
+
+const std::wstring& Localized(const std::wstring& english) {
+    const TextHook hook = g_textHook;
+    return hook ? hook(english) : english;
+}
+
+void AddLanguageChoice(const std::string& code, const std::wstring& name) {
+    // The schema is built once at runtime and lives as long as the process: adding a choice to
+    // the item it holds is safe before anything reads the settings.
+    Item* item = const_cast<Item*>(FindItem("general.language"));
+    if (!item || item->FindChoice(code)) return;
+    item->choices.push_back({code, name, name, {}, {}});
 }
 
 const std::vector<EqPreset>& EqPresets() {

@@ -182,6 +182,7 @@ public:
     // Laptops on battery: the Fast picture preset (video.batteryQuality). At start and on
     // WM_POWERBROADCAST; re-applies the preset's mpv options when the answer changes.
     void UpdatePowerSaving();
+    void ApplyLanguage();
 
 private:
     App();
