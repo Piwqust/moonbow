@@ -3575,6 +3575,46 @@ void TestOnlineCaches() {
     CHECK(mem.Count() == 0 && mem.Bytes() == 0);
 }
 
+// Last.fm's signed form and answers, ListenBrainz's listens (app/Scrobbler.cpp).
+void TestScrobbleData() {
+    CHECK(net::Md5Hex("") == "d41d8cd98f00b204e9800998ecf8427e");
+    CHECK(net::Md5Hex("abc") == "900150983cd24fb0d6963f7d28e17f72");
+    const std::string body = net::LastfmForm(
+        {{"method", "auth.getMobileSession"}, {"username", "u ser"}, {"password", "p&w"}}, "KEY", "SECRET");
+    // Signed over every name and value in name order (format=json is not signed), then the secret.
+    const std::string sig = net::Md5Hex("api_keyKEYmethodauth.getMobileSessionpasswordp&wusernameu serSECRET");
+    CHECK(body.find("api_sig=" + sig) != std::string::npos);
+    CHECK(body.find("api_key=KEY") != std::string::npos);
+    CHECK(body.find("format=json") != std::string::npos);
+    CHECK(body.find("password=p%26w") != std::string::npos);
+    CHECK(body.find("username=u%20ser") != std::string::npos);
+    CHECK(body.find("SECRET") == std::string::npos);
+
+    auto session = json::Parse(R"({"session":{"name":"someone","key":"abc123","subscriber":0}})");
+    CHECK(session && net::ParseLastfm(*session).sessionKey == "abc123" && net::ParseLastfm(*session).sessionName == "someone");
+    auto error = json::Parse(R"({"error":9,"message":"Invalid session key - Please re-authenticate"})");
+    CHECK(error && net::ParseLastfm(*error).error == 9);
+    auto scrobbled = json::Parse(R"({"scrobbles":{"scrobble":[],"@attr":{"ignored":1,"accepted":2}}})");
+    CHECK(scrobbled && net::ParseLastfm(*scrobbled).accepted == 2 && net::ParseLastfm(*scrobbled).ignored == 1);
+
+    net::ListenInfo l;
+    l.artist = L"Исполнитель";
+    l.title = L"Песня";
+    l.album = L"Альбом";
+    l.duration = 215;
+    l.listenedAt = 1764000000;
+    auto now = json::Parse(net::ListenBrainzBody("playing_now", {l}, "0.3.1"));
+    CHECK(now && now->GetString("listen_type") == "playing_now");
+    const json::Value* first = now ? &(*now->Find("payload"))[0] : nullptr;
+    CHECK(first && first->Find("listened_at") == nullptr);
+    const json::Value* meta = first ? first->Find("track_metadata") : nullptr;
+    CHECK(meta && meta->GetString("track_name") == "Песня");
+    CHECK(meta && meta->Find("additional_info") && meta->Find("additional_info")->GetInt("duration_ms") == 215000);
+    auto single = json::Parse(net::ListenBrainzBody("single", {l}, "0.3.1"));
+    CHECK(single && (*single->Find("payload"))[0].GetInt("listened_at") == 1764000000);
+    CHECK(single && (*single->Find("payload"))[0].Find("track_metadata")->GetString("release_name") == "Альбом");
+}
+
 void TestOnlineJson() {
     // URLs
     CHECK(net::UrlEncode(L"AC/DC & Кино") == L"AC%2FDC%20%26%20%D0%9A%D0%B8%D0%BD%D0%BE");
@@ -4237,6 +4277,7 @@ const TestCase kTests[] = {
     {"guess_video", TestGuessVideo},
     {"online_caches", TestOnlineCaches},
     {"online_json", TestOnlineJson},
+    {"scrobble_data", TestScrobbleData},
     {"secret_settings", TestSecretSettings},
     {"http_client", TestHttpClient},
     {"log_file", TestLogFile},

@@ -21,6 +21,8 @@
 #include "app/Shell.h"
 #include "app/Skins.h"
 #include "app/SettingsActions.h"
+#include "app/DiscordPresence.h"
+#include "app/Scrobbler.h"
 #include "app/Updater.h"
 #include "app/player/PlayerView.h"
 #include "app/settings/ShortcutStore.h"
@@ -552,6 +554,8 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
     ControlLayoutChanged().Connect([this] { SetUiValue("controls.layout", CurrentControlLayout().Serialize()); });
     main_->StartTimer(3000, [this] { FlushStores(); }, true);
     InitDialogs();
+    InitScrobbler();
+    InitDiscordPresence();
     // Data files that could not be parsed were kept as *.corrupt-<time>.json (core/Paths.h).
     if (std::vector<std::wstring> bad = TakeCorruptFileNotices(); !bad.empty()) {
         static const std::pair<const wchar_t*, const wchar_t*> kWhat[] = {
@@ -598,6 +602,7 @@ int App::Run(HINSTANCE instance, std::vector<std::wstring> args) {
         DispatchMessageW(&msg);
     }
     Trace("close: message loop ended");
+    ShutdownDiscordPresence();
     Updater::Get().OnExit();  // a downloaded update installs now, once this process has ended
     FlushStores();
     Trace("close: stores saved");

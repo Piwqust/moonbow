@@ -4,6 +4,7 @@
 #include "../library/MediaTypes.h"
 
 #include <windows.h>
+#include <bcrypt.h>
 
 #include <algorithm>
 #include <cmath>
@@ -410,6 +411,82 @@ int64_t ParseIsoUtc(const std::string& iso) {
 
 bool TmdbKeyIsBearer(const std::string& key) {
     return key.rfind("eyJ", 0) == 0 && std::count(key.begin(), key.end(), '.') == 2;
+}
+
+// --- scrobbling -----------------------------------------------------------------------------
+
+std::string Md5Hex(std::string_view data) {
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&alg, BCRYPT_MD5_ALGORITHM, nullptr, 0))) return {};
+    unsigned char digest[16];
+    const bool ok = BCRYPT_SUCCESS(BCryptHash(alg, nullptr, 0, reinterpret_cast<PUCHAR>(const_cast<char*>(data.data())),
+                                              static_cast<ULONG>(data.size()), digest, sizeof(digest)));
+    BCryptCloseAlgorithmProvider(alg, 0);
+    if (!ok) return {};
+    static const char kHex[] = "0123456789abcdef";
+    std::string out;
+    for (unsigned char b : digest) {
+        out += kHex[b >> 4];
+        out += kHex[b & 15];
+    }
+    return out;
+}
+
+std::string LastfmForm(std::map<std::string, std::string> params, const std::string& apiKey,
+                       const std::string& secret) {
+    params["api_key"] = apiKey;
+    std::string sig;
+    for (const auto& [name, value] : params) sig += name + value;  // std::map: in name order
+    params["api_sig"] = Md5Hex(sig + secret);
+    params["format"] = "json";
+    std::string body;
+    for (const auto& [name, value] : params) {
+        if (!body.empty()) body += '&';
+        body += json::ToUtf8(UrlEncode(json::ToWide(name))) + '=' + json::ToUtf8(UrlEncode(json::ToWide(value)));
+    }
+    return body;
+}
+
+LastfmAnswer ParseLastfm(const json::Value& doc) {
+    LastfmAnswer a;
+    a.error = static_cast<int>(doc.GetInt("error"));
+    a.message = doc.GetString("message");
+    if (const json::Value* s = doc.Find("session")) {
+        a.sessionKey = s->GetString("key");
+        a.sessionName = s->GetString("name");
+    }
+    if (const json::Value* s = doc.Find("scrobbles"))
+        if (const json::Value* attr = s->Find("@attr")) {
+            a.accepted = static_cast<int>(attr->GetInt("accepted", -1));
+            a.ignored = static_cast<int>(attr->GetInt("ignored", -1));
+        }
+    return a;
+}
+
+std::string ListenBrainzBody(const char* listenType, const std::vector<ListenInfo>& listens,
+                             const std::string& clientVersion) {
+    const bool now = std::strcmp(listenType, "playing_now") == 0;
+    json::Value payload = json::Value::MakeArray();
+    for (const ListenInfo& l : listens) {
+        json::Value meta = json::Value::MakeObject();
+        meta.Set("artist_name", json::ToUtf8(l.artist));
+        meta.Set("track_name", json::ToUtf8(l.title));
+        if (!l.album.empty()) meta.Set("release_name", json::ToUtf8(l.album));
+        json::Value info = json::Value::MakeObject();
+        if (l.duration > 0) info.Set("duration_ms", static_cast<int64_t>(l.duration) * 1000);
+        info.Set("media_player", "Moonbow");
+        info.Set("submission_client", "Moonbow");
+        info.Set("submission_client_version", clientVersion);
+        meta.Set("additional_info", std::move(info));
+        json::Value listen = json::Value::MakeObject();
+        if (!now) listen.Set("listened_at", l.listenedAt);
+        listen.Set("track_metadata", std::move(meta));
+        payload.Push(std::move(listen));
+    }
+    json::Value doc = json::Value::MakeObject();
+    doc.Set("listen_type", listenType);
+    doc.Set("payload", std::move(payload));
+    return json::Serialize(doc);
 }
 
 }  // namespace net

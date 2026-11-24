@@ -124,3 +124,16 @@
 {L"Song lyrics: LRCLIB", L"Тексты песен: LRCLIB"},
 {L"Subtitles: OpenSubtitles.com", L"Субтитры: OpenSubtitles.com"},
 {L"Posters and descriptions: TMDB", L"Постеры и описания: TMDB"},
+// --- scrobbling (app/Scrobbler.cpp)
+{L"This copy of Moonbow was built without a Last.fm key.", L"Эта копия Moonbow собрана без ключа Last.fm."},
+{L"Signed in to Last.fm as {0}", L"Вход в Last.fm выполнен: {0}"},
+{L"Last.fm did not accept the user name or password.", L"Last.fm не принял имя пользователя или пароль."},
+{L"No connection to Last.fm. Moonbow tries to sign in again at the next start.",
+ L"Нет связи с Last.fm. Moonbow попробует войти снова при следующем запуске."},
+{L"Last.fm is not available right now (error {0}).", L"Last.fm сейчас недоступен (ошибка {0})."},
+{L"Last.fm signed Moonbow out. Enter your password again in Settings › Privacy › Online services.",
+ L"Last.fm завершил сеанс Moonbow. Снова введите пароль в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
+{L"ListenBrainz did not accept the user token. Check it in Settings › Privacy › Online services.",
+ L"ListenBrainz не принял токен пользователя. Проверьте его в «Настройки › Конфиденциальность › Онлайн-сервисы»."},
+// --- Discord status (app/DiscordPresence.cpp)
+{L"Paused", L"На паузе"},

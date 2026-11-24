@@ -15,6 +15,14 @@ The day-by-day development journal (in Russian) is in [`changelog/`](changelog/R
   finds them on OpenSubtitles, saves them next to the video and turns them on. "Only ones made for this file" takes
   subtitles timed for exactly this release; "Also the best match by name" takes the most downloaded ones otherwise.
 
+### Music
+- **Scrobbling**: songs you listen to can go to Last.fm and ListenBrainz under your account (**Settings → Privacy →
+  Online services**, off by default). A song counts after half its length or 4 minutes; the one you start shows as
+  playing. Songs heard offline are sent later, up to 14 days. Last.fm asks for your password once: Moonbow keeps the
+  session Last.fm gives, not the password.
+- **Show what plays in Discord**: your Discord profile can show the song (or the video too) with its time, while
+  the Discord app runs on this computer. Off by default; a pause and a seek update it.
+
 ### Playback
 - Podcasts, audiobooks and long mixes go on where you stopped, a few seconds back (**Settings → Playback →
   Continue long audio**: longer than 20 minutes by default; audiobooks in .m4b always). Songs still start from the

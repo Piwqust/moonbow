@@ -1127,6 +1127,41 @@ void BuildApp(Builder& b) {
     // Moonbow's own key is built in (net/ServiceKeys.h); a key here (API key or Read Access Token)
     // replaces it: builds made without one, test runs.
     b.Text("privacy.tmdbKey", L"TMDB API key", L"Ключ API TMDB").Secret().Hidden();
+    // app/Scrobbler.cpp.
+    b.Toggle("privacy.lastfmSubmit", L"Scrobble songs to Last.fm", L"Скробблить песни в Last.fm", false)
+        .Desc(L"After half a song or 4 minutes, its artist, title, album and length are sent to last.fm under your "
+              L"account, and the song you start shows as playing there. Songs heard offline go later.",
+              L"После половины песни или 4 минут её исполнитель, название, альбом и длительность отправляются на "
+              L"last.fm в вашу учётную запись, а начатая песня видна там как играющая. Прослушанное без сети "
+              L"отправляется позже.");
+    b.Text("privacy.lastfmUser", L"Last.fm user name", L"Имя пользователя Last.fm")
+        .When("privacy.lastfmSubmit", "true");
+    b.Text("privacy.lastfmPassword", L"Last.fm password", L"Пароль Last.fm")
+        .Desc(L"Used once to sign in: Moonbow keeps the session Last.fm gives, not the password.",
+              L"Нужен один раз для входа: Moonbow хранит сессию, которую выдаёт Last.fm, а не пароль.")
+        .Secret()
+        .When("privacy.lastfmSubmit", "true");
+    b.Text("privacy.lastfmSession", L"Last.fm session", L"Сессия Last.fm").Secret().Hidden();
+    b.Toggle("privacy.listenbrainzSubmit", L"Submit listens to ListenBrainz", L"Отправлять прослушанное в ListenBrainz",
+             false)
+        .Desc(L"The same for listenbrainz.org, the open music history of the MetaBrainz Foundation.",
+              L"То же для listenbrainz.org, открытой истории прослушиваний от MetaBrainz Foundation.");
+    b.Text("privacy.listenbrainzToken", L"ListenBrainz user token", L"Токен пользователя ListenBrainz")
+        .Hint(L"Paste your token", L"Вставьте свой токен")
+        .Desc(L"Your user token from listenbrainz.org › Settings. Stored encrypted for your Windows account.",
+              L"Ваш токен пользователя из listenbrainz.org › Settings. Хранится зашифрованным для вашей учётной "
+              L"записи Windows.")
+        .Secret()
+        .When("privacy.listenbrainzSubmit", "true");
+    // app/DiscordPresence.cpp.
+    b.Pick("privacy.discordStatus", L"Show what plays in Discord", L"Показывать в Discord, что играет",
+           {{"off", L"Off", L"Выкл."}, {"music", L"Music", L"Музыку"}, {"all", L"Music and videos", L"Музыку и видео"}},
+           "off")
+        .Desc(L"Your Discord profile shows the song or video Moonbow plays, while the Discord app runs on this "
+              L"computer. Moonbow only tells the Discord app; Discord shares it with the people who see your profile.",
+              L"В вашем профиле Discord видно песню или видео, которые играют в Moonbow, пока на этом компьютере "
+              L"запущен Discord. Moonbow сообщает это только приложению Discord, а оно показывает тем, кто видит ваш "
+              L"профиль.");
     b.Button("privacy.clearOnline", L"Downloaded lyrics, posters and search results", L"Загруженные тексты, постеры и "
              L"результаты поиска", "clear-online-data", L"Clear", L"Очистить")
         .Desc(L"Delete what the online services sent. Subtitle files you downloaded stay. Clearing the history does "
@@ -1138,25 +1173,8 @@ void BuildApp(Builder& b) {
     b.Text("privacy.opensubtitlesServer", L"OpenSubtitles server", L"Сервер OpenSubtitles").Hidden();
     b.Text("privacy.tmdbServer", L"TMDB server", L"Сервер TMDB").Hidden();
     b.Text("privacy.tmdbImageServer", L"TMDB image server", L"Сервер изображений TMDB").Hidden();
-    b.Toggle("privacy.lastfmSubmit", L"Submit played tracks to last.fm", L"Отправлять прослушанное в last.fm", false)
-        .Desc(L"Scrobble the songs you listen to your last.fm profile.",
-              L"Отмечать прослушанные песни в вашем профиле last.fm (скробблинг).")
-        .Hidden();  // not implemented yet
-    b.Text("privacy.lastfmUser", L"Last.fm username", L"Имя пользователя Last.fm")
-        .Desc(L"Your last.fm account name.", L"Имя вашей учётной записи last.fm.")
-        .When("privacy.lastfmSubmit", "true")
-        .Hidden();  // not implemented yet
-    b.Text("privacy.lastfmPassword", L"Last.fm password", L"Пароль Last.fm")
-        .Desc(L"Used once to obtain a session key; it is not sent anywhere else.",
-              L"Нужен один раз для получения ключа сессии и больше никуда не передаётся.")
-        .Secret()
-        .When("privacy.lastfmSubmit", "true")
-        .Hidden();  // not implemented yet
-    b.Text("privacy.lastfmUrl", L"Last.fm submission URL", L"Адрес отправки Last.fm", "post.audioscrobbler.com")
-        .Desc(L"Scrobbling server. Change it only for a compatible service such as Libre.fm.",
-              L"Сервер скробблинга. Меняйте только для совместимого сервиса, например Libre.fm.")
-        .When("privacy.lastfmSubmit", "true")
-        .Hidden();  // not implemented yet
+    b.Text("privacy.lastfmServer", L"Last.fm server", L"Сервер Last.fm").Hidden();  // app/Scrobbler.cpp
+    b.Text("privacy.listenbrainzServer", L"ListenBrainz server", L"Сервер ListenBrainz").Hidden();
 
     // ===== Controls =====
     b.Cat("controls", "app", "hotkeys", L"Controls", L"Управление");

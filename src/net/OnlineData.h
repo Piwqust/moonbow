@@ -5,7 +5,9 @@
 #include "../core/Json.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace net {
@@ -124,6 +126,30 @@ EpisodeMeta ParseTmdbEpisode(const json::Value& doc);
 // A TMDB authentication: v4 read access tokens (JWT, "eyJ...") go in an Authorization header,
 // v3 API keys (32 hex) in the api_key parameter.
 bool TmdbKeyIsBearer(const std::string& key);
+
+// --- scrobbling (app/Scrobbler.cpp) ---------------------------------------------------------
+std::string Md5Hex(std::string_view data);  // 32 lower-case hex digits; empty on failure
+// The body of a Last.fm API call (application/x-www-form-urlencoded): `params` plus api_key and
+// api_sig, the MD5 of every name and value in name order followed by the secret; format=json
+// is added after signing, as their API asks.
+std::string LastfmForm(std::map<std::string, std::string> params, const std::string& apiKey,
+                       const std::string& secret);
+struct LastfmAnswer {
+    int error = 0;  // Last.fm's error code, 0 for none (9: the session key is no longer valid)
+    std::string message;
+    std::string sessionKey, sessionName;  // auth.getMobileSession
+    int accepted = -1, ignored = -1;      // track.scrobble
+};
+LastfmAnswer ParseLastfm(const json::Value& doc);
+
+// One listen for ListenBrainz's submit-listens: "playing_now" (no time), "single" or "import".
+struct ListenInfo {
+    std::wstring artist, title, album;
+    int duration = 0;       // seconds, 0 when unknown
+    int64_t listenedAt = 0;  // unix seconds the song started
+};
+std::string ListenBrainzBody(const char* listenType, const std::vector<ListenInfo>& listens,
+                             const std::string& clientVersion);
 
 int YearOf(const std::string& isoDate);  // "2010-07-15" -> 2010, 0 when empty
 // "2026-10-19T12:00:00.000Z" -> unix seconds (UTC); 0 when it doesn't parse.
