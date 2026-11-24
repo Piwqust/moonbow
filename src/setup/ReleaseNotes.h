@@ -16,6 +16,21 @@ struct ReleaseNote {
 };
 
 inline constexpr ReleaseNote kReleaseNotes[] = {
+    {L"0.4.0",
+     L"Skip intro works without chapters: Moonbow finds the opening two episodes share by sound, on this computer.\n"
+     L"Anime and other series numbered without a season are recognized; Series Settings… fixes a folder by hand.\n"
+     L"Missing subtitles can download by themselves, with your own free OpenSubtitles key.\n"
+     L"Scrobbling to Last.fm and ListenBrainz, and the song you play in your Discord profile.\n"
+     L"Podcasts and audiobooks go on where you stopped.\n"
+     L"DVD and Blu-ray discs with their menus; smoother motion on AMD Radeon; less power on battery.\n"
+     L"VU meters read 3 dB lower by default.",
+     L"«Пропустить заставку» работает и без глав: Moonbow находит общую заставку двух серий по звуку, на этом компьютере.\n"
+     L"Сериалы и аниме с номерами без сезона распознаются; «Настройки сериала…» поправляют папку вручную.\n"
+     L"Недостающие субтитры могут скачиваться сами, с вашим бесплатным ключом OpenSubtitles.\n"
+     L"Скробблинг в Last.fm и ListenBrainz, а в профиле Discord видно, что играет.\n"
+     L"Подкасты и аудиокниги продолжаются с места остановки.\n"
+     L"DVD и Blu-ray с меню; плавнее движение на AMD Radeon; меньше расход на батарее.\n"
+     L"VU-индикаторы по умолчанию показывают на 3 дБ меньше."},
     {L"0.3.0",
      L"Any part of the player opens in a window of its own: the cover, the seek bar, the lyrics, each audio meter.\n"
      L"Right-click in the player › Separate windows; they stay where you put them, on any screen.\n"

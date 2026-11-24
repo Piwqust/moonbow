@@ -3,7 +3,7 @@
 What changes for the person using Moonbow, newest first. The release notes on GitHub are taken from here.
 The day-by-day development journal (in Russian) is in [`changelog/`](changelog/README.md).
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-11-24)
 
 ### Skip intro without chapters
 - **Skip intro** now works for episodes that have no chapters. Moonbow compares the first minutes of an episode with
