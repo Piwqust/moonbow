@@ -17,6 +17,11 @@ MediaKind KindOf(std::wstring_view path);
 bool IsMediaPath(std::wstring_view path);  // Video or Audio
 bool IsSubtitlePath(std::wstring_view path);
 bool IsPlaylistPath(std::wstring_view path);
+// A DVD or Blu-ray to play as a disc (menus included): an .iso image, a disc folder (one with
+// VIDEO_TS or BDMV in it, or that folder itself) or the disc's VIDEO_TS.IFO / MovieObject.bdmv.
+// Returns what to give mpv, which recognizes these and plays the disc; empty otherwise. Looks at
+// the file system for folders.
+std::wstring DiscEntry(const std::wstring& path);
 
 // "video" / "audio" / "other" for JSON files, and back.
 const char* KindName(MediaKind kind);

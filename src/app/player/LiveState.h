@@ -25,6 +25,7 @@ struct LiveValues {
     double abA = NAN, abB = NAN;  // A-B loop points, NaN = not set
     int64_t secondarySid = 0;
     bool subVisible = true;
+    bool discMenu = false;  // a DVD or Blu-ray menu with buttons is up (mpv's disc-menu-active)
     std::string audioDevice = "auto";
     std::vector<AudioDevice> devices;
 };

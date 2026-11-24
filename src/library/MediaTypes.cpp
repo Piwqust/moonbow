@@ -79,6 +79,25 @@ bool IsPlaylistPath(std::wstring_view path) {
     return InList(ExtOf(path), kPlaylistExts);
 }
 
+std::wstring DiscEntry(const std::wstring& path) {
+    auto file = [](const std::wstring& p) {
+        const DWORD a = GetFileAttributesW(p.c_str());
+        return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+    };
+    if (path.empty() || path.find(L"://") != std::wstring::npos) return {};
+    if (ExtOf(path) == L"iso") return path;
+    std::wstring dir = path;
+    while (dir.size() > 3 && (dir.back() == L'\\' || dir.back() == L'/')) dir.pop_back();
+    const std::wstring name = MapCase(FileNameOf(dir), LCMAP_UPPERCASE);
+    if (name == L"VIDEO_TS.IFO" || name == L"MOVIEOBJECT.BDMV") return path;
+    const DWORD a = GetFileAttributesW(dir.c_str());
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) return {};
+    for (const wchar_t* sub : {L"\\VIDEO_TS\\VIDEO_TS.IFO", L"\\VIDEO_TS.IFO", L"\\BDMV\\MovieObject.bdmv",
+                               L"\\MovieObject.bdmv"})
+        if (file(dir + sub)) return dir + sub;
+    return {};
+}
+
 const char* KindName(MediaKind kind) {
     switch (kind) {
         case MediaKind::Video: return "video";

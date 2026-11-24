@@ -190,7 +190,7 @@ std::vector<std::wstring> FileDialog(HWND owner, bool folders, bool multi, bool 
     const COMDLG_FILTERSPEC media[] = {
         {Tr(L"Video and audio"),
          L"*.mkv;*.mp4;*.m4v;*.avi;*.mov;*.webm;*.wmv;*.flv;*.ts;*.m2ts;*.mts;*.mpg;*.mpeg;*.vob;*.ogv;*.3gp;*.rmvb;"
-         L"*.mp3;*.flac;*.m4a;*.aac;*.ogg;*.opus;*.wav;*.wma;*.ac3;*.dts;*.m3u;*.m3u8;*.pls"},
+         L"*.mp3;*.flac;*.m4a;*.aac;*.ogg;*.opus;*.wav;*.wma;*.ac3;*.dts;*.m3u;*.m3u8;*.pls;*.iso"},
         {Tr(L"All files"), L"*.*"},
     };
     const COMDLG_FILTERSPEC subs[] = {
@@ -987,6 +987,18 @@ void App::Open(const std::vector<std::wstring>& paths) {
         return;
     }
     if (paths.size() == 1 && !IsUrl(paths[0])) {
+        // A DVD or Blu-ray (an .iso, a disc folder): mpv plays it as a disc, with its menus.
+        if (const std::wstring disc = library::DiscEntry(paths[0]); !disc.empty()) {
+            std::wstring title = paths[0];
+            while (title.size() > 3 && (title.back() == L'\\' || title.back() == L'/')) title.pop_back();
+            title = FileNameOf(title);
+            if (const size_t dot = title.find_last_of(L'.'); dot != std::wstring::npos && !IsDirectory(paths[0]))
+                title.resize(dot);
+            QueueItem item = ItemFor(disc);
+            item.title = title;
+            PlayQueueItems({item}, 0, title);
+            return;
+        }
         if (IsDirectory(paths[0])) {
             std::wstring folder = paths[0];
             while (folder.size() > 3 && (folder.back() == L'\\' || folder.back() == L'/')) folder.pop_back();

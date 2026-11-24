@@ -396,6 +396,13 @@ void LiveState::ObserveAll() {
             ApplyUpscaler();
         });
     });
+    // A DVD or Blu-ray menu: the arrows, Enter and clicks go to its buttons (MainWindow, PlayerView).
+    p.Observe("disc-menu-active", MPV_FORMAT_FLAG, [this](const mpv_event_property& e) {
+        const bool on = e.format == MPV_FORMAT_FLAG && e.data && *static_cast<int*>(e.data) != 0;
+        if (on == v_.discMenu) return;
+        v_.discMenu = on;
+        Notify();
+    });
     p.Observe("audio-device", MPV_FORMAT_STRING, [this](const mpv_event_property& e) {
         if (e.format == MPV_FORMAT_STRING && e.data) {
             const char* s = *static_cast<char**>(e.data);

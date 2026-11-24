@@ -1604,6 +1604,29 @@ void TestBookmarksFavorites() {
 
 // --- Media library ------------------------------------------------------------------------------
 
+// DVD and Blu-ray: what Open hands mpv for an image, a disc folder or its index file.
+void TestDiscEntry() {
+    const std::wstring root = g_temp + L"\\discs";
+    DeleteTree(root);
+    SHCreateDirectoryExW(nullptr, (root + L"\\Film DVD\\VIDEO_TS").c_str(), nullptr);
+    SHCreateDirectoryExW(nullptr, (root + L"\\Film BD\\BDMV").c_str(), nullptr);
+    SHCreateDirectoryExW(nullptr, (root + L"\\Just files").c_str(), nullptr);
+    WriteFile(root + L"\\Film DVD\\VIDEO_TS\\VIDEO_TS.IFO", "DVDVIDEO-VMG");
+    WriteFile(root + L"\\Film BD\\BDMV\\MovieObject.bdmv", "MOBJ0200");
+    WriteFile(root + L"\\Just files\\a.mkv", "x");
+    using library::DiscEntry;
+    CHECK(DiscEntry(root + L"\\Film DVD") == root + L"\\Film DVD\\VIDEO_TS\\VIDEO_TS.IFO");
+    CHECK(DiscEntry(root + L"\\Film DVD\\") == root + L"\\Film DVD\\VIDEO_TS\\VIDEO_TS.IFO");
+    CHECK(DiscEntry(root + L"\\Film DVD\\VIDEO_TS") == root + L"\\Film DVD\\VIDEO_TS\\VIDEO_TS.IFO");
+    CHECK(DiscEntry(root + L"\\Film BD") == root + L"\\Film BD\\BDMV\\MovieObject.bdmv");
+    CHECK(DiscEntry(root + L"\\Film BD\\BDMV\\MovieObject.bdmv") == root + L"\\Film BD\\BDMV\\MovieObject.bdmv");
+    CHECK(DiscEntry(L"D:\\Images\\Film.ISO") == L"D:\\Images\\Film.ISO");  // by name, also when missing
+    CHECK(DiscEntry(root + L"\\Just files").empty());
+    CHECK(DiscEntry(root + L"\\Just files\\a.mkv").empty());
+    CHECK(DiscEntry(L"https://example.com/film.iso").empty());
+    CHECK(library::KindOf(L"Film.iso") == library::MediaKind::Other);  // not a library video
+}
+
 void TestMediaTypes() {
     using library::KindOf;
     using library::MediaKind;
@@ -4244,6 +4267,7 @@ const TestCase kTests[] = {
     {"playlists", TestPlaylists},
     {"bookmarks_favorites", TestBookmarksFavorites},
     {"media_types", TestMediaTypes},
+    {"disc_entry", TestDiscEntry},
     {"episodes_order", TestEpisodesAndOrder},
     {"shows", TestShows},
     {"player_episodes", TestPlayerEpisodes},

@@ -8,9 +8,11 @@
 #include "app/App.h"
 #include "app/Shell.h"
 #include "app/player/ControlBar.h"
+#include "app/player/LiveState.h"
 #include "app/library/LibraryCommon.h"
 #include "app/player/PlayerView.h"
 #include "app/player/SeekPreview.h"
+#include "library/MediaTypes.h"
 
 #include <shlwapi.h>
 #include <windowsx.h>
@@ -156,6 +158,22 @@ bool MainWindow::Create() {
                 }
         }
         const bool arrow = e.key == VK_UP || e.key == VK_DOWN || e.key == VK_LEFT || e.key == VK_RIGHT;
+        // A DVD or Blu-ray menu is up: the arrows move between its buttons, Enter presses one,
+        // Backspace goes back a menu (mpv's discnav).
+        if (TheApp().PlayerShown() && LiveState::Get().V().discMenu && !e.mods.ctrl && !e.mods.alt && !e.mods.shift &&
+            !Focus()) {
+            const char* nav = e.key == VK_UP      ? "up"
+                              : e.key == VK_DOWN  ? "down"
+                              : e.key == VK_LEFT  ? "left"
+                              : e.key == VK_RIGHT ? "right"
+                              : e.key == VK_RETURN ? "select"
+                              : e.key == VK_BACK  ? "prev"
+                                                  : nullptr;
+            if (nav) {
+                TheApp().player().Command({"discnav", nav});
+                return true;
+            }
+        }
         if (arrow && !TheApp().PlayerShown() && !Focus() && !e.mods.ctrl && !e.mods.alt && library_ && library_->View())
             if (Widget* first = library_->View()->InitialFocus()) {
                 SetFocus(first, true);
@@ -188,7 +206,7 @@ bool MainWindow::Create() {
     onDropFiles = [](std::vector<std::wstring> files) {
         if (PlayerPanelOpen(PanelKind::Queue)) {
             TheApp().Enqueue(files);
-        } else if (files.size() == 1 && PathIsDirectoryW(files[0].c_str())) {
+        } else if (files.size() == 1 && PathIsDirectoryW(files[0].c_str()) && library::DiscEntry(files[0]).empty()) {
             lib::ShowFolderInLibrary(files[0]);
         } else {
             TheApp().Open(files);

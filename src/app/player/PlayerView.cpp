@@ -344,6 +344,19 @@ public:
     void OnClick() override {
         if (!clickPending_) return;
         clickPending_ = false;
+        // A DVD or Blu-ray menu takes the click on its buttons: mpv learns where the pointer is in
+        // the video window's pixels, then presses what is there (discnav).
+        if (Live().V().discMenu) {
+            if (Host* h = GetHost()) {
+                const Point m = h->MousePos();
+                const float s = h->Scale();
+                Player& p = TheApp().player();
+                p.Command({"mouse", std::to_string(static_cast<int>((m.x - rect.x) * s)),
+                           std::to_string(static_cast<int>((m.y - rect.y) * s))});
+                p.Command({"discnav", "mouse-click"});
+            }
+            return;
+        }
         // Clicks right after a double click at an edge go on seeking there, as on YouTube.
         if (Host* h = GetHost(); h && edgeSide_ && GetTickCount64() - edgeAt_ < kEdgeRepeatMs &&
                                  EdgeAt(h->MousePos().x) == edgeSide_) {
